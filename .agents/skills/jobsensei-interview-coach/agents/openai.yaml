@@ -1,0 +1,4 @@
+interface:
+  display_name: "interview coach"
+  short_description: "Practice interviews truthfully"
+  default_prompt: "Use $jobsensei-interview-coach to run a mock interview or refine answers for a job already in interview stage."

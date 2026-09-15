@@ -1,0 +1,4 @@
+interface:
+  display_name: "JobSensei Local Data"
+  short_description: "Build safe local storage and ingestion"
+  default_prompt: "Use $jobsensei-local-data to implement this JobSensei storage or document-ingestion change."

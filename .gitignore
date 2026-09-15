@@ -1,0 +1,24 @@
+.env
+.env.*
+!.env.example
+data/
+debrief/
+.sensei/
+node_modules/
+dist-electron/
+dist-renderer/
+coverage/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local planning and candidate-specific development notes
+/implementation_plan.md
+/whats_next.md
+/sensei-workflow-plan.md
+/live_interview_implementation_plan.md
+/antigravity-permissions.md
+/Building Local Job-Seeker Assistant.md
+/DSE gemini Finch.md
+/assemblydefaultprompt.md

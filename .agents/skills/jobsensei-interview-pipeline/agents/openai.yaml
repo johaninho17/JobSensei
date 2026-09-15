@@ -1,0 +1,5 @@
+interface:
+  display_name: "interview pipeline"
+  short_description: "Prepare an existing job for interviews"
+  default_prompt: "Use $jobsensei-interview-pipeline to prepare the named existing JobSensei job for its confirmed interview."
+

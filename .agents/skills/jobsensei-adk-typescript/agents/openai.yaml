@@ -1,0 +1,4 @@
+interface:
+  display_name: "JobSensei ADK TypeScript"
+  short_description: "Build grounded, efficient JobSensei AI"
+  default_prompt: "Use $jobsensei-adk-typescript to implement this JobSensei AI capability in TypeScript."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "JobSensei Quality Gate"
+  short_description: "Verify code, agents, data, and UI"
+  default_prompt: "Use $jobsensei-quality-gate to verify this JobSensei change before completion."

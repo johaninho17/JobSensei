@@ -1,0 +1,4 @@
+interface:
+  display_name: "technical challenge"
+  short_description: "Create hands-on practice for an existing job"
+  default_prompt: "Use $jobsensei-technical-challenge to create job-tailored coding labs and verbal assessment scenarios for the named existing JobSensei job."

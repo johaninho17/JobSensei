@@ -1,0 +1,4 @@
+interface:
+  display_name: "job match"
+  short_description: "Map job requirements to evidence"
+  default_prompt: "Use $jobsensei-job-match to compare the active job only with eligible rows in its current evidence snapshot."

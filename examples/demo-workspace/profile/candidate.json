@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "identity": {
+    "fullName": "Alex Morgan",
+    "artifactPrefix": "Alex_Morgan",
+    "email": "alex@example.test",
+    "phone": null,
+    "location": "Portland, OR",
+    "links": ["https://example.test/alex"]
+  },
+  "sources": {
+    "baseResumePath": "resumes/Alex_Morgan_Resume.md",
+    "secondaryResumePaths": [],
+    "linkedinProfilePath": null,
+    "structuredContextRoots": ["context/structured"],
+    "broadContextRoots": ["context/broad"],
+    "denylistPath": "context/denylist.md",
+    "applicationVoicePath": "context/application_voice_profile.md"
+  },
+  "career": {
+    "employers": [{ "name": "Northstar Systems", "title": "Software Engineer", "startDate": "2023-04", "endDate": null, "location": "Portland, OR", "contextPaths": ["context/structured/northstar.md"] }],
+    "education": [{ "institution": "Example University", "degree": "B.S. Computer Science", "location": "Portland, OR", "details": [] }],
+    "transitionSummary": "Moved from backend implementation into customer-facing technical delivery.",
+    "preferredRoleFamilies": ["solutions engineering", "software engineering"]
+  },
+  "preferences": {
+    "resume": { "includeSummary": false, "totalExperienceBullets": { "min": 8, "max": 12 }, "currentEmployerBullets": { "min": 4, "max": 6 }, "skillsCategories": ["Engineering", "Delivery", "Tools"] },
+    "coverLetter": { "storyGuidance": ["Explain the documented career transition."], "voiceGuidance": ["Use plain, direct language."] }
+  },
+  "truth": { "factualAuthority": "Selected structured career evidence", "boundaries": ["Never invent candidate facts or outcomes."] },
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

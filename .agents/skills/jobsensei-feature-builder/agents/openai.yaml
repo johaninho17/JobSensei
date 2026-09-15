@@ -1,0 +1,4 @@
+interface:
+  display_name: "JobSensei Feature Builder"
+  short_description: "Build complete JobSensei features safely"
+  default_prompt: "Use $jobsensei-feature-builder to implement a complete JobSensei feature from the current plan."

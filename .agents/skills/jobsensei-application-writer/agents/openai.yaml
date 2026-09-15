@@ -1,0 +1,4 @@
+interface:
+  display_name: "application writer"
+  short_description: "Draft grounded applications"
+  default_prompt: "Use $jobsensei-application-writer to draft from the current evidence snapshot and show a truthful, relevant career path in the cover letter."

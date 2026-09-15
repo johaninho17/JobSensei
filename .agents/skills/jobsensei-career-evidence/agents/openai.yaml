@@ -1,0 +1,4 @@
+interface:
+  display_name: "career evidence"
+  short_description: "Ground and audit career claims"
+  default_prompt: "Use $jobsensei-career-evidence to ground claims only in the current evidence snapshot and enforce the career denylist."

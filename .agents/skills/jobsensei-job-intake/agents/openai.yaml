@@ -1,0 +1,4 @@
+interface:
+  display_name: "job intake"
+  short_description: "Create structured job workspaces"
+  default_prompt: "Use $jobsensei-job-intake to create a safe job workspace from a posting."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "JobSensei UI/UX"
+  short_description: "Design and verify JobSensei interfaces"
+  default_prompt: "Use $jobsensei-ui-ux to design and visually verify this JobSensei interface."

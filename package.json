@@ -1,0 +1,47 @@
+{
+  "name": "jobsensei",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first career workspace for grounded job applications.",
+  "main": "dist-electron/electron/main.js",
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true,
+    "node-pty@1.1.0": true
+  },
+  "scripts": {
+    "predev": "tsc -p tsconfig.electron.json",
+    "dev": "concurrently -k \"vite --host 127.0.0.1 --port 5173 --strictPort\" \"wait-on http://127.0.0.1:5173 && VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "build": "tsc -b && vite build && tsc -p tsconfig.electron.json",
+    "typecheck": "tsc -b --pretty false && tsc -p tsconfig.electron.json --noEmit",
+    "test": "vitest run",
+    "context:snapshot": "tsc -p tsconfig.electron.json && node dist-electron/electron/evidence-snapshot.js",
+    "application:finalize": "tsc -p tsconfig.electron.json && node dist-electron/electron/application-finalize.js",
+    "application:validate": "tsc -p tsconfig.electron.json && node dist-electron/electron/application-validation-cli.js",
+    "migrate:job-descriptions": "node scripts/migrate-original-jds.mjs",
+    "start": "electron .",
+    "postinstall": "node scripts/ensure-pty-helper.cjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "electron": "latest",
+    "mammoth": "^1.12.0",
+    "node-pty": "^1.1.0",
+    "pdfjs-dist": "^6.2.108",
+    "react": "latest",
+    "react-dom": "latest",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "concurrently": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "^3.2.7",
+    "wait-on": "latest"
+  }
+}

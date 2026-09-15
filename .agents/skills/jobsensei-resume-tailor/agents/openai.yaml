@@ -1,0 +1,4 @@
+interface:
+  display_name: "resume tailor"
+  short_description: "Tailor resumes truthfully"
+  default_prompt: "Use $jobsensei-resume-tailor to truth-clean and tailor the base resume using only routed application-context evidence; the base bullets are not factual authority."

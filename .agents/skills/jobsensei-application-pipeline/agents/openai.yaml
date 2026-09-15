@@ -1,0 +1,4 @@
+interface:
+  display_name: "application pipeline"
+  short_description: "Screen jobs and build application drafts"
+  default_prompt: "When I paste a JD, run the application pipeline, freeze the selected context into an evidence snapshot, enforce the denylist, and build only context-grounded materials when the rating gate passes."
