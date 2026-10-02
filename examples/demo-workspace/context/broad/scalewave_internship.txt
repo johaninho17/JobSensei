@@ -1,0 +1,16 @@
+# Engineering Internship Notes — Scalewave Technologies
+Role: Software Engineering Intern
+Timeline: June 2014 – August 2014 (Summer Internship)
+Location: Berkeley / Emeryville, CA, USA
+
+## 1. Overview
+Summer software engineering internship undertaken during undergraduate studies at UC Berkeley EECS. Supported the backend infrastructure team responsible for scalable web application analytics.
+
+## 2. API Integration Testing & Automation
+- Developed automated integration test scripts in Python (using pytest and requests) to validate core REST API endpoints.
+- Authored test suites covering HTTP status code responses, edge-case headers, invalid JSON payloads, and parameter boundaries.
+- Integrated test runs into the team's Git pre-commit hooks and continuous build pipelines.
+
+## 3. Server Monitoring & Telemetry Dashboards
+- Configured Grafana and Graphite monitoring dashboards tracking server CPU, memory, and HTTP response latency metrics across staging clusters.
+- Configured automated threshold alerts sent to internal engineering chat channels.

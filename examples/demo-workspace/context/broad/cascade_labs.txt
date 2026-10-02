@@ -1,13 +1,24 @@
-# Foundational Engineering Records — Cascade Software Labs
+# Engineering Worklog & Project Record — Cascade Software Labs
 Role: Software Engineer
 Timeline: June 2015 – April 2018
 Location: San Francisco, CA, USA
 
-## Overview
-Cascade Labs was a high-growth software engineering consultancy building backend systems and cloud applications for venture-backed startups.
+## 1. Core RESTful Services & Relational Database Connectors
+Cascade Software Labs developed custom web and mobile SaaS platforms for enterprise clients across healthcare, logistics, and retail.
+- Engineered core backend RESTful API services in Node.js, Express, and Python for customer-facing applications.
+- Built database connector abstractions and object-relational mapping (ORM) models across MySQL and PostgreSQL.
+- Implemented user authentication, session management, and role-based permissions (RBAC) across multi-tenant applications.
 
-## Key Contributions
-- Engineered core RESTful API services and database connectors in Node.js and Python, supporting web and mobile applications with high concurrency requirements.
-- Developed automated data synchronization workers that ingested diverse partner CSV, XML, and JSON payloads, normalizing raw records into structured SQL schemas.
-- Collaborated with QA and platform infrastructure teams to build automated CI/CD deployment pipelines utilizing Docker and Jenkins across multi-region environments.
-- Wrote unit and integration test suites with Mocha and Chai, establishing automated code coverage checks on all pull requests.
+## 2. Partner Data Synchronization Workers & ETL Normalization
+- Designed and maintained asynchronous background workers that periodically polled external partner APIs to sync inventory, catalog, and customer data.
+- Built schema transformation engines that sanitized messy third-party CSV and JSON payloads into normalized SQL relational schemas.
+- Handled idempotency and data deduplication to ensure repeatable, crash-safe data ingestion batches.
+
+## 3. CI/CD Deployment Automation & DevOps
+- Collaborated with QA and infrastructure teams to modernize manual deployment practices into automated continuous integration and continuous delivery (CI/CD) pipelines.
+- Wrote Jenkins pipeline scripts (Jenkinsfile) and Docker Compose configurations for local development and automated staging deployments.
+- Standardized container builds across multi-region AWS EC2 and ECS deployment clusters.
+
+## 4. Concurrency Debugging & Concurrency Incidents
+- Resolved a critical transaction isolation bug causing frequent database deadlocks during simultaneous batch imports and user transactions.
+- Analyzed transaction logs, isolated row lock contention in InnoDB, and refactored table lock acquisition order, permanently resolving the deadlock conditions.

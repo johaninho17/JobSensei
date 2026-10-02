@@ -1,0 +1,25 @@
+# Technical Architecture Notes & Incident Management Principles — Northstar Notes
+Author: Alex Morgan
+Domain: API Reliability, Partner Webhook Architecture, and Incident Triage
+
+## 1. Webhook Reliability & Delivery Guarantees
+- Idempotency Keys: Every incoming and outgoing webhook delivery must attach a unique idempotency key (UUIDv4) and timestamp. Receivers should store processed idempotency keys in Redis with an appropriate TTL (typically 24–72 hours) to avoid double-processing during network retransmissions.
+- Exponential Backoff with Full Jitter: Standard exponential retries (e.g. 1s, 2s, 4s, 8s...) create thundering herd problems when a downed downstream partner recovers. Introducing full jitter (randomized sleep between 0 and 2^retry * base_delay) distributes request load smoothly across partner endpoints.
+- Dead-Letter Queue (DLQ) Lifecycle: Events that fail all retry attempts (e.g., 5 attempts over 2 hours) should be quarantined into a persistent DLQ with original payload, error codes, and request trace headers intact, rather than dropped silently.
+
+## 2. Detecting and Mitigating Partner API Drift
+- Runtime Validation vs Compile-time Types: TypeScript types are erased at runtime; production integration services must validate incoming external payloads at the network boundary using Zod, JSON Schema, or Protobuf.
+- Graceful Degradation: If a non-essential field changes type or is omitted by a third-party API, log a warning and fallback to default rather than failing the entire request. If a critical field breaks, capture the raw payload, raise an operational alert, and quarantine the record for engineering review.
+
+## 3. Incident Management & Cross-Organization Escalations
+- Scoping Impact with Data: When an integration outage occurs, engineering must immediately answer:
+  1. How many total accounts/tenants are affected?
+  2. Which specific API routes or transaction types are degrading?
+  3. Is this an authentication/credential failure, timeout, or schema mismatch?
+  Using targeted SQL queries across event and audit logs provides immediate quantitative clarity to stakeholders.
+- Packaging Reproducible Cases: Escalating an issue to an external data partner requires an ironclad, reproducible test case. Always provide:
+  - Exact cURL command with sanitized credentials
+  - Full request headers and timestamp (in UTC)
+  - Complete response body and HTTP status code
+  - Tracing ID or correlation header
+  This eliminates days of back-and-forth communication and accelerates partner engineering resolution.

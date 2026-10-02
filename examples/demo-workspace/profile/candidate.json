@@ -84,12 +84,7 @@
         "min": 5,
         "max": 7
       },
-      "skillsCategories": [
-        "Architecture & Systems Integration",
-        "Code & Databases",
-        "Cloud & Observability",
-        "Languages"
-      ]
+      "skillsCategories": []
     },
     "coverLetter": {
       "storyGuidance": [

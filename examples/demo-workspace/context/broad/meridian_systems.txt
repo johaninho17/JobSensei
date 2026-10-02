@@ -1,21 +1,42 @@
-# Engineering Worklog & Project Record — Meridian Cloud Systems
-Role: Lead Solutions & Integrations Engineer
+# Engineering Worklog & Architectural Project Record — Meridian Cloud Systems
+Role: Lead Solutions & Integrations Engineer (formerly Senior Systems Engineer)
 Timeline: March 2021 – Present
 Location: Portland, OR, USA
 
-## 1. Enterprise Partner Gateway & High-Volume Adapters
-Meridian powers enterprise data connectivity across financial and analytics platforms. When I joined as Lead Solutions & Integrations Engineer, partner onboarding required significant bespoke coding due to diverging REST payload conventions, authorization headers, and intermittent socket timeouts.
-- I architected and scaled modular TypeScript and Go integration adapters connecting our core data fabric to 25+ external partner REST APIs.
-- Integrated strict runtime schema validation using Zod and JSON Schema. When partner endpoints return schema drift or missing required fields, adapters capture structural anomalies and alert the operations queue without crashing active worker threads.
-- Scaled ingestion throughput to process over 45 million monthly transactions with an average p95 processing latency of 180ms.
+## 1. Core Platform Architecture & High-Scale Microservices
+Meridian powers enterprise data connectivity across financial institutions, analytical providers, and enterprise cloud applications.
+- When I joined Meridian in early 2021, the backend services were transitioning from a monolithic Node.js application to a domain-oriented microservices architecture on AWS EKS.
+- I led the backend architectural design of the core integration services, authoring RFCs for service boundaries, inter-service gRPC communication, and PostgreSQL transaction isolation.
+- Processed over 60 million monthly application requests across core platform domains with sustained p95 API response times below 120ms.
+- Mentored a squad of 6 distributed backend engineers, running weekly architecture reviews, setting standards for automated linting, test suites, and Dockerized local environments.
 
-## 2. Distributed Webhook Engine & Resilience
-Enterprise partner endpoints often experience maintenance windows, network partitions, and upstream rate limits.
-- Designed a high-volume payload validation and webhook retry pipeline using Redis, Node.js, and an exponential backoff algorithm with full jitter.
-- Integrated dead-letter queues (DLQs) with automated Slack and PagerDuty notifications, guaranteeing that transient partner drops never result in lost transactions.
-- Sustained 99.99% event delivery across all active partner connections over a 3-year period.
+## 2. Database Scalability, Connection Pooling & Redis Caching
+- As platform usage scaled 3x over two years, core PostgreSQL instances suffered connection exhaustion and read replica lag during morning burst traffic.
+- Architected and implemented a centralized Redis caching layer with intelligent cache invalidation based on database write-through events.
+- Configured PgBouncer connection pooling with transaction pooling mode, slashing active database read latency by 42% and eliminating connection pool timeouts during high concurrency.
+- Created reusable query interception middleware that cached high-read, low-write tenant configuration tables, shielding relational stores from millions of repetitive queries.
 
-## 3. Synthetic Probes, Triage & Partner Enablement
-- Built automated synthetic health probes in Python and Postman that continuously exercise partner staging and production endpoints, detecting upstream regressions before customer impact occurs.
-- Spearheaded the technical triage workflow for partner escalations, creating an internal CLI tracing utility that formats exact payload diffs.
-- Authored comprehensive developer guides, architectural integration blueprints, and sandbox testing environments, reducing enterprise partner onboarding cycle times by 35%.
+## 3. Enterprise Partner Gateway & High-Volume External Adapters
+- Connecting Meridian to external partner ecosystems required dedicated integration infrastructure due to wildly diverging API specs, authentication schemes, and network reliability characteristics.
+- Architected and scaled TypeScript and Go integration adapters connecting Meridian to 25+ external partner REST APIs, handling over 45M monthly external integration transactions.
+- Designed runtime schema validation using Zod and JSON Schema. When external partners introduce unannounced breaking changes or schema drift, the adapters capture structural anomalies, parse the delta, and route problematic records to a dedicated inspection queue without taking down the pipeline.
+- Engineered adapters supporting varied authentication mechanisms including OAuth2 with automated token refresh, mTLS mutual authentication, HMAC request signing, and rotating API keys.
+
+## 4. Distributed Webhook Engine & Resilience Pipeline
+- External partner services frequently encounter maintenance windows, intermittent HTTP 502/503 errors, and network partitions.
+- Designed a high-throughput payload validation and webhook retry pipeline using Redis Streams, Node.js worker pools, and an exponential backoff algorithm with full jitter.
+- Designed multi-stage dead-letter queues (DLQ) with automated alerting to Slack and PagerDuty when consecutive retry ceilings are reached.
+- Ensured zero dropped customer transactions during prolonged upstream partner outages, sustaining a 99.99% successful delivery rate over 3 consecutive years.
+
+## 5. Synthetic Probes, Postman Verification & Proactive Monitoring
+- Rather than waiting for customer reports to discover partner API breakage, established a proactive synthetic monitoring system.
+- Created automated Python test suites and Newman-driven Postman collections scheduled across AWS Lambda functions to execute every 60 seconds against partner sandbox and production endpoints.
+- Configured Datadog synthetic monitors to track partner endpoint latency, certificate expiration, and payload integrity.
+- Preemptively caught over 80 upstream partner regressions and breaking changes prior to production customer impact.
+
+## 6. Operational Incident Triage, SQL Impact Scoping & Partner Escalation
+- Acted as the primary technical point of contact during partner integration degradations and high-severity customer escalations.
+- Formulated an analytical, SQL-driven triage methodology: when an endpoint starts returning 5xx or invalid responses, I execute targeted PostgreSQL queries against event logs to identify which enterprise tenants, specific accounts, and payload types are impacted.
+- Packaged clean, reproducible test cases (including exact cURL commands, redacted JSON request/response bodies, and network timing traces) and escalated directly to partner engineering and solutions teams.
+- Maintained a bi-weekly integration on-call rotation with a strict 15-minute response SLA for Tier-1 enterprise partner incidents.
+- Authored comprehensive developer portal integration guides, sample apps, and interactive sandbox environments that accelerated enterprise partner onboarding cycles by 35%.
