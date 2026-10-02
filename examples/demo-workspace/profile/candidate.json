@@ -84,7 +84,11 @@
         "min": 5,
         "max": 7
       },
-      "skillsCategories": []
+      "skillsCategories": [
+        "Distributed Systems & Architecture",
+        "Backend Engineering & Databases",
+        "Cloud & Infrastructure"
+      ]
     },
     "coverLetter": {
       "storyGuidance": [

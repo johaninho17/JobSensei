@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "applicationRunId": "61c7022fd0abe6bd28b94a1d4acc2222b5c251693441f3c8d7951382132ce49e",
+  "evidenceSnapshotId": "2484d9bd6a80906ef76141c5aaa5d1f142b19ec6b97e8b3810763f2d06c777e7",
+  "canonicalBaselineId": "0b45eca94143e82d45d4694b60190cf48c639557450411f4c1e41bebdae7da46",
+  "resume": {
+    "skillsLines": [
+      "**Architecture & Systems Integration:** High-Throughput RESTful APIs, Webhooks, Event-Driven Architecture, Microservices, Multi-Service Connectors, ETL Pipelines, Data Modeling.",
+      "**Code & Databases:** TypeScript/JavaScript (Node.js), Go, Python, SQL, PostgreSQL, Redis, DynamoDB, Git/GitHub Actions.",
+      "**Cloud & Observability:** Amazon Web Services (AWS), Docker, Kubernetes, Linux/Unix Environments, Datadog Telemetry, Postman, CI/CD.",
+      "**Languages:** English (Native speaker), Spanish (Professional working proficiency)."
+    ],
+    "employers": [
+      {
+        "name": "Meridian Cloud Systems",
+        "bullets": [
+          "Architected and scaled TypeScript and Go integration adapters connecting Meridian's core platform to 25+ external partner REST APIs, processing over 45M monthly transactions.",
+          "Diagnosed complex API authentication, schema drift, and cross-service data execution failures across distributed container environments, sustaining 99.99% partner uptime.",
+          "Automated endpoint health verification using Python test suites, Postman collections, and synthetic probes to preemptively detect upstream partner regressions.",
+          "Designed a high-volume payload validation and webhook retry pipeline using Redis, Node.js, and exponential backoff, preventing event drop-offs during partner outages.",
+          "Spearheaded the technical triage workflow for partner escalations, authoring architectural integration guides that reduced enterprise onboarding cycles by 35%."
+        ]
+      },
+      {
+        "name": "Kinetics Data Platform",
+        "bullets": [
+          "Developed modular backend ingestion microservices in Node.js and TypeScript handling streaming data feeds across diverse third-party APIs.",
+          "Optimized PostgreSQL data pipelines and composite indexing strategies, reducing p95 query latency by 45% across analytical reporting endpoints.",
+          "Implemented robust HMAC SHA-256 signature verification and distributed token bucket rate-limiting middleware to protect partner webhook receivers.",
+          "Established automated integration testing frameworks and contract validation pipelines using Docker, driving test coverage above 90%."
+        ]
+      },
+      {
+        "name": "Cascade Software Labs",
+        "bullets": [
+          "Engineered core RESTful API services and database connectors supporting customer-facing web and mobile applications.",
+          "Built automated data synchronization workers that ingested partner payloads, transforming unstructured records into normalized SQL schemas.",
+          "Collaborated with QA and infrastructure engineers to build automated CI/CD deployment pipelines utilizing Docker and Jenkins across multi-region environments."
+        ]
+      }
+    ]
+  },
+  "coverLetter": {
+    "date": "October 2, 2026",
+    "recipientLines": [
+      "Hiring Team",
+      "Plaid"
+    ],
+    "salutation": "Dear Hiring Team,",
+    "bodyParagraphs": [
+      "As a lead solutions and integrations engineer, I am writing regarding the Integrations Operations Engineer role at Plaid to help maintain reliable API connectivity and resolve complex integration issues across your partner ecosystem. Over the past eight years, my career has evolved from building core REST services and data pipelines into leading high-throughput partner integrations, webhook reliability, and operational troubleshooting.",
+      "At Cascade Software Labs, I engineered core RESTful services and automated synchronization workers, learning early how fragile integrations become when external payloads drift from documented schemas. At Kinetics Data Platform, I developed streaming backend ingestion microservices in Node.js and TypeScript, optimized PostgreSQL pipelines to reduce p95 latency by 45%, and implemented HMAC SHA-256 signature verification to safeguard partner endpoints against burst traffic and replay attacks.",
+      "At Meridian Cloud Systems, I lead solutions and integration engineering across 25+ external partner REST APIs processing over 45M monthly transactions. When integration endpoints experience anomalies, I lead cross-organizational triage using Python synthetic test probes and structured tracing to isolate root causes. To guarantee resilience against partner downtime, I architected a Redis-backed webhook retry engine that achieved 99.99% event delivery success while authoring developer resources that cut enterprise onboarding time by 35%.",
+      "Sustaining mission-critical financial integrations demands engineers with deep production seasoning who can rapidly diagnose issues across code, databases, and network boundaries while communicating with clarity. I welcome the opportunity to bring my integration engineering background and operational focus to Plaid's Integrations Operations Engineering team."
+    ],
+    "closing": "Sincerely,"
+  }
+}

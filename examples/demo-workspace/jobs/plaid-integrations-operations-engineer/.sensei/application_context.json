@@ -1,0 +1,541 @@
+{
+  "schemaVersion": 2,
+  "jobId": "plaid-integrations-operations-engineer",
+  "snapshotId": "2484d9bd6a80906ef76141c5aaa5d1f142b19ec6b97e8b3810763f2d06c777e7",
+  "manifestHash": "60d3c4367d06fd72dfb6ca8769f79873300ad4771df57c8870ebee64658f3ef2",
+  "generatedAt": "2026-10-02T22:20:07.600Z",
+  "baseResumePath": "resumes/Alex_Morgan_Resume.md",
+  "job": {
+    "company": "Plaid",
+    "title": "Integrations Operations Engineer",
+    "location": "San Francisco, CA (Remote / Telecommute - United States)"
+  },
+  "candidate": {
+    "fullName": "Alex Morgan",
+    "artifactPrefix": "Alex_Morgan",
+    "transitionSummary": "Over 8 years of engineering experience advancing from core REST services and database architecture into leading enterprise partner integrations, API gateway reliability, and operational troubleshooting.",
+    "preferredRoleFamilies": [
+      "solutions engineering",
+      "integrations operations engineering",
+      "forward deployed engineering",
+      "principal / staff integration architect"
+    ],
+    "storyGuidance": [
+      "Early career: Core RESTful API development and schema normalization at Cascade Software Labs.",
+      "Mid career: High-volume streaming ingestion microservices and PostgreSQL query optimization at Kinetics Data Platform.",
+      "Current leadership: Multi-partner integration adapters, Redis webhook retry pipelines, and operational triage at Meridian Cloud Systems."
+    ],
+    "voiceGuidance": [
+      "Authoritative, practical, and technically grounded.",
+      "Reflect 8+ years of production experience without corporate buzzwords."
+    ]
+  },
+  "resumeTemplate": {
+    "baselineId": "0b45eca94143e82d45d4694b60190cf48c639557450411f4c1e41bebdae7da46",
+    "originalSkillsLines": [
+      "**Distributed Systems & Architecture:** Microservices, Event-Driven Architecture, RESTful APIs, gRPC, Message Queues (Kafka, RabbitMQ), Distributed Caching, Domain-Driven Design (DDD).",
+      "**Backend Engineering & Databases:** TypeScript/JavaScript (Node.js), Go, Python, SQL, PostgreSQL, Redis, DynamoDB, MongoDB, Git.",
+      "**Cloud & Infrastructure:** Amazon Web Services (AWS), Docker, Kubernetes, Terraform, Linux/Unix Environments, CI/CD (GitHub Actions), Datadog.",
+      "**Languages:** English (Native speaker), Spanish (Professional working proficiency)."
+    ],
+    "employers": [
+      {
+        "name": "Meridian Cloud Systems",
+        "originalBulletCount": 5,
+        "originalBullets": [
+          "Architected and scaled distributed backend microservices in TypeScript and Go across core platform domains, processing over 60M monthly application requests.",
+          "Implemented a centralized Redis caching layer and connection pooling strategy, reducing core PostgreSQL database read latency by 42% during peak traffic bursts.",
+          "Engineered asynchronous task worker pipelines in Node.js for batch transaction processing, eliminating CPU starvation on primary API clusters.",
+          "Mentored a distributed squad of 6 backend engineers, conducting weekly architecture RFC reviews and establishing automated code linting and testing standards.",
+          "Automated containerized deployments using AWS EKS and GitHub Actions, reducing service release cycle times from two weeks to daily deployments."
+        ]
+      },
+      {
+        "name": "Kinetics Data Platform",
+        "originalBulletCount": 4,
+        "originalBullets": [
+          "Engineered modular backend ingestion microservices in Node.js and TypeScript, handling streaming event feeds across distributed analytical clusters.",
+          "Optimized PostgreSQL data pipelines and composite indexing strategies, reducing p95 query latency by 45% across analytical reporting endpoints.",
+          "Implemented token bucket rate-limiting middleware and role-based access control (RBAC) in Go, safeguarding core services from denial-of-service traffic spikes.",
+          "Established automated integration testing frameworks and contract validation pipelines using Docker, driving test coverage above 90%."
+        ]
+      },
+      {
+        "name": "Cascade Software Labs",
+        "originalBulletCount": 3,
+        "originalBullets": [
+          "Engineered core RESTful API services and database connectors supporting customer-facing web and mobile applications.",
+          "Built automated data synchronization workers that ingested partner payloads, transforming unstructured records into normalized SQL schemas.",
+          "Collaborated with QA and infrastructure engineers to build automated CI/CD deployment pipelines utilizing Docker and Jenkins across multi-region environments."
+        ]
+      }
+    ],
+    "editableSkillCategories": [
+      "Distributed Systems & Architecture",
+      "Backend Engineering & Databases",
+      "Cloud & Infrastructure"
+    ]
+  },
+  "footprint": {
+    "sourcePath": "resumes/Alex_Morgan_Resume.md",
+    "format": "markdown",
+    "status": "reliable",
+    "wordCount": 350,
+    "experienceBulletCount": 12,
+    "currentEmployerBulletCount": 5,
+    "targetWordMin": 350,
+    "targetWordMax": 386,
+    "experienceWordCount": 220,
+    "averageExperienceBulletWords": 18.333333333333332,
+    "targetExperienceWordMin": 209,
+    "targetExperienceWordMax": 231,
+    "warnings": []
+  },
+  "evidenceRows": [
+    {
+      "evidenceId": "context:meridian:2022:uptime-debug",
+      "claim": "Diagnosed complex API authentication, schema drift, and cross-service data execution failures across distributed container environments, sustaining 99.99% partner uptime.",
+      "scope": "Led technical triage sessions with partner engineering leaders.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Distributed Debugging",
+      "sourcePath": "context/structured/meridian.md",
+      "sourceFamily": "meridian",
+      "timeline": "recent",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:meridian:2024:oncall-sla",
+      "claim": "Participated in bi-weekly integration on-call rotations, maintaining a 15-minute response SLA for Tier-1 enterprise partner incidents.",
+      "scope": "Rotated primary on-call for partner API connectivity and webhook pipeline health.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Operations & Reliability",
+      "sourcePath": "context/structured/meridian.md",
+      "sourceFamily": "meridian",
+      "timeline": "recent",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:cascade:2017:defect-repro",
+      "claim": "Diagnosed edge-case database deadlock issues in multi-threaded ingestion workers using query logs and reproducible test harnesses.",
+      "scope": "Isolated transaction isolation conflicts in MySQL InnoDB.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Concurrency Debugging",
+      "sourcePath": "context/structured/cascade.md",
+      "sourceFamily": "cascade",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:scalewave:2015:metric-dashboards",
+      "claim": "Configured server monitoring dashboards and alert thresholds to track endpoint response latencies and HTTP error rates across development clusters.",
+      "scope": "Supported senior systems engineer on monitoring setup.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Observability",
+      "sourcePath": "context/structured/scalewave.md",
+      "sourceFamily": "scalewave",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:meridian:2023:synthetic-probes",
+      "claim": "Automated endpoint health verification using Python test suites, Postman collections, and synthetic probes to preemptively detect upstream partner regressions.",
+      "scope": "Designed synthetic probe infrastructure in AWS/Datadog.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Endpoint Monitoring",
+      "sourcePath": "context/structured/meridian.md",
+      "sourceFamily": "meridian",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:kinetics:2018:ingestion",
+      "claim": "Developed modular backend ingestion microservices in Node.js and TypeScript handling streaming data feeds across diverse third-party APIs.",
+      "scope": "Senior engineer on ingestion squad; owned event routing services.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Streaming Ingestion",
+      "sourcePath": "context/structured/kinetics.md",
+      "sourceFamily": "kinetics",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:meridian:2021:connectors",
+      "claim": "Architected and scaled TypeScript and Go integration adapters connecting Meridian's core platform to 25+ external partner REST APIs, processing over 45M monthly transactions.",
+      "scope": "Lead solutions engineer; designed adapter interface, schema validators, and data pipelines.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Partner Gateway",
+      "sourcePath": "context/structured/meridian.md",
+      "sourceFamily": "meridian",
+      "timeline": "recent",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:meridian:2023:sql-scoping",
+      "claim": "Executed ad-hoc PostgreSQL diagnostic queries during partner degradation events to quantify customer transaction impact and prioritize patch rollouts.",
+      "scope": "Performed incident triage querying affected accounts, tenants, and payload error codes.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Production Diagnostics",
+      "sourcePath": "context/structured/meridian.md",
+      "sourceFamily": "meridian",
+      "timeline": "recent",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:meridian:2024:partner-guides",
+      "claim": "Spearheaded the technical triage workflow for partner escalations, authoring architectural integration guides that reduced enterprise onboarding cycles by 35%.",
+      "scope": "Technical author and partner architectural liaison.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Partner Enablement",
+      "sourcePath": "context/structured/meridian.md",
+      "sourceFamily": "meridian",
+      "timeline": "recent",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:meridian:2021:microservices-core",
+      "claim": "Architected and scaled distributed backend microservices in TypeScript and Go across core platform domains, processing over 60M monthly application requests.",
+      "scope": "Technical lead on backend platform architecture and domain decomposition.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Core Microservices",
+      "sourcePath": "context/structured/meridian.md",
+      "sourceFamily": "meridian",
+      "timeline": "recent",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:cascade:2015:rest-services",
+      "claim": "Engineered core RESTful API services and database connectors supporting customer-facing web and mobile applications.",
+      "scope": "Early career software engineer; individual contributor.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Core REST Services",
+      "sourcePath": "context/structured/cascade.md",
+      "sourceFamily": "cascade",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:meridian:2024:mentorship-rfcs",
+      "claim": "Mentored a distributed squad of 6 backend engineers, conducting weekly architecture RFC reviews and establishing automated code linting and testing standards.",
+      "scope": "Squad engineering lead and technical mentor.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Team Leadership",
+      "sourcePath": "context/structured/meridian.md",
+      "sourceFamily": "meridian",
+      "timeline": "recent",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:kinetics:2019:oauth-gateway",
+      "claim": "Built OAuth2 token rotation and client credential validation middleware for external partner developer integrations.",
+      "scope": "Designed token validation caching layer in Redis.",
+      "employer": "Meridian Cloud Systems",
+      "project": "API Security",
+      "sourcePath": "context/structured/kinetics.md",
+      "sourceFamily": "kinetics",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:kinetics:2019:postgres-perf",
+      "claim": "Optimized PostgreSQL data pipelines and composite indexing strategies, reducing p95 query latency by 45% across analytical reporting endpoints.",
+      "scope": "Primary contributor; analyzed EXPLAIN ANALYZE traces and added partial indexes.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Database Optimization",
+      "sourcePath": "context/structured/kinetics.md",
+      "sourceFamily": "kinetics",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:kinetics:2020:client-sdks",
+      "claim": "Generated typed TypeScript client SDKs from OpenAPI specifications to streamline external developer consumption and eliminate contract mismatches.",
+      "scope": "Built automated SDK build and publish pipeline.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Developer Tooling",
+      "sourcePath": "context/structured/kinetics.md",
+      "sourceFamily": "kinetics",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:scalewave:2014:api-testing",
+      "claim": "Built automated integration test scripts in Python to validate internal REST API endpoints during undergraduate engineering internship.",
+      "scope": "Engineering intern; created automated regression scripts.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Test Automation",
+      "sourcePath": "context/structured/scalewave.md",
+      "sourceFamily": "scalewave",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:cascade:2016:data-sync",
+      "claim": "Built automated data synchronization workers that ingested partner payloads, transforming unstructured records into normalized SQL schemas.",
+      "scope": "Contributor on backend data ingestion workers.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Schema Normalization",
+      "sourcePath": "context/structured/cascade.md",
+      "sourceFamily": "cascade",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:kinetics:2020:contract-tests",
+      "claim": "Established automated integration testing frameworks and contract validation pipelines using Docker, driving test coverage above 90%.",
+      "scope": "Technical lead on integration test harness.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Test Infrastructure",
+      "sourcePath": "context/structured/kinetics.md",
+      "sourceFamily": "kinetics",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:meridian:2023:retry-engine",
+      "claim": "Designed a high-volume payload validation and webhook retry pipeline using Redis, Node.js, and exponential backoff, preventing event drop-offs during partner outages.",
+      "scope": "Lead implementer of delayed retry workers with DLQ.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Webhook Delivery",
+      "sourcePath": "context/structured/meridian.md",
+      "sourceFamily": "meridian",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:cascade:2016:sql-schemas",
+      "claim": "Designed relational database migration scripts and composite indexing schemes in MySQL and PostgreSQL for transaction recording.",
+      "scope": "Authored migration scripts and index review documentation.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Database Architecture",
+      "sourcePath": "context/structured/cascade.md",
+      "sourceFamily": "cascade",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:cascade:2017:docker-cicd",
+      "claim": "Collaborated with QA and infrastructure engineers to build automated CI/CD deployment pipelines utilizing Docker and Jenkins across multi-region environments.",
+      "scope": "Authored Jenkinsfile scripts and Docker Compose environments.",
+      "employer": "Meridian Cloud Systems",
+      "project": "CI/CD Automation",
+      "sourcePath": "context/structured/cascade.md",
+      "sourceFamily": "cascade",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:kinetics:2018:stream-pipeline",
+      "claim": "Engineered real-time event streaming pipeline processing over 10M daily events with Apache Kafka and Node.js consumer groups.",
+      "scope": "Implemented partition rebalancing and dead-letter topics.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Event Streaming",
+      "sourcePath": "context/structured/kinetics.md",
+      "sourceFamily": "kinetics",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:kinetics:2020:hmac-ratelimit",
+      "claim": "Implemented robust HMAC SHA-256 signature verification and distributed token bucket rate-limiting middleware to protect partner webhook receivers.",
+      "scope": "Authored and deployed core security middleware library.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Security & Rate Limiting",
+      "sourcePath": "context/structured/kinetics.md",
+      "sourceFamily": "kinetics",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:meridian:2022:async-workers",
+      "claim": "Engineered asynchronous task worker pipelines in Node.js for batch transaction processing, eliminating CPU starvation on primary API clusters.",
+      "scope": "Designed background worker pool with fair-share scheduling.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Batch Processing",
+      "sourcePath": "context/structured/meridian.md",
+      "sourceFamily": "meridian",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:meridian:2022:redis-caching",
+      "claim": "Implemented a centralized Redis caching layer and connection pooling strategy, reducing core PostgreSQL database read latency by 42% during peak traffic bursts.",
+      "scope": "Primary designer of cache invalidation and query interception middleware.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Database Optimization",
+      "sourcePath": "context/structured/meridian.md",
+      "sourceFamily": "meridian",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    },
+    {
+      "evidenceId": "context:meridian:2023:eks-cicd",
+      "claim": "Automated containerized deployments using AWS EKS and GitHub Actions, reducing service release cycle times from two weeks to daily deployments.",
+      "scope": "Implemented Helm charts, canary rollouts, and health check gates.",
+      "employer": "Meridian Cloud Systems",
+      "project": "Infrastructure & DevOps",
+      "sourcePath": "context/structured/meridian.md",
+      "sourceFamily": "meridian",
+      "timeline": "prior",
+      "eligibility": "eligible",
+      "maximumClassification": "direct",
+      "sourceAuthority": "primary"
+    }
+  ],
+  "denylistRules": [],
+  "styleRules": [
+    "Authoritative, practical, and technically grounded.",
+    "Reflect 8+ years of production experience without corporate buzzwords.",
+    "Early career: Core RESTful API development and schema normalization at Cascade Software Labs.",
+    "Mid career: High-volume streaming ingestion microservices and PostgreSQL query optimization at Kinetics Data Platform.",
+    "Current leadership: Multi-partner integration adapters, Redis webhook retry pipelines, and operational triage at Meridian Cloud Systems.",
+    "Tone & Style Principles",
+    "**Direct and Technical:** Speak as an engineer who builds systems and troubleshoots real problems with partners.",
+    "**Evidence-Grounded:** Every bullet and sentence must tie directly to verified implementation or operational work.",
+    "**Measurable Outcomes:** Highlight latency improvements, throughput, error-reduction percentages, and SLA uptime where supported by records.",
+    "**Anti-Fluff / Zero Buzzwords:** Never use generic buzzwords such as \"visionary leader\", \"synergized\", \"rockstar\", or \"game-changing\".",
+    "**Chronological Integrity:** Clearly preserve the natural career progression from backend microservices into customer-facing integrations engineering."
+  ],
+  "resumePlan": {
+    "targetTotalBullets": 13,
+    "targetTailoredBulletMin": 4,
+    "targetTailoredBulletMax": 5,
+    "targetCareerAnchorBullets": 8,
+    "targetExperienceWordMin": 209,
+    "targetExperienceWordMax": 231,
+    "customerFacingRole": false,
+    "targetCurrentEmployerCustomerBullets": 0,
+    "customerFacingEvidenceIds": [
+      "context:meridian:2022:uptime-debug",
+      "context:meridian:2024:oncall-sla",
+      "context:meridian:2021:connectors",
+      "context:meridian:2023:sql-scoping",
+      "context:meridian:2024:partner-guides"
+    ],
+    "employerTargets": [
+      {
+        "employer": "Meridian Cloud Systems",
+        "targetBullets": 6,
+        "routedEvidenceCount": 26
+      },
+      {
+        "employer": "Kinetics Data Platform",
+        "targetBullets": 4,
+        "routedEvidenceCount": 0
+      },
+      {
+        "employer": "Cascade Software Labs",
+        "targetBullets": 3,
+        "routedEvidenceCount": 0
+      }
+    ]
+  },
+  "coverLetterBrief": {
+    "targetWordMin": 190,
+    "targetWordMax": 230,
+    "hardWordMax": 300,
+    "roleProblems": [
+      "Maintain the integrations issue backlog through triage and periodic auditing, and continually improve the team's processes and tooling."
+    ],
+    "company": "Plaid",
+    "role": "Integrations Operations Engineer",
+    "introContract": [
+      "Candidate-first narrative: Alex Morgan's story exists independently of the JD. Do not derive the candidate's interests, focus, identity, or reasons for applying from the job description.",
+      "Begin with Alex Morgan: who the candidate is and how the career developed, using candidateProfile and selected evidence.",
+      "Do not announce that he is applying and do not begin by describing the employer. Never use templated openings such as 'Throughout my work, I have focused/concentrated on [job requirements]' or declare the role a 'natural continuation' or 'natural next step'."
+    ],
+    "requiredElements": [
+      "Candidate-first narrative: Alex Morgan's career story exists independently of the JD. The JD selects which truthful career episode is relevant, but never creates interests, passions, focus, or identity.",
+      "Candidate-originated motivation must come from the candidate profile, application voice profile, or user goals—never inferred from JD terminology or invented under non-factual classification.",
+      "Keep at least three quarters of the body on the candidate's documented career path, personal choices, and evidence rather than a skills inventory.",
+      "Fit should be demonstrated through concrete evidence, not declared through lists of matching requirements or prose inventories of tools.",
+      "Use education or earlier work only when it adds meaning to this particular career path; do not include the same education paragraph by default or list coursework.",
+      "Use one or two concrete evidence-backed examples with accurate tense and ownership: use one ongoing Meridian Cloud Systems example when available, and when useful, one earlier career or education bridge."
+    ],
+    "prohibitedPatterns": [
+      "Throughout my work, I have focused",
+      "Throughout my work, I have concentrated",
+      "Throughout my work as an engineer, I have focused",
+      "Throughout my work as a Customer Engineer, I have focused",
+      "I have focused on",
+      "I have concentrated on",
+      "making this position a natural continuation",
+      "making this role a natural next step",
+      "making this role a natural continuation",
+      "a natural continuation",
+      "a natural next step",
+      "That background allows me to",
+      "That development background allows me to",
+      "That engineering background allows me to",
+      "I look forward to bringing",
+      "My background aligns",
+      "My background connects",
+      "This progression",
+      "This combination",
+      "I welcome the opportunity to discuss how my background",
+      "This foundation enables me",
+      "Opening with a generic description of the company",
+      "Engineering teams need",
+      "I am excited to bring this combination"
+    ]
+  },
+  "instructions": [
+    "Use only evidenceRows for candidate facts; preserve employer, timeline, scope, eligibility, and classification ceilings.",
+    "Use the JD to prioritize supported work, never to rewrite candidate history. Follow resumePlan and resumeTemplate exactly.",
+    "Substantively reframe 4-5 experience bullets for the target role using eligible evidence; do not copy baseline bullets verbatim (prevents RESUME_TAILORING_TOO_SIMILAR), and keep total experience words strictly within targetExperienceWordMin and targetExperienceWordMax.",
+    "In the cover letter opening paragraph, introduce the candidate ('I' / 'my') and explicitly include both the target company and role names (prevents COVER_LETTER_INTRO_IMPERSONAL).",
+    "Only cite eligible evidence rows for standalone claims; do not cite a single corroboration-required row alone.",
+    "Use direct, natural wording; denylistRules always win. Apply styleRules to wording only, never as evidence.",
+    "Retain one supported customer-facing career anchor when relevant without displacing stronger technical evidence.",
+    "Write one application_bundle.json with evidence IDs beside each generated claim, then finalize once."
+  ]
+}

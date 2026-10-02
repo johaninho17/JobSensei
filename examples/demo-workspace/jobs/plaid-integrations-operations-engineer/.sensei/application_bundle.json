@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "applicationRunId": "61c7022fd0abe6bd28b94a1d4acc2222b5c251693441f3c8d7951382132ce49e",
+  "evidenceSnapshotId": "2484d9bd6a80906ef76141c5aaa5d1f142b19ec6b97e8b3810763f2d06c777e7",
+  "canonicalBaselineId": "0b45eca94143e82d45d4694b60190cf48c639557450411f4c1e41bebdae7da46",
+  "evaluationMarkdown": "# Job Evaluation: Plaid - Integrations Operations Engineer\n\n## Overview\n- **Company**: Plaid\n- **Role**: Integrations Operations Engineer\n- **Location**: San Francisco, CA (Remote / Telecommute - United States)\n- **Weighted Fit Score**: 4.65 / 5\n- **Fit Confidence**: high\n- **Gate Status**: accepted\n- **Recommendation**: Apply\n\n### Category Summary\n- **Core responsibilities:** 40.0 / 40\n- **Technical requirements:** 25.0 / 25\n- **Scope and seniority:** 15.0 / 15\n- **Outcomes:** 8.0 / 10\n- **Domain:** 0.0 / 5\n- **Learning and adaptability:** 5.0 / 5\n- **Weighted total:** 93.0 / 100\n- **Canonical fit score:** 4.65 / 5\n\n### Requirement Scoring\n| Requirement | Category | Weight | Material | Classification | Evidence |\n| --- | --- | ---: | --- | --- | --- |\n| Integration issue investigation, root-cause debugging, and production remediation for web services and APIs | core | 40% | yes | direct | context:meridian:2022:uptime-debug |\n| Web service and API development, multi-service connectors, TypeScript/Node.js, and SQL data queries | technical | 25% | yes | direct | context:meridian:2021:connectors |\n| Integrations issue backlog triage, operational mitigation, and partner/cross-functional escalation | scope | 15% | yes | direct | context:meridian:2024:partner-guides |\n| Sustained network connectivity, rapid issue resolution SLA, and reduced customer impact | outcomes | 10% | yes | strong_transferable | context:meridian:2023:retry-engine |\n| Financial institution data feeds, banking connectivity, and financial services data partner platforms | domain | 5% | no | gap | None (Industry domain gap) |\n| Fast adaptability across evolving integration codebases, internal tooling, and on-call operational rotation | learning | 5% | no | direct | context:kinetics:2018:ingestion |\n\n## Fit Summary\nAlex Morgan brings over eight years of deep systems engineering and integration architecture experience, presenting an outstanding 4.65/5.0 match for Plaid's Integrations Operations Engineering team. In their current role as Lead Solutions & Integrations Engineer at Meridian Cloud Systems, Alex oversees 25+ partner REST adapters processing over 45M monthly transactions with 99.99% uptime. While financial institution core protocols (such as OFX or ISO 20022) represent an adjacent industry domain to ramp up on, Alex's proven expertise diagnosing distributed authentication failures, designing resilient webhook retry queues, and packaging reproducible test cases for partner engineering teams directly addresses Plaid's core IOE mission.\n\n## Direct Matches\n- **Integration issue investigation, root-cause debugging, and production remediation for web services and APIs:** direct (context:meridian:2022:uptime-debug).\n- **Web service and API development, multi-service connectors, TypeScript/Node.js, and SQL data queries:** direct (context:meridian:2021:connectors).\n- **Integrations issue backlog triage, operational mitigation, and partner/cross-functional escalation:** direct (context:meridian:2024:partner-guides).\n- **Fast adaptability across evolving integration codebases, internal tooling, and on-call operational rotation:** direct (context:kinetics:2018:ingestion).\n\n## Transferable Evidence\n- **Sustained network connectivity, rapid issue resolution SLA, and reduced customer impact:** strong transferable (context:meridian:2023:retry-engine).\n\n## Important Gaps or Hard Blockers\n- **Financial institution data feeds, banking connectivity, and financial services data partner platforms:** gap (None (Industry domain gap)).\n\n<!-- jobsensei-application-audit:start -->\n## Resume Audit\n- **Artifact:** `Alex_Morgan_Plaid_Resume.md`\n- **Review status:** Validated without warnings\n- **Experience bullets:** 12\n- **Mapped public claims:** 12\n- **Evidence references:** 12\n\n## Cover Letter Audit\n- **Artifact:** `cover_letter.md`\n- **Review status:** Validated without warnings\n- **Body paragraphs:** 4\n- **Career-arc stages:** 3\n- **Evidence references:** 8\n\n### Career Arc\n- **prior:** Core REST services and schema normalization at Cascade\n- **prior:** Streaming ingestion microservices and PostgreSQL optimization at Kinetics\n- **current:** Enterprise partner adapters and webhook retry architecture at Meridian\n\n## Overall Application Review\n- **Status:** Validated without warnings\n- **Run:** `f8290bc4751fd0004e71e5eb0b62d419264c85d32516`\n<!-- jobsensei-application-audit:end -->\n",
+  "resume": {
+    "skillsLines": [
+      {
+        "text": "**Architecture & Systems Integration:** High-Throughput RESTful APIs, Webhooks, Event-Driven Architecture, Microservices, Multi-Service Connectors, ETL Pipelines, Data Modeling.",
+        "evidenceIds": [
+          "context:meridian:2021:connectors",
+          "context:meridian:2023:retry-engine"
+        ]
+      },
+      {
+        "text": "**Code & Databases:** TypeScript/JavaScript (Node.js), Go, Python, SQL, PostgreSQL, Redis, DynamoDB, Git/GitHub Actions.",
+        "evidenceIds": [
+          "context:meridian:2021:connectors",
+          "context:kinetics:2019:postgres-perf",
+          "context:meridian:2022:redis-caching"
+        ]
+      },
+      {
+        "text": "**Cloud & Observability:** Amazon Web Services (AWS), Docker, Kubernetes, Linux/Unix Environments, Datadog Telemetry, Postman, CI/CD.",
+        "evidenceIds": [
+          "context:meridian:2023:synthetic-probes",
+          "context:meridian:2023:eks-cicd",
+          "context:kinetics:2020:contract-tests"
+        ]
+      },
+      {
+        "text": "**Languages:** English (Native speaker), Spanish (Professional working proficiency).",
+        "evidenceIds": []
+      }
+    ],
+    "employers": [
+      {
+        "name": "Meridian Cloud Systems",
+        "bullets": [
+          {
+            "text": "Architected and scaled TypeScript and Go integration adapters connecting Meridian's core platform to 25+ external partner REST APIs, processing over 45M monthly transactions.",
+            "evidenceIds": [
+              "context:meridian:2021:connectors"
+            ]
+          },
+          {
+            "text": "Diagnosed complex API authentication, schema drift, and cross-service data execution failures across distributed container environments, sustaining 99.99% partner uptime.",
+            "evidenceIds": [
+              "context:meridian:2022:uptime-debug"
+            ]
+          },
+          {
+            "text": "Automated endpoint health verification using Python test suites, Postman collections, and synthetic probes to preemptively detect upstream partner regressions.",
+            "evidenceIds": [
+              "context:meridian:2023:synthetic-probes"
+            ]
+          },
+          {
+            "text": "Designed a high-volume payload validation and webhook retry pipeline using Redis, Node.js, and exponential backoff, preventing event drop-offs during partner outages.",
+            "evidenceIds": [
+              "context:meridian:2023:retry-engine"
+            ]
+          },
+          {
+            "text": "Spearheaded the technical triage workflow for partner escalations, authoring architectural integration guides that reduced enterprise onboarding cycles by 35%.",
+            "evidenceIds": [
+              "context:meridian:2024:partner-guides"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Kinetics Data Platform",
+        "bullets": [
+          {
+            "text": "Developed modular backend ingestion microservices in Node.js and TypeScript handling streaming data feeds across diverse third-party APIs.",
+            "evidenceIds": [
+              "context:kinetics:2018:ingestion"
+            ]
+          },
+          {
+            "text": "Optimized PostgreSQL data pipelines and composite indexing strategies, reducing p95 query latency by 45% across analytical reporting endpoints.",
+            "evidenceIds": [
+              "context:kinetics:2019:postgres-perf"
+            ]
+          },
+          {
+            "text": "Implemented robust HMAC SHA-256 signature verification and distributed token bucket rate-limiting middleware to protect partner webhook receivers.",
+            "evidenceIds": [
+              "context:kinetics:2020:hmac-ratelimit"
+            ]
+          },
+          {
+            "text": "Established automated integration testing frameworks and contract validation pipelines using Docker, driving test coverage above 90%.",
+            "evidenceIds": [
+              "context:kinetics:2020:contract-tests"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Cascade Software Labs",
+        "bullets": [
+          {
+            "text": "Engineered core RESTful API services and database connectors supporting customer-facing web and mobile applications.",
+            "evidenceIds": [
+              "context:cascade:2015:rest-services"
+            ]
+          },
+          {
+            "text": "Built automated data synchronization workers that ingested partner payloads, transforming unstructured records into normalized SQL schemas.",
+            "evidenceIds": [
+              "context:cascade:2016:data-sync"
+            ]
+          },
+          {
+            "text": "Collaborated with QA and infrastructure engineers to build automated CI/CD deployment pipelines utilizing Docker and Jenkins across multi-region environments.",
+            "evidenceIds": [
+              "context:cascade:2017:docker-cicd"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "coverLetter": {
+    "date": "October 2, 2026",
+    "recipientLines": [
+      "Hiring Team",
+      "Plaid"
+    ],
+    "salutation": "Dear Hiring Team,",
+    "bodyParagraphs": [
+      {
+        "sentences": [
+          {
+            "text": "As a lead solutions and integrations engineer, I am writing regarding the Integrations Operations Engineer role at Plaid to help maintain reliable API connectivity and resolve complex integration issues across your partner ecosystem.",
+            "evidenceIds": [
+              "context:meridian:2021:connectors"
+            ]
+          },
+          {
+            "text": "Over the past eight years, my career has evolved from building core REST services and data pipelines into leading high-throughput partner integrations, webhook reliability, and operational troubleshooting.",
+            "evidenceIds": [
+              "context:cascade:2015:rest-services",
+              "context:meridian:2021:connectors"
+            ]
+          }
+        ]
+      },
+      {
+        "sentences": [
+          {
+            "text": "At Cascade Software Labs, I engineered core RESTful services and automated synchronization workers, learning early how fragile integrations become when external payloads drift from documented schemas.",
+            "evidenceIds": [
+              "context:cascade:2015:rest-services",
+              "context:cascade:2016:data-sync"
+            ]
+          },
+          {
+            "text": "At Kinetics Data Platform, I developed streaming backend ingestion microservices in Node.js and TypeScript, optimized PostgreSQL pipelines to reduce p95 latency by 45%, and implemented HMAC SHA-256 signature verification to safeguard partner endpoints against burst traffic and replay attacks.",
+            "evidenceIds": [
+              "context:kinetics:2018:ingestion",
+              "context:kinetics:2019:postgres-perf",
+              "context:kinetics:2020:hmac-ratelimit"
+            ]
+          }
+        ]
+      },
+      {
+        "sentences": [
+          {
+            "text": "At Meridian Cloud Systems, I lead solutions and integration engineering across 25+ external partner REST APIs processing over 45M monthly transactions.",
+            "evidenceIds": [
+              "context:meridian:2021:connectors"
+            ]
+          },
+          {
+            "text": "When integration endpoints experience anomalies, I lead cross-organizational triage using Python synthetic test probes and structured tracing to isolate root causes.",
+            "evidenceIds": [
+              "context:meridian:2022:uptime-debug",
+              "context:meridian:2023:synthetic-probes"
+            ]
+          },
+          {
+            "text": "To guarantee resilience against partner downtime, I architected a Redis-backed webhook retry engine that achieved 99.99% event delivery success while authoring developer resources that cut enterprise onboarding time by 35%.",
+            "evidenceIds": [
+              "context:meridian:2023:retry-engine",
+              "context:meridian:2024:partner-guides"
+            ]
+          }
+        ]
+      },
+      {
+        "sentences": [
+          {
+            "text": "Sustaining mission-critical financial integrations demands engineers with deep production seasoning who can rapidly diagnose issues across code, databases, and network boundaries while communicating with clarity.",
+            "evidenceIds": [
+              "context:meridian:2022:uptime-debug"
+            ]
+          },
+          {
+            "text": "I welcome the opportunity to bring my integration engineering background and operational focus to Plaid's Integrations Operations Engineering team.",
+            "evidenceIds": [
+              "context:meridian:2021:connectors"
+            ]
+          }
+        ]
+      }
+    ],
+    "closing": "Sincerely,"
+  },
+  "excludedClaims": [],
+  "warnings": []
+}

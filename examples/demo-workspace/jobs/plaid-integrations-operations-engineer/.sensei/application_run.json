@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "runId": "61c7022fd0abe6bd28b94a1d4acc2222b5c251693441f3c8d7951382132ce49e",
+  "jobId": "plaid-integrations-operations-engineer",
+  "snapshotId": "2484d9bd6a80906ef76141c5aaa5d1f142b19ec6b97e8b3810763f2d06c777e7",
+  "manifestHash": "60d3c4367d06fd72dfb6ca8769f79873300ad4771df57c8870ebee64658f3ef2",
+  "baseResumePath": "resumes/Alex_Morgan_Resume.md",
+  "canonicalBaselineId": "0b45eca94143e82d45d4694b60190cf48c639557450411f4c1e41bebdae7da46",
+  "createdAt": "2026-10-02T22:20:07.605Z",
+  "updatedAt": "2026-10-02T22:20:51.667Z",
+  "state": "validated",
+  "previousRunId": null,
+  "validatedAt": "2026-10-02T22:20:51.667Z",
+  "validationAttempts": 1,
+  "maxValidationAttempts": 1,
+  "lastValidationStatus": "passed"
+}

@@ -1469,10 +1469,10 @@ function filterQuestionBank(markdown: string, filter: QuestionFilter): string {
     else preamble.push(line);
   }
   const matches = (heading: string): boolean => {
-    if (filter === "primary") return /primary for this round|recruiter|hiring.manager|customer.facing|behavioral/.test(heading);
-    if (filter === "followups") return /follow.?up/.test(heading);
-    if (filter === "later") return /secondary|later.round|technical|domain/.test(heading);
-    return /questions to ask|reverse/.test(heading);
+    if (filter === "primary") return /primary(?:.*round)?|recruiter|hiring.manager|customer.facing|behavioral/i.test(heading);
+    if (filter === "followups") return /follow.?up/i.test(heading);
+    if (filter === "later") return /secondary|later.round|technical|domain/i.test(heading);
+    return /questions to ask|reverse/i.test(heading);
   };
   const selected = sections.filter((section) => matches(section.heading));
   if (!selected.length) return `${preamble.join("\n")}\n\n## No matching section\n\nThis legacy question bank does not label questions for this filter.`;

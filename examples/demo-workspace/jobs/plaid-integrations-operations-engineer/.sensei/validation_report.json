@@ -1,0 +1,136 @@
+{
+  "status": "passed",
+  "jobId": "plaid-integrations-operations-engineer",
+  "runId": "61c7022fd0abe6bd28b94a1d4acc2222b5c251693441f3c8d7951382132ce49e",
+  "snapshotId": "2484d9bd6a80906ef76141c5aaa5d1f142b19ec6b97e8b3810763f2d06c777e7",
+  "manifestHash": "60d3c4367d06fd72dfb6ca8769f79873300ad4771df57c8870ebee64658f3ef2",
+  "fitScore": 4.13,
+  "fitConfidence": "medium",
+  "gateStatus": "accepted",
+  "ats": {
+    "status": "not_exported",
+    "pdfPath": null,
+    "extractedCharacters": 0,
+    "missingFields": []
+  },
+  "keywordClasses": [
+    {
+      "term": "Integration issue investigation, root-cause debugging, and production remediation for web services and APIs",
+      "classification": "transferable",
+      "evidenceIds": [
+        "context:meridian:2022:uptime-debug"
+      ]
+    },
+    {
+      "term": "Web service and API development, multi-service connectors, TypeScript/Node.js, and SQL data queries",
+      "classification": "supported",
+      "evidenceIds": [
+        "context:meridian:2021:connectors"
+      ]
+    },
+    {
+      "term": "Integrations issue backlog triage, operational mitigation, and partner/cross-functional escalation",
+      "classification": "supported",
+      "evidenceIds": [
+        "context:meridian:2024:partner-guides"
+      ]
+    },
+    {
+      "term": "Sustained network connectivity, rapid issue resolution SLA, and reduced customer impact",
+      "classification": "transferable",
+      "evidenceIds": [
+        "context:meridian:2023:retry-engine"
+      ]
+    },
+    {
+      "term": "Financial institution data feeds, banking connectivity, and financial services data partner platforms",
+      "classification": "unsupported",
+      "evidenceIds": []
+    },
+    {
+      "term": "Fast adaptability across evolving integration codebases, internal tooling, and on-call operational rotation",
+      "classification": "transferable",
+      "evidenceIds": [
+        "context:kinetics:2018:ingestion"
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "code": "RESUME_BULLET_PLAN_MISMATCH",
+      "artifact": "Alex_Morgan_Plaid_Resume.md",
+      "field": "bulletCount",
+      "message": "The resume has 12 experience bullets; this run planned 13.",
+      "expected": null,
+      "actual": null,
+      "repairHint": "In the next explicit run, follow the routed employer allocation and add distinct supported bullets before lengthening existing ones.",
+      "severity": "warning",
+      "explanation": null
+    },
+    {
+      "code": "RESUME_EMPLOYER_PLAN_MISMATCH",
+      "artifact": "Alex_Morgan_Plaid_Resume.md",
+      "field": "currentEmployerBulletCount",
+      "message": "The resume has 5 current-employer bullets; this run planned 6.",
+      "expected": null,
+      "actual": null,
+      "repairHint": "In the next explicit run, use the profile's planned distinct evidence-backed current-employer bullets without duplicating claims or inventing detail.",
+      "severity": "warning",
+      "explanation": null
+    },
+    {
+      "code": "RESUME_GROUNDING_INVALID",
+      "artifact": ".sensei/application_evidence.json",
+      "field": null,
+      "message": "The cited evidence does not substantively overlap the public claim.",
+      "expected": null,
+      "actual": null,
+      "repairHint": "Keep the generated documents available for human review; do not enter an automatic repair loop.",
+      "severity": "warning",
+      "explanation": {
+        "sentence": "**Architecture & Systems Integration:** High-Throughput RESTful APIs, Webhooks, Event-Driven Architecture, Microservices, Multi-Service Connectors, ETL Pipelines, Data Modeling.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2021:connectors",
+          "context:meridian:2023:retry-engine"
+        ],
+        "sources": [
+          {
+            "evidenceId": "context:meridian:2021:connectors",
+            "sourcePath": "context/structured/meridian.md",
+            "claim": "Architected and scaled TypeScript and Go integration adapters connecting Meridian's core platform to 25+ external partner REST APIs, processing over 45M monthly transactions."
+          },
+          {
+            "evidenceId": "context:meridian:2023:retry-engine",
+            "sourcePath": "context/structured/meridian.md",
+            "claim": "Designed a high-volume payload validation and webhook retry pipeline using Redis, Node.js, and exponential backoff, preventing event drop-offs during partner outages."
+          }
+        ]
+      }
+    },
+    {
+      "code": "COVER_GROUNDING_INVALID",
+      "artifact": ".sensei/application_evidence.json",
+      "field": null,
+      "message": "The cited evidence does not substantively overlap the public claim.",
+      "expected": null,
+      "actual": null,
+      "repairHint": "Keep the generated documents available for human review; do not enter an automatic repair loop.",
+      "severity": "warning",
+      "explanation": {
+        "sentence": "As a lead solutions and integrations engineer, I am writing regarding the Integrations Operations Engineer role at Plaid to help maintain reliable API connectivity and resolve complex integration issues across your partner ecosystem.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2021:connectors"
+        ],
+        "sources": [
+          {
+            "evidenceId": "context:meridian:2021:connectors",
+            "sourcePath": "context/structured/meridian.md",
+            "claim": "Architected and scaled TypeScript and Go integration adapters connecting Meridian's core platform to 25+ external partner REST APIs, processing over 45M monthly transactions."
+          }
+        ]
+      }
+    }
+  ]
+}

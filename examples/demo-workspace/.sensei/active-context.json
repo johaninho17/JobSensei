@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "workspacePath": "/Users/johan/Desktop/JobSensei/examples/demo-workspace",
+  "baseResumePath": "resumes/Alex_Morgan_Resume.md",
+  "secondaryResumePaths": [],
+  "linkedinProfilePath": null,
+  "contextRoots": [
+    "context/structured",
+    "context/broad",
+    "resumes",
+    "cover-letters"
+  ],
+  "fallbackReferenceRoots": [
+    "fallback-references"
+  ],
+  "policyPaths": [
+    "context/denylist.md",
+    "context/application_voice_profile.md"
+  ],
+  "primaryContextRoots": [
+    "context/structured"
+  ],
+  "conditionalContextRoots": [],
+  "selectedJobIds": [
+    "plaid-integrations-operations-engineer"
+  ],
+  "selectedJobPaths": [
+    "jobs/plaid-integrations-operations-engineer"
+  ],
+  "selectedCareerPaths": [
+    "context/structured/cascade.md",
+    "context/structured/kinetics.md",
+    "context/structured/meridian.md",
+    "context/structured/scalewave.md",
+    "resumes/Alex_Morgan_Resume.md"
+  ],
+  "selectedStructuredPaths": [
+    "context/structured/cascade.md",
+    "context/structured/kinetics.md",
+    "context/structured/meridian.md",
+    "context/structured/scalewave.md"
+  ],
+  "selectedBroadPaths": [],
+  "selectedJobFiles": [
+    "jobs/plaid-integrations-operations-engineer/Alex_Morgan_Plaid_Resume.md",
+    "jobs/plaid-integrations-operations-engineer/cover_letter.md",
+    "jobs/plaid-integrations-operations-engineer/evaluation.md",
+    "jobs/plaid-integrations-operations-engineer/interviews/01-recruiter-screen/prep.md",
+    "jobs/plaid-integrations-operations-engineer/interviews/01-recruiter-screen/question_bank.md",
+    "jobs/plaid-integrations-operations-engineer/interviews/01-recruiter-screen/research.md",
+    "jobs/plaid-integrations-operations-engineer/interviews/02-technical-challenge/challenge_brief.md",
+    "jobs/plaid-integrations-operations-engineer/interviews/02-technical-challenge/practice_labs.json",
+    "jobs/plaid-integrations-operations-engineer/interviews/02-technical-challenge/prep.md",
+    "jobs/plaid-integrations-operations-engineer/original_jd.md"
+  ],
+  "selectionMode": "explicit",
+  "scope": "selected-jobs",
+  "sourceFiles": [
+    {
+      "path": "context/structured/cascade.md",
+      "modifiedAt": "2026-10-02T21:33:29.872Z",
+      "sizeBytes": 2288,
+      "sourceFamily": "cascade"
+    },
+    {
+      "path": "context/structured/kinetics.md",
+      "modifiedAt": "2026-10-02T21:33:23.342Z",
+      "sizeBytes": 2949,
+      "sourceFamily": "kinetics"
+    },
+    {
+      "path": "context/structured/meridian.md",
+      "modifiedAt": "2026-10-02T21:33:17.227Z",
+      "sizeBytes": 5069,
+      "sourceFamily": "meridian"
+    },
+    {
+      "path": "context/structured/scalewave.md",
+      "modifiedAt": "2026-10-02T21:33:35.356Z",
+      "sizeBytes": 1319,
+      "sourceFamily": "scalewave"
+    },
+    {
+      "path": "jobs/plaid-integrations-operations-engineer/Alex_Morgan_Plaid_Resume.md",
+      "modifiedAt": "2026-10-02T17:53:45.453Z",
+      "sizeBytes": 3105,
+      "sourceFamily": "alex-morgan-plaid-resume"
+    },
+    {
+      "path": "jobs/plaid-integrations-operations-engineer/cover_letter.md",
+      "modifiedAt": "2026-10-02T18:25:03.397Z",
+      "sizeBytes": 2098,
+      "sourceFamily": "cover-letter"
+    },
+    {
+      "path": "jobs/plaid-integrations-operations-engineer/evaluation.md",
+      "modifiedAt": "2026-10-02T17:54:09.549Z",
+      "sizeBytes": 4406,
+      "sourceFamily": "evaluation"
+    },
+    {
+      "path": "jobs/plaid-integrations-operations-engineer/interviews/01-recruiter-screen/prep.md",
+      "modifiedAt": "2026-10-02T17:54:20.050Z",
+      "sizeBytes": 1940,
+      "sourceFamily": "prep"
+    },
+    {
+      "path": "jobs/plaid-integrations-operations-engineer/interviews/01-recruiter-screen/question_bank.md",
+      "modifiedAt": "2026-10-02T17:54:39.181Z",
+      "sizeBytes": 3290,
+      "sourceFamily": "question-bank"
+    },
+    {
+      "path": "jobs/plaid-integrations-operations-engineer/interviews/01-recruiter-screen/research.md",
+      "modifiedAt": "2026-10-02T17:36:24.468Z",
+      "sizeBytes": 1564,
+      "sourceFamily": "research"
+    },
+    {
+      "path": "jobs/plaid-integrations-operations-engineer/interviews/02-technical-challenge/challenge_brief.md",
+      "modifiedAt": "2026-10-02T17:37:15.155Z",
+      "sizeBytes": 1314,
+      "sourceFamily": "challenge-brief"
+    },
+    {
+      "path": "jobs/plaid-integrations-operations-engineer/interviews/02-technical-challenge/practice_labs.json",
+      "modifiedAt": "2026-10-02T17:37:30.394Z",
+      "sizeBytes": 6776,
+      "sourceFamily": "practice-labs"
+    },
+    {
+      "path": "jobs/plaid-integrations-operations-engineer/interviews/02-technical-challenge/prep.md",
+      "modifiedAt": "2026-10-02T17:37:07.734Z",
+      "sizeBytes": 846,
+      "sourceFamily": "prep"
+    },
+    {
+      "path": "jobs/plaid-integrations-operations-engineer/original_jd.md",
+      "modifiedAt": "2026-10-02T17:35:45.114Z",
+      "sizeBytes": 4908,
+      "sourceFamily": "original-jd"
+    },
+    {
+      "path": "resumes/Alex_Morgan_Resume.md",
+      "modifiedAt": "2026-10-02T21:33:08.206Z",
+      "sizeBytes": 3086,
+      "sourceFamily": "alex-morgan-resume"
+    }
+  ],
+  "generatedAt": "2026-10-02T22:20:07.589Z",
+  "instructions": "Use only the selected files in this manifest. Selected structured context: context/structured/cascade.md, context/structured/kinetics.md, context/structured/meridian.md, context/structured/scalewave.md. Selected broad context: none. Do not read unselected files or count related source families as independent evidence. Employer-context describes company scale only and cannot support candidate claims. Always enforce context/denylist.md, context/application_voice_profile.md as policy. The configured base resume (resumes/Alex_Morgan_Resume.md) controls identity, chronology, structure, and presentation; selected structured evidence controls factual claims. Secondary resumes and LinkedIn are lower-weight historical or corroboration sources. Missing evidence is a gap, never permission to invent or reuse conversation memory. Job evidence is limited to selected files."
+}

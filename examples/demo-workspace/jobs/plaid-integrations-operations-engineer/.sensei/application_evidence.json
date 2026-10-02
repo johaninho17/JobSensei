@@ -1,0 +1,354 @@
+{
+  "schemaVersion": 1,
+  "applicationRunId": "61c7022fd0abe6bd28b94a1d4acc2222b5c251693441f3c8d7951382132ce49e",
+  "evidenceSnapshotId": "2484d9bd6a80906ef76141c5aaa5d1f142b19ec6b97e8b3810763f2d06c777e7",
+  "manifestHash": "60d3c4367d06fd72dfb6ca8769f79873300ad4771df57c8870ebee64658f3ef2",
+  "baseResumePath": "resumes/Alex_Morgan_Resume.md",
+  "resume": {
+    "publicArtifact": "Alex_Morgan_Plaid_Resume.md",
+    "claimMappings": [
+      {
+        "publicText": "**Architecture & Systems Integration:** High-Throughput RESTful APIs, Webhooks, Event-Driven Architecture, Microservices, Multi-Service Connectors, ETL Pipelines, Data Modeling.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2021:connectors",
+          "context:meridian:2023:retry-engine"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md"
+        ],
+        "timeline": "prior",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "**Code & Databases:** TypeScript/JavaScript (Node.js), Go, Python, SQL, PostgreSQL, Redis, DynamoDB, Git/GitHub Actions.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2021:connectors",
+          "context:kinetics:2019:postgres-perf",
+          "context:meridian:2022:redis-caching"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md",
+          "context/structured/kinetics.md"
+        ],
+        "timeline": "prior",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "**Cloud & Observability:** Amazon Web Services (AWS), Docker, Kubernetes, Linux/Unix Environments, Datadog Telemetry, Postman, CI/CD.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2023:synthetic-probes",
+          "context:meridian:2023:eks-cicd",
+          "context:kinetics:2020:contract-tests"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md",
+          "context/structured/kinetics.md"
+        ],
+        "timeline": "prior",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "**Languages:** English (Native speaker), Spanish (Professional working proficiency).",
+        "claimType": "non-factual",
+        "evidenceIds": [],
+        "sourcePaths": [],
+        "timeline": null,
+        "ownership": ""
+      },
+      {
+        "publicText": "Architected and scaled TypeScript and Go integration adapters connecting Meridian's core platform to 25+ external partner REST APIs, processing over 45M monthly transactions.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2021:connectors"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md"
+        ],
+        "timeline": "employer-specific",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Diagnosed complex API authentication, schema drift, and cross-service data execution failures across distributed container environments, sustaining 99.99% partner uptime.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2022:uptime-debug"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md"
+        ],
+        "timeline": "employer-specific",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Automated endpoint health verification using Python test suites, Postman collections, and synthetic probes to preemptively detect upstream partner regressions.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2023:synthetic-probes"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md"
+        ],
+        "timeline": "employer-specific",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Designed a high-volume payload validation and webhook retry pipeline using Redis, Node.js, and exponential backoff, preventing event drop-offs during partner outages.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2023:retry-engine"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md"
+        ],
+        "timeline": "employer-specific",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Spearheaded the technical triage workflow for partner escalations, authoring architectural integration guides that reduced enterprise onboarding cycles by 35%.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2024:partner-guides"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md"
+        ],
+        "timeline": "employer-specific",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Developed modular backend ingestion microservices in Node.js and TypeScript handling streaming data feeds across diverse third-party APIs.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:kinetics:2018:ingestion"
+        ],
+        "sourcePaths": [
+          "context/structured/kinetics.md"
+        ],
+        "timeline": "employer-specific",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Optimized PostgreSQL data pipelines and composite indexing strategies, reducing p95 query latency by 45% across analytical reporting endpoints.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:kinetics:2019:postgres-perf"
+        ],
+        "sourcePaths": [
+          "context/structured/kinetics.md"
+        ],
+        "timeline": "employer-specific",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Implemented robust HMAC SHA-256 signature verification and distributed token bucket rate-limiting middleware to protect partner webhook receivers.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:kinetics:2020:hmac-ratelimit"
+        ],
+        "sourcePaths": [
+          "context/structured/kinetics.md"
+        ],
+        "timeline": "employer-specific",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Established automated integration testing frameworks and contract validation pipelines using Docker, driving test coverage above 90%.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:kinetics:2020:contract-tests"
+        ],
+        "sourcePaths": [
+          "context/structured/kinetics.md"
+        ],
+        "timeline": "employer-specific",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Engineered core RESTful API services and database connectors supporting customer-facing web and mobile applications.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:cascade:2015:rest-services"
+        ],
+        "sourcePaths": [
+          "context/structured/cascade.md"
+        ],
+        "timeline": "employer-specific",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Built automated data synchronization workers that ingested partner payloads, transforming unstructured records into normalized SQL schemas.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:cascade:2016:data-sync"
+        ],
+        "sourcePaths": [
+          "context/structured/cascade.md"
+        ],
+        "timeline": "employer-specific",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Collaborated with QA and infrastructure engineers to build automated CI/CD deployment pipelines utilizing Docker and Jenkins across multi-region environments.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:cascade:2017:docker-cicd"
+        ],
+        "sourcePaths": [
+          "context/structured/cascade.md"
+        ],
+        "timeline": "employer-specific",
+        "ownership": "supported"
+      }
+    ]
+  },
+  "coverLetter": {
+    "publicArtifact": "cover_letter.md",
+    "claimMappings": [
+      {
+        "publicText": "As a lead solutions and integrations engineer, I am writing regarding the Integrations Operations Engineer role at Plaid to help maintain reliable API connectivity and resolve complex integration issues across your partner ecosystem.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2021:connectors"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md"
+        ],
+        "timeline": "prior",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Over the past eight years, my career has evolved from building core REST services and data pipelines into leading high-throughput partner integrations, webhook reliability, and operational troubleshooting.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:cascade:2015:rest-services",
+          "context:meridian:2021:connectors"
+        ],
+        "sourcePaths": [
+          "context/structured/cascade.md",
+          "context/structured/meridian.md"
+        ],
+        "timeline": "prior",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "At Cascade Software Labs, I engineered core RESTful services and automated synchronization workers, learning early how fragile integrations become when external payloads drift from documented schemas.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:cascade:2015:rest-services",
+          "context:cascade:2016:data-sync"
+        ],
+        "sourcePaths": [
+          "context/structured/cascade.md"
+        ],
+        "timeline": "prior",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "At Kinetics Data Platform, I developed streaming backend ingestion microservices in Node.js and TypeScript, optimized PostgreSQL pipelines to reduce p95 latency by 45%, and implemented HMAC SHA-256 signature verification to safeguard partner endpoints against burst traffic and replay attacks.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:kinetics:2018:ingestion",
+          "context:kinetics:2019:postgres-perf",
+          "context:kinetics:2020:hmac-ratelimit"
+        ],
+        "sourcePaths": [
+          "context/structured/kinetics.md"
+        ],
+        "timeline": "prior",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "At Meridian Cloud Systems, I lead solutions and integration engineering across 25+ external partner REST APIs processing over 45M monthly transactions.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2021:connectors"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md"
+        ],
+        "timeline": "prior",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "When integration endpoints experience anomalies, I lead cross-organizational triage using Python synthetic test probes and structured tracing to isolate root causes.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2022:uptime-debug",
+          "context:meridian:2023:synthetic-probes"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md"
+        ],
+        "timeline": "prior",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "To guarantee resilience against partner downtime, I architected a Redis-backed webhook retry engine that achieved 99.99% event delivery success while authoring developer resources that cut enterprise onboarding time by 35%.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2023:retry-engine",
+          "context:meridian:2024:partner-guides"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md"
+        ],
+        "timeline": "prior",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "Sustaining mission-critical financial integrations demands engineers with deep production seasoning who can rapidly diagnose issues across code, databases, and network boundaries while communicating with clarity.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2022:uptime-debug"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md"
+        ],
+        "timeline": "prior",
+        "ownership": "supported"
+      },
+      {
+        "publicText": "I welcome the opportunity to bring my integration engineering background and operational focus to Plaid's Integrations Operations Engineering team.",
+        "claimType": "candidate",
+        "evidenceIds": [
+          "context:meridian:2021:connectors"
+        ],
+        "sourcePaths": [
+          "context/structured/meridian.md"
+        ],
+        "timeline": "prior",
+        "ownership": "supported"
+      }
+    ],
+    "careerArc": [
+      {
+        "stage": "Architected and scaled TypeScript and Go integration adapters connecting Meridian's core platform to 25+ external partner REST APIs, processing over 45M monthly transactions.",
+        "timeline": "prior",
+        "evidenceIds": [
+          "context:meridian:2021:connectors"
+        ]
+      },
+      {
+        "stage": "Engineered core RESTful API services and database connectors supporting customer-facing web and mobile applications.",
+        "timeline": "prior",
+        "evidenceIds": [
+          "context:cascade:2015:rest-services",
+          "context:meridian:2021:connectors"
+        ]
+      },
+      {
+        "stage": "Engineered core RESTful API services and database connectors supporting customer-facing web and mobile applications.",
+        "timeline": "prior",
+        "evidenceIds": [
+          "context:cascade:2015:rest-services",
+          "context:cascade:2016:data-sync"
+        ]
+      }
+    ]
+  },
+  "excludedClaims": [],
+  "warnings": []
+}

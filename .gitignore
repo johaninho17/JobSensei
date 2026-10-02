@@ -3,7 +3,7 @@
 !.env.example
 data/
 debrief/
-.sensei/
+/.sensei/
 node_modules/
 dist-electron/
 dist-renderer/
