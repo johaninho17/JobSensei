@@ -1,0 +1,18 @@
+# Technical Retrospective — Kinetics Data Platform
+Role: Senior Backend & Integration Engineer
+Timeline: May 2018 – February 2021
+Location: Seattle, WA, USA
+
+## 1. Streaming Ingestion Microservices
+At Kinetics, we built real-time event streaming systems for B2B SaaS integrations.
+- Developed modular backend ingestion microservices in Node.js and TypeScript handling streaming data feeds across diverse third-party APIs.
+- Built custom HTTP middleware layers to normalize request authentication headers (Bearer, API keys, OAuth 2.0 Client Credentials) and standardize error responses.
+
+## 2. PostgreSQL Pipeline & Query Tuning
+- Investigated severe latency degradation on analytical reporting endpoints during morning batch uploads.
+- Analyzed production query execution traces using PostgreSQL EXPLAIN ANALYZE, discovering sequential scans caused by unindexed composite foreign keys.
+- Redesigned indexing strategies with targeted partial B-Tree indexes and query refactoring, achieving a 45% reduction in p95 query latency across reporting endpoints.
+
+## 3. Webhook Security & Test Automation
+- Implemented HMAC SHA-256 signature verification and distributed token bucket rate-limiting middleware using Redis to safeguard partner endpoints against replay attacks and thundering-herd traffic spikes.
+- Established automated integration test frameworks and contract validation pipelines using Docker, elevating automated test coverage past 90%.

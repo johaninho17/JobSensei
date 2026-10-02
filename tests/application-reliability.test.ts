@@ -114,4 +114,26 @@ describe("application reliability", () => {
     expect(cover).toContain("ALEX MORGAN");
     expect(cover).toContain("alex@example.com");
   });
+
+  it("sanitizes broken bold markers where closing asterisks leak into the contact line", async () => {
+    const workspace = await fixtureWorkspace();
+    const brokenHeaderResume = fictionalResume.replace(
+      "# **ALEX MORGAN**\nalex@example.com",
+      "**ALEX MORGAN\n**+1 (555) 019-2831 | alex@example.com",
+    );
+    await writeFile(join(workspace, "resumes/broken.md"), brokenHeaderResume, "utf8");
+    const baseline = await loadCanonicalResumeBaseline(workspace, "resumes/broken.md");
+    expect(baseline.headerLines[0]).toBe("**ALEX MORGAN**");
+    expect(baseline.headerLines[1]).toBe("+1 (555) 019-2831 | alex@example.com | +1 555 010 2020 | linkedin.com/in/alex-morgan");
+
+    const composed = composeCanonicalResume(baseline, {
+      skillsLines: baseline.originalSkillsLines,
+      employers: baseline.employers.map((employer) => ({
+        name: employer.name,
+        bullets: employer.originalBullets.map((_, index) => `Contribution ${index + 1}.`),
+      })),
+    });
+    expect(composed).toContain("**ALEX MORGAN**\n+1 (555) 019-2831 | alex@example.com");
+    expect(composed).not.toContain("**+1 (555)");
+  });
 });

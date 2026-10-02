@@ -57,6 +57,19 @@ function decodeHtml(value: string): string {
     .replaceAll("&#39;", "'");
 }
 
+function sanitizeHeaderLines(lines: string[]): string[] {
+  const result = [...lines];
+  if (result.length >= 2) {
+    const first = result[0] ?? "";
+    const second = result[1] ?? "";
+    if (first.startsWith("**") && !first.endsWith("**") && second.startsWith("**")) {
+      result[0] = `${first}**`;
+      result[1] = second.replace(/^\*\*\s*/, "").trim();
+    }
+  }
+  return result;
+}
+
 function mammothHtmlToMarkdown(html: string): string {
   return decodeHtml(html)
     .replace(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, "[$2]($1)")
@@ -69,7 +82,7 @@ function mammothHtmlToMarkdown(html: string): string {
     .replace(/<[^>]+>/g, "")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/^\*\*([^*\n]+)\n\*\*(?=\(\d{3}\))/m, "**$1**\n")
+    .replace(/^((?:#+\s*)?\*\*[^*\n]+?)\s*\n\*\*\s*/m, "$1**\n")
     .trim();
 }
 
@@ -117,7 +130,8 @@ function parseCanonicalMarkdown(
     throw new Error("The configured base resume does not expose the required Skills, Professional Experience, and Education structure.");
   }
 
-  const headerLines = lines.slice(0, skillsIndex).map((line) => line.trim()).filter(Boolean);
+  const rawHeaderLines = lines.slice(0, skillsIndex).map((line) => line.trim()).filter(Boolean);
+  const headerLines = sanitizeHeaderLines(rawHeaderLines);
   const originalSkillsLines = lines.slice(skillsIndex + 1, professionalIndex).map((line) => line.trim()).filter(Boolean);
   const professionalLines = lines.slice(professionalIndex + 1, educationIndex);
   const employers: CanonicalResumeEmployer[] = [];
@@ -233,8 +247,9 @@ export function composeCanonicalResume(baseline: CanonicalResumeBaseline, draft:
   const canonicalLanguagesLine = baseline.originalSkillsLines.find(isLanguagesLine);
   const tailoredSkillsLines = draft.skillsLines.filter((line) => !isLanguagesLine(line));
   const composedSkillsLines = canonicalLanguagesLine ? [...tailoredSkillsLines, canonicalLanguagesLine] : tailoredSkillsLines;
+  const header = sanitizeHeaderLines(baseline.headerLines).join("\n");
   const sections = [
-    baseline.headerLines.join("\n"),
+    header,
     baseline.skillsHeadingLine,
     composedSkillsLines.join("\n"),
     baseline.professionalHeadingLine,
@@ -250,13 +265,14 @@ export function composeCanonicalResume(baseline: CanonicalResumeBaseline, draft:
 }
 
 export function composeCanonicalCoverLetter(baseline: CanonicalResumeBaseline, draft: ApplicationDraft["coverLetter"]): string {
+  const header = sanitizeHeaderLines(baseline.headerLines);
   return `${[
-    baseline.headerLines.join("\n"),
+    header.join("\n"),
     draft.date,
     draft.recipientLines.join("\n"),
     draft.salutation,
     ...draft.bodyParagraphs,
-    `${draft.closing}\n${displayText(baseline.headerLines[0] ?? "")}`,
+    `${draft.closing}\n${displayText(header[0] ?? "")}`,
   ].join("\n\n")}\n`;
 }
 

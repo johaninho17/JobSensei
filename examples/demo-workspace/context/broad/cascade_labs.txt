@@ -1,0 +1,13 @@
+# Foundational Engineering Records — Cascade Software Labs
+Role: Software Engineer
+Timeline: June 2015 – April 2018
+Location: San Francisco, CA, USA
+
+## Overview
+Cascade Labs was a high-growth software engineering consultancy building backend systems and cloud applications for venture-backed startups.
+
+## Key Contributions
+- Engineered core RESTful API services and database connectors in Node.js and Python, supporting web and mobile applications with high concurrency requirements.
+- Developed automated data synchronization workers that ingested diverse partner CSV, XML, and JSON payloads, normalizing raw records into structured SQL schemas.
+- Collaborated with QA and platform infrastructure teams to build automated CI/CD deployment pipelines utilizing Docker and Jenkins across multi-region environments.
+- Wrote unit and integration test suites with Mocha and Chai, establishing automated code coverage checks on all pull requests.

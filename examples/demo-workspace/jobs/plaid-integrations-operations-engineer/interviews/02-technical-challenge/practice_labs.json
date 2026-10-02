@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "jobId": "plaid-integrations-operations-engineer",
+  "company": "Plaid",
+  "role": "Integrations Operations Engineer",
+  "roundId": "02-technical-challenge",
+  "title": "Bank Webhook Telemetry & Resilient Ingestion Lab",
+  "assessmentMode": "debugging",
+  "sourceBasis": "job_derived",
+  "realPromptSupplied": false,
+  "approximationNotice": "Simulated exercise based on Plaid IOE core duties: API integration troubleshooting, rate limiting, and partner webhook verification.",
+  "exercises": [
+    {
+      "id": "verify-hmac-webhook",
+      "type": "coding",
+      "title": "HMAC Signature Verification & Replay Protection",
+      "difficulty": "intermediate",
+      "timeboxMinutes": 25,
+      "jobRelevance": "Plaid integration engineers routinely verify that inbound bank event payloads match cryptographic signatures before writing to databases.",
+      "prompt": "Implement a robust verifyWebhookSignature function that takes raw body bytes, signature header, timestamp header, secret, and maximum allowed drift (in seconds). Return true if valid, false otherwise.",
+      "starterContext": "import { createHmac, timingSafeEqual } from \"node:crypto\";\n\nexport function verifyWebhookSignature(\n  rawBody: string,\n  signatureHex: string,\n  timestampSec: number,\n  secret: string,\n  maxDriftSec = 300\n): boolean {\n  // TODO: implement\n  return false;\n}",
+      "requirements": [
+        "Verify SHA-256 HMAC of `${timestampSec}.${rawBody}` matches signatureHex.",
+        "Reject requests where timestampSec deviates from current time by more than maxDriftSec.",
+        "Use crypto.timingSafeEqual to prevent side-channel timing attacks."
+      ],
+      "expectedOutput": "Boolean true if valid and within drift window, false otherwise.",
+      "acceptanceTests": [
+        "Returns true for matching HMAC within drift window.",
+        "Returns false if timestamp is older than 300 seconds (replay attack protection).",
+        "Returns false if payload has been modified by a single character."
+      ],
+      "hints": [
+        "Construct the signed string as `${timestampSec}.${rawBody}` before feeding to createHmac('sha256', secret).",
+        "Convert both the computed hash and the expected signature to Buffers before passing to timingSafeEqual."
+      ],
+      "solution": "import { createHmac, timingSafeEqual } from \"node:crypto\";\n\nexport function verifyWebhookSignature(\n  rawBody: string,\n  signatureHex: string,\n  timestampSec: number,\n  secret: string,\n  maxDriftSec = 300\n): boolean {\n  const now = Math.floor(Date.now() / 1000);\n  if (Math.abs(now - timestampSec) > maxDriftSec) return false;\n  const expectedHash = createHmac(\"sha256\", secret).update(`${timestampSec}.${rawBody}`).digest();\n  const providedHash = Buffer.from(signatureHex, \"hex\");\n  if (expectedHash.length !== providedHash.length) return false;\n  return timingSafeEqual(expectedHash, providedHash);\n}",
+      "explanation": "Timing attacks allow bad actors to deduce correct signatures character-by-character. timingSafeEqual guarantees constant-time comparison, while timestamp drift validation prevents replay attacks.",
+      "commonMistakes": [
+        "Using regular string equality (===) which leaks timing information.",
+        "Parsing JSON before computing the HMAC, which alters whitespace and invalidates signatures."
+      ],
+      "followUpProbes": [
+        "How would you support key rotation when a bank transitions from secret-v1 to secret-v2 without downtime?"
+      ],
+      "evaluationCriteria": [
+        "Correct HMAC-SHA256 generation.",
+        "Timing-safe constant-time verification.",
+        "Effective replay attack window validation."
+      ],
+      "scoringRubric": [
+        {
+          "criterion": "Security & Correctness",
+          "baselinePerformance": "Generates valid HMAC using standard string equality.",
+          "strongPerformance": "Enforces timingSafeEqual, rejects drift, and preserves raw payload bytes."
+        }
+      ]
+    },
+    {
+      "id": "triage-429-retry-storm",
+      "type": "verbal",
+      "title": "Mitigating Partner HTTP 429 Thundering-Herd Storms",
+      "difficulty": "intermediate",
+      "timeboxMinutes": 20,
+      "jobRelevance": "Plaid IOE engineers must prevent thundering-herd retry storms when an upstream bank experiences throttling.",
+      "prompt": "A major regional bank partner begins returning HTTP 429 Too Many Requests to Plaid's transaction webhook consumers. Describe your step-by-step diagnostic and mitigation plan.",
+      "starterContext": null,
+      "requirements": [
+        "Explain how to isolate the degraded partner traffic so other financial institutions are unaffected.",
+        "Describe exponential backoff with full jitter to eliminate retry synchronization.",
+        "Detail proactive partner outreach with telemetry metrics."
+      ],
+      "expectedOutput": "Structured 4-step architectural strategy: Triage, Queue Isolation, Jittered Backoff, and Partner Communication.",
+      "acceptanceTests": [],
+      "hints": [
+        "Check for a Retry-After header in the 429 response.",
+        "Consider tenant-partitioned worker queues to prevent starvation."
+      ],
+      "solution": "1. Isolate the partner tenant queue to prevent consumer starvation for healthy banks.\n2. Honor Retry-After headers or apply exponential backoff with full jitter (e.g. t = min(cap, base * 2^attempt) * random()).\n3. Package a Datadog telemetry snapshot showing request volume vs 429 rate and share with the bank's API engineering team.\n4. Introduce client-side token bucket rate limiting on Plaid's outbound callers to match the bank's capacity.",
+      "explanation": "When thousands of delayed jobs retry simultaneously, they create periodic thundering herds that overwhelm the downstream API. Full jitter smooths the request distribution across time.",
+      "commonMistakes": [
+        "Retrying immediately or with fixed intervals, reinforcing the partner's rate limit lock.",
+        "Allowing one bank's backlog to saturate the shared worker pool."
+      ],
+      "followUpProbes": [
+        "How do we alert end-users in Plaid Link about delayed synchronization without causing panic?"
+      ],
+      "evaluationCriteria": [
+        "Clear grasp of exponential backoff and jitter algorithms.",
+        "Queue isolation and tenancy protection principles.",
+        "Constructive partner communication."
+      ],
+      "scoringRubric": [
+        {
+          "criterion": "Operational Architecture",
+          "baselinePerformance": "Suggests pausing workers or basic retries.",
+          "strongPerformance": "Articulates tenant queue partitioning, jitter mechanics, and partner API diplomacy."
+        }
+      ]
+    }
+  ]
+}

@@ -4,29 +4,112 @@
     "fullName": "Alex Morgan",
     "artifactPrefix": "Alex_Morgan",
     "email": "alex@example.test",
-    "phone": null,
-    "location": "Portland, OR",
-    "links": ["https://example.test/alex"]
+    "phone": "+1 (555) 019-2831",
+    "location": "Portland, OR, USA",
+    "links": [
+      "https://linkedin.com/in/alex-morgan-demo",
+      "https://github.com/alexmorgan-demo"
+    ]
   },
   "sources": {
     "baseResumePath": "resumes/Alex_Morgan_Resume.md",
     "secondaryResumePaths": [],
     "linkedinProfilePath": null,
-    "structuredContextRoots": ["context/structured"],
-    "broadContextRoots": ["context/broad"],
+    "structuredContextRoots": [
+      "context/structured"
+    ],
+    "broadContextRoots": [
+      "context/broad"
+    ],
     "denylistPath": "context/denylist.md",
     "applicationVoicePath": "context/application_voice_profile.md"
   },
   "career": {
-    "employers": [{ "name": "Northstar Systems", "title": "Software Engineer", "startDate": "2023-04", "endDate": null, "location": "Portland, OR", "contextPaths": ["context/structured/northstar.md"] }],
-    "education": [{ "institution": "Example University", "degree": "B.S. Computer Science", "location": "Portland, OR", "details": [] }],
-    "transitionSummary": "Moved from backend implementation into customer-facing technical delivery.",
-    "preferredRoleFamilies": ["solutions engineering", "software engineering"]
+    "employers": [
+      {
+        "name": "Meridian Cloud Systems",
+        "title": "Lead Solutions & Integrations Engineer",
+        "startDate": "2021-03",
+        "endDate": null,
+        "location": "Portland, OR, USA",
+        "contextPaths": [
+          "context/structured/meridian.md"
+        ]
+      },
+      {
+        "name": "Kinetics Data Platform",
+        "title": "Senior Backend & Integration Engineer",
+        "startDate": "2018-05",
+        "endDate": "2021-02",
+        "location": "Seattle, WA, USA",
+        "contextPaths": [
+          "context/structured/kinetics.md"
+        ]
+      },
+      {
+        "name": "Cascade Software Labs",
+        "title": "Software Engineer",
+        "startDate": "2015-06",
+        "endDate": "2018-04",
+        "location": "San Francisco, CA, USA",
+        "contextPaths": [
+          "context/structured/cascade.md"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "University of California, Berkeley",
+        "degree": "Bachelor of Science (B.S.), Electrical Engineering & Computer Sciences (EECS)",
+        "location": "Berkeley, CA",
+        "details": []
+      }
+    ],
+    "transitionSummary": "Over 8 years of engineering experience advancing from core REST services and database architecture into leading enterprise partner integrations, API gateway reliability, and operational troubleshooting.",
+    "preferredRoleFamilies": [
+      "solutions engineering",
+      "integrations operations engineering",
+      "forward deployed engineering",
+      "principal / staff integration architect"
+    ]
   },
   "preferences": {
-    "resume": { "includeSummary": false, "totalExperienceBullets": { "min": 8, "max": 12 }, "currentEmployerBullets": { "min": 4, "max": 6 }, "skillsCategories": ["Engineering", "Delivery", "Tools"] },
-    "coverLetter": { "storyGuidance": ["Explain the documented career transition."], "voiceGuidance": ["Use plain, direct language."] }
+    "resume": {
+      "includeSummary": false,
+      "totalExperienceBullets": {
+        "min": 10,
+        "max": 14
+      },
+      "currentEmployerBullets": {
+        "min": 5,
+        "max": 7
+      },
+      "skillsCategories": [
+        "Architecture & Systems Integration",
+        "Code & Databases",
+        "Cloud & Observability",
+        "Languages"
+      ]
+    },
+    "coverLetter": {
+      "storyGuidance": [
+        "Early career: Core RESTful API development and schema normalization at Cascade Software Labs.",
+        "Mid career: High-volume streaming ingestion microservices and PostgreSQL query optimization at Kinetics Data Platform.",
+        "Current leadership: Multi-partner integration adapters, Redis webhook retry pipelines, and operational triage at Meridian Cloud Systems."
+      ],
+      "voiceGuidance": [
+        "Authoritative, practical, and technically grounded.",
+        "Reflect 8+ years of production experience without corporate buzzwords."
+      ]
+    }
   },
-  "truth": { "factualAuthority": "Selected structured career evidence", "boundaries": ["Never invent candidate facts or outcomes."] },
-  "updatedAt": "2026-01-01T00:00:00.000Z"
+  "truth": {
+    "factualAuthority": "Selected structured career evidence",
+    "boundaries": [
+      "Never invent employers, credentials, metrics, ownership, or production scope.",
+      "Do not describe supported implementation work as sole corporate ownership.",
+      "Do not claim banking/financial regulatory licenses (Series 7, FINRA) or certified compliance accreditations (SOC2 auditor, PCI-DSS QSA)."
+    ]
+  },
+  "updatedAt": "2026-10-02T12:00:00.000Z"
 }

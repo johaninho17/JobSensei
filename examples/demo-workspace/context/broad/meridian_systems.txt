@@ -1,0 +1,21 @@
+# Engineering Worklog & Project Record — Meridian Cloud Systems
+Role: Lead Solutions & Integrations Engineer
+Timeline: March 2021 – Present
+Location: Portland, OR, USA
+
+## 1. Enterprise Partner Gateway & High-Volume Adapters
+Meridian powers enterprise data connectivity across financial and analytics platforms. When I joined as Lead Solutions & Integrations Engineer, partner onboarding required significant bespoke coding due to diverging REST payload conventions, authorization headers, and intermittent socket timeouts.
+- I architected and scaled modular TypeScript and Go integration adapters connecting our core data fabric to 25+ external partner REST APIs.
+- Integrated strict runtime schema validation using Zod and JSON Schema. When partner endpoints return schema drift or missing required fields, adapters capture structural anomalies and alert the operations queue without crashing active worker threads.
+- Scaled ingestion throughput to process over 45 million monthly transactions with an average p95 processing latency of 180ms.
+
+## 2. Distributed Webhook Engine & Resilience
+Enterprise partner endpoints often experience maintenance windows, network partitions, and upstream rate limits.
+- Designed a high-volume payload validation and webhook retry pipeline using Redis, Node.js, and an exponential backoff algorithm with full jitter.
+- Integrated dead-letter queues (DLQs) with automated Slack and PagerDuty notifications, guaranteeing that transient partner drops never result in lost transactions.
+- Sustained 99.99% event delivery across all active partner connections over a 3-year period.
+
+## 3. Synthetic Probes, Triage & Partner Enablement
+- Built automated synthetic health probes in Python and Postman that continuously exercise partner staging and production endpoints, detecting upstream regressions before customer impact occurs.
+- Spearheaded the technical triage workflow for partner escalations, creating an internal CLI tracing utility that formats exact payload diffs.
+- Authored comprehensive developer guides, architectural integration blueprints, and sandbox testing environments, reducing enterprise partner onboarding cycle times by 35%.
