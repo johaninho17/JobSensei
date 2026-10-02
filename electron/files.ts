@@ -39,7 +39,7 @@ function stripRtf(value: string): string {
 async function nodeForPath(workspacePath: string, path: string): Promise<FileTreeNode | null> {
   const info = await stat(path).catch(() => null);
   if (!info) return null;
-  const relativePath = relative(workspacePath, path);
+  const relativePath = relative(workspacePath, path).replaceAll("\\", "/");
   if (info.isDirectory()) {
     const entries = await readdir(path, { withFileTypes: true });
     const children: FileTreeNode[] = [];
@@ -118,7 +118,7 @@ export async function saveMarkdownFile(workspacePath: string, input: MarkdownSav
   if (parsed.relativePath.startsWith(".") || parsed.relativePath.includes("\\")) throw new Error("Use a workspace-relative Markdown path.");
   const workspaceRoot = resolve(workspacePath);
   const path = assertInsideWorkspace(workspaceRoot, resolve(workspaceRoot, parsed.relativePath));
-  const safeRelativePath = relative(workspaceRoot, path);
+  const safeRelativePath = relative(workspaceRoot, path).replaceAll("\\", "/");
   if (!safeRelativePath.match(/^(jobs|debrief|resumes)\//)) throw new Error("Career source files are read-only. Only job, debrief, and resume Markdown can be edited.");
   if (extname(path).toLowerCase() !== ".md") throw new Error("Only Markdown files can be edited.");
 
@@ -165,7 +165,7 @@ export async function getBaseResume(workspacePath: string, configuredPath: strin
     try {
       const safe = assertInsideWorkspace(workspacePath, resolve(workspacePath, candidate));
       const info = await stat(safe).catch(() => null);
-      if (info?.isFile()) return relative(workspacePath, safe);
+      if (info?.isFile()) return relative(workspacePath, safe).replaceAll("\\", "/");
     } catch { /* Skip stale or unsafe configured paths and try the default. */ }
   }
   return null;
@@ -178,7 +178,7 @@ export async function listResumePaths(workspacePath: string, configuredBase: str
     try {
       const safe = assertInsideWorkspace(workspacePath, resolve(workspacePath, candidate));
       const info = await stat(safe).catch(() => null);
-      const relativeCandidate = relative(workspacePath, safe);
+      const relativeCandidate = relative(workspacePath, safe).replaceAll("\\", "/");
       if (info?.isFile() && relativeCandidate !== baseResumePath) secondaryResumePaths.push(relativeCandidate);
     } catch { /* Ignore stale or unsafe saved paths. */ }
   }

@@ -148,7 +148,7 @@ ipcMain.handle("settings:choose-resume", async (_event, role: "base" | "secondar
   if (result.canceled || !result.filePaths[0]) return settingsStore.get();
   const selected = resolve(result.filePaths[0]);
   let target = selected;
-  const selectedRelative = relative(requireWorkspace(), selected);
+  const selectedRelative = relative(requireWorkspace(), selected).replaceAll("\\", "/");
   if (!selectedRelative || selectedRelative.startsWith("..") || !selectedRelative.startsWith(`resumes/`)) {
     const originalName = basename(selected);
     const extension = extname(originalName);
@@ -158,7 +158,7 @@ ipcMain.handle("settings:choose-resume", async (_event, role: "base" | "secondar
     while (await stat(target).then(() => true).catch(() => false)) { target = join(resumesRoot, `${stem}-${suffix}${extension.toLowerCase()}`); suffix += 1; }
     await copyFile(selected, target);
   }
-  const relativeTarget = relative(requireWorkspace(), target);
+  const relativeTarget = relative(requireWorkspace(), target).replaceAll("\\", "/");
   const current = await settingsStore.get();
   const next = role === "base" ? await settingsStore.save({ baseResumePath: relativeTarget }) : await settingsStore.save({ baseResumePath: current.baseResumePath, secondaryResumePaths: [...new Set([...current.secondaryResumePaths, relativeTarget])] });
   await updateCandidateProfileSources(requireWorkspace(), next);

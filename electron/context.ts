@@ -32,7 +32,7 @@ async function collectFiles(root: string, workspacePath: string, output: Context
     if (entry.isDirectory()) await collectFiles(path, workspacePath, output);
     else {
       const info = await stat(path).catch(() => null);
-      if (info?.isFile()) output.push({ path: relative(workspacePath, path), modifiedAt: info.mtime.toISOString(), sizeBytes: info.size });
+      if (info?.isFile()) output.push({ path: relative(workspacePath, path).replaceAll("\\", "/"), modifiedAt: info.mtime.toISOString(), sizeBytes: info.size });
     }
   }
 }
@@ -43,7 +43,7 @@ async function collectRelativePath(workspacePath: string, relativePath: string, 
   const path = join(workspacePath, relativePath);
   const info = await stat(path).catch(() => null);
   if (info?.isDirectory()) return collectFiles(path, workspacePath, output);
-  if (info?.isFile()) output.push({ path: relative(workspacePath, path), modifiedAt: info.mtime.toISOString(), sizeBytes: info.size });
+  if (info?.isFile()) output.push({ path: relative(workspacePath, path).replaceAll("\\", "/"), modifiedAt: info.mtime.toISOString(), sizeBytes: info.size });
 }
 
 export async function buildContextManifest(workspacePath: string, selection: ContextSelectionInput = {}, resumeConfig: { baseResumePath?: string | null; secondaryResumePaths?: string[]; linkedinProfilePath?: string | null } = {}): Promise<ContextManifest> {

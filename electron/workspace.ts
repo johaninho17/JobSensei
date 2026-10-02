@@ -72,4 +72,4 @@ export async function summarizeWorkspace(workspacePath: string, repositoryRoot =
   }
 }
 
-export function relativePath(workspacePath: string, path: string): string { return relative(workspacePath, assertInsideWorkspace(workspacePath, path)); }
+export function relativePath(workspacePath: string, path: string): string { return relative(workspacePath, assertInsideWorkspace(workspacePath, path)).replaceAll("\\", "/"); }

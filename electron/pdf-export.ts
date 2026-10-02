@@ -211,7 +211,7 @@ export async function exportMarkdownPdf(workspacePath: string, relativePath: str
     await writeBinaryAtomic(outputPath, pdf);
   } finally { window.destroy(); }
   return exportedPdfSchema.parse({
-    relativePath: relative(workspacePath, outputPath),
+    relativePath: relative(workspacePath, outputPath).replaceAll("\\", "/"),
     name: basename(outputPath),
     artifactType,
     pageCount,
