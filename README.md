@@ -101,7 +101,14 @@ See [Product Flows](PRODUCT_FLOWS.md) for an end-to-end explanation of each work
 
 ## Try The Fictional Example
 
-[`examples/demo-workspace/`](examples/demo-workspace/) contains a fictional candidate, job application, and interview round. It demonstrates the expected folder and artifact formats without exposing real candidate data. The example is intended for code review and exploration; normal onboarding creates a separate private `data/` workspace.
+[`examples/demo-workspace/`](examples/demo-workspace/) contains a fictional candidate (Alex Morgan), job application, and interview round. To quickly test or record a demo using this fictional workspace, run:
+
+```bash
+npm run demo:seed   # Seeds data/ from examples/demo-workspace/
+npm run demo:reset  # Cleans data/ and re-seeds fresh demo fixtures
+```
+
+Normal onboarding creates a separate private `data/` workspace.
 
 ## Application Workflow
 

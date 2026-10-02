@@ -18,6 +18,8 @@
     "context:snapshot": "tsc -p tsconfig.electron.json && node dist-electron/electron/evidence-snapshot.js",
     "application:finalize": "tsc -p tsconfig.electron.json && node dist-electron/electron/application-finalize.js",
     "application:validate": "tsc -p tsconfig.electron.json && node dist-electron/electron/application-validation-cli.js",
+    "demo:seed": "node scripts/seed-demo.mjs",
+    "demo:reset": "node scripts/seed-demo.mjs --clean",
     "migrate:job-descriptions": "node scripts/migrate-original-jds.mjs",
     "start": "electron .",
     "postinstall": "node scripts/ensure-pty-helper.cjs"

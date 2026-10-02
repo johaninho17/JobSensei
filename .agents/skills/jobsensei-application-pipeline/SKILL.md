@@ -28,14 +28,14 @@ For an explicit regeneration, the saved JD is the only job-specific input. Exist
 ## Drafting Rules
 
 - Candidate facts come only from `evidenceRows`. The JD identifies what to prioritize; it never proves that the candidate performed it.
-- Respect every row's employer, timeline, scope, eligibility, `maximumClassification`, and source authority. Never invent an evidence ID.
+- Respect every row's employer, timeline, scope, eligibility, `maximumClassification`, and source authority. Every public claim must cite an `eligible` evidence row. Never cite a single `corroboration-required` row alone. Never invent an evidence ID.
 - Follow `resumePlan`, `resumeTemplate`, `footprint`, `denylistRules`, and the local candidate preferences. The finalizer restores protected identity, contact details, chronology, titles, dates, locations, education, and layout.
 - Use `resumeTemplate.originalBullets` and `originalSkillsLines` as the presentation baseline and wording reference; they cannot independently prove a claim, metric, tool, or outcome.
-- Tailor skills and bullets from the candidate's supported work first, then add exact JD terms only when they describe the same capability. Do not turn support into ownership, testing into production engineering, or adjacent work into an exact tool claim.
-- Keep the candidate's stable career story. Make at least three substantive evidence-backed tailoring choices, but do not reshape the whole resume into the JD.
+- Substantively reframe at least 4-5 experience bullets to align directly with the target role's core responsibilities and technical priorities using routed eligible evidence. Merely copying baseline bullets verbatim triggers `RESUME_TAILORING_TOO_SIMILAR`.
+- Strictly adhere to the experience word count budget (`footprint.targetExperienceWordMin` to `footprint.targetExperienceWordMax`). Do not exceed `targetExperienceWordMax` (triggers `RESUME_EXPERIENCE_DENSITY_HIGH`).
 - For customer-facing roles, use the plan's supported customer evidence while retaining technical work. For AI-focused roles, surface supported AI work in experience without upgrading integration, testing, configuration, or enablement into model ownership.
 - Use direct, natural engineering language. Prefer an accurate action, concrete method or tool, and supported purpose or result. Avoid noun chains, decorative skill labels, keyword inventories, and denylisted wording.
-- Keep the cover letter candidate-first and normally 190-230 words. Use the candidate's documented direction and career progression, one or two concrete examples, accurate tense, and a brief role connection. Do not announce the application, paraphrase the JD, invent passion, or spend a paragraph describing the employer.
+- Keep the cover letter candidate-first and strictly between 190-230 words. In the opening paragraph, introduce the candidate's background ('I' / 'my') and explicitly connect the trajectory to both the target company and role names (prevents `COVER_LETTER_INTRO_IMPERSONAL`). Do not announce the application with generic clichés, paraphrase the JD, invent passion, or spend a paragraph describing the employer.
 - Apply `styleRules` last for wording only. They cannot support facts or alter evidence mappings.
 - Employer-facing files must never contain evidence IDs, warnings, hashes, or generation notes.
 

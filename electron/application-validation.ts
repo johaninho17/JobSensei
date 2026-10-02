@@ -568,11 +568,10 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
       ));
     }
     const firstParagraph = coverLetterBodyParagraphs(loaded.coverMarkdown)[0] ?? "";
-    const firstSentence = firstParagraph.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() ?? firstParagraph;
     const brief = loaded.applicationContext?.coverLetterBrief;
-    const namesCandidate = /\b(?:I|my)\b/i.test(firstSentence);
-    const namesCompany = !brief?.company || firstSentence.toLowerCase().includes(brief.company.toLowerCase());
-    const namesRole = !brief?.role || firstSentence.toLowerCase().includes(brief.role.toLowerCase());
+    const namesCandidate = /\b(?:I|my)\b/i.test(firstParagraph);
+    const namesCompany = !brief?.company || firstParagraph.toLowerCase().includes(brief.company.toLowerCase());
+    const namesRole = !brief?.role || firstParagraph.toLowerCase().includes(brief.role.toLowerCase());
     if (!namesCandidate || !namesCompany || !namesRole) {
       issues.push(issue(
         "COVER_LETTER_INTRO_IMPERSONAL",

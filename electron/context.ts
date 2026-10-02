@@ -3,6 +3,7 @@ import { basename, extname, join, relative, normalize } from "node:path";
 import type { ContextManifest, ContextSelection } from "../src/shared/schemas";
 type ContextSelectionInput = Partial<ContextSelection> | string[];
 import { contextManifestSchema } from "../src/shared/schemas";
+import { readCandidateProfile } from "./candidate-profile";
 import { listResumePaths } from "./files";
 import { listJobFolders } from "./job-folders";
 import { readJson, writeJsonAtomic } from "./persistence";
@@ -54,7 +55,13 @@ export async function buildContextManifest(workspacePath: string, selection: Con
   const pathJobIds = requestedJobPaths.filter((path) => path.startsWith("jobs/")).map((path) => path.split("/")[1]).filter((id): id is string => Boolean(id));
   const selectedJobIds = [...new Set([...requestedJobIds, ...pathJobIds])].filter((id) => allowed.has(id));
   const sourceFiles: ContextManifest["sourceFiles"] = [];
-  const resumePaths = await listResumePaths(workspacePath, resumeConfig.baseResumePath ?? null, resumeConfig.secondaryResumePaths ?? []);
+  const profile = await readCandidateProfile(workspacePath);
+  const baseResume = resumeConfig.baseResumePath ?? profile?.sources.baseResumePath ?? null;
+  const secondaryResumes = (resumeConfig.secondaryResumePaths && resumeConfig.secondaryResumePaths.length > 0)
+    ? resumeConfig.secondaryResumePaths
+    : (profile?.sources.secondaryResumePaths ?? []);
+  const linkedin = resumeConfig.linkedinProfilePath ?? profile?.sources.linkedinProfilePath ?? null;
+  const resumePaths = await listResumePaths(workspacePath, baseResume, secondaryResumes);
   const configuredResumePaths = [resumePaths.baseResumePath, ...resumePaths.secondaryResumePaths].filter((path): path is string => Boolean(path));
   const hasExplicitContextSelection = normalizedSelection.structuredPaths.length > 0 || normalizedSelection.broadPaths.length > 0 || normalizedSelection.careerPaths.length > 0;
   const hasExplicitSelection = hasExplicitContextSelection || normalizedSelection.jobIds.length > 0 || normalizedSelection.jobPaths.length > 0;
@@ -74,7 +81,7 @@ export async function buildContextManifest(workspacePath: string, selection: Con
   const selectedStructuredPaths = selectedCareerPaths.filter((path) => path.startsWith("context/structured/"));
   const selectedBroadPaths = selectedCareerPaths.filter((path) => path.startsWith("context/broad/"));
   const selectedJobFiles = sourceFiles.filter((source) => source.path.startsWith("jobs/")).map((source) => source.path);
-  const linkedinProfilePath = resumeConfig.linkedinProfilePath && selectedCareerPaths.includes(resumeConfig.linkedinProfilePath) ? resumeConfig.linkedinProfilePath : null;
+  const linkedinProfilePath = linkedin && selectedCareerPaths.includes(linkedin) ? linkedin : null;
   const manifest = contextManifestSchema.parse({
     schemaVersion: 1,
     workspacePath,

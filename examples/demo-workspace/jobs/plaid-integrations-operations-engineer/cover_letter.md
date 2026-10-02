@@ -9,7 +9,7 @@ Plaid
 
 Dear Hiring Team,
 
-I am applying for the Integrations Operations Engineer role at Plaid to help maintain reliable API connectivity and resolve complex integration issues across your partner ecosystem. Over the past eight years, my career has evolved from building core REST services and data pipelines into leading high-throughput partner integrations, webhook reliability, and operational troubleshooting.
+As a lead solutions and integrations engineer, I am writing regarding the Integrations Operations Engineer role at Plaid to help maintain reliable API connectivity and resolve complex integration issues across your partner ecosystem. Over the past eight years, my career has evolved from building core REST services and data pipelines into leading high-throughput partner integrations, webhook reliability, and operational troubleshooting.
 
 At Cascade Software Labs, I engineered core RESTful services and automated synchronization workers, learning early how fragile integrations become when external payloads drift from documented schemas. At Kinetics Data Platform, I developed streaming backend ingestion microservices in Node.js and TypeScript, optimized PostgreSQL pipelines to reduce p95 latency by 45%, and implemented HMAC SHA-256 signature verification to safeguard partner endpoints against burst traffic and replay attacks.
 

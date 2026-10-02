@@ -24,6 +24,7 @@ import { contextManifestHash } from "./context-manifest-hash";
 import { assertInsideWorkspace } from "./workspace";
 import { parseJobDescriptionMetadata, resolveJobDescriptionPath } from "./job-description";
 import { readCandidateProfile } from "./candidate-profile";
+import { buildContextManifest, readActiveContextManifest } from "./context";
 
 const MANIFEST_PATH = ".sensei/active-context.json";
 const DENYLIST_PATH = "context/denylist.md";
@@ -53,7 +54,7 @@ function metadataValue(markdown: string, key: string): string {
 function classifyEvidence(confidence: string, publicUse: string, sourceRole: string): EvidenceSnapshotRow["classification"] {
   const combined = `${confidence} ${publicUse}`.toLowerCase();
   if (/contradict/.test(combined)) return "contradictory";
-  if (/corroboration|required|medium-low|low/.test(combined)) return "corroboration-required";
+  if (/corroboration|required|medium-low|\blow\b/.test(combined)) return "corroboration-required";
   if (/inference/.test(combined)) return "supported-inference";
   if (/summary/.test(combined) || sourceRole.includes("summary")) return "summary-derived";
   return "verified";
@@ -62,7 +63,7 @@ function classifyEvidence(confidence: string, publicUse: string, sourceRole: str
 function eligibilityFor(classification: EvidenceSnapshotRow["classification"], publicUse: string): EvidenceSnapshotRow["eligibility"] {
   if (classification === "contradictory") return "blocked";
   if (classification === "corroboration-required" || /corroborat|historical support|date reconciliation/i.test(publicUse)) return "corroboration-required";
-  return /eligible|public/i.test(publicUse) ? "eligible" : "corroboration-required";
+  return /eligible|public|allowed/i.test(publicUse) ? "eligible" : "corroboration-required";
 }
 
 function recencyFor(value: string): Pick<EvidenceSnapshotRow, "startYear" | "endYear" | "isOngoing" | "recencyBand"> {
@@ -566,9 +567,15 @@ async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
 export async function createEvidenceSnapshot(workspacePath: string, jobId: string): Promise<EvidenceSnapshot> {
   if (!/^[a-z0-9][a-z0-9-]*$/i.test(jobId)) throw new Error("The canonical job ID is invalid.");
   const workspace = resolve(workspacePath);
-  const manifestPath = assertInsideWorkspace(workspace, join(workspace, MANIFEST_PATH));
-  const manifestText = await readFile(manifestPath, "utf8");
-  const manifest = contextManifestSchema.parse(JSON.parse(manifestText));
+  let manifest = await readActiveContextManifest(workspace);
+  if (!manifest || !manifest.baseResumePath) {
+    const candidateProfile = await readCandidateProfile(workspace);
+    manifest = await buildContextManifest(workspace, { jobIds: [jobId] }, {
+      baseResumePath: candidateProfile?.sources.baseResumePath ?? null,
+      secondaryResumePaths: candidateProfile?.sources.secondaryResumePaths ?? [],
+      linkedinProfilePath: candidateProfile?.sources.linkedinProfilePath ?? null,
+    });
+  }
   const candidateProfile = await readCandidateProfile(workspace);
   if (resolve(manifest.workspacePath) !== workspace) throw new Error("The active context manifest belongs to another workspace.");
   if (!manifest.baseResumePath) throw new Error("The active context manifest has no configured base resume.");
@@ -598,7 +605,13 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
 
   for (const relativePath of allPaths) {
     const absolutePath = assertInsideWorkspace(workspace, join(workspace, relativePath));
-    const content = await readFile(absolutePath);
+    const content = await readFile(absolutePath).catch(() => {
+      if (relativePath === DENYLIST_PATH || relativePath === APPLICATION_VOICE_PROFILE_PATH) {
+        return Buffer.from("");
+      }
+      return null;
+    });
+    if (!content) continue;
     const role = sourceRole(relativePath, manifest);
     const text = /\.(?:md|txt|json)$/i.test(relativePath)
       ? content.toString("utf8")
@@ -773,6 +786,9 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       instructions: [
         "Use only evidenceRows for candidate facts; preserve employer, timeline, scope, eligibility, and classification ceilings.",
         "Use the JD to prioritize supported work, never to rewrite candidate history. Follow resumePlan and resumeTemplate exactly.",
+        "Substantively reframe 4-5 experience bullets for the target role using eligible evidence; do not copy baseline bullets verbatim (prevents RESUME_TAILORING_TOO_SIMILAR), and keep total experience words strictly within targetExperienceWordMin and targetExperienceWordMax.",
+        "In the cover letter opening paragraph, introduce the candidate ('I' / 'my') and explicitly include both the target company and role names (prevents COVER_LETTER_INTRO_IMPERSONAL).",
+        "Only cite eligible evidence rows for standalone claims; do not cite a single corroboration-required row alone.",
         "Use direct, natural wording; denylistRules always win. Apply styleRules to wording only, never as evidence.",
         resumePlan.customerFacingRole
           ? `Include ${resumePlan.targetCurrentEmployerCustomerBullets} supported current-employer customer-facing bullets and retain a technical foundation.`
