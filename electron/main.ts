@@ -5,7 +5,7 @@ import { copyFile, mkdir, stat } from "node:fs/promises";
 import type { Settings } from "../src/shared/schemas";
 import { markdownSaveInputSchema, pdfExportRequestSchema } from "../src/shared/schemas";
 import { SettingsStore } from "./settings";
-import { deleteWorkspacePath, getBaseResume, listFileTree, previewFile, revealWorkspacePath, saveMarkdownFile } from "./files";
+import { deleteWorkspacePath, getBaseResume, listFileTree, listResumePaths, previewFile, revealWorkspacePath, saveMarkdownFile } from "./files";
 import { listJobArtifacts, listJobFolders, listJobTree } from "./job-folders";
 import { assertInsideWorkspace, indexContext, summarizeWorkspace } from "./workspace";
 import { initializeWorkspace } from "./workspace-init";
@@ -112,8 +112,25 @@ ipcMain.handle("profile:create", async (_event, input) => createCandidateProfile
 ipcMain.handle("settings:get", async () => {
   const current = await settingsStore.get();
   if (workspacePath) {
-    const baseResume = await getBaseResume(workspacePath, current.baseResumePath);
-    if (baseResume !== current.baseResumePath) return settingsStore.save({ baseResumePath: baseResume });
+    const { baseResumePath, secondaryResumePaths } = await listResumePaths(workspacePath, current.baseResumePath, current.secondaryResumePaths);
+    let linkedinProfilePath = current.linkedinProfilePath;
+    if (linkedinProfilePath) {
+      try {
+        const safe = assertInsideWorkspace(workspacePath, resolve(workspacePath, linkedinProfilePath));
+        const info = await stat(safe).catch(() => null);
+        if (!info?.isFile()) linkedinProfilePath = null;
+      } catch {
+        linkedinProfilePath = null;
+      }
+    }
+    const changed = baseResumePath !== current.baseResumePath
+      || linkedinProfilePath !== current.linkedinProfilePath
+      || secondaryResumePaths.length !== current.secondaryResumePaths.length
+      || secondaryResumePaths.some((path, i) => path !== current.secondaryResumePaths[i]);
+
+    if (changed) {
+      return settingsStore.save({ baseResumePath, secondaryResumePaths, linkedinProfilePath });
+    }
   }
   return current;
 });
