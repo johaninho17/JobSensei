@@ -56,11 +56,11 @@ export async function buildContextManifest(workspacePath: string, selection: Con
   const selectedJobIds = [...new Set([...requestedJobIds, ...pathJobIds])].filter((id) => allowed.has(id));
   const sourceFiles: ContextManifest["sourceFiles"] = [];
   const profile = await readCandidateProfile(workspacePath);
-  const baseResume = resumeConfig.baseResumePath ?? profile?.sources.baseResumePath ?? null;
-  const secondaryResumes = (resumeConfig.secondaryResumePaths && resumeConfig.secondaryResumePaths.length > 0)
-    ? resumeConfig.secondaryResumePaths
-    : (profile?.sources.secondaryResumePaths ?? []);
-  const linkedin = resumeConfig.linkedinProfilePath ?? profile?.sources.linkedinProfilePath ?? null;
+  const baseResume = profile?.sources.baseResumePath ?? resumeConfig.baseResumePath ?? null;
+  const secondaryResumes = (profile?.sources.secondaryResumePaths && profile.sources.secondaryResumePaths.length > 0)
+    ? profile.sources.secondaryResumePaths
+    : (resumeConfig.secondaryResumePaths ?? []);
+  const linkedin = profile?.sources.linkedinProfilePath ?? resumeConfig.linkedinProfilePath ?? null;
   const resumePaths = await listResumePaths(workspacePath, baseResume, secondaryResumes);
   const configuredResumePaths = [resumePaths.baseResumePath, ...resumePaths.secondaryResumePaths].filter((path): path is string => Boolean(path));
   const hasExplicitContextSelection = normalizedSelection.structuredPaths.length > 0 || normalizedSelection.broadPaths.length > 0 || normalizedSelection.careerPaths.length > 0;

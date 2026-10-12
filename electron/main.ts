@@ -15,7 +15,9 @@ import { exportMarkdownPdf } from "./pdf-export";
 import { getInterviewOverview, listInterviewRounds, refreshInterviewDashboard, setCurrentInterviewRound } from "./interviews";
 import { invalidateSearchIndex, searchWorkspace } from "./search";
 import { getJobApplicationStatus, validateJobApplication } from "./application-validation";
-import { createCandidateProfile, readCandidateProfile, updateCandidateProfileSources } from "./candidate-profile";
+import { createCandidateProfile, readCandidateProfile, updateCandidateProfilePreferences, updateCandidateProfileSources } from "./candidate-profile";
+import { readBulletBank, saveBulletBank } from "./bullet-bank";
+import { generateJobClarifyingQuestions, saveJobClarificationAnswers } from "./clarifying-questions";
 
 let mainWindow: BrowserWindow | undefined;
 let interviewWindow: BrowserWindow | undefined;
@@ -108,6 +110,11 @@ ipcMain.handle("workspace:rescan", async () => {
 });
 ipcMain.handle("profile:get", async () => readCandidateProfile(requireWorkspace()));
 ipcMain.handle("profile:create", async (_event, input) => createCandidateProfile(requireWorkspace(), input, await settingsStore.get()));
+ipcMain.handle("profile:update-preferences", async (_event, preferences) => updateCandidateProfilePreferences(requireWorkspace(), preferences));
+ipcMain.handle("bullet-bank:get", async () => readBulletBank(requireWorkspace()));
+ipcMain.handle("bullet-bank:save", async (_event, bank) => saveBulletBank(requireWorkspace(), bank));
+ipcMain.handle("clarifications:get-questions", async (_event, jobId: string) => generateJobClarifyingQuestions(requireWorkspace(), jobId));
+ipcMain.handle("clarifications:submit-answers", async (_event, { jobId, answers }: { jobId: string; answers: any[] }) => saveJobClarificationAnswers(requireWorkspace(), jobId, answers));
 
 ipcMain.handle("settings:get", async () => {
   const current = await settingsStore.get();

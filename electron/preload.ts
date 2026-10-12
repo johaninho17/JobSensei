@@ -13,6 +13,15 @@ const api: SenseiApi = {
   profile: {
     get: () => ipcRenderer.invoke("profile:get"),
     create: (input) => ipcRenderer.invoke("profile:create", input),
+    updatePreferences: (preferences) => ipcRenderer.invoke("profile:update-preferences", preferences),
+  },
+  bulletBank: {
+    get: () => ipcRenderer.invoke("bullet-bank:get"),
+    save: (bank) => ipcRenderer.invoke("bullet-bank:save", bank),
+  },
+  clarifications: {
+    getQuestions: (jobId) => ipcRenderer.invoke("clarifications:get-questions", jobId),
+    submitAnswers: (jobId, answers) => ipcRenderer.invoke("clarifications:submit-answers", { jobId, answers }),
   },
   settings: {
     get: () => ipcRenderer.invoke("settings:get"),

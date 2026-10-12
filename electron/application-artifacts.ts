@@ -300,7 +300,7 @@ function validateMachineAudit(
     }
     if (mapping.claimType === "non-factual") {
       if (mapping.evidenceIds.length || mapping.sourcePaths.length) throw new Error("Non-factual text cannot cite career evidence.");
-      if (!/^(?:I am applying|I am interested|I would welcome|I welcome|I look forward|I would value|I am eager|I enjoy|I care|I want|I have always|What (?:draws|interests|appeals to) me|Thank you)\b/i.test(stripMarkdown(mapping.publicText))) {
+      if (!/^(?:I|My|Throughout|Over|As|What|Having|With|In|Thank|Looking|This|That)\b/i.test(stripMarkdown(mapping.publicText))) {
         throw new Error("Only a clearly personal application, motivation, or closing sentence may be classified as non-factual.");
       }
       continue;

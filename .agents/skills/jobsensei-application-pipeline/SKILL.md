@@ -9,18 +9,18 @@ Use this skill automatically for a pasted JD or direct job-posting URL. The cand
 
 ## Hard Boundary
 
-For a normal run, read only this skill, `data/.sensei/active-context.json`, the supplied JD, and the new job's `.sensei/application_run.json` plus `.sensei/application_context.json`. Do not open source code, schemas, validators, other skills, raw context, the full snapshot, the base resume, or any existing job. Do not use subagents, scratch scripts, converter discovery, broad search, or prior application artifacts.
+For a normal run, read only this skill, the supplied JD, and the new job's `.sensei/application_context.json`. Do not read `data/.sensei/active-context.json` or `.sensei/application_run.json` (the snapshot command reads active-context and outputs run metadata directly). Do not open source code, schemas, validators, other skills, raw context, the full snapshot, the base resume, or any existing job. Do not use subagents, scratch scripts, directory exploration, broad search, or prior application artifacts.
 
-For a URL, fetch that exact posting once. Do not browse linked pages or retry through alternate tools. If it cannot be fetched, ask the user to paste the JD and stop.
+For a URL, fetch that exact posting once and draft directly from the returned content. Do not inspect raw fetched HTML files or browse linked pages. If it cannot be fetched, ask the user to paste the JD and stop.
 
 ## One-Pass Flow
 
 1. Extract the company, role, location, source URL, and clean JD. Screen it once.
 2. Score exactly six distinct capabilities: `core` 40%, `technical` 25%, `scope` 15%, `outcomes` 10%, `domain` 5%, and `learning` 5%. Use `direct` 1.00, `strong_transferable` 0.80, `adjacent_transferable` 0.65, `unclear` 0.25, and `gap` 0. Do not score personality, logistics, or ordinary learnable tools as standalone requirements. Only a genuine hard blocker prevents applying.
-3. Below `3.5/5`, save only the screened result and stop. At or above the gate, create `data/jobs/<job-id>/original_jd.md`, `pdfs/`, `.sensei/job.json`, and `.sensei/status.json` in one file-writing turn.
-4. Run `npm run context:snapshot -- <job-id>` exactly once.
-5. Read `.sensei/application_run.json` and `.sensei/application_context.json` once. The compact context is the complete drafting boundary and retains every routed claim needed for the run.
-6. In one file-writing turn, create only `.sensei/application_bundle.json` using the contract below.
+3. Derive `<job-id>` directly as lowercase kebab-case `<company>-<role-title>` (e.g., `gitlab-solutions-architect-public-sector-west`). Never run `ls` or directory checks. Below `3.5/5`, save only the screened result and stop. At or above the gate, write ONLY `data/jobs/<job-id>/original_jd.md`. Never create `pdfs/`, `.gitkeep`, `.sensei/job.json`, or `.sensei/status.json` manually (the snapshot and finalizer commands automatically generate all metadata and folder scaffolding).
+4. Run `npm run context:snapshot -- <job-id>` exactly once. Note `snapshotId` and `runId` from the command's stdout.
+5. Read `.sensei/application_context.json` once in a single turn. The compact context fits completely in one view and contains every routed claim, resume footprint, and template needed for the run.
+6. In one file-writing turn, create only `.sensei/application_bundle.json` using the contract below. To avoid latency, keep `evaluationMarkdown` focused strictly on the 6-row table, adapt pre-verified phrasing from `resumeTemplate.originalBullets` / Bullet Bank for foundational bullets while substantively reframing the 4-5 target bullets, and draft the 3-act cover letter (220-300 words).
 7. Run `npm run application:finalize -- <job-id>` exactly once. Report its `fitScore`, `fitConfidence`, `gateStatus`, and warnings, then stop. Never inspect code, patch output, or retry after finalization.
 
 For an explicit regeneration, the saved JD is the only job-specific input. Existing generated files are stale outputs, not references. Never read them before replacement.
@@ -31,11 +31,17 @@ For an explicit regeneration, the saved JD is the only job-specific input. Exist
 - Respect every row's employer, timeline, scope, eligibility, `maximumClassification`, and source authority. Every public claim must cite an `eligible` evidence row. Never cite a single `corroboration-required` row alone. Never invent an evidence ID.
 - Follow `resumePlan`, `resumeTemplate`, `footprint`, `denylistRules`, and the local candidate preferences. The finalizer restores protected identity, contact details, chronology, titles, dates, locations, education, and layout.
 - Use `resumeTemplate.originalBullets` and `originalSkillsLines` as the presentation baseline and wording reference; they cannot independently prove a claim, metric, tool, or outcome.
-- Substantively reframe at least 4-5 experience bullets to align directly with the target role's core responsibilities and technical priorities using routed eligible evidence. Merely copying baseline bullets verbatim triggers `RESUME_TAILORING_TOO_SIMILAR`.
+- Omit any resume summary section by default unless `preferences.resume.includeSummary` is explicitly enabled in the candidate profile.
+- Consult the candidate's Reusable Bullet Bank (`data/profile/bullet_bank.json`) when available. Where the candidate has pre-verified, high-impact bullets matching the role's themes, prioritize reusing or adapting those bullets to preserve proven wording, save compute, and maintain consistency.
+- Curate `skillsLines` categories specifically for the target job's domain using eligible evidence (e.g. adapting headings from generic baselines to job-relevant categories such as "Partner Solutions & Enablement", "Cloud & Data Systems", "Operational Frameworks", etc.). Do not leave skills categories statically frozen across distinct job domains.
+- Substantively reframe at least 4-5 experience bullets to align directly with the target role's core responsibilities and priorities using routed eligible evidence. Merely copying baseline bullets verbatim triggers `RESUME_TAILORING_TOO_SIMILAR`.
 - Strictly adhere to the experience word count budget (`footprint.targetExperienceWordMin` to `footprint.targetExperienceWordMax`). Do not exceed `targetExperienceWordMax` (triggers `RESUME_EXPERIENCE_DENSITY_HIGH`).
-- For customer-facing roles, use the plan's supported customer evidence while retaining technical work. For AI-focused roles, surface supported AI work in experience without upgrading integration, testing, configuration, or enablement into model ownership.
-- Use direct, natural engineering language. Prefer an accurate action, concrete method or tool, and supported purpose or result. Avoid noun chains, decorative skill labels, keyword inventories, and denylisted wording.
-- Keep the cover letter candidate-first and strictly between 190-230 words. In the opening paragraph, introduce the candidate's background ('I' / 'my') and explicitly connect the trajectory to both the target company and role names (prevents `COVER_LETTER_INTRO_IMPERSONAL`). Do not announce the application with generic clichés, paraphrase the JD, invent passion, or spend a paragraph describing the employer.
+- Align bullet emphasis with the core discipline of the target role (e.g., leadership, operations, commercial, technical, or people enablement) based on the candidate's supported background without exaggerating scope or ownership.
+- Use direct, natural professional language appropriate to the candidate's field. Strictly adhere to `$jobsensei-anti-slop` standards: eliminate machine clichés (delve, leverage, utilize, navigate, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, intersection, synergy, beacon, rule-of-three corporate lists). Prefer an accurate action, concrete method or tool, and supported purpose or result.
+- Keep the cover letter candidate-first and follow the 3-Act Narrative Architecture (target 220-300 words):
+  - **Act 1 (The Human Connection & Shared Problem):** In paragraph 1, introduce the candidate ('I' / 'my') with a direct, polite statement of application connecting to the company and role, followed immediately by the ground-level operational or technical problem at the boundary of the work. **CRITICAL:** Do NOT lecture the employer on what their industry requires or make grand corporate CEO keynote declarations (e.g., "Delivering seamless digital payment experiences requires both deep API fluency..."). Do NOT parrot the JD qualifications back to the hiring team.
+  - **Act 2 (The Career Journey & Human Motivation):** Explain the authentic career evolution from earlier foundational roles toward current specialization, grounded in the profile's documented transition. Never write a mini-resume list of tools or recite the JD.
+  - **Act 3 (The Standout Proof Point & Forward Vision):** Highlight concrete evidence-backed achievements that demonstrate problem-solving capability, closing with authentic forward alignment with the team's mission.
 - Apply `styleRules` last for wording only. They cannot support facts or alter evidence mappings.
 - Employer-facing files must never contain evidence IDs, warnings, hashes, or generation notes.
 
@@ -109,4 +115,4 @@ Every editable skills line, resume bullet, and factual cover-letter sentence nee
 
 ## Time Budget
 
-Use one fetch, one batched intake write, one snapshot command, one compact-context read, one bundle write, and one finalization command. The target is 30-60 seconds. A warning is a completed run, not permission to investigate or repair.
+Use at most 5 bounded operations: write `original_jd.md`, run `npm run context:snapshot`, read `.sensei/application_context.json`, write `.sensei/application_bundle.json`, and run `npm run application:finalize`. Never run exploratory directory listings (`ls`), never create empty `.gitkeep` files, and never read `active-context.json` or `application_run.json`. Target execution time is 30–45 seconds. A warning is a completed run, not permission to investigate or repair.

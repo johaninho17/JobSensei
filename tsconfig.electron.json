@@ -8,6 +8,8 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "incremental": true,
+    "tsBuildInfoFile": "dist-electron/.tsbuildinfo",
     "types": ["node", "electron"]
   },
   "include": ["electron/**/*.ts", "src/shared/**/*.ts"]

@@ -174,6 +174,10 @@ describe("Sensei viewer workspace", () => {
     expect(() => session.write("x".repeat(100_001))).toThrow(/invalid/i);
     expect(() => session.resize(1, 24)).toThrow(/invalid/i);
     expect(() => session.resize(80, 201)).toThrow(/invalid/i);
+    const result = session.start(workspace, workspace, null);
+    expect(result).toHaveProperty("cwd");
+    expect(result).toHaveProperty("agyStarted");
+    expect(typeof result.agyStarted).toBe("boolean");
     session.stop();
     expect(workspace).toContain("sensei-viewer-");
   });

@@ -33,6 +33,31 @@ export const candidateEducationSchema = z.object({
   details: z.array(z.string()).default([]),
 });
 
+export const voicePresetSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  tagline: z.string(),
+  description: z.string(),
+  toneGuidance: z.string(),
+});
+export type VoicePreset = z.infer<typeof voicePresetSchema>;
+
+export const voiceSettingsSchema = z.object({
+  tonePreset: z.string().default("direct_outcomes"),
+  customGuidance: z.string().default(""),
+  antiSlopStrictness: z.enum(["standard", "aggressive"]).default("aggressive"),
+  interactiveQuestions: z.enum(["always", "on_gaps", "never"]).default("on_gaps"),
+  narrativeDepth: z.enum(["journey_first", "balanced", "technical_proof"]).default("journey_first"),
+});
+export type VoiceSettings = z.infer<typeof voiceSettingsSchema>;
+
+export const candidateNarrativePillarsSchema = z.object({
+  turningPoints: z.string().default(""),
+  workingStyle: z.string().default(""),
+  personalValues: z.string().default(""),
+});
+export type CandidateNarrativePillars = z.infer<typeof candidateNarrativePillarsSchema>;
+
 export const candidateProfileSchema = z.object({
   schemaVersion: z.literal(1),
   identity: z.object({
@@ -57,6 +82,11 @@ export const candidateProfileSchema = z.object({
     education: z.array(candidateEducationSchema).default([]),
     transitionSummary: z.string().default(""),
     preferredRoleFamilies: z.array(z.string()).default([]),
+    narrativePillars: candidateNarrativePillarsSchema.default({
+      turningPoints: "",
+      workingStyle: "",
+      personalValues: "",
+    }),
   }),
   preferences: z.object({
     resume: z.object({
@@ -68,6 +98,18 @@ export const candidateProfileSchema = z.object({
     coverLetter: z.object({
       storyGuidance: z.array(z.string()).default([]),
       voiceGuidance: z.array(z.string()).default([]),
+      narrativePillars: candidateNarrativePillarsSchema.default({
+        turningPoints: "",
+        workingStyle: "",
+        personalValues: "",
+      }),
+    }),
+    voice: voiceSettingsSchema.default({
+      tonePreset: "direct_outcomes",
+      customGuidance: "",
+      antiSlopStrictness: "aggressive",
+      interactiveQuestions: "on_gaps",
+      narrativeDepth: "journey_first",
     }),
   }),
   truth: z.object({
@@ -81,6 +123,7 @@ export type CandidateProfile = z.infer<typeof candidateProfileSchema>;
 export const candidateProfileCreateSchema = z.object({
   fullName: z.string().trim().min(1).max(120),
   artifactPrefix: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/),
+  narrativePillars: candidateNarrativePillarsSchema.optional(),
 });
 export type CandidateProfileCreate = z.infer<typeof candidateProfileCreateSchema>;
 
@@ -892,6 +935,64 @@ export const contextSelectionSchema = z.object({
 });
 export type ContextSelection = z.infer<typeof contextSelectionSchema>;
 
+export const bulletBankItemSchema = z.object({
+  id: z.string(),
+  themeId: z.string(),
+  employerName: z.string(),
+  text: z.string(),
+  evidenceIds: z.array(z.string()).default([]),
+  metrics: z.array(z.string()).default([]),
+  tags: z.array(z.string()).default([]),
+  updatedAt: z.string(),
+});
+export type BulletBankItem = z.infer<typeof bulletBankItemSchema>;
+
+export const bulletBankThemeSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string(),
+  keywords: z.array(z.string()).default([]),
+});
+export type BulletBankTheme = z.infer<typeof bulletBankThemeSchema>;
+
+export const bulletBankSchema = z.object({
+  schemaVersion: z.literal(1),
+  themes: z.array(bulletBankThemeSchema).default([]),
+  bullets: z.array(bulletBankItemSchema).default([]),
+  updatedAt: z.string(),
+});
+export type BulletBank = z.infer<typeof bulletBankSchema>;
+
+export const clarifyingQuestionOptionSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+});
+export type ClarifyingQuestionOption = z.infer<typeof clarifyingQuestionOptionSchema>;
+
+export const clarifyingQuestionSchema = z.object({
+  id: z.string(),
+  prompt: z.string(),
+  contextHint: z.string().optional(),
+  options: z.array(clarifyingQuestionOptionSchema),
+  allowWriteIn: z.boolean().default(true),
+});
+export type ClarifyingQuestion = z.infer<typeof clarifyingQuestionSchema>;
+
+export const clarifyingAnswerSchema = z.object({
+  questionId: z.string(),
+  selectedOptionId: z.string().nullable().default(null),
+  writeInText: z.string().nullable().default(null),
+});
+export type ClarifyingAnswer = z.infer<typeof clarifyingAnswerSchema>;
+
+export const clarifyingAnswersReportSchema = z.object({
+  jobId: z.string(),
+  answers: z.array(clarifyingAnswerSchema),
+  updatedAt: z.string(),
+});
+export type ClarifyingAnswersReport = z.infer<typeof clarifyingAnswersReportSchema>;
+
 export interface SenseiApi {
   app: {
     copyText(text: string): Promise<void>;
@@ -904,6 +1005,15 @@ export interface SenseiApi {
   profile: {
     get(): Promise<CandidateProfile | null>;
     create(input: CandidateProfileCreate): Promise<CandidateProfile>;
+    updatePreferences(preferences: CandidateProfile["preferences"]): Promise<CandidateProfile>;
+  };
+  bulletBank: {
+    get(): Promise<BulletBank>;
+    save(bank: BulletBank): Promise<BulletBank>;
+  };
+  clarifications: {
+    getQuestions(jobId: string): Promise<ClarifyingQuestion[]>;
+    submitAnswers(jobId: string, answers: ClarifyingAnswer[]): Promise<void>;
   };
   settings: {
     get(): Promise<Settings>;
@@ -945,12 +1055,12 @@ export interface SenseiApi {
     onUpdated(callback: (manifest: ContextManifest) => void): () => void;
   };
   terminal: {
-    start(input: { cwd?: string }): Promise<{ cwd: string }>;
+    start(input: { cwd?: string }): Promise<{ cwd: string; agyStarted?: boolean }>;
     setContext(input: ContextSelection): Promise<ContextManifest>;
     write(data: string): Promise<void>;
     insertPrompt(text: string): Promise<void>;
     resize(input: { cols: number; rows: number }): Promise<void>;
-    restart(): Promise<{ cwd: string }>;
+    restart(): Promise<{ cwd: string; agyStarted?: boolean }>;
     stop(): Promise<void>;
     onData(callback: (data: string) => void): () => void;
     onExit(callback: (code: number) => void): () => void;

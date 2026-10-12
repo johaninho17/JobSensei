@@ -25,6 +25,7 @@ import { assertInsideWorkspace } from "./workspace";
 import { parseJobDescriptionMetadata, resolveJobDescriptionPath } from "./job-description";
 import { readCandidateProfile } from "./candidate-profile";
 import { buildContextManifest, readActiveContextManifest } from "./context";
+import { deriveVoicePresets } from "../src/shared/voice-presets";
 
 const MANIFEST_PATH = ".sensei/active-context.json";
 const DENYLIST_PATH = "context/denylist.md";
@@ -389,30 +390,25 @@ export function buildCoverLetterBrief(
     .filter((line) => /\b(?:build|support|partner|lead|manage|design|deliver|solve|drive|improve|work with|responsib|customer|client)\b/i.test(line))
     .slice(0, 1);
   return {
-    targetWordMin: 190,
-    targetWordMax: 230,
-    hardWordMax: 300,
+    targetWordMin: 220,
+    targetWordMax: 300,
+    hardWordMax: 360,
     roleProblems,
     company,
     role,
     introContract: [
-      `Candidate-first narrative: ${candidateName}'s story exists independently of the JD. Do not derive the candidate's interests, focus, identity, or reasons for applying from the job description.`,
-      `Begin with ${candidateName}: who the candidate is and how the career developed, using candidateProfile and selected evidence.`,
-      "Do not announce that he is applying and do not begin by describing the employer. Never use templated openings such as 'Throughout my work, I have focused/concentrated on [job requirements]' or declare the role a 'natural continuation' or 'natural next step'.",
-      `Mention ${role ?? "the role"} at ${company ?? "the company"} briefly only after the candidate's trajectory is established, then connect it to the documented path.`,
-      "Choose the opening angle from routed evidence rather than a reusable motivation sentence or invented passion under non-factual classification. Never invent attachment to the employer's mission, market, product, users, or slogan.",
+      `Candidate-first narrative: ${candidateName}'s story exists independently of the JD. Do not parrot the job description or recite qualification checklists.`,
+      `State the application directly and professionally in paragraph 1 connecting to ${company ?? "the company"} and ${role ?? "the role"}.`,
+      `Ground the narrative in who the candidate is as a person: why they made past career decisions, chose to step out of comfort zones, and what drives their working style.`,
     ],
     requiredElements: [
-      `Candidate-first narrative: ${candidateName}'s career story exists independently of the JD. The JD selects which truthful career episode is relevant, but never creates interests, passions, focus, or identity.`,
-      "Candidate-originated motivation must come from the candidate profile, application voice profile, or user goals—never inferred from JD terminology or invented under non-factual classification.",
-      "Keep at least three quarters of the body on the candidate's documented career path, personal choices, and evidence rather than a skills inventory.",
-      "Fit should be demonstrated through concrete evidence, not declared through lists of matching requirements or prose inventories of tools.",
-      "Use education or earlier work only when it adds meaning to this particular career path; do not include the same education paragraph by default or list coursework.",
-      `Use one or two concrete evidence-backed examples with accurate tense and ownership: use one ongoing ${currentEmployer} example when available, and when useful, one earlier career or education bridge.`,
-      "Use chronological order when connecting earlier work to changing responsibility; mention only stages relevant to this role.",
-      "Use at most one sentence to describe the employer or role. Do not write a standalone requirements paragraph; explain why the candidate wants this work as a credible next step in the documented career.",
-      "If no personal company-specific motivation is supported, use straightforward interest in the role's scope or growth opportunity without declaring it a 'natural continuation' or manufacturing passion.",
-      "Use common words the candidate could say aloud, then close briefly with the work the candidate wants to continue doing without repeating job requirements or pledging a list of capabilities.",
+      "Follow the Human Narrative Architecture: Act 1 (The Hook & Honest Connection), Act 2 (The Career Journey & Turning Points — why you made key transitions), Act 3 (How You Operate as a Person & Real Ownership), Act 4 (The Forward Destination & Team Fit).",
+      "Focus on who the candidate is as a person and their problem-solving mindset, NOT a mini-resume list of tools or tasks.",
+      "Never lecture the employer on what their industry requires or make grand corporate CEO keynote speeches.",
+      "Never describe the job description back to the hiring manager.",
+      "Demonstrate fit through authentic career progression and concrete problem ownership, not through matching requirement lists.",
+      `Use one or two concrete evidence-backed milestones with accurate tense and ownership: use one ongoing ${currentEmployer} example when available, and one earlier career bridge.`,
+      "Use common spoken words; strictly avoid AI slop words (delve, leverage, tapestry, realm, pivotal, rule-of-three corporate lists).",
     ],
     prohibitedPatterns: [
       "Throughout my work, I have focused",
@@ -426,16 +422,9 @@ export function buildCoverLetterBrief(
       "making this role a natural continuation",
       "a natural continuation",
       "a natural next step",
-      "That background allows me to",
-      "That development background allows me to",
-      "That engineering background allows me to",
       "I look forward to bringing",
       "My background aligns",
-      "My background connects",
-      "This progression",
-      "This combination",
-      "I welcome the opportunity to discuss how my background",
-      "This foundation enables me",
+      "That background allows me to",
       "Opening with a generic description of the company",
       "Engineering teams need",
       "I am excited to bring this combination",
@@ -445,7 +434,6 @@ export function buildCoverLetterBrief(
       "measurable results",
       "I am drawn to the mission",
       "I am passionate about your mission",
-      "I am applying for",
       "I am excited to apply",
       "I am interested in applying",
       "democratizing access",
@@ -460,7 +448,27 @@ function compactStyleRules(markdown: string, profile?: CandidateProfile | null):
     .filter((line) => line.length >= 12 && line.length <= 240)
     .filter((line) => !/^source|^updated|^purpose|^application voice profile$/i.test(line))
     .slice(0, 14);
+
+  const voice = profile?.preferences.voice;
+  const activePresetGuidance: string[] = [];
+  if (voice?.tonePreset) {
+    const presets = deriveVoicePresets(profile ?? null);
+    const active = presets.find((p) => p.id === voice.tonePreset);
+    if (active?.toneGuidance) {
+      activePresetGuidance.push(`Tone & Positioning Style: ${active.toneGuidance}`);
+    }
+  }
+  if (voice?.customGuidance?.trim()) {
+    activePresetGuidance.push(`Custom Tone Guidance: ${voice.customGuidance.trim()}`);
+  }
+  if (voice?.narrativeDepth === "journey_first") {
+    activePresetGuidance.push("Narrative Framing: Prioritize candidate journey, deliberate transitions, and problem-solving ownership over technical tool inventories.");
+  } else if (voice?.narrativeDepth === "technical_proof") {
+    activePresetGuidance.push("Technical Grounding: Prioritize concrete systems architecture, data models, and technical proof points.");
+  }
+
   return [...new Set([
+    ...activePresetGuidance,
     ...(profile?.preferences.coverLetter.voiceGuidance ?? []),
     ...(profile?.preferences.coverLetter.storyGuidance ?? []),
     ...documentRules,
@@ -564,19 +572,45 @@ async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
   await rename(tempPath, path);
 }
 
+async function writeTextAtomic(path: string, value: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const tempPath = `${path}.${process.pid}.tmp`;
+  await writeFile(tempPath, value, "utf8");
+  await rename(tempPath, path);
+}
+
+export function serializeCompactApplicationContext(context: ApplicationContext): string {
+  if (!context.evidenceRows.length) {
+    return JSON.stringify(context, null, 2);
+  }
+  const marker = `__COMPACT_EVIDENCE_ROWS_${Date.now()}__`;
+  const baseJson = JSON.stringify(
+    {
+      ...context,
+      evidenceRows: marker as unknown,
+    },
+    null,
+    2,
+  );
+  const formattedRows = "[\n" + context.evidenceRows
+    .map((row) => `    ${JSON.stringify(row)}`)
+    .join(",\n") + "\n  ]";
+  return baseJson.replace(`"${marker}"`, formattedRows);
+}
+
 export async function createEvidenceSnapshot(workspacePath: string, jobId: string): Promise<EvidenceSnapshot> {
   if (!/^[a-z0-9][a-z0-9-]*$/i.test(jobId)) throw new Error("The canonical job ID is invalid.");
   const workspace = resolve(workspacePath);
   let manifest = await readActiveContextManifest(workspace);
-  if (!manifest || !manifest.baseResumePath) {
-    const candidateProfile = await readCandidateProfile(workspace);
+  const candidateProfile = await readCandidateProfile(workspace);
+  const expectedBase = candidateProfile?.sources.baseResumePath ?? null;
+  if (!manifest || !manifest.baseResumePath || (expectedBase && manifest.baseResumePath !== expectedBase)) {
     manifest = await buildContextManifest(workspace, { jobIds: [jobId] }, {
-      baseResumePath: candidateProfile?.sources.baseResumePath ?? null,
+      baseResumePath: expectedBase,
       secondaryResumePaths: candidateProfile?.sources.secondaryResumePaths ?? [],
       linkedinProfilePath: candidateProfile?.sources.linkedinProfilePath ?? null,
     });
   }
-  const candidateProfile = await readCandidateProfile(workspace);
   if (resolve(manifest.workspacePath) !== workspace) throw new Error("The active context manifest belongs to another workspace.");
   if (!manifest.baseResumePath) throw new Error("The active context manifest has no configured base resume.");
 
@@ -603,14 +637,20 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       warnings: [error instanceof Error ? error.message : String(error)],
     }));
 
-  for (const relativePath of allPaths) {
-    const absolutePath = assertInsideWorkspace(workspace, join(workspace, relativePath));
-    const content = await readFile(absolutePath).catch(() => {
-      if (relativePath === DENYLIST_PATH || relativePath === APPLICATION_VOICE_PROFILE_PATH) {
-        return Buffer.from("");
-      }
-      return null;
-    });
+  const fileContents = await Promise.all(
+    allPaths.map(async (relativePath) => {
+      const absolutePath = assertInsideWorkspace(workspace, join(workspace, relativePath));
+      const content = await readFile(absolutePath).catch(() => {
+        if (relativePath === DENYLIST_PATH || relativePath === APPLICATION_VOICE_PROFILE_PATH) {
+          return Buffer.from("");
+        }
+        return null;
+      });
+      return { relativePath, content };
+    })
+  );
+
+  for (const { relativePath, content } of fileContents) {
     if (!content) continue;
     const role = sourceRole(relativePath, manifest);
     const text = /\.(?:md|txt|json)$/i.test(relativePath)
@@ -786,7 +826,9 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       instructions: [
         "Use only evidenceRows for candidate facts; preserve employer, timeline, scope, eligibility, and classification ceilings.",
         "Use the JD to prioritize supported work, never to rewrite candidate history. Follow resumePlan and resumeTemplate exactly.",
-        "Substantively reframe 4-5 experience bullets for the target role using eligible evidence; do not copy baseline bullets verbatim (prevents RESUME_TAILORING_TOO_SIMILAR), and keep total experience words strictly within targetExperienceWordMin and targetExperienceWordMax.",
+        "Substantively reframe 4-5 experience bullets for the target role using eligible evidence and target themes; do not copy baseline bullets verbatim (prevents RESUME_TAILORING_TOO_SIMILAR), and keep total experience words strictly within targetExperienceWordMin and targetExperienceWordMax.",
+        "Strictly eliminate AI slop words (delve, leverage, utilize, navigate, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, intersection, synergy, beacon).",
+        "In the cover letter, follow the 3-act narrative architecture (The Connection, The Career Journey & Motivation, The Standout Proof Point); do not write a mini-resume list of tools.",
         "In the cover letter opening paragraph, introduce the candidate ('I' / 'my') and explicitly include both the target company and role names (prevents COVER_LETTER_INTRO_IMPERSONAL).",
         "Only cite eligible evidence rows for standalone claims; do not cite a single corroboration-required row alone.",
         "Use direct, natural wording; denylistRules always win. Apply styleRules to wording only, never as evidence.",
@@ -796,7 +838,8 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
         "Write one application_bundle.json with evidence IDs beside each generated claim, then finalize once.",
       ],
     });
-    await writeJsonAtomic(assertInsideWorkspace(jobPath, join(statePath, "application_context.json")), applicationContext);
+    const compactSerialized = serializeCompactApplicationContext(applicationContext);
+    await writeTextAtomic(assertInsideWorkspace(jobPath, join(statePath, "application_context.json")), `${compactSerialized}\n`);
   }
   await pinApplicationRun(jobPath, statePath, snapshot);
   return snapshot;

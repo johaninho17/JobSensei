@@ -128,7 +128,10 @@ function questionItems(markdown: string, sourcePath: string, limit: number): Raw
         answerLines.push(line);
       }
     }
-    const answer = firstUsefulText(answerLines.join("\n"), 420)
+    const coreTakeawayMatch = block.map((line) => /^\s*[-*]\s+\*\*Core Takeaway:\*\*\s*(.+)/i.exec(line)).find(Boolean);
+    const takeaway = coreTakeawayMatch?.[1] ? plainMarkdown(coreTakeawayMatch[1]) : null;
+    const answer = takeaway
+      ?? firstUsefulText(answerLines.join("\n"), 420)
       ?? firstUsefulText(block.join("\n"), 340)
       ?? "Open the question bank for the prepared answer and evidence.";
     items.push({ title: plainMarkdown(heading[2]), text: answer, sourcePath });

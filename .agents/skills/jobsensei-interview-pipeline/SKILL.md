@@ -141,23 +141,39 @@ Create 15-20 primary questions grouped by likely persona: technical, customer/cr
 - Practical topics appropriate to the stage
 - Five to eight stage-specific questions for the interviewer
 
-`question_bank.md` must use these exact sections:
+- If the user runs an interview action on a job that already has interview preparation, regenerate that round using the new Action Points format and refresh its dashboard brief.
+
+`question_bank.md` must use these exact top-level sections:
 
 - `## Primary for this round`
 - `## Likely follow-ups`
 - `## Secondary / later-round preparation`
 - `## Questions to ask`
 
-Every primary question must contain:
+### Standardized Question Bank Contract (Action Points & Bullet Points)
 
-1. `Testing`
-2. `Direct answer (30-45 seconds)`: a complete first-person spoken answer
-3. `Expanded answer (60-90 seconds)`: a complete deeper answer
-4. `Likely follow-up probes`
-5. `Evidence`: selected evidence IDs and source paths
-6. `Scope / truthfulness caution`
+Never produce full-prose conversational monologues or verbatim scripts. Interview questions are never asked word-for-word in real calls, and long scripted essays cause cognitive overload. Every primary and follow-up question must be formatted as scannable action points and STAR cues:
 
-Behavioral answers may run up to two minutes and use STAR only when the evidence supports Situation, Task, Action, and Result. Answer the question before background. Do not force metrics.
+Every question under `## Primary for this round` must follow this exact template:
+
+```markdown
+### Question <N>: <Question Text>?
+
+- **Category:** <One of: Core Experience & Background | System Architecture & Integrations | Ambiguity & Problem Solving | Customer & Cross-Functional Success | Behavioral & Working Style | Role & Company Alignment>
+- **What it tests:** <1 concise sentence on the underlying interviewer signal>
+- **Core Takeaway:** <1 punchy sentence delivering the bottom-line thesis/answer (scannable in 3 seconds)>
+- **Talking Points (STAR Cues):**
+  - **Context:** <1 crisp line describing the specific problem or scenario>
+  - **Action & Ownership:** <concise bullets highlighting candidate's technical decisions, tools, and actions>
+  - **Impact & Metric:** <measurable result, business outcome, or lesson learned>
+- **Evidence Anchor:** <Evidence ID> · <Source file path>
+- **Scope Boundary:** <explicit truthfulness boundary on what not to overclaim>
+- **Quick Follow-up Angles:**
+  - *<Likely follow-up angle 1>*
+  - *<Likely follow-up angle 2>*
+```
+
+Use STAR cues only when evidence supports Situation, Task, Action, and Result. Answer the core question before background. Do not force synthetic metrics.
 
 Use `proof of concept`, `production`, `contributed`, `led`, `customer enablement`, and `full account ownership` precisely. Unknown preferences or logistics must be marked for user confirmation, never filled in.
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
-import { extname, resolve } from "node:path";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { dirname, extname, join, resolve } from "node:path";
 import mammoth from "mammoth";
 import {
   canonicalResumeBaselineSchema,
@@ -123,9 +123,9 @@ function parseCanonicalMarkdown(
   warnings: string[],
 ): CanonicalResumeBaseline {
   const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-  const skillsIndex = lines.findIndex((line) => isHeading(line, /^skills(?:\s*[-–—&]\s*languages)?$/i));
-  const professionalIndex = lines.findIndex((line) => isHeading(line, /^professional experience$/i));
-  const educationIndex = lines.findIndex((line) => isHeading(line, /^education$/i));
+  const skillsIndex = lines.findIndex((line) => isHeading(line, /^(?:skills(?:\s*[-–—&]\s*languages)?|core\s+competencies(?:\s*[-–—&]\s*technical\s+skills)?|technical\s+skills)$/i));
+  const professionalIndex = lines.findIndex((line) => isHeading(line, /^(?:professional\s+experience|work\s+experience|experience)$/i));
+  const educationIndex = lines.findIndex((line) => isHeading(line, /^education(?:\s*[-–—&]\s*languages)?$/i));
   if (skillsIndex < 0 || professionalIndex <= skillsIndex || educationIndex <= professionalIndex) {
     throw new Error("The configured base resume does not expose the required Skills, Professional Experience, and Education structure.");
   }
@@ -205,11 +205,33 @@ export async function loadCanonicalResumeBaseline(workspacePath: string, relativ
   }
   if (extension === ".pdf") {
     const stripped = relativePath.slice(0, -extname(relativePath).length);
-    const candidates = [
+    const directory = dirname(relativePath);
+    const candidates: string[] = [
       stripped,
       ...[".docx", ".md"].map((altExt) => stripped + altExt),
     ];
-    for (const companionRelative of candidates) {
+    try {
+      const dirAbsolute = assertInsideWorkspace(workspacePath, resolve(workspacePath, directory));
+      const entries = await readdir(dirAbsolute).catch(() => []);
+      const siblings = entries
+        .filter((name) => name.endsWith(".md") || name.endsWith(".docx"))
+        .sort((a, b) => {
+          const aBase = /base/i.test(a);
+          const bBase = /base/i.test(b);
+          if (aBase && !bBase) return -1;
+          if (!aBase && bBase) return 1;
+          const aResume = /resume/i.test(a);
+          const bResume = /resume/i.test(b);
+          if (aResume && !bResume) return -1;
+          if (!aResume && bResume) return 1;
+          return a.localeCompare(b);
+        });
+      for (const sibling of siblings) {
+        candidates.push(join(directory, sibling).replaceAll("\\", "/"));
+      }
+    } catch {}
+
+    for (const companionRelative of [...new Set(candidates)]) {
       if (!companionRelative.endsWith(".docx") && !companionRelative.endsWith(".md")) {
         continue;
       }
@@ -223,6 +245,10 @@ export async function loadCanonicalResumeBaseline(workspacePath: string, relativ
             sourcePath: relativePath,
             sourceSha256: sha256(source),
             footprint,
+            warnings: [
+              ...companionBaseline.warnings,
+              `Linked PDF baseline to companion structure from ${companionRelative}.`,
+            ],
           };
           return canonicalResumeBaselineSchema.parse({
             ...coreWithoutId,
@@ -230,7 +256,7 @@ export async function loadCanonicalResumeBaseline(workspacePath: string, relativ
           });
         }
       } catch {
-        // continue trying next companionRelative
+        // continue trying next companion candidate
       }
     }
   }

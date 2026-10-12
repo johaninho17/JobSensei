@@ -13,6 +13,7 @@ import { buildJobActions, type JobAction } from "./job-actions";
 import { evaluationCategoryLabels, evaluationCredits, evaluationLabel, evaluationSection, parseEvaluationRequirements } from "./evaluation-model";
 import { parseQuestionBank, type QuestionEntry } from "./question-navigation";
 import { SearchPalette, type PaletteAction } from "./SearchPalette";
+import { SettingsModal } from "./SettingsModal";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -87,6 +88,7 @@ function WorkspaceApp() {
   const [leftPanelOpen, setLeftPanelOpen] = useState(() => storedPanelOpen("sensei-left-panel-state"));
   const [rightPanelOpen, setRightPanelOpen] = useState(() => storedPanelOpen("sensei-right-panel-state"));
   const [searchOpen, setSearchOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [treeRevealPath, setTreeRevealPath] = useState<string | null>(null);
   const [promptRequest, setPromptRequest] = useState<PromptRequest | null>(null);
   const promptRequestId = useRef(0);
@@ -466,6 +468,13 @@ function WorkspaceApp() {
       keywords: "reload refresh files jobs context",
       run: () => void refresh(),
     },
+    {
+      id: "open-settings",
+      title: "Preferences & Voice Settings",
+      subtitle: "Customize tone, resume tailoring, reusable bullets, and identity",
+      keywords: "settings preferences tone voice bullets summary",
+      run: () => setSettingsModalOpen(true),
+    },
   ];
   const panelLayoutStyle = {
     "--left-panel-width": `${leftPanelOpen ? leftPanelWidth : 0}px`,
@@ -490,9 +499,18 @@ function WorkspaceApp() {
       <div className="topbar-status"><span className={`status-dot ${configured ? "is-ready" : ""}`} />{configured ? "Workspace ready" : "Choose a workspace"}</div>
       {configured && <button className="topbar-button search-trigger" onClick={() => setSearchOpen(true)}><span aria-hidden="true">⌕</span>Search <kbd>Ctrl/⌘ K</kbd></button>}
       {configured && <button className="topbar-button" onClick={() => void refresh()}>Rescan</button>}
+      {configured && <button className="topbar-button" onClick={() => setSettingsModalOpen(true)}>⚙ Settings</button>}
       <button className="theme-toggle" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}><span aria-hidden="true">{theme === "dark" ? "☼" : "◐"}</span>{theme === "dark" ? "Day" : "Night"}</button>
     </header>
     <SearchPalette open={searchOpen} actions={paletteActions} onClose={() => setSearchOpen(false)} onOpenResult={openSearchResult} />
+    <SettingsModal
+      open={settingsModalOpen}
+      onClose={() => setSettingsModalOpen(false)}
+      profile={candidateProfile}
+      settings={resumeSettings}
+      onProfileUpdated={(updated) => setCandidateProfile(updated)}
+      onSettingsUpdated={(updated) => setResumeSettings(updated)}
+    />
     <section className="workspace-grid" style={panelLayoutStyle}>
       <section className={`workspace-main ${leftPanelOpen ? "" : "is-navigation-compact"}`}>
         <aside className={`workspace-navigator ${leftPanelOpen ? "is-open" : "is-closed"}`} aria-label="Workspace navigation" aria-hidden={!leftPanelOpen}>
@@ -534,6 +552,9 @@ function WorkspaceApp() {
 function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBase }: { workspace: WorkspaceSummary; profile: CandidateProfile | null; settings: Settings; onProfileCreated: (profile: CandidateProfile) => Promise<void>; onChooseBase: () => void }) {
   const [fullName, setFullName] = useState("");
   const [artifactPrefix, setArtifactPrefix] = useState("");
+  const [turningPoints, setTurningPoints] = useState("");
+  const [workingStyle, setWorkingStyle] = useState("");
+  const [personalValues, setPersonalValues] = useState("");
   const [state, setState] = useState<"idle" | "saving" | "error">("idle");
   const [message, setMessage] = useState("");
   function updateName(value: string) {
@@ -545,7 +566,14 @@ function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBa
     setState("saving");
     setMessage("");
     try {
-      const next = await window.sensei.profile.create({ fullName, artifactPrefix });
+      const narrativePillars = (turningPoints.trim() || workingStyle.trim() || personalValues.trim())
+        ? {
+            turningPoints: turningPoints.trim(),
+            workingStyle: workingStyle.trim(),
+            personalValues: personalValues.trim(),
+          }
+        : undefined;
+      const next = await window.sensei.profile.create({ fullName, artifactPrefix, narrativePillars });
       await onProfileCreated(next);
       setState("idle");
     } catch (caught) {
@@ -565,7 +593,46 @@ function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBa
     <div className="get-started-grid">
       <ol>{steps.map(([label, complete, detail], index) => <li className={complete ? "is-complete" : ""} key={label}><span>{complete ? "✓" : index + 1}</span><div><strong>{label}</strong><small>{detail}</small></div></li>)}</ol>
       <div className="setup-card">
-        {!profile ? <><h2>Create your candidate profile</h2><p>This stores identity and preferences locally. Career claims continue to come from your selected context files.</p><label>Full name<input value={fullName} onChange={(event) => updateName(event.target.value)} placeholder="Alex Morgan" /></label><label>Artifact prefix<input value={artifactPrefix} onChange={(event) => setArtifactPrefix(event.target.value.replace(/[^A-Za-z0-9_-]/g, ""))} placeholder="Alex_Morgan" /></label><button disabled={!fullName.trim() || !artifactPrefix.trim() || state === "saving"} onClick={() => void createProfile()}>{state === "saving" ? "Creating…" : "Create local profile"}</button></> : !workspace.hasBaseResume ? <><h2>Select a base resume</h2><p>The base resume protects identity, chronology, section order, and presentation. Career context remains the factual authority.</p><button onClick={onChooseBase}>Choose base resume</button></> : <><h2>Setup complete</h2><p>Open the Command Center and run Agy from the repository root. Your active workspace remains <code>data/</code>.</p></>}
+        {!profile ? <>
+          <h2>Create your candidate profile</h2>
+          <p>This stores identity and preferences locally. Career claims continue to come from your selected context files.</p>
+          <label>Full name<input value={fullName} onChange={(event) => updateName(event.target.value)} placeholder="Alex Morgan" /></label>
+          <label>Artifact prefix<input value={artifactPrefix} onChange={(event) => setArtifactPrefix(event.target.value.replace(/[^A-Za-z0-9_-]/g, ""))} placeholder="Alex_Morgan" /></label>
+          <details className="setup-story-accordion">
+            <summary>Career Story & Narrative Pillars (Optional)</summary>
+            <p className="setup-story-hint">
+              Answer these 3 questions now or edit them anytime in Settings. JobSensei uses them so your cover letters reflect your authentic journey instead of repeating the job description.
+            </p>
+            <label>
+              1. Career Transitions & Pivots
+              <textarea
+                rows={2}
+                placeholder="Why did you make key career moves or step outside your comfort zone? What drives you?"
+                value={turningPoints}
+                onChange={(e) => setTurningPoints(e.target.value)}
+              />
+            </label>
+            <label>
+              2. Operating Style & Problem Ownership
+              <textarea
+                rows={2}
+                placeholder="How do you handle client friction or technical problems? (e.g., take full ownership, understand their shoes, work it out directly)"
+                value={workingStyle}
+                onChange={(e) => setWorkingStyle(e.target.value)}
+              />
+            </label>
+            <label>
+              3. Fit as a Person & Core Values
+              <textarea
+                rows={2}
+                placeholder="Who are you as a person beyond daily task descriptions?"
+                value={personalValues}
+                onChange={(e) => setPersonalValues(e.target.value)}
+              />
+            </label>
+          </details>
+          <button disabled={!fullName.trim() || !artifactPrefix.trim() || state === "saving"} onClick={() => void createProfile()}>{state === "saving" ? "Creating…" : "Create local profile"}</button>
+        </> : !workspace.hasBaseResume ? <><h2>Select a base resume</h2><p>The base resume protects identity, chronology, section order, and presentation. Career context remains the factual authority.</p><button onClick={onChooseBase}>Choose base resume</button></> : <><h2>Setup complete</h2><p>Open the Command Center and run Agy from the repository root. Your active workspace remains <code>data/</code>.</p></>}
         {message && <p className="inline-error" role="alert">{message}</p>}
       </div>
     </div>
@@ -1530,15 +1597,193 @@ function PdfDocument({ preview }: { preview: FilePreview }) {
   return <div className="pdf-document">{error ? <div className="unsupported-state"><h2>PDF preview unavailable</h2><p>{error}</p></div> : <div className="pdf-pages" ref={hostRef} />}</div>;
 }
 
+type PastedBlock = {
+  id: string;
+  lineCount: number;
+  byteCount: number;
+  content: string;
+  preview: string;
+};
+
+type ChatEntry = {
+  id: string;
+  sender: "user" | "assistant" | "system";
+  title?: string;
+  content: string;
+  pastedBlock?: PastedBlock;
+  steps?: string[];
+  rawOutput?: string[];
+  status?: "pending" | "running" | "success" | "error";
+  startTime?: number;
+  durationMs?: number;
+  timestamp: string;
+};
+
+function stripAnsi(raw: string): string {
+  return raw
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "")
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
+    .replace(/\x1b[()][AB012]/g, "")
+    .replace(/[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]/g, "")
+    .replace(/\r+/g, "\n");
+}
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const tenths = Math.floor((ms % 1000) / 100);
+  if (minutes > 0) {
+    return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+  }
+  return `${seconds}.${tenths}s`;
+}
+
 function TerminalPanel({ cwd, selectedJobFiles, selectedCareerPaths, theme, visible, onClose, jobActions, promptRequest, onPromptHandled, onInsertPrompt }: { cwd: string; selectedJobFiles: string[]; selectedCareerPaths: string[]; theme: "dark" | "light"; visible: boolean; onClose: () => void; jobActions: JobAction[]; promptRequest: PromptRequest | null; onPromptHandled: (id: number) => void; onInsertPrompt: (action: JobAction) => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [status, setStatus] = useState("Starting terminal…");
   const [terminalReady, setTerminalReady] = useState(false);
   const terminalReadyRef = useRef(false);
+  const [agyActive, setAgyActive] = useState(false);
   const [promptNotice, setPromptNotice] = useState("");
   const handledPromptId = useRef(0);
+  const [viewMode, setViewMode] = useState<"chat" | "console">("chat");
+  const [chatInput, setChatInput] = useState("");
+  const [pastedAttachment, setPastedAttachment] = useState<PastedBlock | null>(null);
+  const [expandedPastes, setExpandedPastes] = useState<Record<string, boolean>>({});
+  const [expandedRawLogs, setExpandedRawLogs] = useState<Record<string, boolean>>({});
+  const [liveNow, setLiveNow] = useState(Date.now());
+  const chatStreamRef = useRef<HTMLDivElement>(null);
+  const activeAsstIdRef = useRef<string | null>(null);
+  const quietTimerRef = useRef<number | null>(null);
+  const [chatEntries, setChatEntries] = useState<ChatEntry[]>([
+    {
+      id: "welcome",
+      sender: "system",
+      title: "JobSensei Copilot",
+      content: "Connected to local career evidence and job workspace. Paste a job description to screen and tailor your application, choose a recommended action, or enter a prompt below.",
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    },
+  ]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (activeAsstIdRef.current) {
+        setLiveNow(Date.now());
+      }
+    }, 200);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    const nextHeight = Math.min(Math.max(textarea.scrollHeight, 38), 160);
+    textarea.style.height = `${nextHeight}px`;
+  }, [chatInput]);
+
+  const executeCommand = (text: string, label?: string, attachedPaste?: PastedBlock) => {
+    const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const now = Date.now();
+    const userContent = label ? `⚡ ${label}` : text;
+    const userMsg: ChatEntry = {
+      id: `user-${now}`,
+      sender: "user",
+      content: userContent,
+      pastedBlock: attachedPaste,
+      timestamp: time,
+    };
+
+    let payload = text;
+    if (attachedPaste) {
+      payload = text.trim() ? `${text.trim()}\n${attachedPaste.content}` : attachedPaste.content;
+    }
+
+    const asstId = `asst-${now}`;
+    activeAsstIdRef.current = asstId;
+    const commandSummary = label || (text.trim() ? (text.length > 40 ? `${text.slice(0, 40)}…` : text) : (attachedPaste ? `Pasted JD (${attachedPaste.lineCount} lines)` : "Task"));
+
+    const asstMsg: ChatEntry = {
+      id: asstId,
+      sender: "assistant",
+      title: label || "Task execution",
+      content: "",
+      steps: [`Starting: ${commandSummary}…`],
+      status: "running",
+      startTime: now,
+      timestamp: time,
+    };
+
+    setChatEntries((prev) => [...prev, userMsg, asstMsg]);
+    void window.sensei.terminal.write(payload.endsWith("\n") ? payload : `${payload}\r`);
+  };
+
+  const handleChatSubmit = (event?: React.FormEvent) => {
+    if (event) event.preventDefault();
+    const prompt = chatInput.trim();
+    if (!prompt && !pastedAttachment) return;
+    const pasteToSend = pastedAttachment ?? undefined;
+    setPastedAttachment(null);
+    setChatInput("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+    executeCommand(prompt, undefined, pasteToSend);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      handleChatSubmit();
+    }
+  };
+
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const text = event.clipboardData.getData("text");
+    if (!text) return;
+    const lines = text.split(/\r\n|\r|\n/);
+    if (lines.length >= 3 || text.length > 250) {
+      event.preventDefault();
+      const id = `paste-${Date.now()}`;
+      const preview = lines.filter((l) => l.trim().length > 0).slice(0, 3).join("\n") || text.slice(0, 150);
+      setPastedAttachment({
+        id,
+        lineCount: lines.length,
+        byteCount: new Blob([text]).size,
+        content: text,
+        preview,
+      });
+    }
+  };
+
+  const handleClear = () => {
+    if (viewMode === "chat") {
+      setChatEntries([
+        {
+          id: `welcome-${Date.now()}`,
+          sender: "system",
+          title: "JobSensei Copilot",
+          content: "Connected to local career evidence and job workspace. Paste a job description to screen and tailor your application, choose a recommended action, or enter a prompt below.",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        },
+      ]);
+    } else {
+      terminalRef.current?.clear();
+      void window.sensei.terminal.write("\x0c");
+    }
+  };
+
+  const toggleExpandPaste = (id: string) => {
+    setExpandedPastes((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleExpandRaw = (id: string) => {
+    setExpandedRawLogs((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -1554,7 +1799,56 @@ function TerminalPanel({ cwd, selectedJobFiles, selectedCareerPaths, theme, visi
     hostRef.current.addEventListener("click", focusTerminal);
     terminalRef.current = terminal;
     fitRef.current = fit;
-    const removeData = window.sensei.terminal.onData((data) => terminal.write(data));
+    const removeData = window.sensei.terminal.onData((data) => {
+      terminal.write(data);
+      const clean = stripAnsi(data).trim();
+      if (!clean) return;
+
+      const rawLines = clean.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+      const meaningfulLines = rawLines.filter((l) => l.length > 3 && !l.endsWith("%") && !l.endsWith("$") && !l.startsWith("]0;"));
+
+      if (meaningfulLines.length && activeAsstIdRef.current) {
+        const activeId = activeAsstIdRef.current;
+        setChatEntries((prev) => prev.map((entry) => {
+          if (entry.id !== activeId) return entry;
+          const currentSteps = entry.steps ?? [];
+          const newSteps = [...currentSteps];
+          for (const line of meaningfulLines) {
+            if (/(?:✓|done|complete|created|wrote|screening|snapshott|evaluat|prepar|finaliz|tailor|warn|error|building|analyz)/i.test(line)) {
+              const stepText = line.replace(/^[✓\-*•→]\s*/, "");
+              if (!newSteps.includes(stepText) && newSteps.length < 12) {
+                newSteps.push(stepText);
+              }
+            }
+          }
+          const existingRaw = entry.rawOutput ?? [];
+          const updatedRaw = [...existingRaw, ...meaningfulLines].slice(-60);
+          const lastLine = meaningfulLines[meaningfulLines.length - 1];
+          return {
+            ...entry,
+            steps: newSteps,
+            rawOutput: updatedRaw,
+            content: entry.content || (lastLine && !newSteps.includes(lastLine) ? lastLine : entry.content),
+          };
+        }));
+      }
+
+      if (quietTimerRef.current !== null) window.clearTimeout(quietTimerRef.current);
+      quietTimerRef.current = window.setTimeout(() => {
+        if (activeAsstIdRef.current) {
+          const finishedId = activeAsstIdRef.current;
+          const finishTime = Date.now();
+          setChatEntries((prev) => prev.map((entry) => {
+            if (entry.id === finishedId) {
+              const duration = entry.startTime ? finishTime - entry.startTime : undefined;
+              return { ...entry, status: "success", durationMs: duration };
+            }
+            return entry;
+          }));
+          activeAsstIdRef.current = null;
+        }
+      }, 2500);
+    });
     const removeExit = window.sensei.terminal.onExit((code) => setStatus(`Terminal exited (${code})`));
     let resizeFrame: number | null = null;
     let lastSize = "";
@@ -1579,7 +1873,18 @@ function TerminalPanel({ cwd, selectedJobFiles, selectedCareerPaths, theme, visi
     terminal.onData((data) => void window.sensei.terminal.write(data));
     terminalReadyRef.current = false;
     setTerminalReady(false);
-    void window.sensei.terminal.start({}).then(({ cwd: startedCwd }) => { terminalReadyRef.current = true; setStatus(`${startedCwd} · context-aware`); setTerminalReady(true); resize(); terminal.focus(); }).catch((caught: unknown) => { terminalReadyRef.current = false; setTerminalReady(false); setStatus(messageOf(caught, "Terminal failed to start")); });
+    void window.sensei.terminal.start({}).then(({ cwd: startedCwd, agyStarted }) => {
+      terminalReadyRef.current = true;
+      setAgyActive(Boolean(agyStarted));
+      setStatus(`${startedCwd} · ${agyStarted ? "⚡ agy ready" : "shell ready"}`);
+      setTerminalReady(true);
+      resize();
+      terminal.focus();
+    }).catch((caught: unknown) => {
+      terminalReadyRef.current = false;
+      setTerminalReady(false);
+      setStatus(messageOf(caught, "Terminal failed to start"));
+    });
     const initialResize = window.setTimeout(resize, 80);
     return () => { terminalReadyRef.current = false; resizeObserver.disconnect(); window.removeEventListener("resize", resize); hostRef.current?.removeEventListener("click", focusTerminal); window.clearTimeout(initialResize); if (resizeFrame !== null) cancelAnimationFrame(resizeFrame); removeData(); removeExit(); void window.sensei.terminal.stop(); terminal.dispose(); terminalRef.current = null; fitRef.current = null; };
   }, [cwd]);
@@ -1603,17 +1908,28 @@ function TerminalPanel({ cwd, selectedJobFiles, selectedCareerPaths, theme, visi
   }, [visible]);
 
   useEffect(() => {
+    if (viewMode === "chat" && chatStreamRef.current) {
+      chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
+    }
+  }, [chatEntries, viewMode, expandedPastes, expandedRawLogs]);
+
+  useEffect(() => {
     if (!visible || !terminalReady || !promptRequest || handledPromptId.current === promptRequest.id) return;
     handledPromptId.current = promptRequest.id;
-    void window.sensei.terminal.insertPrompt(promptRequest.text)
-      .then(() => {
-        setPromptNotice(`Prompt ready: ${promptRequest.label} · Press Enter to run`);
-        terminalRef.current?.focus();
-        window.setTimeout(() => setPromptNotice(""), 4500);
-      })
-      .catch((caught: unknown) => setPromptNotice(messageOf(caught, "Unable to insert that prompt.")))
-      .finally(() => onPromptHandled(promptRequest.id));
-  }, [visible, terminalReady, promptRequest?.id]);
+    if (viewMode === "chat") {
+      executeCommand(promptRequest.text, promptRequest.label);
+      onPromptHandled(promptRequest.id);
+    } else {
+      void window.sensei.terminal.insertPrompt(promptRequest.text)
+        .then(() => {
+          setPromptNotice(`Prompt ready: ${promptRequest.label} · Press Enter to run`);
+          terminalRef.current?.focus();
+          window.setTimeout(() => setPromptNotice(""), 4500);
+        })
+        .catch((caught: unknown) => setPromptNotice(messageOf(caught, "Unable to insert that prompt.")))
+        .finally(() => onPromptHandled(promptRequest.id));
+    }
+  }, [visible, terminalReady, promptRequest?.id, viewMode]);
 
   useEffect(() => {
     if (!cwd) return;
@@ -1622,7 +1938,216 @@ function TerminalPanel({ cwd, selectedJobFiles, selectedCareerPaths, theme, visi
       .catch(() => setStatus(`${cwd} · context update failed`));
   }, [cwd, selectedCareerPaths.join(","), selectedJobFiles.join(",")]);
 
-  return <aside className={`terminal-panel ${visible ? "" : "is-collapsed"}`}><div className="terminal-header"><div><div className="eyebrow">COMMAND CENTER</div></div><div className="terminal-header-actions"><JobActionsMenu actions={jobActions} onInsert={onInsertPrompt} /><button className="terminal-action" onClick={() => void window.sensei.terminal.restart()}>Restart</button><button className="terminal-action" aria-label="Hide terminal panel" onClick={onClose}>Hide</button></div></div><div className="terminal-host" ref={hostRef} /><div className="terminal-status"><span className="status-dot is-ready" /><span>{promptNotice || status}</span></div></aside>;
+  return (
+    <aside className={`terminal-panel ${visible ? "" : "is-collapsed"}`}>
+      <div className="terminal-header">
+        <div className="terminal-header-title-group">
+          <div className="terminal-brand-badge">
+            <div className="eyebrow">COMMAND CENTER</div>
+            <span className={`terminal-engine-tag ${agyActive ? "is-agy" : "is-shell"}`}>
+              {agyActive ? "⚡ agy" : "🐚 shell"}
+            </span>
+          </div>
+          <div className="terminal-header-view-toggle" role="group" aria-label="Command center view mode">
+            <button
+              className={`view-toggle-btn ${viewMode === "chat" ? "is-active" : ""}`}
+              onClick={() => setViewMode("chat")}
+              type="button"
+              aria-pressed={viewMode === "chat"}
+            >
+              💬 Chat
+            </button>
+            <button
+              className={`view-toggle-btn ${viewMode === "console" ? "is-active" : ""}`}
+              onClick={() => {
+                setViewMode("console");
+                window.setTimeout(() => fitRef.current?.fit(), 60);
+              }}
+              type="button"
+              aria-pressed={viewMode === "console"}
+            >
+              🖥️ Console
+            </button>
+          </div>
+        </div>
+        <div className="terminal-header-actions">
+          <JobActionsMenu actions={jobActions} onInsert={onInsertPrompt} />
+          <button className="terminal-action" onClick={handleClear} title="Clear conversation or console output">Clear</button>
+          <button className="terminal-action" onClick={() => void window.sensei.terminal.restart().then((res) => { if (res?.agyStarted !== undefined) setAgyActive(Boolean(res.agyStarted)); })} title="Restart session">Restart</button>
+          <button className="terminal-action" aria-label="Hide terminal panel" onClick={onClose}>Hide</button>
+        </div>
+      </div>
+
+      <div className="terminal-body">
+        {viewMode === "chat" ? (
+          <div className="chat-container">
+            <div className="chat-stream" ref={chatStreamRef}>
+              {chatEntries.map((entry) => (
+                <div key={entry.id} className={`chat-bubble is-${entry.sender}`}>
+                  <div className="chat-bubble-header">
+                    <div className="chat-sender-group">
+                      <span className="chat-sender-name">
+                        {entry.sender === "user" ? "You" : entry.sender === "assistant" ? "Sensei Copilot" : "System"}
+                      </span>
+                      {entry.status === "running" && entry.startTime && (
+                        <span className="chat-timer-badge is-running">
+                          <span className="chat-pulse-dot" /> {formatDuration(liveNow - entry.startTime)}
+                        </span>
+                      )}
+                      {entry.status === "success" && entry.durationMs !== undefined && (
+                        <span className="chat-timer-badge is-completed">
+                          ✓ {formatDuration(entry.durationMs)}
+                        </span>
+                      )}
+                    </div>
+                    <span className="chat-timestamp">{entry.timestamp}</span>
+                  </div>
+                  {entry.title && <div className="chat-bubble-title">{entry.title}</div>}
+                  {entry.content && <div className="chat-bubble-content">{entry.content}</div>}
+                  {entry.pastedBlock && (
+                    <div className="chat-pasted-card">
+                      <div className="chat-pasted-header">
+                        <div className="chat-pasted-title-row">
+                          <span className="chat-pasted-icon">📄</span>
+                          <span className="chat-pasted-title">
+                            Pasted text [lines 1–{entry.pastedBlock.lineCount} · {formatBytes(entry.pastedBlock.byteCount)}]
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="chat-pasted-toggle-btn"
+                          onClick={() => toggleExpandPaste(entry.id)}
+                        >
+                          {expandedPastes[entry.id] ? "Collapse ▴" : "Preview ▾"}
+                        </button>
+                      </div>
+                      {expandedPastes[entry.id] ? (
+                        <pre className="chat-pasted-full-content">{entry.pastedBlock.content}</pre>
+                      ) : (
+                        <div className="chat-pasted-preview-snippet" onClick={() => toggleExpandPaste(entry.id)}>
+                          <div className="chat-pasted-preview-text">{entry.pastedBlock.preview}</div>
+                          <div className="chat-pasted-fade" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {entry.steps && entry.steps.length > 0 && (
+                    <div className="chat-steps">
+                      {entry.steps.map((step, idx) => (
+                        <div key={idx} className="chat-step-item">
+                          <span className="chat-step-check">✓</span>
+                          <span>{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {entry.status === "running" && (
+                    <div className="chat-running-status">
+                      <span className="chat-pulse-dot" /> Executing steps…
+                    </div>
+                  )}
+                  {entry.rawOutput && entry.rawOutput.length > 0 && (
+                    <div className="chat-raw-output-container">
+                      <button
+                        type="button"
+                        className="chat-raw-toggle-btn"
+                        onClick={() => toggleExpandRaw(entry.id)}
+                      >
+                        {expandedRawLogs[entry.id]
+                          ? "Hide CLI log ▴"
+                          : `Show CLI log (${entry.rawOutput.length} lines) ▾`}
+                      </button>
+                      {expandedRawLogs[entry.id] && (
+                        <pre className="chat-raw-content">
+                          {entry.rawOutput.join("\n")}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="chat-footer">
+              {pastedAttachment && (
+                <div className="chat-staged-attachment">
+                  <div className="chat-staged-body">
+                    <span className="chat-staged-icon">📄</span>
+                    <div className="chat-staged-info">
+                      <span className="chat-staged-label">
+                        Pasted text [lines 1–{pastedAttachment.lineCount} · {formatBytes(pastedAttachment.byteCount)}]
+                      </span>
+                      <span className="chat-staged-snippet">{pastedAttachment.preview.replace(/\n/g, " · ").slice(0, 75)}…</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="chat-staged-remove"
+                    onClick={() => setPastedAttachment(null)}
+                    title="Remove pasted attachment"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+              {jobActions.length > 0 && (
+                <div className="chat-quick-actions">
+                  {jobActions.slice(0, 3).map((action) => (
+                    <button
+                      key={action.id}
+                      type="button"
+                      className="chat-action-pill"
+                      onClick={() => executeCommand(action.prompt, action.label)}
+                      title={action.prompt}
+                    >
+                      ⚡ {action.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="chat-input-bar">
+                <textarea
+                  ref={textareaRef}
+                  className="chat-textarea"
+                  value={chatInput}
+                  rows={1}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onPaste={handlePaste}
+                  onKeyDown={handleKeyDown}
+                  placeholder={
+                    pastedAttachment
+                      ? "Add prompt instruction or press Enter to run…"
+                      : "Ask Sensei or paste a job description… (Shift+Enter for newline)"
+                  }
+                />
+                <button
+                  type="button"
+                  className="chat-send-btn"
+                  onClick={() => handleChatSubmit()}
+                  disabled={!chatInput.trim() && !pastedAttachment}
+                  aria-label="Send prompt"
+                  title="Send (Enter)"
+                >
+                  ↑
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div
+          className="terminal-host"
+          ref={hostRef}
+          style={{ display: viewMode === "console" ? "block" : "none" }}
+        />
+      </div>
+
+      <div className="terminal-status">
+        <span className={`status-dot ${terminalReady ? "is-ready" : ""}`} />
+        <span>{promptNotice || status}</span>
+      </div>
+    </aside>
+  );
 }
 
 function JobActionsMenu({ actions, onInsert }: { actions: JobAction[]; onInsert: (action: JobAction) => void }) {

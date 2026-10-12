@@ -46,7 +46,13 @@ export async function createCandidateProfile(
       denylistPath: "context/denylist.md",
       applicationVoicePath: "context/application_voice_profile.md",
     },
-    career: { employers: [], education: [], transitionSummary: "", preferredRoleFamilies: [] },
+    career: {
+      employers: [],
+      education: [],
+      transitionSummary: "",
+      preferredRoleFamilies: [],
+      narrativePillars: value.narrativePillars,
+    },
     preferences: {
       resume: {
         includeSummary: false,
@@ -54,7 +60,11 @@ export async function createCandidateProfile(
         currentEmployerBullets: { min: 6, max: 8 },
         skillsCategories: [],
       },
-      coverLetter: { storyGuidance: [], voiceGuidance: [] },
+      coverLetter: {
+        storyGuidance: [],
+        voiceGuidance: [],
+        narrativePillars: value.narrativePillars,
+      },
     },
     truth: {
       factualAuthority: "Selected structured career evidence",
@@ -79,6 +89,36 @@ export async function updateCandidateProfileSources(workspacePath: string, setti
     },
     updatedAt: new Date().toISOString(),
   }));
+}
+
+export async function updateCandidateProfilePreferences(
+  workspacePath: string,
+  preferences: CandidateProfile["preferences"],
+): Promise<CandidateProfile> {
+  const current = await readCandidateProfile(workspacePath);
+  if (!current) throw new Error("No candidate profile found to update.");
+  const next = candidateProfileSchema.parse({
+    ...current,
+    preferences: {
+      ...current.preferences,
+      ...preferences,
+      voice: {
+        ...current.preferences.voice,
+        ...preferences.voice,
+      },
+      resume: {
+        ...current.preferences.resume,
+        ...preferences.resume,
+      },
+      coverLetter: {
+        ...current.preferences.coverLetter,
+        ...preferences.coverLetter,
+      },
+    },
+    updatedAt: new Date().toISOString(),
+  });
+  await writeJsonAtomic(join(workspacePath, candidateProfileRelativePath), next);
+  return next;
 }
 
 export async function profileHasBaseResume(workspacePath: string, profile: CandidateProfile | null, settings: Settings): Promise<boolean> {

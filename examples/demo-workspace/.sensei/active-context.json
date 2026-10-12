@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "workspacePath": "/Users/johan/Desktop/JobSensei/examples/demo-workspace",
+  "workspacePath": ".",
   "baseResumePath": "resumes/Alex_Morgan_Resume.md",
   "secondaryResumePaths": [],
   "linkedinProfilePath": null,

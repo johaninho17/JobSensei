@@ -4,7 +4,8 @@ import { join } from "node:path";
 export async function initializeWorkspace(workspacePath: string): Promise<void> {
   await Promise.all([
     mkdir(join(workspacePath, "profile"), { recursive: true }),
-    mkdir(join(workspacePath, "context"), { recursive: true }),
+    mkdir(join(workspacePath, "context", "structured"), { recursive: true }),
+    mkdir(join(workspacePath, "context", "broad"), { recursive: true }),
     mkdir(join(workspacePath, "resumes"), { recursive: true }),
     mkdir(join(workspacePath, "jobs"), { recursive: true }),
     mkdir(join(workspacePath, "debrief"), { recursive: true }),
