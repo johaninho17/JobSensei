@@ -19,6 +19,10 @@ import { createCandidateProfile, readCandidateProfile, updateCandidateProfilePre
 import { readBulletBank, saveBulletBank } from "./bullet-bank";
 import { generateJobClarifyingQuestions, saveJobClarificationAnswers } from "./clarifying-questions";
 
+if (process.argv.includes("--dev") && !process.env.VITE_DEV_SERVER_URL) {
+  process.env.VITE_DEV_SERVER_URL = "http://127.0.0.1:5173";
+}
+
 let mainWindow: BrowserWindow | undefined;
 let interviewWindow: BrowserWindow | undefined;
 let workspacePath: string;

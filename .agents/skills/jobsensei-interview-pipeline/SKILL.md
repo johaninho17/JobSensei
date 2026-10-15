@@ -18,16 +18,16 @@ Do not activate because a pasted JD contains the word `interview`. Never run fro
 5. Normalize the requested stage to one of:
    - `recruiter_screen`
    - `hiring_manager`
-   - `technical`
+   - `practical_evaluation` (or `technical`)
+   - `final_panel` (or `onsite` / `executive`)
    - `take_home`
-   - `onsite`
-   - `executive`
    - `unknown`
-6. For interview preparation creation, use the canonical two-round layout for every new job:
-   - `01-recruiter-hiring-manager/`: one combined first-round preparation set. Keep recruiter coverage, but weight hiring-manager ownership, judgment, ambiguity, customer depth, and career progression more heavily than logistics-only questions.
-   - `02-technical/`: independent technical preparation. Do not create technical-challenge material unless the user explicitly asks for a coding challenge, live exercise, take-home, implementation walkthrough, or similar test.
-   The combined first round uses `stage: hiring_manager` for schema compatibility and `label: Recruiter / Hiring Manager`; its content must clearly separate recruiter questions from hiring-manager questions. Explicit prompt details and `reported_by_interviewer` process details outrank official generic guidance, candidate reports, and inference.
-7. An unspecified first interview creates or updates only `01-recruiter-hiring-manager`. An explicit technical prompt creates or updates only `02-technical`. An explicit technical-challenge prompt creates only the optional `02-technical/challenge/` artifacts and never a third interview round.
+6. For interview preparation creation, use the isolated canonical 4-stage layout:
+   - `01-recruiter-screen/`: Non-technical 15–20 min Talent Acquisition screen. Bounded strictly to 6–8 questions covering background arc, motivation, role fit, checklist qualifications, logistics (location, comp, authorization, timeline), and reverse questions. Zero low-level architecture or debugging scenarios.
+   - `02-hiring-manager/`: 30–45 min manager screen. Bounded strictly to 8–10 questions covering end-to-end ownership, cross-functional collaboration, navigating ambiguity, and 30-60-90 day thinking.
+   - `03-practical-evaluation/` (or `03-technical/`): 45–60 min assessment. Role-aware: "Role-Play & Pitch Simulation" for BDR/Sales; "Technical & System Design" for Engineering; "Product Sense & Case Study" for PM; "Scenario Modeling" for Ops. Bounded to 6–8 practical scenarios.
+   - `04-final-panel/`: 30–45 min leadership round. Bounded to 6–8 strategic questions covering mission alignment, culture fit, and executive reverse questions.
+7. An initial recruiter screen prompt creates or updates only `01-recruiter-screen`. An explicit hiring-manager prompt creates or updates `02-hiring-manager`. An explicit practical or technical prompt creates or updates `03-practical-evaluation` (or `03-technical`). Technical challenge material remains opt-in under `challenge/`.
 
 ## Round Storage Contract
 
@@ -90,41 +90,40 @@ After resolving one job:
 
 ## Stage Distribution
 
-The stage must control the question plan, not merely label it.
+The stage must control the question plan, not merely label it. Every question entry must use pure bullet talking points (Situation/Context -> Concrete Action/Mechanism -> Real Outcome). Never output scripted monologues or direct quotes in quotation marks.
 
-### Recruiter / Hiring Manager (Combined First Round)
+### 01-recruiter-screen (Recruiter Screen)
+- Strictly 6–8 primary questions in pure bullet-cue format.
+- Covered topics:
+  1. Career trajectory arc & current focus
+  2. Why this company & why this role now
+  3. Positive, future-facing reason for leaving current employer
+  4. Core checklist qualifications (client-facing experience, primary daily stack)
+  5. Logistics: location/commute, comp band, work authorization, notice period
+  6. 3–4 reverse questions to ask the recruiter
+- NEVER include low-level architecture, container debugging, or code mechanics.
 
-- Create 14-18 primary questions in one bank, with hiring-manager questions first and recruiter questions clearly labeled as secondary within the same round.
-- At least 60% must cover hiring-manager themes: ownership, judgment, ambiguity, customer challenges, collaboration, current-company scope, career progression, motivation, desired next role, and first-90-day thinking.
-- Retain recruiter coverage for background, logistics, compensation, location, availability, authorization, and reason for leaving, but do not let logistics dominate the primary set.
-- Include only 2-4 light technical verification questions. Keep deep architecture, coding, and challenge material under `Secondary / later-round preparation` until requested.
-
-### Hiring Manager
-
-- Create 12-16 primary questions.
+### 02-hiring-manager (Hiring Manager Screen)
+- Strictly 8–10 primary questions.
 - Prioritize ownership, judgment, ambiguity, customer challenges, cross-functional collaboration, project decisions, career goals, feedback, learning, and first-90-day thinking.
-- Include moderate technical depth relevant to the role, but do not simulate a full technical loop.
+- Include moderate technical/functional depth relevant to the role, but do not simulate a full technical loop.
 
-### Technical
+### 03-practical-evaluation (Practical & Role Evaluation)
+- Strictly 6–8 targeted scenarios or practical walkthroughs.
+- Role-aware discipline mapping:
+  - *Engineering / Technical:* "Technical & System Design" — systems trade-offs, debugging scenarios, failure recovery.
+  - *BDR / SDR / Commercial:* "Role-Play & Pitch Simulation" — mock cold call, discovery questioning, objection handling, qualification frameworks.
+  - *Product Management:* "Product Sense & Case Study" — feature prioritization, user journeys, north star metrics.
+  - *Operations / Strategy:* "Operational Scenario & Case Modeling" — process bottlenecks, analytics modeling.
+- Technical challenge is an optional child. When explicitly requested, create `interviews/03-practical-evaluation/challenge/` with the challenge brief, labs, answer keys, and verbal scenarios.
 
-- Create 12-18 primary questions.
-- Prioritize systems, agents, data, debugging, design tradeoffs, project depth, practical scenarios, validation, and failure handling.
-- Retain concise motivation and collaboration checks without letting them dominate.
+### 04-final-panel (Executive / Final Panel)
+- Strictly 6–8 strategic questions.
+- Prioritize company vision, mission alignment, intellectual humility, learning from failure, cultural contribution, and executive reverse questions.
 
-Technical challenge is an optional child of the technical round. When explicitly requested, create `interviews/02-technical/challenge/` with the same challenge brief, labs, answer keys, verbal scenarios, and evaluation information currently required by `$jobsensei-technical-challenge`. Do not create or imply challenge artifacts during ordinary technical preparation.
-
-### Take-Home
-
-Do not create a generic numbered question bank. Produce the expected evaluation rubric, constraints and assumptions, execution plan, validation checklist, submission explanation, self-review, and likely review questions. Never invent undisclosed exercise details.
-
-### Onsite
-
-Create 15-20 primary questions grouped by likely persona: technical, customer/cross-functional, behavioral, and leadership. Keep each inferred session explicitly uncertain unless confirmed.
-
-### Executive And Unknown
-
-- Executive preparation prioritizes company judgment, motivation, communication, values demonstrated through evidence, and strategic questions.
-- `unknown` uses recruiter-screen preparation as primary and labels technical or later-stage material as secondary.
+### Take-Home & Unknown
+- Take-Home produces the expected evaluation rubric, constraints and assumptions, execution plan, validation checklist, submission explanation, self-review, and likely review questions.
+- `unknown` uses recruiter-screen preparation as primary and labels later-stage material as secondary.
 
 ## Required Artifacts
 
@@ -150,27 +149,23 @@ Create 15-20 primary questions grouped by likely persona: technical, customer/cr
 - `## Secondary / later-round preparation`
 - `## Questions to ask`
 
-### Standardized Question Bank Contract (Action Points & Bullet Points)
+### Standardized Question Bank Contract (Glanceable Bullet Cues)
 
-Never produce full-prose conversational monologues or verbatim scripts. Interview questions are never asked word-for-word in real calls, and long scripted essays cause cognitive overload. Every primary and follow-up question must be formatted as scannable action points and STAR cues:
+Never produce full-prose conversational monologues, scripted pitches, or answers in quotation marks. Every primary and follow-up question must be formatted as clean, glanceable bullet talking points that candidates use as memory anchors while speaking naturally:
 
 Every question under `## Primary for this round` must follow this exact template:
 
 ```markdown
 ### Question <N>: <Question Text>?
 
-- **Category:** <One of: Core Experience & Background | System Architecture & Integrations | Ambiguity & Problem Solving | Customer & Cross-Functional Success | Behavioral & Working Style | Role & Company Alignment>
-- **What it tests:** <1 concise sentence on the underlying interviewer signal>
-- **Core Takeaway:** <1 punchy sentence delivering the bottom-line thesis/answer (scannable in 3 seconds)>
-- **Talking Points (STAR Cues):**
-  - **Context:** <1 crisp line describing the specific problem or scenario>
-  - **Action & Ownership:** <concise bullets highlighting candidate's technical decisions, tools, and actions>
-  - **Impact & Metric:** <measurable result, business outcome, or lesson learned>
-- **Evidence Anchor:** <Evidence ID> · <Source file path>
-- **Scope Boundary:** <explicit truthfulness boundary on what not to overclaim>
-- **Quick Follow-up Angles:**
-  - *<Likely follow-up angle 1>*
-  - *<Likely follow-up angle 2>*
+* **Core Takeaway:**
+  - <1-2 punchy lines delivering the bottom-line answer (scannable in 3 seconds)>
+* **Key Talking Points:**
+  - **Situation / Context:** <1 crisp line on the situation or business requirement>
+  - **Action & Mechanism:** <2-3 concise bullets on exact tools, decisions, and ownership>
+  - **Result & Impact:** <1 bullet on verified outcome, metric, or resolution>
+* **Truth Boundary & Cautions:**
+  - <1 concise line clarifying scope boundaries or key logistical facts>
 ```
 
 Use STAR cues only when evidence supports Situation, Task, Action, and Result. Answer the core question before background. Do not force synthetic metrics.

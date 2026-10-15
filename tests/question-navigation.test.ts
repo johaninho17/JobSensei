@@ -43,4 +43,25 @@ describe("question bank navigation", () => {
       "question-what-happens-next",
     ]);
   });
+
+  it("indexes bulleted reverse questions under questions to ask", () => {
+    const questions = parseQuestionBank([
+      "## Primary for this round",
+      "### Question 1: Why this role?",
+      "## Questions to ask",
+      "- How is the FDE team structured?",
+      "- What distinguishes top performers?",
+    ].join("\n"));
+
+    expect(questions.length).toBe(3);
+    expect(questions[1]).toMatchObject({
+      text: "How is the FDE team structured?",
+      section: "Questions to ask",
+    });
+    expect(questions[2]).toMatchObject({
+      text: "What distinguishes top performers?",
+      section: "Questions to ask",
+    });
+  });
 });
+

@@ -265,7 +265,7 @@ export const artifactFileSchema = z.object({
 });
 export type ArtifactFile = z.infer<typeof artifactFileSchema>;
 
-export const interviewStageSchema = z.enum(["recruiter_screen", "hiring_manager", "technical", "technical_challenge", "take_home", "onsite", "executive", "unknown"]);
+export const interviewStageSchema = z.enum(["recruiter_screen", "hiring_manager", "technical", "practical_evaluation", "technical_challenge", "take_home", "onsite", "final_panel", "executive", "unknown"]);
 export type InterviewStage = z.infer<typeof interviewStageSchema>;
 
 export const interviewRoundStatusSchema = z.enum(["planned", "prep_ready", "completed", "debriefed"]);

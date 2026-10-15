@@ -24,9 +24,11 @@ const stageLabels: Record<InterviewStage, string> = {
   recruiter_screen: "Recruiter screen",
   hiring_manager: "Hiring manager",
   technical: "Technical interview",
+  practical_evaluation: "Practical evaluation",
   technical_challenge: "Technical challenge",
   take_home: "Take-home exercise",
   onsite: "Onsite interview",
+  final_panel: "Final panel",
   executive: "Executive interview",
   unknown: "Interview",
 };

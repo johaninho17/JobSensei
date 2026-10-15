@@ -17,3 +17,5 @@ Configure this workspace rule as **Always On**.
 - The finalizer inserts the canonical Languages line. Never draft, map, route, or investigate evidence for that protected line.
 - Never use Python, inline scripts, broad searches, converter discovery, subagents, or sibling-job reads during the default application run.
 - Apply `data/context/application_voice_profile.md` last for wording only. It cannot strengthen or create a claim.
+- For interview preparation, never output scripted speeches or answers in quotation marks. Output must be glanceable bullet anchors (Context -> Concrete Action -> Real Outcome) without corporate or AI filler.
+

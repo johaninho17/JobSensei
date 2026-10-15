@@ -1,7 +1,18 @@
-import { spawn, type IPty } from "node-pty";
+import type { IPty } from "node-pty";
 import { statSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import type { ContextManifest } from "../src/shared/schemas";
+
+let ptyModule: typeof import("node-pty") | null = null;
+let ptyLoadError: string | null = null;
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ptyModule = require("node-pty");
+} catch (error) {
+  ptyLoadError = error instanceof Error ? error.message : String(error);
+  console.warn("Sensei: node-pty failed to load. Terminal session will be disabled.", ptyLoadError);
+}
 
 function resolveAgyExecutable(): string | null {
   const home = process.env.HOME || process.env.USERPROFILE || "";
@@ -11,6 +22,7 @@ function resolveAgyExecutable(): string | null {
     "/opt/homebrew/bin/agy",
   ];
   if (process.platform === "win32") {
+    candidates.push(join(home, "AppData", "Local", "agy", "bin", "agy.exe"));
     candidates.push(join(home, "AppData", "Local", "Programs", "agy", "agy.exe"));
   }
   for (const candidate of candidates) {
@@ -42,12 +54,19 @@ export class TerminalSession {
     this.cwd = resolve(cwd);
     this.workspacePath = resolve(workspacePath);
     this.manifest = manifest;
+    if (!ptyModule) {
+      const errorMsg = ptyLoadError
+        ? `Terminal helper (node-pty) could not be loaded: ${ptyLoadError}\r\nPlease check C++ build tools if using terminal on Windows.`
+        : "Terminal helper is not available in this environment.";
+      this.onDataCallback?.(`\r\n\x1b[33m${errorMsg}\x1b[0m\r\n`);
+      return { cwd: this.cwd, agyStarted: false };
+    }
     const windows = process.platform === "win32";
     const shell = windows ? process.env.ComSpec || "powershell.exe" : process.env.SHELL || "/bin/zsh";
     const agyPath = resolveAgyExecutable();
     const executable = agyPath ?? shell;
     const args = agyPath ? [] : (windows ? [] : ["-l"]);
-    this.process = spawn(executable, args, { name: "xterm-256color", cols: 100, rows: 28, cwd: this.cwd, env: this.environment() });
+    this.process = ptyModule.spawn(executable, args, { name: "xterm-256color", cols: 100, rows: 28, cwd: this.cwd, env: this.environment() });
     this.process.onData((data) => this.onDataCallback?.(data));
     const ptyProcess = this.process;
     ptyProcess.onExit(({ exitCode }) => { if (this.process === ptyProcess) this.process = null; this.onExitCallback?.(exitCode); });
@@ -71,7 +90,8 @@ export class TerminalSession {
   onData(callback: (data: string) => void): void { this.onDataCallback = callback; }
   onExit(callback: (code: number) => void): void { this.onExitCallback = callback; }
   private environment(): NodeJS.ProcessEnv {
-    const userLocal = join(process.env.HOME ?? "", ".local", "bin");
+    const home = process.env.HOME || process.env.USERPROFILE || "";
+    const userLocal = home ? join(home, ".local", "bin") : "";
     const currentPath = process.env.PATH ?? "";
     const extraPaths = [userLocal, "/opt/homebrew/bin", "/usr/local/bin"].filter((p) => p && !currentPath.includes(p));
     const augmentedPath = extraPaths.length > 0 ? `${extraPaths.join(delimiter)}${delimiter}${currentPath}` : currentPath;

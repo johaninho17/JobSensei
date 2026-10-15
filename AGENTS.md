@@ -30,7 +30,16 @@ Default application output is limited to `original_jd.md`, `evaluation.md`, the 
 
 Use `$jobsensei-interview-pipeline` only after the user explicitly asks to prepare an existing job for an interview. Use `$jobsensei-technical-challenge` only for an explicitly requested challenge or test. A pasted JD never creates interview content.
 
-Interview research may use current public sources when requested, but external information cannot become candidate career evidence. Transcripts are performance records, not factual career sources.
+### Interview Rules & Quality Standards:
+- **No Scripted Pitches or Direct Quotes:** Never generate verbatim monologue scripts or answers in quotation marks. Output must be structured as glanceable, punchy bullet points (Context -> Concrete Tool/Action -> Real Outcome) that candidates use as memory anchors while speaking naturally.
+- **Strict Stage Isolation (The 4 Canonical Rounds):**
+  1. `01-recruiter-screen`: 15–20 min non-technical filter. Bounded to 6–8 questions covering background arc, role motivation, checklist qualifications, logistics (location, comp band, authorization, timeline), and reverse questions. Zero low-level architecture or debugging scenarios.
+  2. `02-hiring-manager`: 30–45 min manager screen. Bounded to 8–10 questions covering end-to-end ownership, cross-functional collaboration, navigating ambiguity, and 30-60-90 day thinking.
+  3. `03-practical-evaluation`: Role-aware assessment bounded to 6–8 practical scenarios. Uses role-appropriate terminology (e.g., "Role-Play & Pitch Simulation" for BDR/Sales; "Technical & System Design" for Engineering; "Product Sense & Case Study" for PM; "Scenario Modeling" for Ops).
+  4. `04-final-panel`: 30–45 min leadership round bounded to 6–8 strategic questions covering mission alignment, culture fit, and executive reverse questions.
+- **Cognitive Bounds & Glanceability:** Strip internal audit metadata (`Category`, `What it tests`, `Evidence Anchor`, `Scope Boundary`) from primary question cards. Keep answers immediately scannable in under 5 seconds during live calls.
+- **Zero Corporate/AI Filler:** Strictly enforce the anti-slop dictionary. Ground all points in verified candidate evidence without corporate jargon or exaggerated titles.
+- **Evidence Integrity:** Interview research may use current public sources when requested, but external information cannot become candidate career evidence. Transcripts are performance records, not factual career sources.
 
 ## Engineering work
 

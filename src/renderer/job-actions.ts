@@ -17,16 +17,19 @@ function companyName(job: JobFolderSummary): string {
 }
 
 function stageWords(stage: InterviewStage): string {
-  return {
+  const map: Record<InterviewStage, string> = {
     recruiter_screen: "recruiter interview",
     hiring_manager: "hiring manager interview",
     technical: "technical interview",
+    practical_evaluation: "practical evaluation",
     technical_challenge: "technical challenge",
     take_home: "take-home practice",
     onsite: "onsite interview",
+    final_panel: "final panel interview",
     executive: "executive interview",
     unknown: "interview",
-  }[stage];
+  };
+  return map[stage] ?? "interview";
 }
 
 export function buildJobActions(job: JobFolderSummary | null, interview: InterviewOverview | null, application: ApplicationStatus | null): JobAction[] {

@@ -28,9 +28,9 @@ export function parseQuestionBank(markdown: string): QuestionEntry[] {
       return;
     }
     const questionHeading = /^###\s+(.+)$/.exec(line);
-    const numbered = /^\s*\d+[.)]\s+(.+)$/.exec(line);
+    const listMatch = /^\s*(?:\d+[.)]|[-*])\s+(.+)$/.exec(line);
     const candidate = questionHeading?.[1]
-      ?? (numbered && /follow.?up|questions to ask|reverse/i.test(section) ? numbered[1] : null);
+      ?? (listMatch && /follow.?up|questions to ask|reverse/i.test(section) ? listMatch[1] : null);
     if (!candidate) return;
     const text = plainText(candidate).replace(/^["“]|["”]$/g, "").trim();
     if (!text || (!questionHeading && !text.includes("?"))) return;
