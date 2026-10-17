@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "A local-first career workspace for grounded job applications.",
+  "author": "JobSensei Team",
   "main": "dist-electron/electron/main.js",
   "allowScripts": {
     "esbuild@0.28.1": true,
@@ -22,13 +23,16 @@
     "demo:reset": "node scripts/seed-demo.mjs --clean",
     "migrate:job-descriptions": "node scripts/migrate-original-jds.mjs",
     "start": "electron .",
-    "postinstall": "node scripts/ensure-pty-helper.cjs"
+    "postinstall": "node scripts/ensure-pty-helper.cjs",
+    "pack:binaries": "node scripts/prepare-bundled-binaries.mjs",
+    "dist": "npm run pack:binaries && npm run build && electron-builder",
+    "dist:mac": "node scripts/prepare-bundled-binaries.mjs --platform=mac && npm run build && electron-builder --mac",
+    "dist:win": "node scripts/prepare-bundled-binaries.mjs --platform=win && npm run build && electron-builder --win"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "electron": "latest",
     "mammoth": "^1.12.0",
     "node-pty": "^1.1.0",
     "pdfjs-dist": "^6.2.108",
@@ -41,9 +45,58 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "concurrently": "latest",
+    "electron": "latest",
+    "electron-builder": "^26.15.3",
     "typescript": "latest",
     "vite": "latest",
     "vitest": "^3.2.7",
     "wait-on": "latest"
+  },
+  "build": {
+    "appId": "com.jobsensei.desktop",
+    "productName": "JobSensei",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "dist-renderer/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node-pty/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "build-resources/bin/${os}",
+        "to": "bin",
+        "filter": ["*"]
+      },
+      {
+        "from": ".agents/skills",
+        "to": "skills",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "AGENTS.md",
+        "to": "AGENTS.md"
+      }
+    ],
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "JobSensei"
+    }
   }
 }

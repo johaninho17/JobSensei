@@ -586,7 +586,7 @@ function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBa
     ["Candidate profile", Boolean(profile), profile ? `${profile.identity.fullName} · ${profile.identity.artifactPrefix}` : "Add your name and artifact prefix"],
     ["Base resume", Boolean(settings.baseResumePath && workspace.hasBaseResume), settings.baseResumePath ?? "Choose a Markdown, PDF, or DOCX resume"],
     ["Career context", workspace.contextFileCount > 0, workspace.contextFileCount ? `${workspace.contextFileCount} local files` : "Add files under data/context"],
-    ["Agy terminal", workspace.agyAvailable, workspace.agyAvailable ? "Agy found on PATH" : "Install Agy or add it to PATH"],
+    ["Agy terminal", workspace.agyAvailable, workspace.agyAvailable ? "Agy ready (offline bundled or installed)" : "Install Agy or add it to PATH"],
   ] as const;
   return <section className="get-started">
     <div className="get-started-copy"><span className="eyebrow">PRIVATE LOCAL SETUP</span><h1>Get JobSensei ready</h1><p>Your workspace stays in <code>data/</code>. Resume and context files are never committed by the public repository.</p></div>

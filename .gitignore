@@ -7,6 +7,8 @@ debrief/
 node_modules/
 dist-electron/
 dist-renderer/
+release/
+build-resources/
 coverage/
 *.tsbuildinfo
 .DS_Store

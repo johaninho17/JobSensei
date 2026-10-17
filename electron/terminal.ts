@@ -1,6 +1,6 @@
 import type { IPty } from "node-pty";
 import { statSync } from "node:fs";
-import { delimiter, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import type { ContextManifest } from "../src/shared/schemas";
 
 let ptyModule: typeof import("node-pty") | null = null;
@@ -14,25 +14,40 @@ try {
   console.warn("Sensei: node-pty failed to load. Terminal session will be disabled.", ptyLoadError);
 }
 
-function resolveAgyExecutable(): string | null {
+export function resolveAgyExecutable(): string | null {
   const home = process.env.HOME || process.env.USERPROFILE || "";
-  const candidates = [
-    join(home, ".local", "bin", "agy"),
-    "/usr/local/bin/agy",
-    "/opt/homebrew/bin/agy",
-  ];
+  const binaryName = process.platform === "win32" ? "agy.exe" : "agy";
+  const candidates: string[] = [];
+
+  // 1. Packaged application resources (offline bundled binary)
+  if (process.resourcesPath) {
+    candidates.push(join(process.resourcesPath, "bin", binaryName));
+  }
+  // Local project development resources fallback
+  candidates.push(join(__dirname, "../../build-resources/bin", process.platform === "win32" ? "win" : "mac", binaryName));
+  candidates.push(join(__dirname, "../../resources/bin", binaryName));
+
+  // 2. Standard user-level and system candidate paths
+  candidates.push(join(home, ".local", "bin", "agy"));
+  candidates.push("/usr/local/bin/agy");
+  candidates.push("/opt/homebrew/bin/agy");
+
   if (process.platform === "win32") {
     candidates.push(join(home, "AppData", "Local", "agy", "bin", "agy.exe"));
     candidates.push(join(home, "AppData", "Local", "Programs", "agy", "agy.exe"));
   }
+
   for (const candidate of candidates) {
+    if (!candidate) continue;
     try {
       if (statSync(candidate).isFile()) return candidate;
     } catch {}
   }
+
+  // 3. Fallback to system PATH
   const pathEntries = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
   for (const dir of pathEntries) {
-    const candidate = join(dir, process.platform === "win32" ? "agy.exe" : "agy");
+    const candidate = join(dir, binaryName);
     try {
       if (statSync(candidate).isFile()) return candidate;
     } catch {}
@@ -92,8 +107,10 @@ export class TerminalSession {
   private environment(): NodeJS.ProcessEnv {
     const home = process.env.HOME || process.env.USERPROFILE || "";
     const userLocal = home ? join(home, ".local", "bin") : "";
+    const agyExecutable = resolveAgyExecutable();
+    const agyDir = agyExecutable ? dirname(agyExecutable) : "";
     const currentPath = process.env.PATH ?? "";
-    const extraPaths = [userLocal, "/opt/homebrew/bin", "/usr/local/bin"].filter((p) => p && !currentPath.includes(p));
+    const extraPaths = [agyDir, userLocal, "/opt/homebrew/bin", "/usr/local/bin"].filter((p) => p && !currentPath.includes(p));
     const augmentedPath = extraPaths.length > 0 ? `${extraPaths.join(delimiter)}${delimiter}${currentPath}` : currentPath;
 
     return {

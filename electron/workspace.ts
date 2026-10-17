@@ -3,6 +3,7 @@ import { join, relative, resolve, sep } from "node:path";
 import { readJson, writeJsonAtomic } from "./persistence";
 import type { Settings } from "../src/shared/schemas";
 import { executableAvailable, profileHasBaseResume, readCandidateProfile } from "./candidate-profile";
+import { resolveAgyExecutable } from "./terminal";
 
 const CONTEXT_DIR = "context";
 const JOBS_DIR = "jobs";
@@ -64,7 +65,7 @@ export async function summarizeWorkspace(workspacePath: string, repositoryRoot =
       hasIndex: await stat(join(root, INDEX_FILE)).then(() => true).catch(() => false),
       hasCandidateProfile: Boolean(profile),
       hasBaseResume: await profileHasBaseResume(root, profile, effectiveSettings),
-      agyAvailable: await executableAvailable("agy"),
+      agyAvailable: Boolean(resolveAgyExecutable()) || (await executableAvailable("agy")),
       warnings: [] as string[],
     };
   } catch (error) {
