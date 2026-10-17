@@ -107,10 +107,14 @@ ipcMain.handle("app:copy-text", async (_event, text: string) => {
   clipboard.writeText(text);
 });
 
-ipcMain.handle("workspace:get-summary", async () => summarizeWorkspace(workspacePath, app.getAppPath(), await settingsStore.get()));
+function getRepositoryRoot(): string {
+  return app.isPackaged ? workspacePath : resolve(app.getAppPath());
+}
+
+ipcMain.handle("workspace:get-summary", async () => summarizeWorkspace(workspacePath, getRepositoryRoot(), await settingsStore.get()));
 ipcMain.handle("workspace:rescan", async () => {
   invalidateSearchIndex(requireWorkspace());
-  return summarizeWorkspace(requireWorkspace(), app.getAppPath(), await settingsStore.get());
+  return summarizeWorkspace(requireWorkspace(), getRepositoryRoot(), await settingsStore.get());
 });
 ipcMain.handle("profile:get", async () => readCandidateProfile(requireWorkspace()));
 ipcMain.handle("profile:create", async (_event, input) => createCandidateProfile(requireWorkspace(), input, await settingsStore.get()));
@@ -232,10 +236,11 @@ ipcMain.handle("context:get-active-manifest", async () => readActiveContextManif
 ipcMain.handle("context:get-sources", async () => contextSources());
 
 ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
-  if (input?.cwd && input.cwd !== ".") assertInsideWorkspace(requireWorkspace(), resolve(requireWorkspace(), input.cwd));
-  const cwd = resolve(app.getAppPath());
-  const manifest = await buildContextManifest(requireWorkspace(), {}, await settingsStore.get());
-  return terminal.start(cwd, requireWorkspace(), manifest);
+  const workspace = requireWorkspace();
+  if (input?.cwd && input.cwd !== ".") assertInsideWorkspace(workspace, resolve(workspace, input.cwd));
+  const cwd = input?.cwd && input.cwd !== "." ? resolve(workspace, input.cwd) : workspace;
+  const manifest = await buildContextManifest(workspace, {}, await settingsStore.get());
+  return terminal.start(cwd, workspace, manifest);
 });
 ipcMain.handle("terminal:set-context", async (_event, input) => {
   const manifest = await buildContextManifest(requireWorkspace(), input ?? {}, await settingsStore.get());
@@ -257,19 +262,47 @@ ipcMain.handle("terminal:resize", async (_event, input: { cols: number; rows: nu
 ipcMain.handle("terminal:restart", async () => terminal.restart());
 ipcMain.handle("terminal:stop", async () => terminal.stop());
 
+async function resolveInitialWorkspacePath(store: SettingsStore): Promise<string> {
+  if (process.env.SENSEI_WORKSPACE) {
+    return resolve(process.env.SENSEI_WORKSPACE);
+  }
+  const current = await store.get().catch(() => null);
+  if (current?.workspacePath) {
+    try {
+      const candidate = resolve(current.workspacePath);
+      const candidateStat = await stat(candidate);
+      if (candidateStat.isDirectory()) return candidate;
+    } catch {
+      // Fallback if stored path is invalid or moved
+    }
+  }
+  if (app.isPackaged) {
+    return join(app.getPath("documents"), "JobSensei");
+  }
+  return resolve(app.getAppPath(), "data");
+}
+
 app.whenReady().then(async () => {
-  settingsStore = new SettingsStore(app.getPath("userData"));
-  workspacePath = resolve(app.getAppPath(), "data");
-  await initializeWorkspace(workspacePath);
-  await indexContext(workspacePath);
-  await settingsStore.setWorkspace(workspacePath);
-  startWorkspaceWatcher(workspacePath);
+  try {
+    settingsStore = new SettingsStore(app.getPath("userData"));
+    workspacePath = await resolveInitialWorkspacePath(settingsStore);
+    await initializeWorkspace(workspacePath);
+    await indexContext(workspacePath);
+    await settingsStore.setWorkspace(workspacePath);
+    startWorkspaceWatcher(workspacePath);
+  } catch (error) {
+    console.error("Sensei startup initialization error:", error);
+  }
+
   const scriptPolicy = process.env.VITE_DEV_SERVER_URL ? "'self' 'unsafe-inline'" : "'self'";
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": [`default-src 'self'; style-src 'self' 'unsafe-inline'; script-src ${scriptPolicy}; img-src 'self' data:; object-src 'self' data:; frame-src 'self' data:; connect-src 'self' http://127.0.0.1:5173 ws://127.0.0.1:5173`] } }));
   terminal.onData((data) => mainWindow?.webContents.send("terminal:data", data));
   terminal.onExit((code) => mainWindow?.webContents.send("terminal:exit", code));
   createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+}).catch((error) => {
+  console.error("Sensei fatal whenReady error:", error);
+  createWindow();
 });
 
 app.on("before-quit", () => { workspaceWatcher?.close(); if (workspaceWatchTimer) clearTimeout(workspaceWatchTimer); terminal.stop(); });
