@@ -1,6 +1,6 @@
 {
   "name": "jobsensei",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "A local-first career workspace for grounded job applications.",
   "author": "JobSensei Team",
@@ -70,12 +70,16 @@
       {
         "from": "build-resources/bin/${os}",
         "to": "bin",
-        "filter": ["*"]
+        "filter": [
+          "*"
+        ]
       },
       {
         "from": ".agents/skills",
         "to": "skills",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "AGENTS.md",
@@ -83,11 +87,17 @@
       }
     ],
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.productivity"
     },
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "nsis": {
       "oneClick": false,
