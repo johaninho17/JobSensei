@@ -22,6 +22,9 @@
 - The provider returns invalid JSON.
 - The provider returns `429`.
 - An interview answer contains an unsupported claim.
+- An interview preparation artifact duplicates retrospective STAR stories across rounds or duplicates challenge labs in question banks.
+- An interview scenario or practical challenge relies on proprietary unreleased internal company architecture rather than industry-standard first principles.
+- An interview answer uses scripted verbatim monologues or quotation marks instead of glanceable punchy memory anchors.
 - A research source conflicts with another source.
 
 ## Completion standard

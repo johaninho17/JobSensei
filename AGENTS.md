@@ -31,6 +31,23 @@ Default application output is limited to `original_jd.md`, `evaluation.md`, the 
 Use `$jobsensei-interview-pipeline` only after the user explicitly asks to prepare an existing job for an interview. Use `$jobsensei-technical-challenge` only for an explicitly requested challenge or test. A pasted JD never creates interview content.
 
 ### Interview Rules & Quality Standards:
+- **Universal Role Agnosticism (For Anyone in Any Field):** JobSensei serves candidates across Engineering, Sales, Product Management, Operations, Customer Success, Marketing, and Finance. Every stage and scenario must adapt naturally to the target discipline without assuming software engineering terminology:
+  - *Sales / BDR / Commercial:* Territory planning, cold outreach, objection handling, qualification frameworks (MEDDPICC/BANT), deal velocity, pipeline generation, and customer pitch simulations.
+  - *Product Management:* User journey mapping, North Star metrics, feature prioritization (RICE), cross-functional consensus, PRD design, and product sense case studies.
+  - *Operations / Strategy / Finance:* Process bottleneck identification, unit economics, supply chain modeling, vendor negotiation, and spreadsheet scenario modeling.
+  - *Customer Success / Implementation:* Account onboarding escalations, churn prevention, QBR presentations, and customer relationship recovery.
+  - *Engineering / Technical:* First-principles system design, distributed data contracts, diagnostic troubleshooting, and code walkthroughs.
+- **Zero Proprietary Over-Fitting / First-Principles Standard:** Never ask, expect, or coach a candidate to explain the hiring company's internal, proprietary architecture, private backend systems, or unreleased product roadmap. Real interviewers test generalizable domain principles, problem-solving methodology, and the candidate's own past career track record. Always frame questions around industry-standard concepts and the candidate's verified evidence.
+- **Strict Story Partitioning & Zero Cannibalization:** Never duplicate the same primary STAR stories or anecdotes across multiple rounds. A candidate cannot tell the Hiring Manager in Round 02 the exact same 3 stories they tell in Round 03.
+  - *Round 01:* High-level career trajectory arc, checklist stack verification, and compensation/location logistics. Zero deep architecture monologues.
+  - *Round 02:* Deep ownership under ambiguity, handling customer/stakeholder pushback, prioritization under tight deadlines, and 30-60-90 day impact.
+  - *Round 03:* Live interactive problem-solving, trade-off analysis, domain frameworks, and live simulations. Focus on real-time execution rather than retrospective story monologues.
+  - *Round 04:* Strategic market alignment, executive vision, culture add, and high-impact macro business outcomes.
+- **Differentiated Reverse Questions by Persona:** Reverse questions must be strictly unique to the target interviewer persona:
+  - *Recruiter:* Hiring process milestones, team growth rate, and onboarding expectations.
+  - *Hiring Manager:* Team operating cadences, managing client escalations, and balancing custom field requests against core roadmaps.
+  - *Practical / Peer:* Real-world day-to-day tooling bottlenecks, domain standards, and cross-functional peer collaboration.
+  - *Executive:* Long-term market positioning, 2-to-3-year company vision, and key strategic priorities.
 - **No Scripted Pitches or Direct Quotes:** Never generate verbatim monologue scripts or answers in quotation marks. Output must be structured as glanceable, punchy bullet points (Context -> Concrete Tool/Action -> Real Outcome) that candidates use as memory anchors while speaking naturally.
 - **Strict Stage Isolation (The 4 Canonical Rounds):**
   1. `01-recruiter-screen`: 15–20 min non-technical filter. Bounded to 6–8 questions covering background arc, role motivation, checklist qualifications, logistics (location, comp band, authorization, timeline), and reverse questions. Zero low-level architecture or debugging scenarios.

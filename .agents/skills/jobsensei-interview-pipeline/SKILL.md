@@ -39,7 +39,7 @@ Use `data/jobs/<job-id>/interviews/interview.json` as the job-level index:
   "jobId": "<job-id>",
   "company": "<display company>",
   "role": "<display role>",
-  "currentRoundId": "01-recruiter-hiring-manager",
+  "currentRoundId": "01-recruiter-screen",
   "rounds": [],
   "knownProcess": []
 }
@@ -65,8 +65,12 @@ Each round record contains `id`, `sequence`, `stage`, `label`, nullable `intervi
 
 Keep each legacy list bounded to the most useful 6-10 items. Put every high-value prepared answer, company fact, process note, technical topic, challenge reference, reverse question, caution, and debrief lesson in `references`; do not truncate a useful answer with ellipses. `sourcePath` must exist, and `anchor` must exactly match a Markdown heading when present. Every item must be copied or faithfully condensed from its named source. When updating a source file, refresh its dashboard entries in the same write stage. Existing rounds without `dashboardBrief` remain valid because the app derives a read-only fallback from their files.
 
-- Store new artifacts under `interviews/<NN>-<stage>/`. For new workspaces use `interviews/01-recruiter-hiring-manager/` and `interviews/02-technical/`.
-- Round preparation creates `research.md`, `prep.md`, and `question_bank.md`. Technical challenge artifacts remain opt-in.
+- Store new artifacts under canonical folders: `01-recruiter-screen/`, `02-hiring-manager/`, `03-practical-evaluation/`, and `04-final-panel/`.
+- **Story Partitioning & Zero-Duplication Rule:** Never duplicate the same STAR stories, anecdotes, or reverse questions across multiple rounds. Partition evidence strictly:
+  - *Recruiter Screen:* High-level trajectory arc, checklist stack verification, and compensation/location logistics. Zero deep architecture monologues.
+  - *Hiring Manager:* Ownership under ambiguity, customer crisis de-escalation, cross-functional engineering loops, prioritization, and 30-60-90 day impact.
+  - *Practical Evaluation / Technical:* Live system design, telemetry instrumentation, performance trade-offs, and debugging decision trees. Do not copy retrospective manager stories.
+- Round preparation creates `research.md`, `prep.md`, and `question_bank.md`. Technical challenge artifacts remain opt-in under `challenge/`.
 - Debrief analysis may add only `debrief_analysis.md` in the completed round.
 - Text mock coaching may add numbered mock and feedback files in that round.
 - Existing flat `interviews/research.md`, `prep.md`, and `question_bank.md` form a read-only legacy first round. Do not move, overwrite, or silently regenerate them.
@@ -88,57 +92,67 @@ After resolving one job:
    - Put the best official facts, reported process details, and likely stage-specific questions into `dashboardBrief.references` with `sourceType`, the local `research.md` path, and an exact heading anchor.
 5. Update `status.json` history without deleting prior entries. Record only the requested round.
 
-## Stage Distribution
+## Stage Distribution & Universal Multi-Disciplinary Standards
 
-The stage must control the question plan, not merely label it. Every question entry must use pure bullet talking points (Situation/Context -> Concrete Action/Mechanism -> Real Outcome). Never output scripted monologues or direct quotes in quotation marks.
+The stage and target discipline must strictly control the artifact structure, questions, and preparation focus. Every question entry must use glanceable, punchy bullet talking points (Context -> Concrete Action/Mechanism -> Real Outcome). Never output scripted monologues or direct quotes in quotation marks.
 
-### 01-recruiter-screen (Recruiter Screen)
+**Universal Role Mapping Across Disciplines:**
+- *Engineering / Technical:* "Technical & System Design" — first-principles architecture, data flow, telemetry/metrics, debugging trees, and live code walkthroughs.
+- *Sales / BDR / Account Executive:* "Role-Play & Pitch Simulation" — mock cold outreach, discovery questioning (MEDDPICC/BANT), objection handling, deal stage progression, and pricing negotiation.
+- *Product Management:* "Product Sense & Case Study" — user personas, problem definition, North Star metrics, feature prioritization (RICE), and trade-off matrices.
+- *Operations / Strategy / Finance:* "Operational Scenario & Case Modeling" — process bottlenecks, capacity planning, unit economics, supply chain modeling, and KPI dashboards.
+- *Customer Success / Implementation:* "Client Onboarding & Escalation Simulation" — technical kickoff walkthroughs, churn risk diagnosis, QBR presentations, and SLA recovery.
+
+### 01-recruiter-screen (Recruiter Screen — 15–20 min non-technical filter)
 - Strictly 6–8 primary questions in pure bullet-cue format.
-- Covered topics:
-  1. Career trajectory arc & current focus
-  2. Why this company & why this role now
-  3. Positive, future-facing reason for leaving current employer
-  4. Core checklist qualifications (client-facing experience, primary daily stack)
-  5. Logistics: location/commute, comp band, work authorization, notice period
-  6. 3–4 reverse questions to ask the recruiter
-- NEVER include low-level architecture, container debugging, or code mechanics.
+- **Focus:**
+  1. 45s natural career trajectory arc & current focus.
+  2. Genuine motivation: why this company, why this role now.
+  3. Positive, future-facing reason for transition.
+  4. Core checklist qualifications (client-facing presence, daily tools/stack, domain experience).
+  5. Logistics: location/commute, comp band expectations, work authorization, notice period.
+  6. 3–4 reverse questions to ask the recruiter (process timelines, team growth, onboarding cadence).
+- **Prohibitions:** NEVER include low-level architecture, deep case-study calculations, or detailed technical debugging. Do not burn deep STAR stories on a recruiter.
+- `prep.md` structure: Career narrative, Current role realities, Motivations, Recruiter qualification checklist, Logistics, Reverse questions.
 
-### 02-hiring-manager (Hiring Manager Screen)
+### 02-hiring-manager (Hiring Manager Screen — 30–45 min leadership & ownership screen)
 - Strictly 8–10 primary questions.
-- Prioritize ownership, judgment, ambiguity, customer challenges, cross-functional collaboration, project decisions, career goals, feedback, learning, and first-90-day thinking.
-- Include moderate technical/functional depth relevant to the role, but do not simulate a full technical loop.
+- **Focus:**
+  1. 45s executive career introduction tailored to the team.
+  2. **The Authoritative STAR Story Map (3–5 non-overlapping stories):**
+     - Story A: End-to-end project ownership under ambiguity.
+     - Story B: Handling high-pressure customer or operational crisis / outage.
+     - Story C: Navigating stakeholder pushback or conflicting priorities across teams.
+     - Story D: Managing concurrent accounts/projects and ruthless prioritization.
+  3. First 30-60-90 day execution plan and ramp milestones.
+  4. Claims to clarify, qualify, or avoid.
+  5. Gaps and transferability strategies.
+  6. 5–8 reverse questions on team dynamics, management style, operational cadences, and core product feedback loops.
+- **Prohibitions:** Never lecture the hiring manager on their own private internal systems. Ground all answers in candidate's past track record.
 
-### 03-practical-evaluation (Practical & Role Evaluation)
-- Strictly 6–8 targeted scenarios or practical walkthroughs.
-- Role-aware discipline mapping:
-  - *Engineering / Technical:* "Technical & System Design" — systems trade-offs, debugging scenarios, failure recovery.
-  - *BDR / SDR / Commercial:* "Role-Play & Pitch Simulation" — mock cold call, discovery questioning, objection handling, qualification frameworks.
-  - *Product Management:* "Product Sense & Case Study" — feature prioritization, user journeys, north star metrics.
-  - *Operations / Strategy:* "Operational Scenario & Case Modeling" — process bottlenecks, analytics modeling.
-- Technical challenge is an optional child. When explicitly requested, create `interviews/03-practical-evaluation/challenge/` with the challenge brief, labs, answer keys, and verbal scenarios.
+### 03-practical-evaluation (Practical & Role Evaluation — 45–60 min peer assessment)
+- Strictly 6–8 practical scenarios or walkthroughs appropriate to the discipline.
+- **Focus:**
+  1. 30s technical/functional positioning statement (core tools, methodology, and operating rhythm).
+  2. **Live Decision & Diagnostic Reference Frameworks:**
+     - Industry-standard domain reference sheets (e.g. system design architectures, discovery questioning rubrics, unit economic models).
+     - Live trade-off matrices (e.g. speed vs accuracy, batch vs real-time, custom builds vs standard tooling).
+  3. Live scenario simulations testing real-time problem-solving and diagnostic methodology.
+  4. 5–8 reverse questions on day-to-day practitioner tooling, workflow bottlenecks, and peer collaboration.
+- **Prohibitions:** DO NOT duplicate the retrospective STAR stories from Round 02. DO NOT duplicate the motivation or career elevator pitch from Round 01/02. When an optional `challenge/` is attached, the question bank must focus on verbal architectural defense, edge cases, and trade-offs rather than restating the challenge lab prompts.
 
-### 04-final-panel (Executive / Final Panel)
+### 04-final-panel (Executive / Final Panel — 30–45 min leadership round)
 - Strictly 6–8 strategic questions.
-- Prioritize company vision, mission alignment, intellectual humility, learning from failure, cultural contribution, and executive reverse questions.
+- **Focus:**
+  1. Long-term mission alignment and industry market trends.
+  2. Intellectual humility, accountability, and learning from past failure.
+  3. Cultural contribution, cross-functional empathy, and scaling philosophy.
+  4. 4–6 high-level executive reverse questions on multi-year vision, competitive moat, and strategic bets.
+- **Prohibitions:** Zero low-level mechanical or tooling trivia.
 
 ### Take-Home & Unknown
 - Take-Home produces the expected evaluation rubric, constraints and assumptions, execution plan, validation checklist, submission explanation, self-review, and likely review questions.
 - `unknown` uses recruiter-screen preparation as primary and labels later-stage material as secondary.
-
-## Required Artifacts
-
-`prep.md` must include:
-
-- Requested round and target persona
-- Natural 45-60 second career introduction
-- Current-company and current-role explanation
-- Why company, why role, why leaving, and what the candidate wants next
-- Evidence-backed story map with truthful ownership
-- Application claims to clarify, qualify, or avoid
-- Gaps and transferability
-- Portfolio or demonstration readiness when relevant
-- Practical topics appropriate to the stage
-- Five to eight stage-specific questions for the interviewer
 
 - If the user runs an interview action on a job that already has interview preparation, regenerate that round using the new Action Points format and refresh its dashboard brief.
 

@@ -89,7 +89,37 @@ The interview pipeline resolves one existing job, identifies the requested stage
 | `jobsensei-interview-coach` | Runs text mocks, improves answers, and creates feedback or debrief analysis |
 | `jobsensei-technical-challenge` | Creates labs or scenarios only after an explicit challenge/test request |
 
-Recruiter and hiring-manager preparation emphasizes career narrative, motivation, scope, customer work, and logistics. Technical preparation emphasizes systems, debugging, implementation choices, and supported project depth. Challenge material is kept separate until explicitly requested.
+Recruiter and hiring-manager preparation emphasizes career narrative, motivation, scope, customer work, and logistics. Practical evaluation emphasizes real-world execution, trade-offs, and first-principles diagnostics. Challenge material is kept separate until explicitly requested.
+
+### Canonical Round Structure
+
+JobSensei organizes interview preparation into 4 distinct, isolated stages to prevent redundant answers and story fatigue:
+
+1. `01-recruiter-screen`: 15–20 min non-technical filter. Bounded to 6–8 questions covering background arc, motivation, checklist qualifications, logistics (location, comp band, authorization, timeline), and recruiter reverse questions. Zero deep architectural monologues.
+2. `02-hiring-manager`: 30–45 min manager screen. Bounded to 8–10 questions covering managerial STAR stories (crisis handling, stakeholder navigation, ambiguity, prioritization), 30-60-90 day thinking, and team management reverse questions.
+3. `03-practical-evaluation`: 45–60 min role-aware assessment bounded to 6–8 practical scenarios or live decision frameworks. Uses role-appropriate terminology (e.g. Sales Pitch Simulation for Sales; Product Sense for PM; Technical & System Design for Engineering). STAR stories from Round 2 are purged in favor of real-time diagnostic frameworks.
+4. `04-final-panel`: 30–45 min leadership round bounded to 6–8 strategic questions covering mission alignment, company culture, executive communication, and high-level reverse questions.
+
+### Universal Multi-Disciplinary Standard
+
+JobSensei is built for candidates in any field:
+- **Engineering / AI**: Technical architecture, live debugging, telemetry scaling, deterministic eval harnesses.
+- **Sales / Account Exec / BDR**: Discovery frameworks, objection handling, commercial negotiation, pitch simulations.
+- **Product Management**: Product sense, feature prioritization, PRD trade-offs, metric instrumentation.
+- **Operations / Support / CS**: Incident triage, SLA mitigation, customer de-escalation, workflow automation.
+- **Marketing / Growth**: Campaign attribution, conversion funnel diagnostics, cross-channel experimentation.
+
+### Anti-Proprietary Over-Fitting (First-Principles Standard)
+
+Interviewers do not expect candidates to know their proprietary internal systems or unreleased specs end-to-end. Evaluators test fundamental reasoning:
+- Frame all practical evaluation questions, challenges, and mocks around industry-standard architectures, public APIs, and foundational patterns.
+- Never penalize or coach candidates to memorize unreleased internal company implementations.
+- Ground all candidate answers in verified past experience from `data/context/` rather than speculative guesses about the employer's internal tools.
+
+### Story Partitioning & Reverse Questions
+
+- **Story Allocation**: Retrospective STAR stories are anchored to `02-hiring-manager`. Round 3 replaces retrospective narratives with forward-looking diagnostic trees and architecture/execution trade-off matrices.
+- **Persona-Targeted Reverse Questions**: Recruiters receive recruiting questions (hiring timeline, team growth); hiring managers receive team execution questions (feedback cadences, team friction points); domain peers receive craft questions (tooling debt, operational bottlenecks); executives receive strategic vision questions.
 
 Raw transcripts remain performance records. They do not become career evidence automatically.
 

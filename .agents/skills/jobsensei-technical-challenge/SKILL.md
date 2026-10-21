@@ -42,7 +42,7 @@ Technical challenges are distinct from the `technical` interview stage. Use `tec
 
 Create or attach one requested round under:
 
-`data/jobs/<job-id>/interviews/02-technical/challenge/`
+`data/jobs/<job-id>/interviews/03-practical-evaluation/challenge/` (or active practical/technical stage)
 
 Create only:
 
