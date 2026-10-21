@@ -156,12 +156,13 @@ function practiceDashboardItems(raw: string, sourcePath: string): InterviewDashb
   } catch { return []; }
 }
 
-async function buildDashboardBrief(workspacePath: string, round: InterviewRound): Promise<InterviewDashboardBrief> {
+async function buildDashboardBrief(workspacePath: string, round: InterviewRound, jobId?: string): Promise<InterviewDashboardBrief> {
   const paths = round.artifactPaths;
+  const researchTarget = paths.research ?? (jobId ? `jobs/${jobId}/interviews/company_research.md` : null);
   const [prep, questionBank, research, challengeBrief, practiceLabs, debriefAnalysis] = await Promise.all([
     readArtifact(workspacePath, paths.prep),
     readArtifact(workspacePath, paths.questionBank),
-    readArtifact(workspacePath, paths.research),
+    readArtifact(workspacePath, researchTarget),
     readArtifact(workspacePath, paths.challengeBrief),
     readArtifact(workspacePath, paths.practiceLabs),
     readArtifact(workspacePath, paths.debriefAnalysis),
@@ -382,7 +383,7 @@ export async function getInterviewOverview(workspacePath: string, jobId: string,
       const parsed = parseRound(jobId, round, index);
       return parsed ? [parsed] : [];
     }).sort((a, b) => a.sequence - b.sequence);
-    const enrichedRounds = await Promise.all(rounds.map(async (round) => ({ ...round, dashboardBrief: refreshDashboard || !round.dashboardBrief ? await buildDashboardBrief(workspacePath, round) : round.dashboardBrief })));
+    const enrichedRounds = await Promise.all(rounds.map(async (round) => ({ ...round, dashboardBrief: refreshDashboard || !round.dashboardBrief ? await buildDashboardBrief(workspacePath, round, jobId) : round.dashboardBrief })));
     return interviewOverviewSchema.parse({
       schemaVersion: 2,
       jobId,
@@ -398,7 +399,7 @@ export async function getInterviewOverview(workspacePath: string, jobId: string,
   const legacy = await legacyOverview(workspacePath, jobId, job, interview, interviewRoot);
   return interviewOverviewSchema.parse({
     ...legacy,
-    rounds: await Promise.all(legacy.rounds.map(async (round) => ({ ...round, dashboardBrief: round.dashboardBrief ?? await buildDashboardBrief(workspacePath, round) }))),
+    rounds: await Promise.all(legacy.rounds.map(async (round) => ({ ...round, dashboardBrief: round.dashboardBrief ?? await buildDashboardBrief(workspacePath, round, jobId) }))),
   });
 }
 
