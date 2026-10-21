@@ -81,7 +81,10 @@ Keep each legacy list bounded to the most useful 6-10 items. Put every high-valu
 
 After resolving one job:
 
-1. Read only that job's JD, metadata, status, submitted application files, evaluation, match, interview index, and the active round's prior files.
+1. Read that job's JD, metadata, status, submitted application files, evaluation, match, interview index, and the **files of all preceding rounds** (`prep.md`, `question_bank.md`) as well as the active round's prior files:
+   - Build an explicit **Non-Overlap / Exclusion Boundary**: Inspect the questions, STAR anecdotes, past project examples, and reverse questions from all preceding rounds (`01-`, `02-`, etc.).
+   - Strictly prohibit re-asking questions, recycling the same STAR stories, or reusing reverse questions in the current round.
+   - For `03-practical-evaluation`, enforce first-principles scenarios and live problem-solving; never re-tell Round 02 retrospective stories (e.g. past debugging crises or past onboarding anecdotes).
 2. Use `$jobsensei-career-evidence` with the selected context manifest. Preserve evidence IDs, source families, ownership, and current-versus-prior tense.
 3. Read the matching generalized role-memory record only under the memory contract. Do not scan old jobs or transcripts.
 4. Research the current company and requested stage when internet access is available:
