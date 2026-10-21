@@ -102,6 +102,27 @@ describe("interview overview", () => {
     expect(rounds.map((round) => round.stage)).toEqual(["recruiter_screen", "hiring_manager"]);
   });
 
+  it("normalizes final panel and practical evaluation stages in known process", async () => {
+    const root = await workspace();
+    const job = await createJob(root, "panel-example", "Panel Example");
+    await writeFile(join(job, "interviews", "interview.json"), JSON.stringify({
+      schemaVersion: 2,
+      jobId: "panel-example",
+      company: "Panel Example",
+      role: "Staff Engineer",
+      currentRoundId: null,
+      rounds: [],
+      knownProcess: [
+        { stage: "final_panel", label: "Executive & Team Panel", sourceType: "reported" },
+        { stage: "practical_evaluation", label: "Practical Evaluation", sourceType: "reported" },
+      ],
+    }), "utf8");
+
+    const overview = await getInterviewOverview(root, "panel-example");
+    expect(overview?.knownProcess[0].stage).toBe("final_panel");
+    expect(overview?.knownProcess[1].stage).toBe("practical_evaluation");
+  });
+
   it("builds an information-rich round brief from existing prep, question bank, and research files", async () => {
     const root = await workspace();
     const job = await createJob(root, "brief-example", "Brief Example");

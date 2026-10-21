@@ -444,7 +444,7 @@ function WorkspaceApp() {
       id: `job-action:${action.id}`,
       title: action.label,
       subtitle: `${action.company} · Insert into Command Center`,
-      keywords: `${action.group} ${action.prompt}`,
+      keywords: `${action.group} ${action.prompt}${action.id === "team-panel-interview" ? " final panel executive panel" : ""}`,
       run: () => insertJobPrompt(action),
     })),
     {
@@ -974,7 +974,10 @@ function InterviewGuide({ jobId, overview, loading, activeRoundId, onSelect, onR
   if (!overview || !overview.rounds.length) return null;
   const current = overview.rounds.find((round) => round.id === selectedRoundId) ?? overview.rounds.find((round) => round.id === overview.currentRoundId) ?? overview.rounds.at(-1)!;
   const currentIndex = Math.max(0, overview.rounds.findIndex((round) => round.id === current.id));
-  const next = overview.knownProcess.find((step) => !overview.rounds.some((round) => round.stage === step.stage && round.sequence > current.sequence));
+  const currentStepIndex = overview.knownProcess.findIndex((step) => step.stage === current.stage || ("roundId" in step && step.roundId === current.id));
+  const candidateSteps = currentStepIndex >= 0 ? overview.knownProcess.slice(currentStepIndex + 1) : overview.knownProcess;
+  const next = candidateSteps.find((step) => !overview.rounds.some((round) => round.stage === step.stage || ("roundId" in step && step.roundId === round.id)))
+    ?? overview.knownProcess.find((step) => !overview.rounds.some((round) => round.stage === step.stage || ("roundId" in step && step.roundId === round.id)));
   const company = promptCompany(overview.company ?? overview.jobId);
   const prompts = [
     ...(current.debriefSourcePaths.length && !current.artifactPaths.debriefAnalysis ? [`${company} debrief`] : []),

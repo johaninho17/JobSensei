@@ -94,7 +94,82 @@ describe("Job Actions", () => {
     const recommended = actions.find((action) => action.recommended);
 
     expect(recommended?.prompt).toBe("Prepare Example Labs technical challenge");
+    expect(actions.some((action) => action.id === "team-panel-interview" && action.label === "Prepare team panel interview" && action.prompt === "Prepare Example Labs team panel interview" && action.group === "Interview")).toBe(true);
     expect(actions.every((action) => !/[\r\n]/.test(action.prompt))).toBe(true);
+  });
+
+  it("recommends team panel preparation when advancing to the final stage", () => {
+    const job: JobFolderSummary = {
+      id: "example-labs",
+      relativePath: "jobs/example-labs",
+      name: "example-labs",
+      title: "Forward Deployed Engineer",
+      company: "Example Labs",
+      createdAt: "2026-07-28T00:00:00.000Z",
+      modifiedAt: "2026-07-28T00:00:00.000Z",
+      artifactCount: 3,
+      applicationStage: "interview",
+      rating: 4.8,
+      ratingDecision: "Strong Match",
+      ratingConfidence: "high",
+      ratingHighlights: [],
+      ratingGaps: [],
+      location: "San Francisco, CA",
+      interviewRoundLabel: "Practical Evaluation",
+      hasApplicationMaterials: true,
+    };
+    const overview: InterviewOverview = {
+      schemaVersion: 2,
+      jobId: "example-labs",
+      company: "Example Labs",
+      role: "Forward Deployed Engineer",
+      currentRoundId: "03-practical-evaluation",
+      rounds: [
+        {
+          id: "01-recruiter-screen",
+          sequence: 1,
+          title: "Recruiter screen",
+          stage: "recruiter_screen",
+          status: "debriefed",
+          legacy: false,
+          artifactPaths: { research: null, prep: null, questionBank: null, challengeBrief: null, practiceLabs: null, debriefAnalysis: null },
+          debriefSourcePaths: [],
+        },
+        {
+          id: "02-hiring-manager",
+          sequence: 2,
+          title: "Hiring manager",
+          stage: "hiring_manager",
+          status: "debriefed",
+          legacy: false,
+          artifactPaths: { research: null, prep: null, questionBank: null, challengeBrief: null, practiceLabs: null, debriefAnalysis: null },
+          debriefSourcePaths: [],
+        },
+        {
+          id: "03-practical-evaluation",
+          sequence: 3,
+          title: "Practical evaluation",
+          stage: "practical_evaluation",
+          status: "debriefed",
+          legacy: false,
+          artifactPaths: { research: null, prep: null, questionBank: null, challengeBrief: null, practiceLabs: null, debriefAnalysis: "jobs/example-labs/interviews/03-practical-evaluation/debrief_analysis.md" },
+          debriefSourcePaths: [],
+        },
+      ],
+      knownProcess: [
+        { stage: "recruiter_screen", label: "Recruiter screen", interviewer: null, format: null, sourceType: "reported" },
+        { stage: "hiring_manager", label: "Hiring manager", interviewer: null, format: null, sourceType: "reported" },
+        { stage: "practical_evaluation", label: "Practical evaluation", interviewer: null, format: null, sourceType: "reported" },
+        { stage: "final_panel", label: "Executive & Team Panel", interviewer: null, format: null, sourceType: "reported" },
+      ],
+      isLegacy: false,
+    };
+
+    const actions = buildJobActions(job, overview, null);
+    const recommended = actions.find((action) => action.recommended);
+
+    expect(recommended?.label).toBe("Prepare team panel interview");
+    expect(recommended?.prompt).toBe("Prepare Example Labs team panel interview");
   });
 
   it("keeps Job Actions unavailable without an unambiguous job", () => {

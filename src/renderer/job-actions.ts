@@ -25,7 +25,7 @@ function stageWords(stage: InterviewStage): string {
     technical_challenge: "technical challenge",
     take_home: "take-home practice",
     onsite: "onsite interview",
-    final_panel: "final panel interview",
+    final_panel: "team panel interview",
     executive: "executive interview",
     unknown: "interview",
   };
@@ -42,9 +42,15 @@ export function buildJobActions(job: JobFolderSummary | null, interview: Intervi
     }
   };
   const current = interview?.rounds.find((round) => round.id === interview.currentRoundId) ?? interview?.rounds.at(-1) ?? null;
-  const next = current
-    ? interview?.knownProcess.find((step) => !interview.rounds.some((round) => round.stage === step.stage && round.sequence > current.sequence)) ?? null
-    : interview?.knownProcess[0] ?? null;
+  const currentStepIndex = current
+    ? interview?.knownProcess.findIndex((step) => step.stage === current.stage || ("roundId" in step && step.roundId === current.id)) ?? -1
+    : -1;
+  const candidateSteps = currentStepIndex >= 0
+    ? interview?.knownProcess.slice(currentStepIndex + 1) ?? []
+    : interview?.knownProcess ?? [];
+  const next = candidateSteps.find((step) => !interview?.rounds.some((round) => round.stage === step.stage || ("roundId" in step && step.roundId && round.id === step.roundId)))
+    ?? interview?.knownProcess.find((step) => !interview?.rounds.some((round) => round.stage === step.stage || ("roundId" in step && step.roundId && round.id === step.roundId)))
+    ?? null;
 
   if (current?.debriefSourcePaths.length && !current.artifactPaths.debriefAnalysis) {
     add("analyze-debrief", `Analyze ${company} debrief`, `${company} debrief`, "Recommended", true);
@@ -64,6 +70,7 @@ export function buildJobActions(job: JobFolderSummary | null, interview: Intervi
   add("hiring-manager-interview", "Prepare hiring manager interview", `Prepare ${company} hiring manager interview`, "Interview");
   add("technical-interview", "Prepare technical interview", `Prepare ${company} technical interview`, "Interview");
   add("technical-challenge", "Prepare technical challenge", `${company} technical challenge`, "Interview");
+  add("team-panel-interview", "Prepare team panel interview", `Prepare ${company} team panel interview`, "Interview");
   if (current) add("mock-interview", "Start current-round mock", `Start ${company} ${stageWords(current.stage)} mock`, "Interview");
   if (current?.debriefSourcePaths.length) add("debrief", "Analyze latest debrief", `${company} debrief`, "Interview");
 

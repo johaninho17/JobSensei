@@ -201,7 +201,9 @@ function normalizeStage(value: unknown): InterviewStage {
   if (normalized.includes("technical challenge") || normalized.includes("coding test") || normalized.includes("live coding") || normalized.includes("implementation walkthrough")) return "technical_challenge";
   if (normalized.includes("take home") || normalized.includes("takehome") || normalized.includes("exercise")) return "take_home";
   if (normalized.includes("onsite") || normalized.includes("on site")) return "onsite";
+  if (normalized.includes("final panel") || normalized.includes("team panel") || normalized.includes("panel")) return "final_panel";
   if (normalized.includes("executive") || normalized.includes("founder") || normalized.includes("ceo")) return "executive";
+  if (normalized.includes("practical") || normalized.includes("evaluation")) return "practical_evaluation";
   if (normalized.includes("technical") || normalized.includes("engineering")) return "technical";
   return "unknown";
 }

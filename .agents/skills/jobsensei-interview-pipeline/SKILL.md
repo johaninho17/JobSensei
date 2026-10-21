@@ -19,7 +19,7 @@ Do not activate because a pasted JD contains the word `interview`. Never run fro
    - `recruiter_screen`
    - `hiring_manager`
    - `practical_evaluation` (or `technical`)
-   - `final_panel` (or `onsite` / `executive`)
+   - `final_panel` (or `team_panel` / `team panel` / `panel` / `onsite` / `executive`)
    - `take_home`
    - `unknown`
 6. For interview preparation creation, use the isolated canonical 4-stage layout:
@@ -27,7 +27,7 @@ Do not activate because a pasted JD contains the word `interview`. Never run fro
    - `02-hiring-manager/`: 30–45 min manager screen. Bounded strictly to 8–10 questions covering end-to-end ownership, cross-functional collaboration, navigating ambiguity, and 30-60-90 day thinking.
    - `03-practical-evaluation/` (or `03-technical/`): 45–60 min assessment. Role-aware: "Role-Play & Pitch Simulation" for BDR/Sales; "Technical & System Design" for Engineering; "Product Sense & Case Study" for PM; "Scenario Modeling" for Ops. Bounded to 6–8 practical scenarios.
    - `04-final-panel/`: 30–45 min leadership round. Bounded to 6–8 strategic questions covering mission alignment, culture fit, and executive reverse questions.
-7. An initial recruiter screen prompt creates or updates only `01-recruiter-screen`. An explicit hiring-manager prompt creates or updates `02-hiring-manager`. An explicit practical or technical prompt creates or updates `03-practical-evaluation` (or `03-technical`). Technical challenge material remains opt-in under `challenge/`.
+7. An initial recruiter screen prompt creates or updates only `01-recruiter-screen`. An explicit hiring-manager prompt creates or updates `02-hiring-manager`. An explicit practical or technical prompt creates or updates `03-practical-evaluation` (or `03-technical`). An explicit team panel, final panel, executive, or onsite prompt creates or updates `04-final-panel`. Technical challenge material remains opt-in under `challenge/`.
 
 ## Round Storage Contract
 
