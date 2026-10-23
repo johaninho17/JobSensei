@@ -64,4 +64,11 @@ describe("resume tailoring similarity", () => {
     const result = resumeTailoringSimilarity(changed, baseline, null);
     expect(result.nearIdenticalBulletRatio).toBeLessThan(0.5);
   });
+
+  it("handles composite section headings (Core Competencies and Education & Languages)", () => {
+    const compositeResume = `**ALEX MORGAN**\nalex@example.com\n\n**CORE COMPETENCIES & TECHNICAL SKILLS**\n**Engineering:** TypeScript, Node.js\n**Delivery:** Technical documentation\n\n**PROFESSIONAL EXPERIENCE**\n**Northstar Labs**\n- Scoped API mappings for customer onboarding workflows.\n- Debugged authentication failures with reproducible endpoint tests.\n- Tested SDK endpoints for customer use cases.\n\n**EDUCATION & LANGUAGES**\n**Example University**`;
+    const result = resumeTailoringSimilarity(compositeResume, baseline, null);
+    expect(result.editableLineCount).toBe(5); // 2 skills lines + 3 bullets
+    expect(result.nearIdenticalBulletRatio).toBeLessThan(0.7);
+  });
 });

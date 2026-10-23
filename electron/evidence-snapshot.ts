@@ -26,10 +26,15 @@ import { parseJobDescriptionMetadata, resolveJobDescriptionPath } from "./job-de
 import { readCandidateProfile } from "./candidate-profile";
 import { buildContextManifest, readActiveContextManifest } from "./context";
 import { deriveVoicePresets } from "../src/shared/voice-presets";
+import { readBulletBank } from "./bullet-bank";
 
 const MANIFEST_PATH = ".sensei/active-context.json";
 const DENYLIST_PATH = "context/denylist.md";
 const APPLICATION_VOICE_PROFILE_PATH = "context/application_voice_profile.md";
+
+function normalizeResumeText(value: string): string {
+  return value.replaceAll("\\-", "-").replace(/[*_`#|]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
 
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
@@ -90,6 +95,7 @@ function normalizedName(value: string): string {
 function inferEmployer(
   row: Omit<EvidenceSnapshotRow, "employer">,
   canonicalEmployers: string[],
+  candidateProfile?: CandidateProfile | null,
 ): string | null {
   const project = normalizedName(row.project);
   const evidenceId = normalizedName(row.evidenceId);
@@ -98,6 +104,15 @@ function inferEmployer(
     return project.includes(normalized) || normalized.includes(project) || evidenceId.includes(normalized);
   });
   if (direct) return direct;
+  if (candidateProfile) {
+    const matchedProfileEmployer = candidateProfile.career.employers.find((e) =>
+      e.contextPaths?.some((cp) => row.sourcePath === cp || row.sourcePath.startsWith(cp))
+    );
+    if (matchedProfileEmployer) {
+      const canonicalMatch = canonicalEmployers.find((ce) => normalizedName(ce) === normalizedName(matchedProfileEmployer.name));
+      return canonicalMatch ?? matchedProfileEmployer.name;
+    }
+  }
   if (row.sourcePath.startsWith("context/structured/") && !row.evidenceId.startsWith("linkedin:")) {
     return canonicalEmployers[0] ?? null;
   }
@@ -173,7 +188,12 @@ function isQaEvidence(row: EvidenceSnapshotRow): boolean {
   return QA_EVIDENCE_PATTERN.test(`${row.project} ${row.claim} ${row.scope}`);
 }
 
-export function buildApplicationRouting(rows: EvidenceSnapshotRow[], jobDescription: string, preferredEvidenceIds: string[] = []): EvidenceSnapshot["applicationRouting"] {
+export function buildApplicationRouting(
+  rows: EvidenceSnapshotRow[],
+  jobDescription: string,
+  preferredEvidenceIds: string[] = [],
+  canonicalEmployers: string[] = [],
+): EvidenceSnapshot["applicationRouting"] {
   const jdTokens = routingTokens(jobDescription);
   const customerTarget = customerFacingTarget(jobDescription);
   const aiTarget = AI_ROLE_PATTERN.test(jobDescription) ? 4 : 0;
@@ -240,6 +260,15 @@ export function buildApplicationRouting(rows: EvidenceSnapshotRow[], jobDescript
   // across sources before adding lower-authority corroboration.
   const preferred = new Set(preferredEvidenceIds);
   scored.filter((candidate) => preferred.has(candidate.row.evidenceId)).forEach(add);
+
+  if (canonicalEmployers.length) {
+    for (const emp of canonicalEmployers) {
+      scored
+        .filter((candidate) => candidate.row.employer && normalizedName(candidate.row.employer) === normalizedName(emp))
+        .slice(0, 3)
+        .forEach(add);
+    }
+  }
 
   if (customerTarget > 0) {
     scored
@@ -692,9 +721,9 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
   const canonicalEmployers = canonicalResult.canonicalResume?.employers.map((employer) => employer.name) ?? [];
   const normalizedRows = rows.map((row) => ({
     ...row,
-    employer: row.evidenceId.startsWith("job:") ? null : inferEmployer(row, canonicalEmployers),
+    employer: row.evidenceId.startsWith("job:") ? null : inferEmployer(row, canonicalEmployers, candidateProfile),
   })).sort((a, b) => a.evidenceId.localeCompare(b.evidenceId));
-  const applicationRouting = buildApplicationRouting(normalizedRows, jobDescriptionText);
+  const applicationRouting = buildApplicationRouting(normalizedRows, jobDescriptionText, [], canonicalEmployers);
   const snapshotCore = {
     schemaVersion: 1 as const,
     jobId,
@@ -751,10 +780,70 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
     }
   }
   if (snapshot.canonicalResume && snapshot.applicationRouting) {
+    const bulletBank = await readBulletBank(workspace).catch(() => null);
+    const bankBulletsByText = new Map<string, string[]>();
+    if (bulletBank?.bullets) {
+      for (const b of bulletBank.bullets) {
+        bankBulletsByText.set(normalizeResumeText(b.text), b.evidenceIds);
+      }
+    }
     const evidenceById = new Map(snapshot.evidenceRows.map((row) => [row.evidenceId, row]));
     const routedRows = snapshot.applicationRouting.selectedEvidenceIds
       .map((evidenceId) => evidenceById.get(evidenceId))
       .filter((row): row is EvidenceSnapshotRow => Boolean(row));
+
+    const resumeTemplateEmployers = snapshot.canonicalResume.employers.map((employer) => {
+      const empRows = routedRows.filter((r) => r.employer && normalizedName(r.employer) === normalizedName(employer.name));
+      const baselineBullets = employer.originalBullets.map((text) => {
+        const bankMatch = bankBulletsByText.get(normalizeResumeText(text));
+        const validBankIds = bankMatch?.filter((id) => snapshot.applicationRouting?.selectedEvidenceIds.includes(id)) ?? [];
+        if (validBankIds.length) {
+          return { text, evidenceIds: validBankIds };
+        }
+        if (empRows.length) {
+          return { text, evidenceIds: [empRows[0]!.evidenceId] };
+        }
+        const fallback = routedRows[0]?.evidenceId;
+        return { text, evidenceIds: fallback ? [fallback] : [] };
+      });
+      return {
+        name: employer.name,
+        originalBulletCount: employer.originalBulletCount,
+        originalBullets: employer.originalBullets,
+        baselineBullets,
+      };
+    });
+
+    const requiredEvidenceIds = new Set<string>();
+    for (const emp of resumeTemplateEmployers) {
+      for (const bullet of emp.baselineBullets) {
+        for (const id of bullet.evidenceIds) {
+          requiredEvidenceIds.add(id);
+        }
+      }
+    }
+
+    const leanRows: EvidenceSnapshotRow[] = [];
+    const addedIds = new Set<string>();
+    const addLean = (row: EvidenceSnapshotRow) => {
+      if (addedIds.has(row.evidenceId)) return;
+      addedIds.add(row.evidenceId);
+      leanRows.push(row);
+    };
+
+    for (const row of routedRows) {
+      if (requiredEvidenceIds.has(row.evidenceId)) addLean(row);
+    }
+    for (const emp of snapshot.canonicalResume.employers) {
+      const empRows = routedRows.filter((r) => r.employer && normalizedName(r.employer) === normalizedName(emp.name));
+      empRows.slice(0, 2).forEach(addLean);
+    }
+    const LEAN_EVIDENCE_LIMIT = 20;
+    for (const row of routedRows) {
+      if (leanRows.length >= LEAN_EVIDENCE_LIMIT) break;
+      addLean(row);
+    }
+
     const stylePolicy = snapshot.sourceFiles.find((source) => source.path === APPLICATION_VOICE_PROFILE_PATH)?.contextText ?? "";
     const resumePlan = buildResumePlan(routedRows, snapshot.canonicalResume, snapshot.baseResumeFootprint, jobDescriptionText, candidateProfile);
     const configuredSkillCategories = candidateProfile?.preferences.resume.skillsCategories ?? [];
@@ -786,15 +875,11 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       resumeTemplate: {
         baselineId: snapshot.canonicalResume.baselineId,
         originalSkillsLines: snapshot.canonicalResume.originalSkillsLines,
-        employers: snapshot.canonicalResume.employers.map((employer) => ({
-          name: employer.name,
-          originalBulletCount: employer.originalBulletCount,
-          originalBullets: employer.originalBullets,
-        })),
+        employers: resumeTemplateEmployers,
         editableSkillCategories,
       },
       footprint: snapshot.baseResumeFootprint,
-      evidenceRows: routedRows.map((row) => {
+      evidenceRows: leanRows.map((row) => {
         const route = routeById.get(row.evidenceId);
         return {
           evidenceId: row.evidenceId,
@@ -820,13 +905,13 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
           ...brief,
           introContract: brief.introContract?.slice(0, 3),
           requiredElements: brief.requiredElements.slice(0, 6),
-          prohibitedPatterns: brief.prohibitedPatterns.slice(0, 24),
+          prohibitedPatterns: brief.prohibitedPatterns.slice(0, 16),
         };
       })(),
       instructions: [
         "Use only evidenceRows for candidate facts; preserve employer, timeline, scope, eligibility, and classification ceilings.",
-        "Use the JD to prioritize supported work, never to rewrite candidate history. Follow resumePlan and resumeTemplate exactly.",
-        "Substantively reframe 4-5 experience bullets for the target role using eligible evidence and target themes; do not copy baseline bullets verbatim (prevents RESUME_TAILORING_TOO_SIMILAR), and keep total experience words strictly within targetExperienceWordMin and targetExperienceWordMax.",
+        "Surgical Diffing Standard: Earlier, less relevant historical roles (earlier contracts, internships, or past roles) must remain frozen verbatim from resumeTemplate.employers[i].baselineBullets. Only tailor the 3-4 target current-employer bullets and skills headings to align with the JD.",
+        "Maintain natural bullet length (~16-20 words per bullet) matching baseline footprint density without manual word-by-word arithmetic.",
         "Strictly eliminate AI slop words (delve, leverage, utilize, navigate, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, intersection, synergy, beacon).",
         "In the cover letter, follow the 3-act narrative architecture (The Connection, The Career Journey & Motivation, The Standout Proof Point); do not write a mini-resume list of tools.",
         "In the cover letter opening paragraph, introduce the candidate ('I' / 'my') and explicitly include both the target company and role names (prevents COVER_LETTER_INTRO_IMPERSONAL).",

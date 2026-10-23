@@ -3,7 +3,7 @@
 **Stage ID:** `04-final-panel`  
 **Stage Name:** Final Panel & Executive Interview  
 **Duration & Format:** 30–45 minute executive/leadership interview via Zoom  
-**Interviewer Persona:** VP of Engineering, VP of Product/Solutions, Chief Technology Officer, Co-Founder, or Cross-Functional Executive  
+**Interviewer Persona:** VP, Chief Executive / Officer, Founder/Co-Founder, Managing Director, or Cross-Functional Executive  
 
 ---
 
@@ -13,9 +13,9 @@ The Final Panel evaluates high-level alignment, intellectual humility, cultural 
 1. Long-term alignment with the company's multi-year mission and market direction.
 2. Intellectual humility: taking accountability, receiving critical feedback, and learning from missteps.
 3. Cross-functional leadership and scaling philosophy during growth.
-4. Executive communication: distilling complex technical realities into clear business trade-offs.
+4. Executive communication: distilling complex functional realities into clear business trade-offs.
 
-**The Golden Rule of Round 04:** Speak as a strategic peer and future organizational leader. Avoid getting bogged down in low-level code mechanics or repeating standard resume bullet points. Focus on macro business impact, culture add, and strategic trade-offs.
+**The Golden Rule of Round 04:** Speak as a strategic peer and future organizational leader. Avoid getting bogged down in low-level operational or technical mechanics or repeating standard resume bullet points. Focus on macro business impact, culture add, and strategic trade-offs.
 
 ---
 
@@ -41,8 +41,8 @@ The question bank must contain **strictly 6–8 primary questions**:
 2. An experience where you were wrong or had to fundamentally revise a strongly held conviction (intellectual humility).
 3. Maintaining high execution standards and cross-functional empathy during rapid growth.
 4. Communicating high-stakes risk or bad news to executive stakeholders clearly and proactively.
-5. Cross-functional alignment: resolving friction when engineering, product, and sales incentives clash.
-6. Balancing short-term tactical client demands against long-term architectural and business defensibility.
+5. Cross-functional alignment: resolving friction when departmental incentives clash (e.g. Sales, Product, Operations, Finance, Engineering).
+6. Balancing short-term tactical demands against long-term organizational, product, and business defensibility.
 7. Executive Reverse Questions (multi-year vision, strategic bets, market positioning).
 
 ### Primary Question Card Format:
@@ -69,6 +69,6 @@ The question bank must contain **strictly 6–8 primary questions**:
 ---
 
 ## 4. Strict Prohibitions
-- **NO Low-Level Mechanical Trivia:** Never spend executive time discussing syntax, specific compiler flags, or trivial tooling details.
+- **NO Low-Level Mechanical Trivia:** Never spend executive time discussing low-level mechanics, minor spreadsheet formulas, code syntax, or trivial procedural details.
 - **NO Basic Recruiter Pitches:** Do not repeat the Round 01 logistics or elevator pitch.
 - **NO Corporate Jargon / Slop:** Avoid clichés like "synergy", "paradigm shift", or "rockstar"; speak with grounded, authentic clarity.

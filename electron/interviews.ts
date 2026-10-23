@@ -176,7 +176,14 @@ async function buildDashboardBrief(workspacePath: string, round: InterviewRound,
   ].slice(0, 10).map((item) => dashboardItem(item, "caution", "primary"));
   const researchList = listItemsFromSection(research, paths.research ?? "", /company|product|role|research|what .* does|signals|recent/i, 8);
   const companyFacts = uniqueDashboardItems(researchList.length ? researchList : sectionItems(research, paths.research ?? "", /company|product|role|research|what .* does|signals|recent/i, 10), 10).map((item) => dashboardItem(item, "company_fact", "secondary", "official"));
-  const technicalTopics = priorityQuestions.filter((item) => /api|sdk|system|debug|data|technical|architecture|code|sql|cloud|integration|webhook/i.test(`${item.title} ${item.text}`)).slice(0, 10).map((item) => ({ ...item, category: "technical" as const }));
+  const technicalTopics = priorityQuestions
+    .filter((item) =>
+      /api|sdk|system|debug|data|technical|architecture|code|sql|cloud|integration|webhook|pipeline|deal|quota|prospect|lead|customer|retention|churn|funnel|conversion|metric|margin|revenue|budget|forecast|pricing|sla|compliance|governance|product|feature|roadmap|user journey|prioritization|onboarding|escalation|workflow|campaign|cadence/i.test(
+        `${item.title} ${item.text}`,
+      ),
+    )
+    .slice(0, 10)
+    .map((item) => ({ ...item, category: "technical" as const }));
   const challengeTopics = sectionItems(challengeBrief, paths.challengeBrief ?? "", /challenge|exercise|assessment|practice|scenario|implementation/i, 10).map((item) => dashboardItem(item, "challenge", "primary"));
   const practiceReferences = practiceDashboardItems(practiceLabs, paths.practiceLabs ?? "");
   const debriefReferences = sectionItems(debriefAnalysis, paths.debriefAnalysis ?? "", /worked|strength|improv|missed|lesson|next|question/i, 10).map((item) => dashboardItem(item, "debrief_lesson", "secondary", "reported"));
@@ -204,7 +211,16 @@ function normalizeStage(value: unknown): InterviewStage {
   if (normalized.includes("onsite") || normalized.includes("on site")) return "onsite";
   if (normalized.includes("final panel") || normalized.includes("team panel") || normalized.includes("panel")) return "final_panel";
   if (normalized.includes("executive") || normalized.includes("founder") || normalized.includes("ceo")) return "executive";
-  if (normalized.includes("practical") || normalized.includes("evaluation")) return "practical_evaluation";
+  if (
+    normalized.includes("practical") ||
+    normalized.includes("evaluation") ||
+    normalized.includes("pitch") ||
+    normalized.includes("role play") ||
+    normalized.includes("case study") ||
+    normalized.includes("presentation") ||
+    normalized.includes("scenario")
+  )
+    return "practical_evaluation";
   if (normalized.includes("technical") || normalized.includes("engineering")) return "technical";
   return "unknown";
 }

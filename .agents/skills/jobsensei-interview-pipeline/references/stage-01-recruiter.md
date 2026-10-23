@@ -3,7 +3,7 @@
 **Stage ID:** `01-recruiter-screen`  
 **Stage Name:** Recruiter Screen  
 **Duration & Format:** 15–20 minute non-technical screen via phone or Zoom  
-**Interviewer Persona:** Talent Acquisition Partner, Technical Recruiter, or Recruiting Coordinator  
+**Interviewer Persona:** Talent Acquisition Partner, Recruiter, or Recruiting Coordinator  
 
 ---
 
@@ -12,10 +12,10 @@
 The Recruiter Screen is an initial operational and qualification filter. The recruiter's scorecard evaluates:
 1. Basic communication clarity and professional demeanor.
 2. High-level career trajectory arc and genuine role motivation.
-3. Checklist verification of core domain, stack, and customer-facing requirements.
+3. Checklist verification of core domain, key tools/methods, and customer-facing or stakeholder requirements.
 4. Practical logistics: location/commute, compensation expectations, work authorization, and transition timeline.
 
-**The Golden Rule of Round 01:** Keep answers concise (under 60 seconds). Never explain low-level architecture, never recite detailed debugging monologues, and never burn deep problem-solving stories on an initial recruiter call.
+**The Golden Rule of Round 01:** Keep answers concise (under 60 seconds). Never explain low-level mechanics or architecture, never recite detailed debugging or procedural monologues, and never burn deep problem-solving stories on an initial recruiter call.
 
 ---
 
@@ -70,7 +70,7 @@ Never write scripted paragraphs or `Situation -> Action -> Result` monologues. S
 ---
 
 ## 4. Strict Prohibitions
-- **NO Fabricated Experience:** Never invent client names, outages, or metrics.
+- **NO Fabricated Experience:** Never invent client names, incidents, or metrics.
 - **NO Scripted Monologues:** Never output text inside quotation marks or write paragraphs for the candidate to memorize.
-- **NO Architecture / Technical Trivia:** Zero distributed systems design, zero low-level code debugging, zero math or algorithmic trivia.
+- **NO Low-Level Mechanics or Trivia:** Zero deep system designs, zero low-level debugging or niche mechanics, zero complex math or algorithmic trivia.
 - **NO Recycled Stories:** Do not use retrospective managerial crisis stories here; save those for Round 02.

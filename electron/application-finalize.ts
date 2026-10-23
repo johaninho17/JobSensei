@@ -77,14 +77,35 @@ function materializeBundle(
     if (bands.has("current")) return "current";
     return ids.length ? "prior" : null;
   };
-  const claim = (item: { text: string; evidenceIds: string[] }, employerSpecific = false) => ({
-    publicText: item.text,
-    claimType: item.evidenceIds.length ? "candidate" as const : "non-factual" as const,
-    evidenceIds: item.evidenceIds,
-    sourcePaths: sourcePaths(item.evidenceIds),
-    timeline: timeline(item.evidenceIds, employerSpecific),
-    ownership: item.evidenceIds.length ? "supported" : "",
-  });
+  const normalizeText = (val: string) => val.replace(/[*_`#|\\-]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const claim = (item: { text: string; evidenceIds: string[] }, employerSpecific = false, employerName?: string) => {
+    let ids = item.evidenceIds;
+    if (ids.length === 0 && employerName && snapshot.canonicalResume) {
+      const baselineEmp = snapshot.canonicalResume.employers.find((e) => normalizeText(e.name) === normalizeText(employerName));
+      if (baselineEmp) {
+        const isVerbatim = baselineEmp.originalBullets.some((b) => normalizeText(b) === normalizeText(item.text));
+        if (isVerbatim) {
+          const fallbackId = snapshot.applicationRouting?.routes.find((r) => r.employer && normalizeText(r.employer) === normalizeText(employerName))?.evidenceId
+            ?? snapshot.applicationRouting?.selectedEvidenceIds.find((id) => {
+              const r = rows.get(id);
+              return r?.employer && normalizeText(r.employer) === normalizeText(employerName);
+            })
+            ?? snapshot.applicationRouting?.selectedEvidenceIds[0];
+          if (fallbackId) {
+            ids = [fallbackId];
+          }
+        }
+      }
+    }
+    return {
+      publicText: item.text,
+      claimType: ids.length ? "candidate" as const : "non-factual" as const,
+      evidenceIds: ids,
+      sourcePaths: sourcePaths(ids),
+      timeline: timeline(ids, employerSpecific),
+      ownership: ids.length ? "supported" : "",
+    };
+  };
   const coverItems = bundle.coverLetter.bodyParagraphs.flatMap((paragraph) => paragraph.sentences);
   const coverClaims = coverItems.map((item) => claim(item));
   const arcClaims = coverClaims.filter((mapping) => mapping.claimType === "candidate" && mapping.evidenceIds.length);
@@ -129,7 +150,7 @@ function materializeBundle(
         publicArtifact: resumeName,
         claimMappings: [
           ...bundle.resume.skillsLines.map((item) => claim(item)),
-          ...bundle.resume.employers.flatMap((employer) => employer.bullets.map((item) => claim(item, true))),
+          ...bundle.resume.employers.flatMap((employer) => employer.bullets.map((item) => claim(item, true, employer.name))),
         ],
       },
       coverLetter: {

@@ -3,7 +3,7 @@
 **Stage ID:** `02-hiring-manager`  
 **Stage Name:** Hiring Manager Screen  
 **Duration & Format:** 30–45 minute management & ownership interview via Zoom  
-**Interviewer Persona:** Engineering Manager, Solutions Director, Forward Deployed Practice Lead, or Department Head  
+**Interviewer Persona:** Functional Manager, Practice Lead, Director, VP, or Department Head  
 
 ---
 
@@ -41,12 +41,12 @@ This round produces **The Managerial Ownership & Decision Playbook**:
 - Company-wide background belongs once at `interviews/company_research.md`. Do not duplicate company research inside this folder.
 
 ### `prep.md` Required Sections:
-1. **Executive Career Introduction & Operating Philosophy:** 45–60 seconds on the candidate's authentic career evolution, why they chose customer/solutions work, and their personal operating principles.
+1. **Executive Career Introduction & Operating Philosophy:** 45–60 seconds on the candidate's authentic career evolution, why they chose this discipline, and their personal operating principles.
 2. **Core Generalizable Decision Frameworks:**
-   - *Framework A (Ambiguity Deconstruction):* Translating vague client desires into baseline metrics and verifiable API contracts.
-   - *Framework B (Systematic Diagnostic Triage):* Isolating layers (environment -> network -> payload -> application logic), minimal reproduction scripts, and proactive customer updates.
+   - *Framework A (Ambiguity Deconstruction):* Translating vague stakeholder or customer desires into baseline success criteria, measurable metrics, and verifiable milestones.
+   - *Framework B (Systematic Diagnostic Triage):* Isolating failure points, establishing baseline reproductions or root-cause metrics, and maintaining proactive stakeholder updates.
    - *Framework C (Prioritization & Velocity):* Triaging by blocker severity, transparent asynchronous updates, and dedicated deep-work blocks.
-   - *Framework D (Managing Customer / Stakeholder Pushback):* Listening without defensiveness, root-cause investigation, temporary unblocking workarounds, and internal collaboration.
+   - *Framework D (Managing Customer / Stakeholder Pushback):* Listening without defensiveness, root-cause investigation, temporary unblocking workarounds, and cross-functional alignment.
 3. **Truthful Evidence Anchors:** Inventory of verified projects from `data/context/` mapped to these frameworks with strict truth boundaries.
 4. **First 30-60-90 Day Execution Plan:** Realistic, high-impact ramp milestones tailored to the target role.
 5. **Manager-Targeted Reverse Questions:** 5–6 high-impact questions on team dynamics, management cadences, and product feedback loops.
@@ -57,15 +57,15 @@ This round produces **The Managerial Ownership & Decision Playbook**:
 
 The question bank must contain **strictly 8–10 primary questions**:
 1. Career walkthrough tailored to leadership (operating philosophy and transition drivers).
-2. End-to-end technical engagement ownership (discovery through deployment and monitoring).
-3. Handling ambiguity when a customer brings ill-defined or shifting requirements.
-4. Systematic diagnostic troubleshooting under pressure (framework + truthful anchor).
-5. Prioritizing concurrent client accounts and maintaining project velocity.
-6. Handling customer pushback on technical limitations or platform friction.
-7. Balancing custom client-specific code against reusable core platform features.
-8. A project that did not go as planned / course-correcting a technical decision.
+2. End-to-end initiative, account, or engagement ownership (discovery/scoping through execution and value delivery).
+3. Handling ambiguity when a customer or stakeholder brings ill-defined or shifting requirements.
+4. Systematic diagnostic troubleshooting or problem resolution under pressure (framework + truthful anchor).
+5. Prioritizing concurrent accounts/workstreams and maintaining execution velocity.
+6. Handling customer or stakeholder pushback on constraints, delivery trade-offs, or timeline friction.
+7. Balancing bespoke customer concessions or custom requests against scalable core products, processes, or roadmaps.
+8. A project or campaign that did not go as planned / course-correcting a key operational or strategic decision.
 9. 30-60-90 day execution vision for this specific team.
-10. Reverse questions for the Hiring Manager (cadences, team friction, product feedback).
+10. Reverse questions for the Hiring Manager (cadences, team friction, cross-functional feedback loops).
 
 ### Primary Question Card Format:
 ```markdown

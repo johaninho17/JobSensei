@@ -8,6 +8,7 @@ JobSensei is a local-first career workspace. Candidate identity, chronology, pre
 - Treat selected structured career evidence as factual authority. Broad context clarifies; LinkedIn and secondary resumes corroborate history; the base resume protects identity, chronology, structure, and presentation.
 - Never modify source resumes or career-context documents.
 - Never read sibling jobs, prior tailored applications, or unselected context unless the user explicitly selects or names them.
+- Enforce the Universal Surgical Diffing Standard: Never rewrite historical or earlier career experience unless explicitly relevant. Keep foundational past roles frozen verbatim from the base resume, focusing tailoring strictly on the top skills categories and the 3–4 target bullets at the current/most recent employer.
 - Keep evidence IDs, warnings, hashes, and provenance out of employer-facing files.
 - Keep candidate-specific guidance in the local ignored profile or context, not in public skills or repository rules.
 
@@ -45,7 +46,7 @@ Use `$jobsensei-interview-pipeline` only after the user explicitly asks to prepa
   - *Round 04:* Strategic market alignment, executive vision, culture add, and high-impact macro business outcomes.
 - **Differentiated Reverse Questions by Persona:** Reverse questions must be strictly unique to the target interviewer persona:
   - *Recruiter:* Hiring process milestones, team growth rate, and onboarding expectations.
-  - *Hiring Manager:* Team operating cadences, managing client escalations, and balancing custom field requests against core roadmaps.
+  - *Hiring Manager:* Team operating cadences, managing stakeholder/client escalations, and balancing bespoke customer requests against core roadmaps and workflows.
   - *Practical / Peer:* Real-world day-to-day tooling bottlenecks, domain standards, and cross-functional peer collaboration.
   - *Executive:* Long-term market positioning, 2-to-3-year company vision, and key strategic priorities.
 - **No Scripted Pitches or Fake Incidents (Generalize Frameworks, Anchor Truthfully):** Never generate verbatim monologue scripts, quotation marks, or canned STAR mini-scripts. Never invent fake customer outages, imaginary partner crises, or fake technical parameters out of local development notes. Structure preparation around **Generalizable Decision Mental Models**, **Truthful Real Evidence Anchors**, and **Glanceable Talking Cues** that candidates use as cognitive anchors while speaking naturally in their own authentic voice.

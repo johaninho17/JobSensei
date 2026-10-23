@@ -39,24 +39,54 @@ This round produces **The Live Diagnostic & Execution Framework**:
 - Company-wide background belongs once at `interviews/company_research.md`. Do not duplicate company research inside this folder.
 
 ### `prep.md` Required Sections:
-1. **30-Second Technical / Craft Positioning Statement:** Core tools, operating methodology, and engineering/craft philosophy.
-2. **Live Decision & Diagnostic Trees:** 2–3 step-by-step diagnostic trees for isolating failure states in live systems.
-3. **Trade-Off Matrices:** Concrete trade-off comparisons across speed, reliability, operational complexity, and cost (e.g., deterministic vs. model-based evaluation, synchronous vs. asynchronous telemetry export).
-4. **Architectural / Execution Blueprint:** A clean, first-principles ASCII architecture diagram or operational workflow illustrating standard end-to-end data flow.
-5. **Peer-Targeted Reverse Questions:** 5–6 high-impact questions on daily practitioner tooling, CI/CD friction, technical debt, and cross-team collaboration.
+1. **30-Second Craft Positioning Statement:** Core methodologies, primary domain tools, and operating philosophy.
+2. **Live Decision & Diagnostic Trees:** 2–3 step-by-step diagnostic trees or decision rubrics for navigating live friction, trade-offs, or escalation paths.
+3. **Trade-Off Matrices:** Concrete trade-off comparisons across speed, quality, operational complexity, and resource cost.
+4. **Architectural / Operational Blueprint:** A clean, first-principles ASCII architecture diagram, operational workflow, or user/deal progression illustrating standard end-to-end flow.
+5. **Peer-Targeted Reverse Questions:** 5–6 high-impact questions on daily practitioner tooling, operational bottlenecks, friction points, and peer collaboration.
 
 ---
 
 ## 4. `question_bank.md` Structure & Format Standard
 
-The question bank must contain **strictly 6–8 practical scenarios**:
-1. End-to-end system instrumentation / architecture design.
-2. Isolating live latency spikes or performance degradation.
-3. Quality gates & evaluation strategies (deterministic checks vs. deep analysis).
-4. State boundary enforcement / handling data corruption across steps.
-5. Scaling telemetry / throughput architecture under high request loads.
-6. Diagnostic network / connectivity troubleshooting across isolated environments.
-7. Reverse questions for Peer Practitioners (tooling friction, deployment cadences).
+The question bank must contain **strictly 6–8 practical scenarios** tailored to the candidate's target discipline:
+
+### Discipline-Specific Scenario Archetypes:
+- **Sales / Commercial / BDR ("Role-Play & Pitch Simulation"):**
+  1. Live discovery questioning under ambiguity (uncovering latent business pain, economic buyer identification).
+  2. Direct objection handling (pricing pushback, incumbent competitor entrenchment, internal inertia).
+  3. Tailored value-prop walkthrough for an executive buyer.
+  4. Pipeline triage and deal velocity prioritization across multiple stalled accounts.
+  5. Multi-threading complex buying committees across conflicting functional priorities.
+  6. Navigating commercial terms, legal redlines, or procurement hurdles without losing momentum.
+  7. Reverse questions for peer Account Executives / Sales Leads (quota attainment dynamics, enablement tooling).
+
+- **Product Management ("Product Sense & Case Study"):**
+  1. Product sense case study (designing a solution for an underserved persona or emerging market need).
+  2. Prioritization matrix (RICE framework balancing engineering debt vs. high-demand customer features).
+  3. Defining North Star and guardrail metrics for a critical launch.
+  4. Scoping trade-offs and MVP boundary enforcement under tight delivery deadlines.
+  5. Diagnosing a sudden KPI drop (retention, conversion, or engagement deconstruction).
+  6. Go-to-market rollout strategy and structured feedback loops.
+  7. Reverse questions for peer PMs (engineering-PM friction, roadmap planning cadences).
+
+- **Operations / Strategy / Customer Success / Finance ("Operational Scenario & Modeling"):**
+  1. Process bottleneck identification and workflow redesign.
+  2. Critical customer escalation triage and churn prevention recovery.
+  3. SLA breach mitigation and root-cause prevention workflow.
+  4. Unit economics or financial scenario modeling under shifting variable margins.
+  5. Vendor or partner contract renegotiation under constrained timelines.
+  6. Scaling operational processes while preserving quality and compliance standards.
+  7. Reverse questions for peer Operations / CS Leads (systemic process debt, internal tooling bottlenecks).
+
+- **Engineering / Technical / Solutions ("Technical & System Design"):**
+  1. End-to-end system instrumentation / architecture design.
+  2. Isolating live latency spikes or performance degradation.
+  3. Quality gates & evaluation strategies (deterministic checks vs. deep analysis).
+  4. State boundary enforcement / handling data corruption across steps.
+  5. Scaling telemetry / throughput architecture under high request loads.
+  6. Diagnostic network / connectivity troubleshooting across isolated environments.
+  7. Reverse questions for Peer Practitioners (tooling friction, deployment cadences).
 
 ### Primary Question Card Format:
 ```markdown

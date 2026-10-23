@@ -11,7 +11,9 @@ Use this skill automatically for a pasted JD or direct job-posting URL. The cand
 
 For a normal run, read only this skill, the supplied JD, and the new job's `.sensei/application_context.json`. Do not read `data/.sensei/active-context.json` or `.sensei/application_run.json` (the snapshot command reads active-context and outputs run metadata directly). Do not open source code, schemas, validators, other skills, raw context, the full snapshot, the base resume, or any existing job. Do not use subagents, scratch scripts, directory exploration, broad search, or prior application artifacts.
 
-For a URL, fetch that exact posting once and draft directly from the returned content. Do not inspect raw fetched HTML files or browse linked pages. If it cannot be fetched, ask the user to paste the JD and stop.
+For a URL:
+- If the native `read_url_content` tool is present in your toolset, use `read_url_content(Url: <url>)` once in a single turn.
+- If `read_url_content` is NOT available (CLI / agy environments), run a single clean command: `curl -sL "<url>" > data/jobs/<job-id>/original_jd.md`. Never run inline node scripts (`node -e`), multi-step shell commands, or piped sed/grep scripts. If the fetch fails or is blocked by an anti-bot screen, immediately ask the user to paste the JD and stop.
 
 ## One-Pass Flow
 
@@ -20,7 +22,11 @@ For a URL, fetch that exact posting once and draft directly from the returned co
 3. Derive `<job-id>` directly as lowercase kebab-case `<company>-<role-title>` (e.g., `gitlab-solutions-architect-public-sector-west`). Never run `ls` or directory checks. Below `3.5/5`, save only the screened result and stop. At or above the gate, write ONLY `data/jobs/<job-id>/original_jd.md`. Never create `pdfs/`, `.gitkeep`, `.sensei/job.json`, or `.sensei/status.json` manually (the snapshot and finalizer commands automatically generate all metadata and folder scaffolding).
 4. Run `npm run context:snapshot -- <job-id>` exactly once. Note `snapshotId` and `runId` from the command's stdout.
 5. Read `.sensei/application_context.json` once in a single turn. The compact context fits completely in one view and contains every routed claim, resume footprint, and template needed for the run.
-6. In one file-writing turn, create only `.sensei/application_bundle.json` using the contract below. To avoid latency, keep `evaluationMarkdown` focused strictly on the 6-row table, adapt pre-verified phrasing from `resumeTemplate.originalBullets` / Bullet Bank for foundational bullets while substantively reframing the 4-5 target bullets, and draft the 3-act cover letter (220-300 words).
+6. In one file-writing turn, create only `.sensei/application_bundle.json` using the contract below. Follow the **Surgical Diffing Standard**:
+   - For earlier foundational employers, copy `resumeTemplate.employers[i].baselineBullets` directly into `resume.employers[i].bullets`.
+   - For the current employer, adapt only the 3–4 target bullets to align with the JD, retaining 2–3 foundational anchor bullets.
+   - Curate the skills categories from `resumeTemplate.editableSkillCategories`.
+   - Draft the 3-act cover letter (220-300 words).
 7. Run `npm run application:finalize -- <job-id>` exactly once. Report its `fitScore`, `fitConfidence`, `gateStatus`, and warnings, then stop. Never inspect code, patch output, or retry after finalization.
 
 For an explicit regeneration, the saved JD is the only job-specific input. Existing generated files are stale outputs, not references. Never read them before replacement.
@@ -32,10 +38,11 @@ For an explicit regeneration, the saved JD is the only job-specific input. Exist
 - Follow `resumePlan`, `resumeTemplate`, `footprint`, `denylistRules`, and the local candidate preferences. The finalizer restores protected identity, contact details, chronology, titles, dates, locations, education, and layout.
 - Use `resumeTemplate.originalBullets` and `originalSkillsLines` as the presentation baseline and wording reference; they cannot independently prove a claim, metric, tool, or outcome.
 - Omit any resume summary section by default unless `preferences.resume.includeSummary` is explicitly enabled in the candidate profile.
-- Consult the candidate's Reusable Bullet Bank (`data/profile/bullet_bank.json`) when available. Where the candidate has pre-verified, high-impact bullets matching the role's themes, prioritize reusing or adapting those bullets to preserve proven wording, save compute, and maintain consistency.
-- Curate `skillsLines` categories specifically for the target job's domain using eligible evidence (e.g. adapting headings from generic baselines to job-relevant categories such as "Partner Solutions & Enablement", "Cloud & Data Systems", "Operational Frameworks", etc.). Do not leave skills categories statically frozen across distinct job domains.
-- Substantively reframe at least 4-5 experience bullets to align directly with the target role's core responsibilities and priorities using routed eligible evidence. Merely copying baseline bullets verbatim triggers `RESUME_TAILORING_TOO_SIMILAR`.
-- Strictly adhere to the experience word count budget (`footprint.targetExperienceWordMin` to `footprint.targetExperienceWordMax`). Do not exceed `targetExperienceWordMax` (triggers `RESUME_EXPERIENCE_DENSITY_HIGH`).
+- **Universal Surgical Diffing Standard (Applicable to Any Candidate in Any Field):**
+  - **Foundational & Historical Roles:** Earlier, less relevant historical roles (past contracts, internships, or earlier employment) must remain **frozen verbatim** directly from `resumeTemplate.employers[i].baselineBullets`. Do not rewrite, tweak, or touch historical experience unless there is explicit direct relevance or selected evidence for it.
+  - **Skills Categories & Headings:** Curate `skillsLines` categories specifically for the target job's domain using eligible evidence (e.g. adapting headings from generic baselines to job-relevant categories matching the target domain).
+  - **Target Bullets (3–4 Bullets Only):** Substantively reframe only the 3–4 high-impact target bullets at the current or most recent role to align directly with the target job's core responsibilities and priorities using routed eligible evidence.
+  - **Natural Bullet Density:** Maintain natural bullet length (~16–20 words per bullet) consistent with the baseline footprint. Total experience word counts within ±15% of footprint automatically satisfy density tolerances without manual arithmetic.
 - Align bullet emphasis with the core discipline of the target role (e.g., leadership, operations, commercial, technical, or people enablement) based on the candidate's supported background without exaggerating scope or ownership.
 - Use direct, natural professional language appropriate to the candidate's field. Strictly adhere to `$jobsensei-anti-slop` standards: eliminate machine clichés (delve, leverage, utilize, navigate, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, intersection, synergy, beacon, rule-of-three corporate lists). Prefer an accurate action, concrete method or tool, and supported purpose or result.
 - Keep the cover letter candidate-first and follow the 3-Act Narrative Architecture (target 220-300 words):
@@ -111,7 +118,7 @@ Write `.sensei/application_bundle.json` only. Put exact evidence IDs beside each
 }
 ```
 
-Every editable skills line, resume bullet, and factual cover-letter sentence needs one or more exact routed evidence IDs. Personal motivation or a closing may use an empty list. Use at least two evidence-backed cover-letter sentences with distinct evidence so the career arc can be derived. Do not include protected resume fields in the bundle.
+Every editable skills line, target current-employer bullet, and factual cover-letter sentence needs one or more exact routed evidence IDs. Foundational earlier bullets copy their pre-mapped evidence IDs from `baselineBullets`. Personal motivation or a closing may use an empty list. Use at least two evidence-backed cover-letter sentences with distinct evidence so the career arc can be derived. Do not include protected resume fields in the bundle.
 
 ## Time Budget
 

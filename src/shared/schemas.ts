@@ -675,6 +675,10 @@ const applicationContextV2Schema = z.object({
       name: z.string().min(1),
       originalBulletCount: z.number().int().nonnegative(),
       originalBullets: z.array(z.string()),
+      baselineBullets: z.array(z.object({
+        text: z.string().min(1),
+        evidenceIds: z.array(z.string().min(1)),
+      })).optional(),
     })),
     editableSkillCategories: z.array(z.string()),
   }),

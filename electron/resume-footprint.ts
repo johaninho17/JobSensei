@@ -4,10 +4,10 @@ import mammoth from "mammoth";
 import { resumeFootprintSchema, type ResumeFootprint } from "../src/shared/schemas";
 import { assertInsideWorkspace } from "./workspace";
 
-const MIN_FOOTPRINT_RATIO = 1;
-const MAX_FOOTPRINT_RATIO = 1.1;
-const MIN_EXPERIENCE_RATIO = 0.95;
-const MAX_EXPERIENCE_RATIO = 1.05;
+const MIN_FOOTPRINT_RATIO = 0.9;
+const MAX_FOOTPRINT_RATIO = 1.15;
+const MIN_EXPERIENCE_RATIO = 0.85;
+const MAX_EXPERIENCE_RATIO = 1.15;
 
 export async function profileBaseResume(workspacePath: string, relativePath: string): Promise<ResumeFootprint> {
   const path = assertInsideWorkspace(workspacePath, resolve(workspacePath, relativePath));

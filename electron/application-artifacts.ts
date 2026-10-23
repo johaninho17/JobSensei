@@ -596,9 +596,9 @@ function employerBullets(markdown: string, employer: string): string[] {
 
 function firstEmployerName(markdown: string): string | null {
   const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-  const start = lines.findIndex((line) => stripMarkdown(line).toLowerCase() === "professional experience");
+  const start = lines.findIndex((line) => /(?:professional\s+|work\s+|relevant\s+|employment\s+)?experience/i.test(stripMarkdown(line).trim()));
   for (const line of lines.slice(Math.max(0, start + 1))) {
-    if (stripMarkdown(line).toLowerCase() === "education") break;
+    if (/(?:education|academic|credentials)/i.test(stripMarkdown(line).trim())) break;
     const match = /^\s*(?:#{1,6}\s*)?\*\*([^*|]+)\*\*/.exec(line);
     if (match?.[1]?.trim()) return match[1].trim();
   }
@@ -733,7 +733,7 @@ function validateCoverLetterLanguage(markdown: string): void {
 
 function validateResumeStructure(markdown: string): void {
   const normalized = stripMarkdown(markdown).toLowerCase();
-  const requiredInOrder = ["skills", "professional experience", "education"];
+  const requiredInOrder = ["skills", "experience", "education"];
   let cursor = -1;
   for (const section of requiredInOrder) {
     const next = normalized.indexOf(section, cursor + 1);
@@ -761,8 +761,8 @@ function validateResumeEmphasis(markdown: string): void {
 
 function experienceBulletCount(markdown: string): number {
   const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-  const start = lines.findIndex((line) => stripMarkdown(line).toLowerCase() === "professional experience");
-  const end = lines.findIndex((line, index) => index > start && stripMarkdown(line).toLowerCase() === "education");
+  const start = lines.findIndex((line) => /(?:professional\s+|work\s+|relevant\s+|employment\s+)?experience/i.test(stripMarkdown(line).trim()));
+  const end = lines.findIndex((line, index) => index > start && /(?:education|academic|credentials)/i.test(stripMarkdown(line).trim()));
   if (start < 0 || end < 0) throw new Error("The resume must preserve Professional Experience and Education sections.");
   return lines.slice(start + 1, end).filter((line) => /^\s*[-*+]\s+/.test(line)).length;
 }
@@ -791,8 +791,8 @@ function countSkillChanges(baseline: string, tailored: string): number {
 
 function skillSectionLines(markdown: string): string[] {
   const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-  const start = lines.findIndex((line) => stripMarkdown(line).toLowerCase().includes("skills"));
-  const end = lines.findIndex((line, index) => index > start && stripMarkdown(line).toLowerCase() === "professional experience");
+  const start = lines.findIndex((line) => /(?:skills|competencies|qualifications|expertise)/i.test(stripMarkdown(line)));
+  const end = lines.findIndex((line, index) => index > start && /(?:professional\s+|work\s+|relevant\s+|employment\s+)?experience/i.test(stripMarkdown(line).trim()));
   if (start < 0 || end < 0) return [];
   return lines.slice(start + 1, end)
     .filter((line) => line.trim())
@@ -803,8 +803,8 @@ function skillSectionLines(markdown: string): string[] {
 
 function experienceBullets(markdown: string): string[] {
   const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-  const start = lines.findIndex((line) => stripMarkdown(line).toLowerCase() === "professional experience");
-  const end = lines.findIndex((line, index) => index > start && stripMarkdown(line).toLowerCase() === "education");
+  const start = lines.findIndex((line) => /(?:professional\s+|work\s+|relevant\s+|employment\s+)?experience/i.test(stripMarkdown(line).trim()));
+  const end = lines.findIndex((line, index) => index > start && /(?:education|academic|credentials)/i.test(stripMarkdown(line).trim()));
   if (start < 0 || end < 0) return [];
   return lines.slice(start + 1, end).filter((line) => /^\s*[-*+]\s+/.test(line)).map((line) => line.replace(/^\s*[-*+]\s+/, ""));
 }

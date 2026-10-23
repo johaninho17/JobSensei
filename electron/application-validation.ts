@@ -94,9 +94,9 @@ function lineSimilarity(left: string, right: string): number {
 
 function editableResumeLines(markdown: string): string[] {
   const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-  const skills = lines.findIndex((line) => /^\s*(?:\*\*|__)?skills(?:\s*&\s*languages)?/i.test(line));
-  const experience = lines.findIndex((line) => /^\s*(?:\*\*|__)?professional experience/i.test(line));
-  const education = lines.findIndex((line) => /^\s*(?:\*\*|__)?education/i.test(line));
+  const skills = lines.findIndex((line) => /^\s*(?:\*\*|__)?(?:core competencies|technical skills|skills|qualifications|areas of expertise|competencies)(?:\s*&\s*languages)?/i.test(line));
+  const experience = lines.findIndex((line) => /^\s*(?:\*\*|__)?(?:professional\s+|work\s+|relevant\s+|employment\s+)?experience/i.test(line));
+  const education = lines.findIndex((line) => /^\s*(?:\*\*|__)?(?:education|academic|credentials)/i.test(line));
   if (skills < 0 || experience <= skills || education <= experience) return [];
   return [
     ...lines.slice(skills + 1, experience).filter((line) => normalizedResumeLine(line)),
@@ -471,12 +471,12 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
         });
       }
       const tailoring = resumeTailoringSimilarity(loaded.resumeMarkdown, loaded.snapshot.canonicalResume, loaded.evidence);
-      const minBulletChanges = Math.min(3, Math.max(1, Math.ceil((tailoring.editableLineCount - 4) * 0.25)));
+      const minBulletChanges = Math.min(2, Math.max(1, Math.ceil((tailoring.editableLineCount - 4) * 0.15)));
       if (
-        tailoring.substantiveMappedChangeCount < 4
+        tailoring.substantiveMappedChangeCount < 3
         || tailoring.substantiveMappedBulletChangeCount < minBulletChanges
-        || tailoring.nearIdenticalRatio >= 0.65
-        || tailoring.nearIdenticalBulletRatio >= 0.7
+        || tailoring.nearIdenticalRatio >= 0.88
+        || tailoring.nearIdenticalBulletRatio >= 0.88
       ) {
         issues.push(issue(
           "RESUME_TAILORING_TOO_SIMILAR",
@@ -512,14 +512,19 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
         "warning",
       ));
     }
-    if (footprint?.targetExperienceWordMin && stats.experienceWordCount < footprint.targetExperienceWordMin) {
+    const minExpWordTolerance = Math.floor((footprint?.targetExperienceWordMin ?? 0) * 0.85);
+    const maxExpWordTolerance = Math.ceil((footprint?.targetExperienceWordMax ?? Infinity) * 1.15);
+    const minWordTolerance = Math.floor((footprint?.targetWordMin ?? 0) * 0.85);
+    const maxWordTolerance = Math.ceil((footprint?.targetWordMax ?? Infinity) * 1.15);
+
+    if (footprint?.targetExperienceWordMin && stats.experienceWordCount < minExpWordTolerance) {
       issues.push(issue("RESUME_EXPERIENCE_DENSITY_LOW", loaded.resumeName, "experienceWordCount", `The experience bullets contain ${stats.experienceWordCount} words; the preferred minimum is ${footprint.targetExperienceWordMin}.`, "Deepen supported bullets with method, scope, purpose, or documented impact in the next explicit run; never add filler or unsupported outcomes.", "warning"));
-    } else if (footprint?.targetWordMin && stats.wordCount < footprint.targetWordMin) {
+    } else if (footprint?.targetWordMin && stats.wordCount < minWordTolerance) {
       issues.push(issue("RESUME_DENSITY_LOW", loaded.resumeName, "wordCount", `The resume has ${stats.wordCount} words; the preferred minimum is ${footprint.targetWordMin}.`, "Review density if the exported page looks sparse; do not add unsupported content.", "warning"));
     }
-    if (footprint?.targetExperienceWordMax && stats.experienceWordCount > footprint.targetExperienceWordMax) {
+    if (footprint?.targetExperienceWordMax && stats.experienceWordCount > maxExpWordTolerance) {
       issues.push(issue("RESUME_EXPERIENCE_DENSITY_HIGH", loaded.resumeName, "experienceWordCount", `The experience bullets contain ${stats.experienceWordCount} words; the preferred maximum is ${footprint.targetExperienceWordMax}.`, "Review readability and one-page export without automatically deleting relevant truthful content.", "warning"));
-    } else if (footprint?.targetWordMax && stats.wordCount > footprint.targetWordMax) {
+    } else if (footprint?.targetWordMax && stats.wordCount > maxWordTolerance) {
       issues.push(issue("RESUME_DENSITY_HIGH", loaded.resumeName, "wordCount", `The resume has ${stats.wordCount} words; the preferred maximum is ${footprint.targetWordMax}.`, "Review density and one-page export without deleting relevant truthful content automatically.", "warning"));
     }
   }

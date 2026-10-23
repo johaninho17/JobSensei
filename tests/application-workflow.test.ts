@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   classifyApplicationArtifact,
+  resumeArtifactStats,
   validateApplicationArtifact,
 } from "../electron/application-artifacts";
 import { pdfOutputName } from "../electron/pdf-export";
@@ -116,4 +117,79 @@ Evidence ID: context:example:1`;
     expect(guide).toContain("## Customizing Skills");
     expect(`${rules}\n${guide}`).not.toMatch(/hardcoded candidate|private candidate data|personal employer history/i);
   });
+
+  it("validates resumes with composite headers without throwing and detects bullets accurately", () => {
+    const compositeResume = `**ALEX MORGAN — SOLUTIONS ENGINEER**
+alex@example.com | linkedin.com/in/alex-morgan
+
+**CORE COMPETENCIES & TECHNICAL SKILLS**
+**Solutions Architecture:** Client Onboarding, Technical Discovery, API Guidance
+**Software Engineering:** Python, TypeScript, Node.js, REST APIs, Microservices
+**AI & Cloud Systems:** GCP, Agent Architectures, Docker, Looker, BigQuery
+
+**PROFESSIONAL EXPERIENCE**
+**Northstar Labs** — Customer Solutions Engineer | Sep 2023 - Present
+- Led customer technical discovery and architecture planning for enterprise onboarding.
+- Guided enterprise onboarding, converting client requirements into API documentation.
+- Built and tested AI agent solutions using Agent Development Kit (ADK) and Python SDK.
+- Constructed REST APIs and SQL schema mappings to evaluate query performance.
+- Troubleshot authentication failures and API connectivity bottlenecks across live deployments.
+
+**Acme Corp** — Software Developer | Apr 2023 - Jul 2023
+- Built modular Angular and TypeScript frontend components to optimize user flows.
+- Translated complex operational requirements into intuitive user interfaces.
+- Conducted unit testing, debugging, and verification to maintain high code quality.
+
+**Example Cloud Systems** — Cloud Developer | Apr 2022 - Oct 2022
+- Engineered scalable microservices on GCP with Python data processing pipelines.
+- Managed CloudSQL PostgreSQL databases, refining index configurations.
+- Designed RESTful API endpoints using Node.js and Express.
+- Maintained automated CI/CD deployment pipelines using Docker containers.
+
+**EDUCATION & LANGUAGES**
+**Example University** — Master of Science
+**Languages:** English, French`;
+
+    const stats = resumeArtifactStats(compositeResume);
+    expect(stats.bulletCount).toBe(12);
+    expect(stats.experienceWordCount).toBeGreaterThan(100);
+    expect(() => validateApplicationArtifact(compositeResume, "resume")).not.toThrow();
+  });
+
+  it("strictly prevents private candidate profile data from entering public tests", async () => {
+    const candidatePath = join(root, "data/profile/candidate.json");
+    try {
+      const raw = await readFile(candidatePath, "utf8");
+      const profile = JSON.parse(raw);
+      const sensitiveTerms: string[] = [
+        profile.identity?.fullName,
+        profile.identity?.email,
+        profile.identity?.phone,
+        ...(profile.career?.employers?.map((e: { name: string }) => e.name) || []),
+      ].filter((term): term is string => Boolean(term && term.trim().length > 3));
+
+      const testFiles = [
+        "tests/application-workflow.test.ts",
+        "tests/application-reliability.test.ts",
+        "tests/resume-tailoring-similarity.test.ts",
+        "tests/evidence-authority.test.ts",
+        "tests/fit-scoring.test.ts",
+        "tests/interviews.test.ts",
+      ];
+
+      for (const relPath of testFiles) {
+        const content = await readFile(join(root, relPath), "utf8");
+        for (const term of sensitiveTerms) {
+          expect(content.toLowerCase()).not.toContain(term.toLowerCase());
+        }
+      }
+    } catch (err: any) {
+      if (err.code === "ENOENT" || err.code === "EPERM" || err.code === "EACCES") {
+        // In environments without local profile access or restricted perms, pass
+        return;
+      }
+      throw err;
+    }
+  });
 });
+
