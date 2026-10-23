@@ -406,40 +406,48 @@ export function buildCoverLetterBrief(
 ): ApplicationContext["coverLetterBrief"] {
   const metadata = parseJobDescriptionMetadata(jobDescription);
   const company = metadata.company ?? canonicalJob?.company ?? null;
-  const role = metadata.title ?? canonicalJob?.title ?? null;
-  const candidateName = profile?.identity.fullName ?? "the candidate";
-  const currentEmployer = profile?.career.employers[0]?.name ?? "the current employer";
-  const roleProblems = jobDescription.split(/\r?\n/)
-    .map((line) => line.replace(/^#+\s*/, "").replace(/^\s*[-*+]\s+/, "").replace(/\*\*/g, "").trim())
-    .filter((line) => line.length >= 35 && line.length <= 240)
-    .filter((line) => !/^(?:About|Who We Are|Our Mission|Benefits|Perks|Equal Opportunity|Salary|Compensation|Requirements|Qualifications|What You'll Do|What You Bring|Responsibilities|Role Summary)/i.test(line))
-    .filter((line) => !/\b(?:raise blockers|sprint ceremonies|standup|equal opportunity|affirmative action|medical, dental|401\(k\)|unlimited pto|bonus|salary range)\b/i.test(line))
-    .filter((line) => !(company && line.toLowerCase().includes(company.toLowerCase())))
-    .filter((line) => !(role && line.toLowerCase().includes(role.toLowerCase())))
-    .filter((line) => /\b(?:build|support|partner|lead|manage|design|deliver|solve|drive|improve|work with|responsib|customer|client)\b/i.test(line))
-    .slice(0, 1);
+  const headingTitle = jobDescription.split(/\r?\n/)
+    .map((line) => line.match(/^#\s+(.+?)\s*$/)?.[1]?.trim())
+    .find((title): title is string => Boolean(title) && !/original job description/i.test(title!)) ?? null;
+  const role = metadata.title ?? canonicalJob?.title ?? headingTitle;
+  const companyLabel = company ?? "the company";
+  const roleLabel = role ?? "the role";
+  const confidentialNames = profile?.truth.confidentialNames ?? [];
+  // This brief is the single owner of cover-letter structure. Skills point here; do not
+  // restate structure elsewhere. The JD is deliberately NOT summarized into the brief:
+  // feeding JD responsibilities made letters lecture employers about their own business.
   return {
-    targetWordMin: 220,
-    targetWordMax: 300,
-    hardWordMax: 360,
-    roleProblems,
+    targetWordMin: 250,
+    targetWordMax: 350,
+    hardWordMax: 400,
     company,
     role,
+    structure: [
+      `Paragraph 1 (opening): state plainly that you are applying for ${roleLabel} at ${companyLabel}, say who you are professionally, and give one genuine reason this company or role fits your own direction. Every sentence is about the candidate; at most one short clause about the company.`,
+      "Paragraphs 2-3 (body, one or two paragraphs): two or three concrete, evidence-backed examples of work the candidate did. Show how they work: owning problems, handling friction with customers or partners, learning fast. Add detail the resume does not give; do not restate resume bullets.",
+      "Final paragraph (close): restate interest briefly, thank the reader, and invite a conversation. Warm and direct, no promises of impact.",
+    ],
     introContract: [
-      `Candidate-first narrative: ${candidateName}'s story exists independently of the JD. Do not parrot the job description or recite qualification checklists.`,
-      `State the application directly and professionally in paragraph 1 connecting to ${company ?? "the company"} and ${role ?? "the role"}.`,
-      `Ground the narrative in who the candidate is as a person: why they made past career decisions, chose to step out of comfort zones, and what drives their working style.`,
+      "The letter is about the candidate: their career direction, why they made their key moves, and how they operate. The job description only decides which real examples to pick.",
+      `Never explain ${companyLabel}'s business, market, industry, or the role's responsibilities back to the reader.`,
+      "Write in the candidate's voice from styleRules: warm, plain-spoken, confident without hype.",
     ],
     requiredElements: [
-      "Follow the Human Narrative Architecture: Act 1 (The Hook & Honest Connection), Act 2 (The Career Journey & Turning Points — why you made key transitions), Act 3 (How You Operate as a Person & Real Ownership), Act 4 (The Forward Destination & Team Fit).",
-      "Focus on who the candidate is as a person and their problem-solving mindset, NOT a mini-resume list of tools or tasks.",
-      "Never lecture the employer on what their industry requires or make grand corporate CEO keynote speeches.",
-      "Never describe the job description back to the hiring manager.",
-      "Demonstrate fit through authentic career progression and concrete problem ownership, not through matching requirement lists.",
-      `Use one or two concrete evidence-backed milestones with accurate tense and ownership: use one ongoing ${currentEmployer} example when available, and one earlier career bridge.`,
-      "Use common spoken words; strictly avoid AI slop words (delve, leverage, tapestry, realm, pivotal, rule-of-three corporate lists).",
+      "First-person throughout; most sentences start from I/my or the candidate's work.",
+      "Concrete examples come from evidenceRows; framing may be confident but every claim must be defensible in an interview.",
+      "Describe clients and partners generically (e.g. 'a global professional-services firm'); never name them.",
+      "No mini-resume tool inventories and no lists of matching requirements.",
+      "Use common spoken words; avoid AI filler (delve, leverage, tapestry, realm, pivotal, rule-of-three corporate lists).",
     ],
     prohibitedPatterns: [
+      "I am excited to apply",
+      "I am thrilled to apply",
+      "I am interested in applying",
+      "I am writing to express my strong interest",
+      "aligns perfectly",
+      "I am drawn to the mission",
+      "I am passionate about your mission",
+      "democratizing access",
       "Throughout my work, I have focused",
       "Throughout my work, I have concentrated",
       "Throughout my work as an engineer, I have focused",
@@ -454,19 +462,15 @@ export function buildCoverLetterBrief(
       "I look forward to bringing",
       "My background aligns",
       "That background allows me to",
-      "Opening with a generic description of the company",
       "Engineering teams need",
       "I am excited to bring this combination",
       "demands engineers who",
       "operational rigor",
       "high-ownership environment",
       "measurable results",
-      "I am drawn to the mission",
-      "I am passionate about your mission",
-      "I am excited to apply",
-      "I am interested in applying",
-      "democratizing access",
+      "In today's fast-paced",
       ...(company ? [`As ${company}`, `${company}'s mission`, `${company}’s mission`] : []),
+      ...confidentialNames,
     ],
   };
 }
@@ -793,18 +797,12 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       .filter((row): row is EvidenceSnapshotRow => Boolean(row));
 
     const resumeTemplateEmployers = snapshot.canonicalResume.employers.map((employer) => {
-      const empRows = routedRows.filter((r) => r.employer && normalizedName(r.employer) === normalizedName(employer.name));
       const baselineBullets = employer.originalBullets.map((text) => {
         const bankMatch = bankBulletsByText.get(normalizeResumeText(text));
+        // Only evidence that actually backs this bullet (bullet-bank mapping) may be attached.
+        // Otherwise the bullet is unchanged base-resume text and carries no evidence ID.
         const validBankIds = bankMatch?.filter((id) => snapshot.applicationRouting?.selectedEvidenceIds.includes(id)) ?? [];
-        if (validBankIds.length) {
-          return { text, evidenceIds: validBankIds };
-        }
-        if (empRows.length) {
-          return { text, evidenceIds: [empRows[0]!.evidenceId] };
-        }
-        const fallback = routedRows[0]?.evidenceId;
-        return { text, evidenceIds: fallback ? [fallback] : [] };
+        return { text, evidenceIds: validBankIds };
       });
       return {
         name: employer.name,
@@ -898,23 +896,18 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       denylistRules: snapshot.denylistRules,
       styleRules: compactStyleRules(stylePolicy, candidateProfile),
       resumePlan,
-      coverLetterBrief: (() => {
-        const brief = buildCoverLetterBrief(jobDescriptionText, canonicalJob, candidateProfile);
-        if (!brief) return undefined;
-        return {
-          ...brief,
-          introContract: brief.introContract?.slice(0, 3),
-          requiredElements: brief.requiredElements.slice(0, 6),
-          prohibitedPatterns: brief.prohibitedPatterns.slice(0, 16),
-        };
-      })(),
+      coverLetterBrief: buildCoverLetterBrief(jobDescriptionText, canonicalJob, candidateProfile),
       instructions: [
         "Use only evidenceRows for candidate facts; preserve employer, timeline, scope, eligibility, and classification ceilings.",
-        "Surgical Diffing Standard: Earlier, less relevant historical roles (earlier contracts, internships, or past roles) must remain frozen verbatim from resumeTemplate.employers[i].baselineBullets. Only tailor the 3-4 target current-employer bullets and skills headings to align with the JD.",
-        "Maintain natural bullet length (~16-20 words per bullet) matching baseline footprint density without manual word-by-word arithmetic.",
-        "Strictly eliminate AI slop words (delve, leverage, utilize, navigate, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, intersection, synergy, beacon).",
-        "In the cover letter, follow the 3-act narrative architecture (The Connection, The Career Journey & Motivation, The Standout Proof Point); do not write a mini-resume list of tools.",
-        "In the cover letter opening paragraph, introduce the candidate ('I' / 'my') and explicitly include both the target company and role names (prevents COVER_LETTER_INTRO_IMPERSONAL).",
+        "Resume scope: keep earlier, less relevant roles verbatim from resumeTemplate.employers[i].baselineBullets. At the current employer, rework the 3-4 bullets that matter most for this job and keep the rest of its baseline bullets as anchors; curate the skills lines for the role.",
+        "Unchanged baseline bullets are the candidate's own approved claims: copy them word for word with the evidenceIds listed in baselineBullets (often none). Never attach an unrelated evidence ID to make a bullet look supported.",
+        "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. Never add an event, metric, tool, or ownership that did not happen.",
+        ...(candidateProfile?.truth.confidentialNames.length
+          ? [`Never name these clients or partners in the resume or cover letter; describe them generically instead: ${candidateProfile.truth.confidentialNames.join(", ")}.`]
+          : ["Describe clients and partners generically in the resume and cover letter; do not name them."]),
+        "Maintain natural bullet length (~16-20 words) matching the baseline footprint; no word-by-word arithmetic.",
+        "Avoid AI filler (delve, leverage, utilize, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, synergy, beacon) unless styleRules list a phrase as the candidate's own.",
+        "Cover letter: follow coverLetterBrief exactly. It owns the structure, opening, word range, and banned phrases. Do not use any other cover-letter structure.",
         "Only cite eligible evidence rows for standalone claims; do not cite a single corroboration-required row alone.",
         "Use direct, natural wording; denylistRules always win. Apply styleRules to wording only, never as evidence.",
         resumePlan.customerFacingRole

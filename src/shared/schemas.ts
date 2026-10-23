@@ -115,6 +115,8 @@ export const candidateProfileSchema = z.object({
   truth: z.object({
     factualAuthority: z.string().default("Selected structured career evidence"),
     boundaries: z.array(z.string()).default([]),
+    /** Client, partner, or project names that must never appear in public resumes or cover letters. */
+    confidentialNames: z.array(z.string().min(1)).default([]),
   }),
   updatedAt: z.string(),
 });
@@ -598,9 +600,12 @@ export const applicationCoverLetterBriefSchema = z.object({
   targetWordMin: z.number().int().min(1),
   targetWordMax: z.number().int().min(1),
   hardWordMax: z.number().int().min(1),
-  roleProblems: z.array(z.string().min(1)).max(6),
+  /** Retired: JD lines fed to the model made letters lecture the employer. Kept optional for old contexts. */
+  roleProblems: z.array(z.string().min(1)).max(6).optional(),
   company: z.string().nullable().optional(),
   role: z.string().nullable().optional(),
+  /** Paragraph-by-paragraph structure; the single owner of cover-letter structure. */
+  structure: z.array(z.string().min(1)).optional(),
   introContract: z.array(z.string().min(1)).min(1).optional(),
   requiredElements: z.array(z.string().min(1)).min(1),
   prohibitedPatterns: z.array(z.string().min(1)).min(1),
@@ -713,7 +718,7 @@ const careerArcTimelineSchema = z.preprocess(
 
 export const auditClaimMappingSchema = z.object({
   publicText: z.string().min(1),
-  claimType: z.enum(["candidate", "employer", "non-factual"]),
+  claimType: z.enum(["candidate", "employer", "non-factual", "baseline"]),
   evidenceIds: z.array(z.string().min(1)).default([]),
   sourcePaths: z.array(z.string().min(1)).default([]),
   timeline: claimTimelineSchema,

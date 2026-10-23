@@ -10,6 +10,8 @@ JobSensei is a local-first career workspace. Candidate identity, chronology, pre
 - Never read sibling jobs, prior tailored applications, or unselected context unless the user explicitly selects or names them.
 - Enforce the Universal Surgical Diffing Standard: Never rewrite historical or earlier career experience unless explicitly relevant. Keep foundational past roles frozen verbatim from the base resume, focusing tailoring strictly on the top skills categories and the 3–4 target bullets at the current/most recent employer.
 - Keep evidence IDs, warnings, hashes, and provenance out of employer-facing files.
+- Never name clients or partners in a resume or cover letter (see the profile's `truth.confidentialNames`); describe them generically.
+- The cover-letter specification lives only in the generated `coverLetterBrief`; skills point to it.
 - Keep candidate-specific guidance in the local ignored profile or context, not in public skills or repository rules.
 
 ## New job flow

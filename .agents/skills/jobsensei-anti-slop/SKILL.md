@@ -13,7 +13,7 @@ This guide provides hard rules and replacement tables to keep JobSensei text nat
 
 ## 1. Banned AI Vocabulary (The Slop Dictionary)
 
-Never use these words in resumes, cover letters, or interview responses unless they are part of a literal proper noun or API name.
+Never use these words in resumes, cover letters, or interview responses unless they are part of a literal proper noun or API name, or the candidate's own voice profile (`styleRules`) lists the phrase as one they genuinely use.
 
 | Slop Word / Phrase | Why It Signals AI | Human Engineering Alternative |
 | :--- | :--- | :--- |
@@ -64,13 +64,13 @@ Models overuse em-dashes (`—`) to balance two poetic halves of a sentence:
 * ❌ *Slop:* "As a professional dedicated to driving innovation..."
 * ✅ *Human:* "I am writing to apply for the [Role] at [Company] because my focus is solving friction at the boundary between internal teams and external stakeholders."
 
-### E. The Corporate CEO Keynote Speech / Lecturing the Employer
-Models reflexively lecture the target company about why their own industry, business, or role matters, or parrot the job description qualifications back to them as grand declarations:
-* ❌ *Slop:* "For Google and the Product Solutions Engineer role, delivering seamless digital payment experiences requires both deep API fluency and the ability to guide external merchants through complex architecture decisions."
-* ❌ *Slop:* "In consumer payments, trust and frictionless checkout are the lifeblood of modern commerce."
+### E. Lecturing the Employer About Their Own Business
+Models reflexively explain the target company's industry, market, or job back to the hiring team. The reader already knows their business; the letter is about the candidate.
+* ❌ *Slop:* "Delivering seamless digital payment experiences requires both deep API fluency and the ability to guide merchants through complex architecture decisions."
+* ❌ *Slop:* "When third-party developers integrate external APIs, the hardest challenge is rarely the code; it is what happens at the boundary."
 * ❌ *Slop:* "Effective talent acquisition requires a nuanced balance of strategic sourcing and human empathy."
-* ✅ *Human:* "When third-party developers integrate external APIs, the hardest challenge is rarely the internal code—it is what happens at the boundary when external teams hit confusing payload errors, sandbox edge cases, or documentation gaps that stall production launches."
-* ✅ *Human (HR):* "When an organization scales past 200 employees, the most common recruiting bottleneck is rarely sourcing volume—it is misaligned interview scorecards and slow hiring manager feedback loops that cost teams their strongest candidates."
+* ✅ *Human:* "I'm applying for the Solutions Engineer role at Acme. I started as a backend developer and moved into customer-facing work because I wanted to be in the room when integrations got stuck."
+* ✅ *Human (HR):* "I'm applying for the Recruiting Coordinator role at Acme. For the last two years I've run interview scheduling for a 40-person team, and the part I'm best at is keeping candidates informed when plans change."
 
 ---
 

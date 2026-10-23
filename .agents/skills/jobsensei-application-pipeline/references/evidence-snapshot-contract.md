@@ -21,7 +21,7 @@ Non-LinkedIn structured project evidence is primary for the current employer. Li
 - Selected broad `contextText` may clarify an eligible structured row. It cannot independently support a public claim.
 - Eligible LinkedIn rows may support history, education, technologies, and older roles.
 - Secondary resumes may help locate historical wording but cannot independently verify a public claim.
-- The configured base resume controls identity, employer order, titles, dates, education, section grammar, and footprint. Its bullets, skills, metrics, and ownership language are untrusted until an eligible snapshot row supports them.
+- The configured base resume controls identity, employer order, titles, dates, education, section grammar, and footprint. For its bullets: unchanged base-resume bullets are the candidate's own approved claims and may appear word for word, but they earn no fit-score credit, and any rewritten or new claim must trace to eligible context evidence.
 - The snapshot stores a defensive footprint profile for the selected Markdown, PDF, or DOCX base resume. Markdown and structurally readable DOCX profiles are reliable; PDF or malformed binary profiles may be partial and must expose warnings.
 - Snapshot creation pins a deterministic `.sensei/application_run.json`. An unchanged manifest and base resume reuse the same snapshot and run. Changed inputs make earlier drafts pending review.
 - The supplied JD supports employer and requirement statements only. It never supports candidate experience.

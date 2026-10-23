@@ -79,22 +79,20 @@ function materializeBundle(
   };
   const normalizeText = (val: string) => val.replace(/[*_`#|\\-]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
   const claim = (item: { text: string; evidenceIds: string[] }, employerSpecific = false, employerName?: string) => {
-    let ids = item.evidenceIds;
+    const ids = item.evidenceIds;
     if (ids.length === 0 && employerName && snapshot.canonicalResume) {
+      // Unchanged base-resume bullets are the candidate's own approved wording.
+      // Record them as baseline text; never borrow an unrelated evidence ID.
       const baselineEmp = snapshot.canonicalResume.employers.find((e) => normalizeText(e.name) === normalizeText(employerName));
-      if (baselineEmp) {
-        const isVerbatim = baselineEmp.originalBullets.some((b) => normalizeText(b) === normalizeText(item.text));
-        if (isVerbatim) {
-          const fallbackId = snapshot.applicationRouting?.routes.find((r) => r.employer && normalizeText(r.employer) === normalizeText(employerName))?.evidenceId
-            ?? snapshot.applicationRouting?.selectedEvidenceIds.find((id) => {
-              const r = rows.get(id);
-              return r?.employer && normalizeText(r.employer) === normalizeText(employerName);
-            })
-            ?? snapshot.applicationRouting?.selectedEvidenceIds[0];
-          if (fallbackId) {
-            ids = [fallbackId];
-          }
-        }
+      if (baselineEmp?.originalBullets.some((b) => normalizeText(b) === normalizeText(item.text))) {
+        return {
+          publicText: item.text,
+          claimType: "baseline" as const,
+          evidenceIds: [] as string[],
+          sourcePaths: [snapshot.baseResumePath],
+          timeline: null as ReturnType<typeof timeline>,
+          ownership: "baseline",
+        };
       }
     }
     return {
@@ -255,7 +253,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
   }
 
   const resumeMarkdown = composeCanonicalResume(snapshot.canonicalResume, draft.resume);
-  const coverMarkdown = composeCanonicalCoverLetter(snapshot.canonicalResume, draft.coverLetter);
+  const coverMarkdown = composeCanonicalCoverLetter(snapshot.canonicalResume, draft.coverLetter, { fullName: candidateProfile?.identity.fullName });
   const resumeName = evidence.resume.publicArtifact;
   const escapedPrefix = (candidateProfile?.identity.artifactPrefix ?? "Candidate").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (!new RegExp(`^${escapedPrefix}_[A-Za-z0-9][A-Za-z0-9_-]*_Resume\\.md$`).test(resumeName)) {

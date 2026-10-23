@@ -411,7 +411,52 @@ function validateRunIntegrity(loaded: LoadedApplication, issues: ValidationIssue
   }
 }
 
+/**
+ * Opening sentences of 15+ words with no first-person reference. These are the
+ * "lecture the employer about their own business" sentences the brief forbids.
+ */
+export function openingSentencesNotAboutCandidate(paragraph: string): string[] {
+  return paragraph.split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.split(/\s+/).length >= 15)
+    .filter((sentence) => !/\b(?:I|my|me|I'm|I've|I'd|myself)\b/i.test(sentence));
+}
+
+/** Public files must never name confidential clients or partners (profile truth.confidentialNames). */
+export function confidentialNameIssues(
+  artifacts: Array<{ name: string; markdown: string | null | undefined }>,
+  confidentialNames: string[],
+): ValidationIssue[] {
+  const found: ValidationIssue[] = [];
+  for (const artifact of artifacts) {
+    if (!artifact.markdown) continue;
+    const text = artifact.markdown.toLowerCase();
+    const named = confidentialNames.filter((name) => {
+      const escaped = name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`).test(text);
+    });
+    if (named.length) {
+      found.push(issue(
+        "CONFIDENTIAL_NAME_PUBLIC",
+        artifact.name,
+        null,
+        `The file names a confidential client or partner: ${named.join(", ")}.`,
+        "Describe the client or partner generically (e.g. 'a global professional-services firm') before sending.",
+        "warning",
+      ));
+    }
+  }
+  return found;
+}
+
 function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationIssue[]): void {
+  issues.push(...confidentialNameIssues(
+    [
+      { name: loaded.resumeName ?? "resume", markdown: loaded.resumeMarkdown },
+      { name: "cover_letter.md", markdown: loaded.coverMarkdown },
+    ],
+    loaded.candidateProfile?.truth.confidentialNames ?? [],
+  ));
   if (!loaded.evaluationMarkdown) {
     issues.push(issue("EVALUATION_MISSING", "evaluation.md", null, "The application evaluation is missing.", "Create one concise evaluation containing score, matches, transferability, and gaps.", "error"));
   }
@@ -483,7 +528,7 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
           loaded.resumeName,
           "skillsAndExperience",
           `The editable resume contains ${tailoring.substantiveMappedChangeCount} substantive evidence-mapped changes (${tailoring.substantiveMappedBulletChangeCount} experience bullets) and ${tailoring.nearIdenticalLineCount} of ${tailoring.editableLineCount} lines remain near-identical to the canonical baseline (${Math.round(tailoring.nearIdenticalRatio * 100)}% of lines, ${Math.round(tailoring.nearIdenticalBulletRatio * 100)}% of bullets).`,
-          "In the next explicit run, rebuild the editable draft from the current job's highest-value requirements and selected evidence. Curate skills and bullets across relevant employers for the target role family; do not reuse the canonical resume as the tailored output.",
+          "In the next explicit run, rework the 3-4 current-employer bullets most relevant to this job and curate the skills lines from selected evidence; keep earlier roles unchanged.",
           "warning",
         ));
       }
@@ -554,7 +599,7 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
       issues.push(issue("COVER_LETTER_INVALID", "cover_letter.md", null, error instanceof Error ? error.message : String(error), "Leave the draft pending review; do not enter an automatic repair loop.", "error"));
     }
     if (!result) return;
-    if (result.wordCount < 190) {
+    if (result.wordCount < 230) {
       issues.push(issue("COVER_LETTER_CONCISE", "cover_letter.md", "wordCount", `The cover letter has ${result.wordCount} words.`, "This is allowed; review whether the employer connection and career arc are sufficiently clear.", "warning"));
     }
     if ((result.paragraphCount ?? 0) < MIN_COVER_LETTER_PARAGRAPHS || (result.paragraphCount ?? 0) > MAX_COVER_LETTER_PARAGRAPHS) {
@@ -568,7 +613,7 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
         "cover_letter.md",
         "bodyParagraphs",
         `The cover letter reused a prohibited generic pattern: “${usedPattern}”.`,
-        "Use the job-specific role problem, one grounded example, a concise chronological bridge, and a specific close in the next explicit run.",
+        "Follow coverLetterBrief in the next explicit run: a plain first-person opening, concrete examples from the candidate's own work, and a short warm close.",
         "warning",
       ));
     }
@@ -577,6 +622,17 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
     const namesCandidate = /\b(?:I|my)\b/i.test(firstParagraph);
     const namesCompany = !brief?.company || firstParagraph.toLowerCase().includes(brief.company.toLowerCase());
     const namesRole = !brief?.role || firstParagraph.toLowerCase().includes(brief.role.toLowerCase());
+    const employerSentences = openingSentencesNotAboutCandidate(firstParagraph);
+    if (employerSentences.length) {
+      issues.push(issue(
+        "COVER_LETTER_OPENING_ABOUT_EMPLOYER",
+        "cover_letter.md",
+        "bodyParagraphs.0",
+        `The opening explains the employer or the job instead of the candidate: “${employerSentences[0]}”`,
+        "Keep the opening about the candidate: why they are applying and who they are. Do not explain the employer's business back to them.",
+        "warning",
+      ));
+    }
     if (!namesCandidate || !namesCompany || !namesRole) {
       issues.push(issue(
         "COVER_LETTER_INTRO_IMPERSONAL",

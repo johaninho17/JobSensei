@@ -18,16 +18,14 @@ Read [the workflow contract](../jobsensei-application-pipeline/references/workfl
 1. Treat eligible rows from selected `data/context/structured/` files as the exclusive factual authority for capabilities, projects, responsibilities, tools, outcomes, ownership, and metrics.
 2. Treat selected `data/context/structured/company/` and `data/context/broad/company/` files as `employer-context`. They describe a company's public products, market, scale, and operating environment; they are never candidate evidence. Use selected current-employer context only to calibrate organizational wording.
 3. Treat selected `data/context/broad/` files as raw supporting context only. Never read unselected broad or structured files, and never count a broad file and its structured derivative as independent evidence.
-4. Use the app-configured base resume only as the canonical presentation, identity, chronology, title, date, and section baseline. Its bullets, skills, metrics, ownership, and outcomes are untrusted until eligible selected context independently supports them.
+4. Use the app-configured base resume as the canonical presentation, identity, chronology, title, date, and section baseline. For its bullets: unchanged base-resume bullets are the candidate's own approved claims and may appear word for word, but they earn no fit-score credit, and any rewritten or new claim must trace to eligible context evidence.
 5. Use the configured LinkedIn profile for education, credentials, skills, career history, and corroboration. LinkedIn-only current-employer evidence cannot independently support a public claim or direct score credit when selected project evidence is available.
 6. Treat secondary-resume snapshot text as a lower-weight historical index. It may identify an older role, tool, or date worth checking in selected structured evidence or LinkedIn, but it is never an eligible evidence row, cannot earn score credit, and cannot independently support a public claim.
-6. Treat configured secondary resumes as lower-weight historical support. They may recover older experience but cannot silently override stronger selected context, LinkedIn, or the base resume.
-7. Treat normalized `boudica_client_work` evidence like every other selected context source. There is no special platform-reference root.
-8. Treat existing files under `data/jobs/<job-id>/` as job-specific context, not global proof, unless the user explicitly promotes a claim.
-9. Preserve the source-relative path, source family, source role, and a locator or excerpt for every factual claim.
-10. When a file declares a `source_family`, deduplicate related raw and normalized derivatives. Use the richest selected representation for retrieval, but preserve the original source path for provenance.
-11. Preserve normalized start/end years, ongoing status, and recency band in the snapshot. Recency is a ranking signal only after a claim is relevant and eligible; it never upgrades confidence, directness, ownership, or truthfulness.
-12. Treat `data/context/application_voice_profile.md` as always-on style policy. It has no factual authority and cannot create an evidence row, score credit, chronology, metric, ownership, or outcome.
+7. Treat existing files under `data/jobs/<job-id>/` as job-specific context, not global proof, unless the user explicitly promotes a claim.
+8. Preserve the source-relative path, source family, source role, and a locator or excerpt for every factual claim.
+9. When a file declares a `source_family`, deduplicate related raw and normalized derivatives. Use the richest selected representation for retrieval, but preserve the original source path for provenance.
+10. Preserve normalized start/end years, ongoing status, and recency band in the snapshot. Recency is a ranking signal only after a claim is relevant and eligible; it never upgrades confidence, directness, ownership, or truthfulness.
+11. Treat `data/context/application_voice_profile.md` as always-on style policy. It has no factual authority and cannot create an evidence row, score credit, chronology, metric, ownership, or outcome.
 
 Use old cover letters only as voice, tone, and phrasing references. They are not factual evidence and cannot establish career chronology, employer motivation, resume content, or an application claim.
 

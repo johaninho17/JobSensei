@@ -8,7 +8,7 @@ import { SettingsStore } from "./settings";
 import { deleteWorkspacePath, getBaseResume, listFileTree, listResumePaths, previewFile, revealWorkspacePath, saveMarkdownFile } from "./files";
 import { listJobArtifacts, listJobFolders, listJobTree } from "./job-folders";
 import { assertInsideWorkspace, indexContext, summarizeWorkspace } from "./workspace";
-import { initializeWorkspace } from "./workspace-init";
+import { initializeWorkspace, syncWorkspaceAgentFiles, type AgentSyncReport } from "./workspace-init";
 import { TerminalSession } from "./terminal";
 import { buildContextManifest, contextSources, readActiveContextManifest } from "./context";
 import { exportMarkdownPdf } from "./pdf-export";
@@ -74,6 +74,11 @@ async function openInterviewWorkspaceWindow(jobId: string, roundId: string): Pro
   if (process.env.VITE_DEV_SERVER_URL) await interviewWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?${query}`);
   else await interviewWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"), { search: `?${query}` });
   interviewWindow.on("closed", () => { interviewWindow = undefined; });
+}
+
+function logAgentSync(report: AgentSyncReport | null): void {
+  if (!report || (!report.updated.length && !report.added.length && !report.removed.length)) return;
+  console.info(`Agy runtime files synced from ${report.sourceRoot}: updated ${report.updated.length}, added ${report.added.length}, removed ${report.removed.length}${report.backupPath ? `; previous copies in ${report.backupPath}` : ""}`);
 }
 
 function requireWorkspace(): string {
@@ -239,6 +244,7 @@ ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
   const workspace = requireWorkspace();
   if (input?.cwd && input.cwd !== ".") assertInsideWorkspace(workspace, resolve(workspace, input.cwd));
   const cwd = input?.cwd && input.cwd !== "." ? resolve(workspace, input.cwd) : workspace;
+  logAgentSync(await syncWorkspaceAgentFiles(workspace).catch((error) => { console.error("Agy skill sync failed:", error); return null; }));
   const manifest = await buildContextManifest(workspace, {}, await settingsStore.get());
   return terminal.start(cwd, workspace, manifest);
 });
@@ -286,7 +292,7 @@ app.whenReady().then(async () => {
   try {
     settingsStore = new SettingsStore(app.getPath("userData"));
     workspacePath = await resolveInitialWorkspacePath(settingsStore);
-    await initializeWorkspace(workspacePath);
+    logAgentSync(await initializeWorkspace(workspacePath));
     await indexContext(workspacePath);
     await settingsStore.setWorkspace(workspacePath);
     startWorkspaceWatcher(workspacePath);

@@ -1,7 +1,28 @@
-import { cp, mkdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { cp, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
+import { join, relative } from "node:path";
 
-export async function initializeWorkspace(workspacePath: string): Promise<void> {
+/** Agy runtime directories the app owns and keeps in sync inside the workspace. */
+export const MANAGED_AGENT_DIRS = ["skills", "rules", "workflows"] as const;
+
+/** Skills that used to ship to workspaces and must be removed from them. */
+export const RETIRED_WORKSPACE_SKILLS = [
+  "jobsensei-adk-typescript",
+  "jobsensei-feature-builder",
+  "jobsensei-local-data",
+  "jobsensei-quality-gate",
+  "jobsensei-ui-ux",
+] as const;
+
+export interface AgentSyncReport {
+  sourceRoot: string | null;
+  updated: string[];
+  added: string[];
+  removed: string[];
+  backupPath: string | null;
+}
+
+export async function initializeWorkspace(workspacePath: string): Promise<AgentSyncReport> {
   await Promise.all([
     mkdir(join(workspacePath, "profile"), { recursive: true }),
     mkdir(join(workspacePath, "context", "structured"), { recursive: true }),
@@ -13,47 +34,151 @@ export async function initializeWorkspace(workspacePath: string): Promise<void> 
     mkdir(join(workspacePath, ".sensei"), { recursive: true }),
   ]);
 
-  await seedWorkspaceSkillsAndRules(workspacePath);
+  return syncWorkspaceAgentFiles(workspacePath);
 }
 
-async function seedWorkspaceSkillsAndRules(workspacePath: string): Promise<void> {
-  const targetSkills = join(workspacePath, ".agents", "skills");
-  const targetAgentsMd = join(workspacePath, "AGENTS.md");
+interface AgentSource {
+  root: string;
+  dirs: Partial<Record<(typeof MANAGED_AGENT_DIRS)[number], string>>;
+  agentsMd: string | null;
+}
 
-  const sourceCandidates: Array<{ skills: string; agentsMd: string }> = [];
+async function exists(path: string): Promise<boolean> {
+  return stat(path).then(() => true, () => false);
+}
 
-  if (process.resourcesPath) {
-    sourceCandidates.push({
-      skills: join(process.resourcesPath, "skills"),
-      agentsMd: join(process.resourcesPath, "AGENTS.md"),
-    });
+async function resolveAgentSource(sourceRoots?: string[]): Promise<AgentSource | null> {
+  const candidates: AgentSource[] = [];
+  if (sourceRoots) {
+    for (const root of sourceRoots) candidates.push(repoLayout(root));
+  } else {
+    if (process.resourcesPath) {
+      const resources = process.resourcesPath;
+      candidates.push({
+        root: resources,
+        dirs: {
+          skills: join(resources, "agents", "skills"),
+          rules: join(resources, "agents", "rules"),
+          workflows: join(resources, "agents", "workflows"),
+        },
+        agentsMd: join(resources, "AGENTS.md"),
+      });
+      // Legacy packaged layout: skills only.
+      candidates.push({ root: resources, dirs: { skills: join(resources, "skills") }, agentsMd: join(resources, "AGENTS.md") });
+    }
+    // Compiled (dist-electron/electron) and source (electron/) locations of the repo root.
+    candidates.push(repoLayout(join(__dirname, "..", "..")), repoLayout(join(__dirname, "..")));
   }
-  sourceCandidates.push({
-    skills: join(__dirname, "../../.agents/skills"),
-    agentsMd: join(__dirname, "../../AGENTS.md"),
-  });
 
-  for (const candidate of sourceCandidates) {
-    try {
-      const skillsStat = await stat(candidate.skills).catch(() => null);
-      if (skillsStat?.isDirectory()) {
-        const targetExists = await stat(targetSkills).catch(() => null);
-        if (!targetExists) {
-          await mkdir(join(workspacePath, ".agents"), { recursive: true });
-          await cp(candidate.skills, targetSkills, { recursive: true });
-        }
-      }
-      const agentsMdStat = await stat(candidate.agentsMd).catch(() => null);
-      if (agentsMdStat?.isFile()) {
-        const targetExists = await stat(targetAgentsMd).catch(() => null);
-        if (!targetExists) {
-          await cp(candidate.agentsMd, targetAgentsMd);
-        }
-      }
-      break;
-    } catch {
-      // Non-fatal fallback
+  for (const candidate of candidates) {
+    if (candidate.dirs.skills && await exists(candidate.dirs.skills)) {
+      return { ...candidate, agentsMd: candidate.agentsMd && await exists(candidate.agentsMd) ? candidate.agentsMd : null };
     }
   }
+  return null;
 }
 
+function repoLayout(root: string): AgentSource {
+  return {
+    root,
+    dirs: {
+      skills: join(root, ".agents", "skills"),
+      rules: join(root, ".agents", "rules"),
+      workflows: join(root, ".agents", "workflows"),
+    },
+    agentsMd: join(root, "AGENTS.md"),
+  };
+}
+
+async function listFiles(root: string): Promise<string[]> {
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  const files: string[] = [];
+  for (const entry of entries) {
+    if (entry.name === ".DS_Store") continue;
+    const full = join(root, entry.name);
+    if (entry.isDirectory()) files.push(...await listFiles(full));
+    else if (entry.isFile()) files.push(full);
+  }
+  return files;
+}
+
+/** Content digest of a file or directory tree, independent of timestamps. */
+async function digest(path: string): Promise<string | null> {
+  const info = await stat(path).catch(() => null);
+  if (!info) return null;
+  const hash = createHash("sha256");
+  if (info.isFile()) {
+    hash.update(await readFile(path));
+    return hash.digest("hex");
+  }
+  const files = (await listFiles(path)).sort();
+  for (const file of files) {
+    hash.update(relative(path, file));
+    hash.update("\0");
+    hash.update(await readFile(file));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
+/**
+ * Keeps the workspace copy of Agy's runtime files identical to the app's version.
+ * Agy runs from the workspace, so a stale copy silently undoes every skill fix.
+ * Differing workspace files are backed up before replacement; nothing is lost.
+ */
+export async function syncWorkspaceAgentFiles(workspacePath: string, options: { sourceRoots?: string[]; now?: Date } = {}): Promise<AgentSyncReport> {
+  const report: AgentSyncReport = { sourceRoot: null, updated: [], added: [], removed: [], backupPath: null };
+  const source = await resolveAgentSource(options.sourceRoots);
+  if (!source) return report;
+  report.sourceRoot = source.root;
+
+  const agentsRoot = join(workspacePath, ".agents");
+  const stamp = (options.now ?? new Date()).toISOString().replace(/[:.]/g, "-");
+  const backupRoot = join(agentsRoot, ".backups", stamp);
+
+  const backup = async (target: string, label: string) => {
+    const destination = join(backupRoot, label);
+    await mkdir(join(destination, ".."), { recursive: true });
+    await cp(target, destination, { recursive: true });
+    report.backupPath = backupRoot;
+  };
+
+  const replace = async (sourcePath: string, target: string, label: string) => {
+    const [sourceDigest, targetDigest] = await Promise.all([digest(sourcePath), digest(target)]);
+    if (sourceDigest === targetDigest) return;
+    if (targetDigest) {
+      await backup(target, label);
+      await rm(target, { recursive: true, force: true });
+      report.updated.push(label);
+    } else {
+      report.added.push(label);
+    }
+    await mkdir(join(target, ".."), { recursive: true });
+    await cp(sourcePath, target, { recursive: true });
+  };
+
+  for (const dir of MANAGED_AGENT_DIRS) {
+    const sourceDir = source.dirs[dir];
+    if (!sourceDir || !await exists(sourceDir)) continue;
+    const entries = await readdir(sourceDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === ".DS_Store") continue;
+      await replace(join(sourceDir, entry.name), join(agentsRoot, dir, entry.name), `${dir}/${entry.name}`);
+    }
+  }
+
+  for (const retired of RETIRED_WORKSPACE_SKILLS) {
+    const target = join(agentsRoot, "skills", retired);
+    if (await exists(target)) {
+      await backup(target, `skills/${retired}`);
+      await rm(target, { recursive: true, force: true });
+      report.removed.push(`skills/${retired}`);
+    }
+  }
+
+  if (source.agentsMd) {
+    await replace(source.agentsMd, join(workspacePath, "AGENTS.md"), "AGENTS.md");
+  }
+
+  return report;
+}

@@ -290,7 +290,20 @@ export function composeCanonicalResume(baseline: CanonicalResumeBaseline, draft:
   return `${sections.join("\n\n")}\n`;
 }
 
-export function composeCanonicalCoverLetter(baseline: CanonicalResumeBaseline, draft: ApplicationDraft["coverLetter"]): string {
+/**
+ * The name a letter is signed with. Prefer the profile's full name; otherwise use the
+ * resume's first header line without any headline ("NAME — TITLE" → "Name").
+ */
+export function coverLetterSignatureName(headerLine: string, fullName?: string | null): string {
+  if (fullName?.trim()) return fullName.trim();
+  const name = displayText(headerLine).split(/\s+[—–|-]\s+|\s*\|\s*/)[0]?.trim() ?? "";
+  if (name && name === name.toUpperCase() && /[A-Z]/.test(name)) {
+    return name.toLowerCase().replace(/(^|[\s'-])([a-z])/g, (_match, lead: string, letter: string) => `${lead}${letter.toUpperCase()}`);
+  }
+  return name;
+}
+
+export function composeCanonicalCoverLetter(baseline: CanonicalResumeBaseline, draft: ApplicationDraft["coverLetter"], options: { fullName?: string | null } = {}): string {
   const header = sanitizeHeaderLines(baseline.headerLines);
   return `${[
     header.join("\n"),
@@ -298,7 +311,7 @@ export function composeCanonicalCoverLetter(baseline: CanonicalResumeBaseline, d
     draft.recipientLines.join("\n"),
     draft.salutation,
     ...draft.bodyParagraphs,
-    `${draft.closing}\n${displayText(header[0] ?? "")}`,
+    `${draft.closing}\n${coverLetterSignatureName(header[0] ?? "", options.fullName)}`,
   ].join("\n\n")}\n`;
 }
 

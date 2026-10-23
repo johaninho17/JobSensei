@@ -75,10 +75,12 @@
         ]
       },
       {
-        "from": ".agents/skills",
-        "to": "skills",
+        "from": ".agents",
+        "to": "agents",
         "filter": [
-          "**/*"
+          "skills/**/*",
+          "rules/**/*",
+          "workflows/**/*"
         ]
       },
       {

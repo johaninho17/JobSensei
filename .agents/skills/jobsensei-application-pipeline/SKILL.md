@@ -11,9 +11,7 @@ Use this skill automatically for a pasted JD or direct job-posting URL. The cand
 
 For a normal run, read only this skill, the supplied JD, and the new job's `.sensei/application_context.json`. Do not read `data/.sensei/active-context.json` or `.sensei/application_run.json` (the snapshot command reads active-context and outputs run metadata directly). Do not open source code, schemas, validators, other skills, raw context, the full snapshot, the base resume, or any existing job. Do not use subagents, scratch scripts, directory exploration, broad search, or prior application artifacts.
 
-For a URL:
-- If the native `read_url_content` tool is present in your toolset, use `read_url_content(Url: <url>)` once in a single turn.
-- If `read_url_content` is NOT available (CLI / agy environments), run a single clean command: `curl -sL "<url>" > data/jobs/<job-id>/original_jd.md`. Never run inline node scripts (`node -e`), multi-step shell commands, or piped sed/grep scripts. If the fetch fails or is blocked by an anti-bot screen, immediately ask the user to paste the JD and stop.
+For a URL: fetch the posting once with your built-in web-fetch tool and keep only the readable job description. Never run inline scripts (`node -e`), piped sed/grep, or repeated fetches. If the fetch fails or hits an anti-bot screen, ask the user to paste the JD and stop.
 
 ## One-Pass Flow
 
@@ -23,10 +21,10 @@ For a URL:
 4. Run `npm run context:snapshot -- <job-id>` exactly once. Note `snapshotId` and `runId` from the command's stdout.
 5. Read `.sensei/application_context.json` once in a single turn. The compact context fits completely in one view and contains every routed claim, resume footprint, and template needed for the run.
 6. In one file-writing turn, create only `.sensei/application_bundle.json` using the contract below. Follow the **Surgical Diffing Standard**:
-   - For earlier foundational employers, copy `resumeTemplate.employers[i].baselineBullets` directly into `resume.employers[i].bullets`.
-   - For the current employer, adapt only the 3–4 target bullets to align with the JD, retaining 2–3 foundational anchor bullets.
+   - For earlier foundational employers, copy `resumeTemplate.employers[i].baselineBullets` (text and their `evidenceIds`, often empty) directly into `resume.employers[i].bullets`.
+   - For the current employer, rework only the 3–4 bullets that matter most for the JD and keep the remaining baseline bullets as anchors.
    - Curate the skills categories from `resumeTemplate.editableSkillCategories`.
-   - Draft the 3-act cover letter (220-300 words).
+   - Draft the cover letter exactly as `coverLetterBrief` specifies.
 7. Run `npm run application:finalize -- <job-id>` exactly once. Report its `fitScore`, `fitConfidence`, `gateStatus`, and warnings, then stop. Never inspect code, patch output, or retry after finalization.
 
 For an explicit regeneration, the saved JD is the only job-specific input. Existing generated files are stale outputs, not references. Never read them before replacement.
@@ -36,7 +34,7 @@ For an explicit regeneration, the saved JD is the only job-specific input. Exist
 - Candidate facts come only from `evidenceRows`. The JD identifies what to prioritize; it never proves that the candidate performed it.
 - Respect every row's employer, timeline, scope, eligibility, `maximumClassification`, and source authority. Every public claim must cite an `eligible` evidence row. Never cite a single `corroboration-required` row alone. Never invent an evidence ID.
 - Follow `resumePlan`, `resumeTemplate`, `footprint`, `denylistRules`, and the local candidate preferences. The finalizer restores protected identity, contact details, chronology, titles, dates, locations, education, and layout.
-- Use `resumeTemplate.originalBullets` and `originalSkillsLines` as the presentation baseline and wording reference; they cannot independently prove a claim, metric, tool, or outcome.
+- Unchanged base-resume bullets are the candidate's own approved claims: copy them word for word. A *rewritten* bullet must trace every claim to `evidenceRows`; the baseline wording shows the confidence level to match, not new facts to add.
 - Omit any resume summary section by default unless `preferences.resume.includeSummary` is explicitly enabled in the candidate profile.
 - **Universal Surgical Diffing Standard (Applicable to Any Candidate in Any Field):**
   - **Foundational & Historical Roles:** Earlier, less relevant historical roles (past contracts, internships, or earlier employment) must remain **frozen verbatim** directly from `resumeTemplate.employers[i].baselineBullets`. Do not rewrite, tweak, or touch historical experience unless there is explicit direct relevance or selected evidence for it.
@@ -45,10 +43,8 @@ For an explicit regeneration, the saved JD is the only job-specific input. Exist
   - **Natural Bullet Density:** Maintain natural bullet length (~16–20 words per bullet) consistent with the baseline footprint. Total experience word counts within ±15% of footprint automatically satisfy density tolerances without manual arithmetic.
 - Align bullet emphasis with the core discipline of the target role (e.g., leadership, operations, commercial, technical, or people enablement) based on the candidate's supported background without exaggerating scope or ownership.
 - Use direct, natural professional language appropriate to the candidate's field. Strictly adhere to `$jobsensei-anti-slop` standards: eliminate machine clichés (delve, leverage, utilize, navigate, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, intersection, synergy, beacon, rule-of-three corporate lists). Prefer an accurate action, concrete method or tool, and supported purpose or result.
-- Keep the cover letter candidate-first and follow the 3-Act Narrative Architecture (target 220-300 words):
-  - **Act 1 (The Human Connection & Shared Problem):** In paragraph 1, introduce the candidate ('I' / 'my') with a direct, polite statement of application connecting to the company and role, followed immediately by the ground-level operational or technical problem at the boundary of the work. **CRITICAL:** Do NOT lecture the employer on what their industry requires or make grand corporate CEO keynote declarations (e.g., "Delivering seamless digital payment experiences requires both deep API fluency..."). Do NOT parrot the JD qualifications back to the hiring team.
-  - **Act 2 (The Career Journey & Human Motivation):** Explain the authentic career evolution from earlier foundational roles toward current specialization, grounded in the profile's documented transition. Never write a mini-resume list of tools or recite the JD.
-  - **Act 3 (The Standout Proof Point & Forward Vision):** Highlight concrete evidence-backed achievements that demonstrate problem-solving capability, closing with authentic forward alignment with the team's mission.
+- Keep the cover letter candidate-first. `coverLetterBrief` in the application context is the only cover-letter specification (structure, opening, word range, banned phrases); follow it and nothing else.
+- Never name clients or partners in the resume or cover letter; describe them generically.
 - Apply `styleRules` last for wording only. They cannot support facts or alter evidence mappings.
 - Employer-facing files must never contain evidence IDs, warnings, hashes, or generation notes.
 
@@ -118,7 +114,7 @@ Write `.sensei/application_bundle.json` only. Put exact evidence IDs beside each
 }
 ```
 
-Every editable skills line, target current-employer bullet, and factual cover-letter sentence needs one or more exact routed evidence IDs. Foundational earlier bullets copy their pre-mapped evidence IDs from `baselineBullets`. Personal motivation or a closing may use an empty list. Use at least two evidence-backed cover-letter sentences with distinct evidence so the career arc can be derived. Do not include protected resume fields in the bundle.
+Every editable skills line, rewritten bullet, and factual cover-letter sentence needs one or more exact routed evidence IDs. Unchanged baseline bullets keep the `evidenceIds` listed in `baselineBullets` (often an empty list); never borrow an unrelated ID for them. Personal motivation or a closing may use an empty list. Use at least two evidence-backed cover-letter sentences with distinct evidence so the career arc can be derived. Do not include protected resume fields in the bundle.
 
 ## Time Budget
 

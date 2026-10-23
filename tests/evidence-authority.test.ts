@@ -286,6 +286,42 @@ describe("context-authoritative evidence", () => {
     }
   });
 
+  it("accepts unchanged base-resume bullets as baseline text without borrowed evidence", () => {
+    const snapshot = {
+      ...auditSnapshot(),
+      canonicalResume: {
+        baselineId: "baseline-1",
+        originalSkillsLines: ["**Engineering:** TypeScript"],
+        employers: [
+          { name: "Northstar Labs", originalBulletCount: 1, originalBullets: ["Configured and tested API integrations for customer workflows."] },
+          { name: "Earlier Co", originalBulletCount: 1, originalBullets: ["Built internal reporting dashboards for operations staff."] },
+        ],
+      },
+    } as unknown as EvidenceSnapshot;
+    const baselineAudit = (publicText: string, overrides: Record<string, unknown> = {}) => ({
+      schemaVersion: 1,
+      artifactType: "resume" as const,
+      publicArtifact: "Alex_Morgan_Sample_Resume.md",
+      validationStatus: "passed" as const,
+      evidenceSnapshotId: snapshot.snapshotId,
+      manifestHash: snapshot.manifestHash,
+      baseResumePath: snapshot.baseResumePath,
+      claimMappings: [{ publicText, claimType: "baseline" as const, evidenceIds: [], sourcePaths: [snapshot.baseResumePath], timeline: null, ownership: "baseline", ...overrides }],
+      sideBySideChanges: [],
+      suggestedAdditionalBullets: [],
+    });
+    const markdown = "## Experience\n**Earlier Co** — Analyst\n* Built internal reporting dashboards for operations staff.";
+    const options = { publicMarkdown: markdown, publicArtifactName: "Alex_Morgan_Sample_Resume.md", snapshot };
+
+    // The verbatim bullet clears every baseline and evidence rule (later, unrelated legacy-audit checks may still apply).
+    const verbatimError = (() => { try { validateResumeAuditJson(baselineAudit("Built internal reporting dashboards for operations staff."), options); return ""; } catch (error) { return (error as Error).message; } })();
+    expect(verbatimError).not.toMatch(/base resume|base-resume|evidence|candidate evidence/i);
+    expect(() => validateResumeAuditJson(baselineAudit("Built internal reporting dashboards for operations staff.", { evidenceIds: ["context:work:api"] }), options))
+      .toThrow(/must not cite context evidence/);
+    expect(() => validateResumeAuditJson(baselineAudit("Built internal dashboards and led the analytics platform.", {}), { ...options, publicMarkdown: "* Built internal dashboards and led the analytics platform." }))
+      .toThrow(/does not match the base resume/);
+  });
+
   it("rejects stale, unselected, resume-only, metric, ownership, and denylisted resume claims", () => {
     const snapshot = auditSnapshot();
     const publicText = "* Configured and tested API integrations for customer workflows.\n* Translated customer requirements into technical workflow support.";

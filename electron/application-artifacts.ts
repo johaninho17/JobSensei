@@ -77,9 +77,10 @@ export const MIN_RESUME_BULLETS = 10;
 export const TARGET_RESUME_BULLETS = 12;
 export const MAX_RESUME_BULLETS = 14;
 export const MIN_CURRENT_EMPLOYER_BULLETS = 5;
-export const MIN_COVER_LETTER_WORDS = 180;
-export const TARGET_MAX_COVER_LETTER_WORDS = 280;
-export const MAX_COVER_LETTER_WORDS = 300;
+// Keep in sync with buildCoverLetterBrief (250-350 target, 400 hard), the owner of letter shape.
+export const MIN_COVER_LETTER_WORDS = 200;
+export const TARGET_MAX_COVER_LETTER_WORDS = 350;
+export const MAX_COVER_LETTER_WORDS = 400;
 export const MIN_COVER_LETTER_PARAGRAPHS = 3;
 export const MAX_COVER_LETTER_PARAGRAPHS = 5;
 export const MAX_COVER_LETTER_SENTENCES_PER_PARAGRAPH = 3;
@@ -182,8 +183,8 @@ export function validateResumeAuditJson(input: unknown, options: MachineAuditVal
   validateMachineAudit(audit, options);
   const publicBullets = experienceBullets(options.publicMarkdown).map(normalizeResumeText);
   const publicSkills = skillSectionLines(options.publicMarkdown).map(normalizeResumeText);
-  if (audit.claimMappings.some((mapping) => mapping.claimType !== "candidate")) {
-    throw new Error("Every resume claim mapping must be classified as candidate evidence.");
+  if (audit.claimMappings.some((mapping) => mapping.claimType !== "candidate" && mapping.claimType !== "baseline")) {
+    throw new Error("Every resume claim mapping must be classified as candidate evidence or as unchanged base-resume text.");
   }
   const mappedClaims = new Set(audit.claimMappings.map((mapping) => normalizeResumeText(mapping.publicText)));
   for (const claim of [...publicBullets, ...publicSkills]) {
@@ -298,6 +299,10 @@ function validateMachineAudit(
     if (!normalizeResumeText(options.publicMarkdown).includes(normalizeResumeText(mapping.publicText))) {
       throw new Error("A JSON claim mapping does not match text in the public artifact.");
     }
+    if (mapping.claimType === "baseline") {
+      validateBaselineClaim(mapping, audit.artifactType, options.snapshot);
+      continue;
+    }
     if (mapping.claimType === "non-factual") {
       if (mapping.evidenceIds.length || mapping.sourcePaths.length) throw new Error("Non-factual text cannot cite career evidence.");
       if (!/^(?:I|My|Throughout|Over|As|What|Having|With|In|Thank|Looking|This|That)\b/i.test(stripMarkdown(mapping.publicText))) {
@@ -379,6 +384,13 @@ function validateResumeEmployerAttribution(audit: ResumeAuditJson, options: Mach
   for (const employer of employers) {
     const bullets = new Set(employerBullets(options.publicMarkdown, employer).map(normalizeResumeText));
     for (const mapping of audit.claimMappings.filter((candidate) => bullets.has(normalizeResumeText(candidate.publicText)))) {
+      if (mapping.claimType === "baseline") {
+        const original = options.snapshot.canonicalResume?.employers.find((candidate) => normalizedEmployer(candidate.name) === normalizedEmployer(employer));
+        if (!original?.originalBullets.some((bullet) => normalizeResumeText(bullet) === normalizeResumeText(mapping.publicText))) {
+          throw new Error(`An unchanged base-resume bullet under ${employer} must come from that employer's base-resume bullets.`);
+        }
+        continue;
+      }
       const evidenceEmployers = new Set(mapping.evidenceIds.flatMap((id) => {
         const evidenceEmployer = options.snapshot.evidenceRows.find((row) => row.evidenceId === id)?.employer;
         return evidenceEmployer ? [evidenceEmployer] : [];
@@ -397,6 +409,26 @@ function validateResumeEmployerAttribution(audit: ResumeAuditJson, options: Mach
         );
       }
     }
+  }
+}
+
+/**
+ * Unchanged base-resume text is the candidate's own approved claim. It carries no
+ * context evidence ID (none may be invented for it); it must match the base resume
+ * exactly and may only appear in the resume.
+ */
+function validateBaselineClaim(mapping: { publicText: string; evidenceIds: string[]; sourcePaths: string[] }, artifactType: string, snapshot: EvidenceSnapshot): void {
+  if (artifactType !== "resume") throw new Error("Unchanged base-resume text can only appear in the resume.");
+  if (mapping.evidenceIds.length) throw new Error("Unchanged base-resume text must not cite context evidence IDs.");
+  const baselineLines = [
+    ...(snapshot.canonicalResume?.employers.flatMap((employer) => employer.originalBullets) ?? []),
+    ...(snapshot.canonicalResume?.originalSkillsLines ?? []),
+  ].map(normalizeResumeText);
+  if (!baselineLines.includes(normalizeResumeText(mapping.publicText))) {
+    throw new Error("A claim marked as unchanged base-resume text does not match the base resume.");
+  }
+  if (mapping.sourcePaths.some((path) => path !== snapshot.baseResumePath)) {
+    throw new Error("Unchanged base-resume text may only cite the configured base resume.");
   }
 }
 

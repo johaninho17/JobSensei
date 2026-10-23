@@ -22,30 +22,40 @@ describe("cover letter brief and guidance contract", () => {
     expect(brief.company).toBe("Iterable");
   });
 
-  it("cleans roleProblems by stripping markdown headings and filtering out ceremonies and role titles", () => {
+  it("never feeds job-description text into the brief (letters must not lecture the employer)", () => {
     const rawJd = [
       "# Technical Support Engineer - Deliverability",
-      "## About Iterable",
-      "We are a high-growth customer engagement platform with a medical, dental, and 401(k) package.",
       "- Deliver responsive troubleshooting and solve complex deliverability issues for enterprise clients.",
-      "- Raise blockers promptly during daily sprint ceremonies and standups.",
+      "- Partner with customers to improve inbox placement across regulated industries.",
     ].join("\n");
+    const brief = buildCoverLetterBrief(rawJd, { title: "Technical Support Engineer - Deliverability", company: "Iterable" });
+    expect(brief.roleProblems).toBeUndefined();
+    const serialized = JSON.stringify(brief);
+    expect(serialized).not.toContain("deliverability issues");
+    expect(serialized).not.toContain("inbox placement");
+    expect(brief.introContract?.join(" ")).toMatch(/never explain iterable's business/i);
+  });
 
-    const brief = buildCoverLetterBrief(rawJd, {
-      title: "Technical Support Engineer - Deliverability",
-      company: "Iterable",
-    });
+  it("reads the role from the JD heading when metadata has no title", () => {
+    const brief = buildCoverLetterBrief("# Original Job Description\n\n# Solution Analyst III\n\n**Company:** Acme", { title: null, company: "Acme" });
+    expect(brief.role).toBe("Solution Analyst III");
+  });
 
-    expect(brief.roleProblems).toBeDefined();
-    expect(brief.roleProblems.length).toBeLessThanOrEqual(1);
-    for (const problem of brief.roleProblems) {
-      expect(problem.startsWith("#")).toBe(false);
-      expect(problem).not.toContain("401(k)");
-      expect(problem).not.toContain("sprint ceremonies");
-      expect(problem.toLowerCase()).not.toContain("iterable");
-      expect(problem.toLowerCase()).not.toContain("technical support engineer - deliverability");
+  it("owns one college-style structure and a 250-350 word target", () => {
+    const brief = buildCoverLetterBrief("Build integrations.", { title: "Solutions Engineer", company: "Acme" });
+    expect(brief.structure).toHaveLength(3);
+    expect(brief.structure?.[0]).toMatch(/applying for Solutions Engineer at Acme/);
+    expect(brief.structure?.join(" ")).not.toMatch(/act\s*\d|3-act|4-act/i);
+    expect([brief.targetWordMin, brief.targetWordMax, brief.hardWordMax]).toEqual([250, 350, 400]);
+  });
+
+  it("keeps every banned opener and the candidate's confidential client names in the prohibited list", () => {
+    const brief = buildCoverLetterBrief("Build integrations.", { title: "Solutions Engineer", company: "Acme" }, {
+      truth: { confidentialNames: ["Northwind Partners"] },
+    } as never);
+    for (const phrase of ["I am excited to apply", "I am interested in applying", "aligns perfectly", "I am drawn to the mission", "Acme's mission", "Northwind Partners"]) {
+      expect(brief.prohibitedPatterns).toContain(phrase);
     }
-    expect(brief.roleProblems[0]).toContain("Deliver responsive troubleshooting and solve complex deliverability issues for enterprise clients.");
   });
 
   it("includes prohibited template formulas in prohibitedPatterns", () => {
@@ -86,5 +96,35 @@ describe("cover letter brief and guidance contract", () => {
     // Workflow contract assertions
     expect(contract).toMatch(/candidate-first/i);
     expect(contract).toMatch(/candidate/i);
+  });
+});
+
+describe("cover letter composition and public-file checks", () => {
+  it("signs with the candidate's name, never the resume headline", async () => {
+    const { coverLetterSignatureName } = await import("../electron/canonical-resume");
+    expect(coverLetterSignatureName("**ALEX MORGAN — CUSTOMER SOLUTIONS ENGINEER**")).toBe("Alex Morgan");
+    expect(coverLetterSignatureName("Alex Morgan | Solutions Engineer")).toBe("Alex Morgan");
+    expect(coverLetterSignatureName("ALEX MORGAN — ENGINEER", "Alex Morgan")).toBe("Alex Morgan");
+  });
+
+  it("flags confidential client names in public files", async () => {
+    const { confidentialNameIssues } = await import("../electron/application-validation");
+    const issues = confidentialNameIssues(
+      [
+        { name: "resume.md", markdown: "- Led onboarding for Northwind Partners on a private AI platform." },
+        { name: "cover_letter.md", markdown: "I helped a global professional-services firm adopt the platform." },
+      ],
+      ["Northwind Partners"],
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ code: "CONFIDENTIAL_NAME_PUBLIC", artifact: "resume.md" });
+  });
+
+  it("flags an opening sentence that lectures the employer instead of describing the candidate", async () => {
+    const { openingSentencesNotAboutCandidate } = await import("../electron/application-validation");
+    const lecturing = "I am applying for the Analyst role at Acme. In enterprise platform delivery, projects stall most often when operational requirements fail to account for integration contracts and readiness. That gap is where I work best.";
+    expect(openingSentencesNotAboutCandidate(lecturing)).toHaveLength(1);
+    const personal = "I am applying for the Analyst role at Acme. I started as a backend developer and moved into customer work because I wanted to see how my systems held up with real users. Acme's onboarding work is close to what I do every day.";
+    expect(openingSentencesNotAboutCandidate(personal)).toHaveLength(0);
   });
 });
