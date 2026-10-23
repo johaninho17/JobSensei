@@ -42,7 +42,7 @@ data/
 │   └── interview-memory/
 │       ├── role-index.json
 │       └── <role-family>.md
-└── index.db
+└── .sensei/active-context.json   # selection manifest (derived)
 ```
 
 Do not assume every optional artifact exists.
@@ -70,7 +70,3 @@ Public resumes and cover letters must not include this envelope. New runs place 
 ## Provenance
 
 Career evidence should retain a stable evidence ID, source-relative path, source hash, excerpt or locator, normalized claim, and confidence. Generated artifacts should reference evidence IDs rather than duplicating untraceable claims.
-
-## Index behavior
-
-Treat SQLite as derived state. Commit canonical files before index updates. Supply a rebuild operation that scans folders, validates records, reports corrupt entries, and recreates the index without modifying source artifacts.

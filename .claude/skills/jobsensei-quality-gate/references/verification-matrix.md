@@ -4,10 +4,11 @@
 |---|---|
 | Shared types or schemas | Typecheck, schema unit tests, compatibility fixture |
 | Local API or IPC | Contract test, unauthorized-path test, actionable error |
-| Files or SQLite | Round-trip test, interrupted-write behavior, index rebuild |
+| Workspace files | Round-trip test, interrupted-write behavior, legacy-folder compatibility |
 | Document ingestion | Representative fixtures, malformed input, extraction warnings |
-| Gemini structured call | Mocked contract test, schema rejection, quota handling |
-| ADK agent | Smoke run plus eval cases for behavior and tool use |
+| Agy skill / AGENTS.md / snapshot instructions | Test locking the rule; rule-ownership map updated; fresh-context pipeline run on demo data |
+| Snapshot, finalizer, validator | Unit test with fictional fixture; check `application_context.json` shape |
+| Privacy | Staged diff scanned for names, employers, clients, contact details, local paths, keys |
 | Resume tailoring | Section/order integrity, evidence audit, no unsupported claims |
 | UI component | Component/flow test and visual inspection |
 | Navigation or layout | Keyboard flow, narrow-window and long-content inspection |
@@ -19,8 +20,8 @@
 - A JD requirement has no supporting evidence.
 - A resume asks for a section absent from the base template.
 - The model proposes an attractive but unsupported metric.
-- The provider returns invalid JSON.
-- The provider returns `429`.
+- The model writes an invalid `application_bundle.json`.
+- A client or partner company name reaches a public resume or cover letter.
 - An interview answer contains an unsupported claim.
 - An interview preparation artifact duplicates retrospective STAR stories across rounds or duplicates challenge labs in question banks.
 - An interview scenario or practical challenge relies on proprietary unreleased internal company architecture rather than industry-standard first principles.

@@ -9,7 +9,7 @@ Apply risk-based verification across code, local data, AI behavior, and the visi
 
 ## Build the verification matrix
 
-1. Read `AGENTS.md`.
+1. Load `jobsensei-architecture` and check `dev-notes/decisions.md`.
 2. Inspect the actual diff and identify affected surfaces.
 3. Map each material risk to evidence that would catch it.
 4. Run the smallest decisive checks first, then broader regression checks.
@@ -26,7 +26,6 @@ Use automated tests for:
 - Tool contracts
 - API or IPC boundaries
 - Persistence and migrations
-- Caching, quotas, and retries
 - Security invariants
 
 Use evaluation cases for:
@@ -35,7 +34,7 @@ Use evaluation cases for:
 - Job-match relevance
 - Resume integrity
 - Interview follow-up quality
-- Tool selection
+- Adherence to recorded decisions (ledger)
 - Refusal to invent evidence
 
 Do not assert exact wording from model output. Evaluate structured properties and rubric-based behavior.
@@ -43,7 +42,7 @@ Do not assert exact wording from model output. Evaluate structured properties an
 ## Verify the real experience
 
 - Run changed user flows through the actual UI.
-- Inspect loading, error, partial, offline, and rate-limit states.
+- Inspect loading, running, error, partial, and stale states.
 - Check keyboard navigation and accessible labels.
 - Inspect long job titles, long reports, and narrow windows.
 - Confirm restart persistence for saved artifacts.
