@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { DEFAULT_PDF_TEXT_SIZE, TRACKER_STATUSES, type JobTrackerUpdate, type RunStatus, type TrackerStatus } from "../shared/schemas";
+import { DEFAULT_PDF_TEXT_SIZE, TRACKER_STATUSES, type JobQueue, type JobTrackerUpdate, type RunStatus, type TrackerStatus } from "../shared/schemas";
+import { advanceQueue, queuePrompt } from "../shared/job-queue";
 import { TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, followUpDays } from "../shared/tracker";
 import { FIT_CLASSIFICATION_CREDIT } from "../shared/fit-credit";
 import type { ApplicationStatus, ApplicationValidationReport, CandidateProfile, ChallengeExercise, ChallengePractice, ContextManifest, FilePreview, FileTreeNode, InterviewOverview, JobFolderSummary, PdfTextSize, SearchResult, Settings, WorkspaceSummary } from "../shared/schemas";
@@ -99,6 +100,31 @@ function WorkspaceApp() {
   const [treeRevealPath, setTreeRevealPath] = useState<string | null>(null);
   const [promptRequest, setPromptRequest] = useState<PromptRequest | null>(null);
   const promptRequestId = useRef(0);
+  const [jobQueue, setJobQueue] = useState<JobQueue>({ autoRun: true, items: [] });
+  const queueRef = useRef(jobQueue);
+  useEffect(() => { if (workspace.status === "ready") void window.sensei.queue.get().then((queue) => { queueRef.current = queue; setJobQueue(queue); }).catch(() => undefined); }, [workspace.status]);
+  async function saveQueue(next: JobQueue) {
+    queueRef.current = next;
+    setJobQueue(next);
+    try { const saved = await window.sensei.queue.save(next); queueRef.current = saved; setJobQueue(saved); }
+    catch (caught) { setError(messageOf(caught, "Unable to save the job queue.")); }
+  }
+  // Queue runner: while links wait or run, check the latest run every 5 seconds; send the next link when Agy is idle.
+  const queueActivity = jobQueue.items.map((item) => item.status).join(",");
+  useEffect(() => {
+    if (!jobQueue.items.some((item) => item.status === "queued" || item.status === "running")) return;
+    let cancelled = false;
+    const tick = async () => {
+      const latest = await window.sensei.runs.latest().catch(() => null);
+      if (cancelled) return;
+      const { queue, send } = advanceQueue(queueRef.current, latest, Date.now());
+      if (JSON.stringify(queue) !== JSON.stringify(queueRef.current)) await saveQueue(queue);
+      if (send) { setRightPanelOpen(true); await window.sensei.terminal.write(`${queuePrompt(send.url)}\r`); }
+    };
+    void tick();
+    const timer = window.setInterval(() => void tick(), 5000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [jobQueue.autoRun, queueActivity]);
   const [storyBankPath, setStoryBankPath] = useState<string | null>(null);
   useEffect(() => { if (workspace.status === "ready") void window.sensei.profile.preview().then((preview) => setStoryBankPath(preview.storyBankPath)).catch(() => undefined); }, [workspace.status, jobTree]);
   const [recentJobIds, setRecentJobIds] = useState<string[]>(() => { try { return JSON.parse(window.localStorage.getItem("sensei-recent-jobs") ?? "[]") as string[]; } catch { return []; } });
@@ -577,7 +603,7 @@ function WorkspaceApp() {
             <section className="context-block"><h2>Career sources</h2><p>Checked files are what Agy reads as facts about you. Structured files are the strongest evidence.</p><div className="context-tree">{tree.length ? tree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedCareerPaths} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No career context folders found.</p>}</div></section>
             <section className="context-block"><h2>Job files in context</h2><p>Add a job's files when you want Agy to use them outside that job, for example an earlier letter that worked well.</p><button className="btn-link" onClick={() => { setSelectedJobFiles([]); void updateContext(selectedCareerPaths, []); }} disabled={!selectedJobFiles.length}>Clear job files ({selectedJobFiles.length})</button><div className="context-tree">{jobTree.length ? jobTree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedJobFiles} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No job folders yet.</p>}</div></section>
           </ContextHome>
-          : <JobsHome jobs={jobs} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} onUpdateTracker={updateTracker} onInsertPrompt={insertJobPrompt} setup={<SetupChecklist items={setupItems} onOpenSettings={() => setSettingsModalOpen(true)} onOpenContext={() => showPage("context-home")} />} />}
+          : <JobsHome jobs={jobs} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} onUpdateTracker={updateTracker} queue={jobQueue} onSaveQueue={(next) => void saveQueue(next)} setup={<SetupChecklist items={setupItems} onOpenSettings={() => setSettingsModalOpen(true)} onOpenContext={() => showPage("context-home")} />} />}
         {loading && <div className="viewer-state">Reading local workspace…</div>}
         {error && <p className="error-copy viewer-error">{error}</p>}
       </section>
@@ -734,12 +760,22 @@ function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBa
 }
 
 type JobsFilter = "all" | "active" | "interviewing" | "follow-up" | "review" | "favorites";
-type JobsView = "list" | "board" | "cards";
+type JobsView = "list" | "cards";
+const STATUS_GROUPS: Array<{ id: string; label: string; statuses: TrackerStatus[] }> = [
+  { id: "saved", label: "Saved", statuses: ["saved"] },
+  { id: "applied", label: "Applied", statuses: ["applied"] },
+  { id: "interviewing", label: "Interviewing", statuses: ["interviewing"] },
+  { id: "offer", label: "Offer", statuses: ["offer"] },
+  { id: "closed", label: "Closed", statuses: ["rejected", "withdrawn"] },
+];
+const STALE_DAYS = 30;
 const ACTIVE_STATUSES: TrackerStatus[] = ["saved", "applied", "interviewing", "offer"];
 
-function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTrash, onUpdateTracker, onInsertPrompt, setup }: { onInsertPrompt: (action: Pick<JobAction, "prompt" | "label">) => void; setup: React.ReactNode; jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onOpenJobView: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onOpenEvaluation: (jobId: string) => void; onMoveToTrash: (jobId: string) => void; onUpdateTracker: (jobId: string, update: JobTrackerUpdate) => Promise<void> }) {
+function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTrash, onUpdateTracker, queue, onSaveQueue, setup }: { queue: JobQueue; onSaveQueue: (queue: JobQueue) => void; setup: React.ReactNode; jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onOpenJobView: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onOpenEvaluation: (jobId: string) => void; onMoveToTrash: (jobId: string) => void; onUpdateTracker: (jobId: string, update: JobTrackerUpdate) => Promise<void> }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<JobsFilter>("all");
+  const [statusGroup, setStatusGroup] = useState<string | null>(null);
+  const [closing, setClosing] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(storedFavoriteJobIds);
   const [sort, setSort] = useState<"added" | "company" | "role" | "follow-up" | "fit">(() => {
     const stored = window.localStorage.getItem("sensei-jobs-sort");
@@ -747,7 +783,7 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
   });
   const [view, setView] = useState<JobsView>(() => {
     const stored = window.localStorage.getItem("sensei-jobs-view");
-    return stored === "cards" || stored === "board" ? stored : "list";
+    return stored === "list" ? "list" : "cards";
   });
   useEffect(() => { window.localStorage.setItem("sensei-jobs-view", view); }, [view]);
   useEffect(() => { window.localStorage.setItem("sensei-jobs-sort", sort); }, [sort]);
@@ -775,7 +811,7 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
     const normalized = query.trim().toLowerCase();
     const text = (value: string | null | undefined, fallback: string) => (value ?? fallback).toLowerCase();
     return jobs
-      .filter((job) => matches(job, filter) && (!normalized || `${job.company ?? ""} ${job.title ?? ""} ${job.name} ${job.location ?? ""} ${effectiveStatus(job)} ${job.interviewRoundLabel ?? ""} ${job.tracker?.notes ?? ""}`.toLowerCase().includes(normalized)))
+      .filter((job) => matches(job, filter) && (!statusGroup || STATUS_GROUPS.find((group) => group.id === statusGroup)!.statuses.includes(effectiveStatus(job))) && (!normalized || `${job.company ?? ""} ${job.title ?? ""} ${job.name} ${job.location ?? ""} ${effectiveStatus(job)} ${job.interviewRoundLabel ?? ""} ${job.tracker?.notes ?? ""}`.toLowerCase().includes(normalized)))
       .sort((a, b) => {
         if (sort === "company") return text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
         if (sort === "role") return text(a.title, "").localeCompare(text(b.title, ""));
@@ -783,23 +819,95 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
         if (sort === "follow-up") return (followUpDays(a.tracker) ?? 9999) - (followUpDays(b.tracker) ?? 9999);
         return Date.parse(b.createdAt) - Date.parse(a.createdAt) || text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
       });
-  }, [jobs, query, filter, sort, favorites]);
+  }, [jobs, query, filter, sort, favorites, statusGroup]);
+  // Applications with no reply after STALE_DAYS: applied (set or derived), applied date that old, and no status change since.
+  const staleCutoff = Date.now() - STALE_DAYS * 86_400_000;
+  const stale = jobs.filter((job) => {
+    if (effectiveStatus(job) !== "applied") return false;
+    const appliedAt = effectiveAppliedAt(job);
+    const lastTouch = Math.max(appliedAt ? Date.parse(appliedAt) : 0, job.tracker?.updatedAt ? Date.parse(job.tracker.updatedAt) : 0);
+    return lastTouch > 0 && lastTouch < staleCutoff;
+  });
+  async function closeStale() {
+    if (!window.confirm(`Mark ${stale.length} application${stale.length === 1 ? "" : "s"} with no reply after ${STALE_DAYS} days as rejected? You can change any of them back later.`)) return;
+    setClosing(true);
+    try { for (const job of stale) await onUpdateTracker(job.id, { status: "rejected" }); } finally { setClosing(false); }
+  }
   const menuHandlers = (job: JobFolderSummary): JobMenuHandlers => ({ onOpen: () => onOpenJob(job.id), onOpenEvaluation: () => onOpenEvaluation(job.id), onOpenInterview: job.interviewRoundLabel ? () => onOpenJobView(job.id, "interview") : null, onMoveToTrash: () => onMoveToTrash(job.id) });
   const filterLabels: Record<JobsFilter, string> = { all: "All", active: "Active", interviewing: "Interviewing", "follow-up": "Follow-up due", review: "Needs review", favorites: "Favorites" };
-  return <section className={`jobs-home ${view === "board" ? "is-board" : ""}`}>
-    <header className="page-head"><div><h1>Jobs</h1><p>{visibleJobs.length === jobs.length ? `${jobs.length} job${jobs.length === 1 ? "" : "s"}` : `${visibleJobs.length} of ${jobs.length} jobs shown`}. {view === "board" ? "Drag a card to change its status, or use the status menu on the card." : "Open one to see its application and interview prep."}</p></div></header>
-    <AddJobBox onInsertPrompt={onInsertPrompt} />
+  return <section className="jobs-home">
+    <header className="page-head"><div><h1>Jobs</h1><p>{visibleJobs.length === jobs.length ? `${jobs.length} job${jobs.length === 1 ? "" : "s"}` : `${visibleJobs.length} of ${jobs.length} jobs shown`}. Open one to see its application and interview prep.</p></div></header>
+    <JobQueueBox queue={queue} jobs={jobs} onSave={onSaveQueue} onOpenJob={onOpenJob} />
+    <nav className="status-strip" aria-label="Jobs by status">
+      {STATUS_GROUPS.map((group) => { const count = jobs.filter((job) => group.statuses.includes(effectiveStatus(job))).length; return <button key={group.id} className={`status-step is-${group.id}`} aria-pressed={statusGroup === group.id} onClick={() => setStatusGroup(statusGroup === group.id ? null : group.id)}><strong className="tabular">{count}</strong><span>{group.label}</span></button>; })}
+      {stale.length > 0 && <p className="status-strip-note">{stale.length} application{stale.length === 1 ? " has" : "s have"} had no reply for {STALE_DAYS}+ days. <button className="btn-link" disabled={closing} onClick={() => void closeStale()}>{closing ? "Closing…" : "Mark them as rejected"}</button></p>}
+    </nav>
     {setup}
     <div className="jobs-toolbar">
       <label className="workspace-search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search company, role, location, or notes…" aria-label="Search jobs" /></label>
       <div className="segmented" role="group" aria-label="Filter jobs">{(Object.keys(filterLabels) as JobsFilter[]).filter((value) => value === "all" || filterCounts[value] > 0 || filter === value).map((value) => <button aria-pressed={filter === value} key={value} onClick={() => setFilter(value)}>{filterLabels[value]}<span>{filterCounts[value]}</span></button>)}</div>
       <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option><option value="follow-up">Follow-up date</option><option value="fit">Best fit</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
-      <div className="segmented" role="group" aria-label="Layout">{(["list", "board", "cards"] as JobsView[]).map((value) => <button key={value} aria-pressed={view === value} onClick={() => setView(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div>
+      <div className="segmented" role="group" aria-label="Layout">{(["cards", "list"] as JobsView[]).map((value) => <button key={value} aria-pressed={view === value} onClick={() => setView(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div>
     </div>
     {!visibleJobs.length ? <div className="dashboard-empty"><h2>No jobs match this view</h2><p>Clear the search or pick another filter.</p></div>
-      : view === "board" ? <JobsBoard jobs={visibleJobs} onOpenJob={onOpenJob} onUpdateTracker={onUpdateTracker} menuHandlers={menuHandlers} />
       : view === "cards" ? <div className="job-card-grid">{visibleJobs.map((job) => <JobCard key={job.id} job={job} favorite={favorites.has(job.id)} onToggleFavorite={() => toggleFavorite(job.id)} onOpen={() => onOpenJob(job.id)} onOpenView={(tab) => onOpenJobView(job.id, tab)} onOpenEvaluation={() => onOpenEvaluation(job.id)} onMoveToTrash={() => onMoveToTrash(job.id)} />)}</div>
       : <div className="jobs-table-wrap"><table className="jobs-table"><thead><tr><th scope="col">Role</th><th scope="col">Fit</th><th scope="col">Status</th><th scope="col">Interview</th><th scope="col">Next</th><th scope="col" className="col-added">Added</th><th scope="col"><span className="sr-only">Favorite and actions</span></th></tr></thead><tbody>{visibleJobs.map((job) => <tr key={job.id} tabIndex={0} onClick={() => onOpenJob(job.id)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onOpenJob(job.id); } }}><td className="jobs-role"><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></td><td><FitBadge rating={job.rating} /></td><td><TrackerPill status={effectiveStatus(job)} /></td><td>{job.interviewRoundLabel ? <button className="btn-link" onClick={(event) => { event.stopPropagation(); onOpenJobView(job.id, "interview"); }}>{job.interviewRoundLabel}</button> : <span className="muted">None</span>}</td><td><NextBadge job={job} /></td><td className="tabular muted col-added">{formatJobDate(job.createdAt)}</td><td><button className={`job-favorite ${favorites.has(job.id) ? "is-favorite" : ""}`} aria-pressed={favorites.has(job.id)} aria-label={`Favorite ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => { event.stopPropagation(); toggleFavorite(job.id); }}>{favorites.has(job.id) ? "★" : "☆"}</button><JobMenuButton job={job} handlers={menuHandlers(job)} /></td></tr>)}</tbody></table></div>}
+  </section>;
+}
+
+type SetupItem = { label: string; done: boolean; action: "settings" | "context" | null };
+
+/** Setup health on the Jobs page; hidden when complete or dismissed. */
+function SetupChecklist({ items, onOpenSettings, onOpenContext }: { items: SetupItem[]; onOpenSettings: () => void; onOpenContext: () => void }) {
+  const [dismissed, setDismissed] = useState(() => { try { return window.localStorage.getItem("sensei-setup-dismissed") === "1"; } catch { return false; } });
+  const open = items.filter((item) => !item.done);
+  if (dismissed || !open.length) return null;
+  return <section className="setup-check" aria-labelledby="setup-check-title">
+    <div className="setup-check-head"><h2 id="setup-check-title">Finish setting up</h2><button className="btn-link" onClick={() => { setDismissed(true); try { window.localStorage.setItem("sensei-setup-dismissed", "1"); } catch { /* storage unavailable */ } }}>Hide</button></div>
+    <ul>{items.map((item) => <li key={item.label} className={item.done ? "is-done" : ""}><span aria-hidden="true">{item.done ? "✓" : "○"}</span>{item.label}{!item.done && item.action === "settings" && <button className="btn-link" onClick={onOpenSettings}>Open Settings</button>}{!item.done && item.action === "context" && <button className="btn-link" onClick={onOpenContext}>Review sources</button>}</li>)}</ul>
+  </section>;
+}
+
+const QUEUE_LABEL: Record<JobQueue["items"][number]["status"], string> = { queued: "Waiting", running: "Running in Agy", done: "Done", needs_attention: "Needs attention" };
+
+/** Job links waiting for Agy. With "Run automatically" on, the next link is sent (and run) when Agy is idle. */
+function JobQueueBox({ queue, jobs, onSave, onOpenJob }: { queue: JobQueue; jobs: JobFolderSummary[]; onSave: (queue: JobQueue) => void; onOpenJob: (jobId: string) => void }) {
+  const [url, setUrl] = useState("");
+  const value = url.trim();
+  const duplicate = queue.items.some((item) => item.url === value && item.status !== "done");
+  const valid = /^https?:\/\/[^\s]+$/i.test(value) && value.length <= 400 && !duplicate;
+  const update = (id: string, patch: Partial<JobQueue["items"][number]>) => onSave({ ...queue, items: queue.items.map((item) => item.id === id ? { ...item, ...patch } : item) });
+  function add(event: React.FormEvent) {
+    event.preventDefault();
+    if (!valid) return;
+    const id = `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    onSave({ ...queue, items: [...queue.items, { id, url: value, addedAt: new Date().toISOString(), status: "queued", sentAt: null, finishedAt: null, jobId: null }] });
+    setUrl("");
+  }
+  const visible = queue.items.filter((item) => item.status !== "done").concat(queue.items.filter((item) => item.status === "done").slice(-3));
+  const waiting = queue.items.filter((item) => item.status === "queued").length;
+  return <section className="job-queue" aria-labelledby="job-queue-title">
+    <form className="add-job" onSubmit={add}>
+      <label htmlFor="add-job-url" id="job-queue-title">Add jobs</label>
+      <input id="add-job-url" type="url" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="Paste a job posting link" aria-describedby="add-job-help" />
+      <button className="btn-primary" disabled={!valid}>Add to queue</button>
+      <p id="add-job-help">{duplicate ? "That link is already in the queue." : <>Agy runs one link at a time: it reads the posting, scores your fit, and drafts the resume and cover letter.</>}</p>
+      <label className="queue-auto"><input type="checkbox" checked={queue.autoRun} onChange={(event) => onSave({ ...queue, autoRun: event.target.checked })} /> Run automatically when Agy is free</label>
+    </form>
+    {visible.length > 0 && <ol className="queue-list" aria-label="Job queue">{visible.map((item) => {
+      const job = item.jobId ? jobs.find((candidate) => candidate.id === item.jobId) : null;
+      return <li key={item.id} className={`queue-item is-${item.status}`}>
+        <span className="queue-state">{QUEUE_LABEL[item.status]}</span>
+        <span className="queue-url">{job ? `${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}` : item.url}</span>
+        <span className="queue-actions">
+          {item.status === "done" && job && <button className="btn-link" onClick={() => onOpenJob(job.id)}>Open job</button>}
+          {item.status === "needs_attention" && <button className="btn-link" onClick={() => update(item.id, { status: "queued", sentAt: null, finishedAt: null })}>Try again</button>}
+          {item.status !== "running" && <button className="btn-link" onClick={() => onSave({ ...queue, items: queue.items.filter((candidate) => candidate.id !== item.id) })}>Remove</button>}
+          {item.status === "running" && <button className="btn-link" onClick={() => update(item.id, { status: "needs_attention", finishedAt: new Date().toISOString() })}>Stop waiting</button>}
+        </span>
+      </li>;
+    })}</ol>}
+    {!queue.autoRun && waiting > 0 && <button className="btn-quiet" onClick={() => onSave({ ...queue, autoRun: true })}>Start the queue ({waiting})</button>}
   </section>;
 }
 
@@ -824,77 +932,6 @@ function NextBadge({ job, quiet = false, due = false }: { job: JobFolderSummary;
 function formatTrackerDate(value: string): string {
   const [y, m, d] = value.split("-").map(Number);
   return new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-const BOARD_COLUMNS: Array<{ id: string; label: string; statuses: TrackerStatus[]; drop: TrackerStatus }> = [
-  { id: "saved", label: "Saved", statuses: ["saved"], drop: "saved" },
-  { id: "applied", label: "Applied", statuses: ["applied"], drop: "applied" },
-  { id: "interviewing", label: "Interviewing", statuses: ["interviewing"], drop: "interviewing" },
-  { id: "offer", label: "Offer", statuses: ["offer"], drop: "offer" },
-  { id: "closed", label: "Closed", statuses: ["rejected", "withdrawn"], drop: "rejected" },
-];
-const BOARD_PAGE = 8;
-
-type SetupItem = { label: string; done: boolean; action: "settings" | "context" | null };
-
-/** Setup health on the Jobs page; hidden when complete or dismissed. */
-function SetupChecklist({ items, onOpenSettings, onOpenContext }: { items: SetupItem[]; onOpenSettings: () => void; onOpenContext: () => void }) {
-  const [dismissed, setDismissed] = useState(() => { try { return window.localStorage.getItem("sensei-setup-dismissed") === "1"; } catch { return false; } });
-  const open = items.filter((item) => !item.done);
-  if (dismissed || !open.length) return null;
-  return <section className="setup-check" aria-labelledby="setup-check-title">
-    <div className="setup-check-head"><h2 id="setup-check-title">Finish setting up</h2><button className="btn-link" onClick={() => { setDismissed(true); try { window.localStorage.setItem("sensei-setup-dismissed", "1"); } catch { /* storage unavailable */ } }}>Hide</button></div>
-    <ul>{items.map((item) => <li key={item.label} className={item.done ? "is-done" : ""}><span aria-hidden="true">{item.done ? "✓" : "○"}</span>{item.label}{!item.done && item.action === "settings" && <button className="btn-link" onClick={onOpenSettings}>Open Settings</button>}{!item.done && item.action === "context" && <button className="btn-link" onClick={onOpenContext}>Review sources</button>}</li>)}</ul>
-  </section>;
-}
-
-/** Paste a job posting link and send it to Agy, which runs the application pipeline. */
-function AddJobBox({ onInsertPrompt }: { onInsertPrompt: (action: Pick<JobAction, "prompt" | "label">) => void }) {
-  const [url, setUrl] = useState("");
-  const value = url.trim();
-  const valid = /^https?:\/\/[^\s]+$/i.test(value) && value.length <= 400;
-  function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!valid) return;
-    onInsertPrompt({ prompt: `Evaluate this job and draft the application: ${value}`, label: "New job" });
-    setUrl("");
-  }
-  return <form className="add-job" onSubmit={submit}>
-    <label htmlFor="add-job-url">Add a job</label>
-    <input id="add-job-url" type="url" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="Paste a job posting link" aria-describedby="add-job-help" />
-    <button className="btn-primary" disabled={!valid}>Send to Agy</button>
-    <p id="add-job-help">Agy reads the posting, scores your fit, and drafts the resume and cover letter. You press Enter in the Agy panel to start.</p>
-  </form>;
-}
-
-function JobsBoard({ jobs, onOpenJob, onUpdateTracker, menuHandlers }: { jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onUpdateTracker: (jobId: string, update: JobTrackerUpdate) => Promise<void>; menuHandlers: (job: JobFolderSummary) => JobMenuHandlers }) {
-  const [dragOver, setDragOver] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  async function move(jobId: string, status: TrackerStatus) {
-    setBusy(jobId);
-    try { await onUpdateTracker(jobId, { status }); } finally { setBusy(null); }
-  }
-  // Due follow-ups first, then most recently added.
-  const order = (a: JobFolderSummary, b: JobFolderSummary) => (followUpDays(a.tracker) ?? 9999) - (followUpDays(b.tracker) ?? 9999) || Date.parse(b.createdAt) - Date.parse(a.createdAt);
-  return <div className="board" aria-label="Jobs by status">
-    {BOARD_COLUMNS.map((column) => {
-      const items = jobs.filter((job) => column.statuses.includes(effectiveStatus(job))).sort(order);
-      const shown = expanded.has(column.id) ? items : items.slice(0, BOARD_PAGE);
-      return <section key={column.id} className={`board-col is-${column.id} ${dragOver === column.id ? "is-over" : ""}`} aria-labelledby={`board-${column.id}`}
-        onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDragOver(column.id); }}
-        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragOver(null); }}
-        onDrop={(event) => { event.preventDefault(); setDragOver(null); const jobId = event.dataTransfer.getData("text/sensei-job"); if (jobId) void move(jobId, column.drop); }}>
-        <h2 id={`board-${column.id}`}><span>{column.label}</span><span>{items.length}</span></h2>
-        <ul>{shown.map((job) => { const status = effectiveStatus(job); return <li key={job.id} className={`board-card ${busy === job.id ? "is-busy" : ""}`} draggable onDragStart={(event) => { event.dataTransfer.setData("text/sensei-job", job.id); event.dataTransfer.effectAllowed = "move"; }}>
-          <button className="board-card-open" onClick={() => onOpenJob(job.id)}><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></button>
-          <div className="board-card-meta"><FitBadge rating={job.rating} />{status === "withdrawn" && <TrackerPill status={status} />}<NextBadge job={job} quiet due /><label className="board-card-move"><span className="sr-only">Status for {job.company ?? displayJobName(job.name)}, {job.title ?? "role"}</span><select value={status} disabled={busy === job.id} onChange={(event) => void move(job.id, event.target.value as TrackerStatus)}>{TRACKER_STATUSES.map((value) => <option key={value} value={value}>{TRACKER_LABELS[value]}</option>)}</select></label><JobMenuButton job={job} handlers={menuHandlers(job)} /></div>
-        </li>; })}</ul>
-        {items.length > BOARD_PAGE && <button className="btn-link board-more" onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(column.id)) next.delete(column.id); else next.add(column.id); return next; })}>{expanded.has(column.id) ? "Show fewer" : `Show ${items.length - BOARD_PAGE} more`}</button>}
-        {!items.length && <p className="board-empty">Drop a job here</p>}
-      </section>;
-    })}
-  </div>;
 }
 
 type JobMenuHandlers = { onOpen: () => void; onOpenEvaluation: () => void; onOpenInterview: (() => void) | null; onMoveToTrash: () => void };

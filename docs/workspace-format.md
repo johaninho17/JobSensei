@@ -24,4 +24,6 @@ Each accepted job uses `jobs/<job-id>/` with `original_jd.md`, `evaluation.md`, 
 
 The application tracker lives in `jobs/<job-id>/.sensei/tracker.json` and is written only when the user changes a job's status, dates, or notes in the app: `status` (`saved`, `applied`, `interviewing`, `offer`, `rejected`, `withdrawn`), `appliedAt` and `nextFollowUpAt` (`YYYY-MM-DD` or null), `notes`, and a `history` of status changes. Agy and the pipeline never write it. Until the user sets a status, the app derives one: Interviewing when interview prep exists, Applied when application drafts exist (applied date = the day the job was added), otherwise Saved.
 
+The job queue lives in the workspace at `.sensei/job_queue.json`: `autoRun` and up to 50 `items` (`url`, `status`: queued, running, done, needs_attention, plus sent and finished times and the resulting `jobId`). The app sends one link at a time to Agy.
+
 Files outside `data/` are application source and public documentation. Never place private candidate data in `examples/`; examples must remain fictional.

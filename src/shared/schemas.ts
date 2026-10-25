@@ -1070,6 +1070,20 @@ export const clarifyingAnswersReportSchema = z.object({
 });
 export type ClarifyingAnswersReport = z.infer<typeof clarifyingAnswersReportSchema>;
 
+/** Job links waiting to be sent to Agy one at a time: `.sensei/job_queue.json` in the workspace. */
+export const jobQueueItemSchema = z.object({
+  id: z.string().regex(/^[a-z0-9-]{6,40}$/),
+  url: z.string().url().max(400).refine((value) => /^https?:\/\//i.test(value), "Use an http(s) link."),
+  addedAt: z.string(),
+  status: z.enum(["queued", "running", "done", "needs_attention"]),
+  sentAt: z.string().nullable().default(null),
+  finishedAt: z.string().nullable().default(null),
+  jobId: z.string().nullable().default(null),
+});
+export type JobQueueItem = z.infer<typeof jobQueueItemSchema>;
+export const jobQueueSchema = z.object({ autoRun: z.boolean().default(true), items: z.array(jobQueueItemSchema).max(50).default([]) });
+export type JobQueue = z.infer<typeof jobQueueSchema>;
+
 /** The latest pipeline run, shown above the terminal. Read from files the commands already write. */
 export type RunStatus = {
   kind: "fetch" | "application" | "interview";
@@ -1144,6 +1158,10 @@ export interface SenseiApi {
   };
   runs: {
     latest(): Promise<RunStatus | null>;
+  };
+  queue: {
+    get(): Promise<JobQueue>;
+    save(queue: JobQueue): Promise<JobQueue>;
   };
   search: {
     query(input: SearchQuery): Promise<SearchResponse>;

@@ -60,6 +60,10 @@ const api: SenseiApi = {
   runs: {
     latest: () => ipcRenderer.invoke("runs:latest"),
   },
+  queue: {
+    get: () => ipcRenderer.invoke("queue:get"),
+    save: (queue) => ipcRenderer.invoke("queue:save", queue),
+  },
   search: {
     query: (input) => ipcRenderer.invoke("search:query", input),
   },

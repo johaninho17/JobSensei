@@ -38,7 +38,7 @@ Light is the default theme. Dark is neutral graphite with green accents, not dar
 │ Settings         │                                                  │           │
 └──────────────────┴──────────────────────────────────────────────────┴───────────┘
 ```
-- Pages: Jobs (List, Board by status with drag and drop plus a status menu on each card, or Cards), Interviews (every job with prep, current round and progress), Career context (resumes, sources, job files Agy reads).
+- Pages: Jobs (job queue box, status strip that filters by status, then Cards by default or List), Interviews (every job with prep, current round and progress), Career context (resumes, sources, job files Agy reads).
 - Job page: company, title (serif h1), stage, fit, location, then tabs Overview, Application, Interview, Files. Overview leads with the next-step card, then Fit, Tracking (dates, notes, history), Documents, and Interviews. The Application tab states the check result in words; pipeline diagnostics sit under "Pipeline details".
 - Interview tab: round stepper, round header with live mode, question cards (filter, search, keyboard), and a side column with key points, delivery reminders, a readiness checklist, prep notes, and files. Live mode shows one card at a time with a timer, in the main window or a pop-out window.
 - Content is left-aligned with a max width of about 1180px. Sections are separated by space and headings; cards only for things you open.

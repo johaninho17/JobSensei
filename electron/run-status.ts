@@ -29,7 +29,7 @@ export async function latestRun(workspacePath: string, now = Date.now()): Promis
   const fetchedAt = await mtime(fetchedPath);
   if (fetchedAt) candidates.push({ at: fetchedAt, load: async () => {
     const meta = await json<{ fetchedAt?: string; company?: string | null; title?: string | null; suggestedJobId?: string | null }>(fetchedPath);
-    return { kind: "fetch", jobId: meta?.suggestedJobId ?? null, roundId: null, label: [meta?.company, meta?.title].filter(Boolean).join(", ") || "Job posting", at: new Date(fetchedAt).toISOString(), durationSeconds: null, state: now - fetchedAt < RUNNING_WINDOW_MS ? "running" : "passed", fitScore: null, gate: null, issues: [] };
+    return { kind: "fetch", jobId: meta?.suggestedJobId ?? null, roundId: null, label: [meta?.company, meta?.title].filter(Boolean).join(", ") || "Job posting", at: new Date(fetchedAt).toISOString(), durationSeconds: null, state: "passed", fitScore: null, gate: null, issues: [] };
   } });
   for (const entry of await readdir(jobsRoot, { withFileTypes: true }).catch(() => [])) {
     if (!entry.isDirectory()) continue;
