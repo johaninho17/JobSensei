@@ -114,6 +114,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "JobSensei"
-    }
+    },
+    "afterPack": "scripts/adhoc-sign-mac.cjs"
   }
 }

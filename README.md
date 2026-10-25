@@ -67,6 +67,17 @@ The viewer, dashboards, local organization, Markdown editing, search, and PDF ex
 
 ## Install
 
+### Download (macOS)
+
+Download the `.dmg` (or `-mac.zip`) from the GitHub release and drag JobSensei to Applications. The app is ad-hoc signed but not notarized by Apple, so the first launch is blocked once:
+
+1. Open JobSensei; macOS says it can't verify the developer. Click **Done**.
+2. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to JobSensei.
+
+Later launches open normally. Packaged builds keep the workspace in `~/Documents/JobSensei`.
+
+### From source
+
 ```bash
 git clone <your-repository-url>
 cd JobSensei
