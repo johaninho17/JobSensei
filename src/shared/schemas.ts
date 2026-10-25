@@ -1186,7 +1186,7 @@ export interface SenseiApi {
     insertPrompt(text: string): Promise<void>;
     resize(input: { cols: number; rows: number }): Promise<void>;
     restart(): Promise<{ cwd: string; agyStarted?: boolean }>;
-    status(): Promise<{ running: boolean; agy: boolean; startedAt: number | null; lastOutputAt: number | null; recentOutput: string }>;
+    status(): Promise<{ running: boolean; agy: boolean; startedAt: number | null; lastOutputAt: number | null; screen: "ready" | "blocked" | "unknown"; recentOutput: string }>;
     stop(): Promise<void>;
     onData(callback: (data: string) => void): () => void;
     onExit(callback: (code: number) => void): () => void;

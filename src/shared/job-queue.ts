@@ -35,10 +35,10 @@ export function advanceQueue(queue: JobQueue, latest: RunStatus | null, now: num
   return { queue: { ...queue, items }, send: next };
 }
 
-/** Screens where Agy is waiting for the user (sign-in, folder trust), not for a prompt. */
-const BLOCKING = /select login method|waiting for authentication|authorization code|authentication (?:failed|timed out)|do you trust the contents|use a google cloud project/gi;
+/** Screens where Agy cannot take a prompt: sign-in, folder trust, or a used-up quota. */
+const BLOCKING = /select login method|waiting for authentication|authorization code|authentication (?:failed|timed out)|do you trust the contents|use a google cloud project|quota reached|upgrade your subscription/gi;
 /** Agy's status line (model and effort), drawn once it is signed in and at its prompt. */
-const READY_LINE = /\b(?:gemini|claude|gpt)[^\n·]{0,40}·\s*(?:low|medium|high|xhigh|max)\b/gi;
+const READY_LINE = /(?:gemini|claude|gpt)[^\n·]{0,40}·\s*(?:low|medium|high|xhigh|max)\b/gi;
 /** Agy redraws while it works, so this long without output means it is idle. */
 const IDLE_MS = 5000;
 
@@ -54,16 +54,25 @@ export function plainTerminalText(output: string): string {
 }
 
 /**
- * Whether Agy can take a queued prompt: running, its status line drawn after any sign-in or trust screen,
- * and idle for a few seconds.
+ * What the latest Agy screen shows, from a rolling tail of plain output: its status line after any
+ * sign-in or trust screen ("ready"), a sign-in or trust screen ("blocked"), or neither ("unknown").
  */
-export function agyReadiness(state: { running: boolean; agy: boolean; startedAt: number | null; lastOutputAt?: number | null; recentOutput: string }, now: number): boolean {
+export function classifyAgyScreen(plainTail: string): "ready" | "blocked" | "unknown" {
+  if (/do you trust the contents/i.test(plainTail.slice(-700))) return "blocked";
+  const ready = lastIndex(READY_LINE, plainTail);
+  const blocked = lastIndex(BLOCKING, plainTail);
+  if (ready < 0 && blocked < 0) return "unknown";
+  return ready > blocked ? "ready" : "blocked";
+}
+
+/**
+ * Whether Agy can take a queued prompt: running, its latest screen classified "ready" (status line after
+ * any sign-in or trust screen), and idle for a few seconds. The main process keeps `screen` up to date as
+ * output arrives, so the status line is never lost from a short buffer.
+ */
+export function agyReadiness(state: { running: boolean; agy: boolean; startedAt: number | null; lastOutputAt?: number | null; recentOutput: string; screen?: "ready" | "blocked" | "unknown" }, now: number): boolean {
   if (!state.running || !state.agy || state.startedAt === null) return false;
   if (now - state.startedAt < 4000) return false;
   if (state.lastOutputAt && now - state.lastOutputAt < IDLE_MS) return false;
-  const text = plainTerminalText(state.recentOutput);
-  const ready = lastIndex(READY_LINE, text);
-  // The trust question is drawn above the status line, so it blocks whenever it is on the latest screen.
-  if (/do you trust the contents/i.test(text.slice(-700))) return false;
-  return ready >= 0 && ready > lastIndex(BLOCKING, text);
+  return (state.screen ?? classifyAgyScreen(plainTerminalText(state.recentOutput))) === "ready";
 }

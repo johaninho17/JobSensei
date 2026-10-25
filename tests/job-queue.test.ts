@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readJobQueue, saveJobQueue } from "../electron/job-queue";
-import { advanceQueue, agyReadiness } from "../src/shared/job-queue";
+import { advanceQueue, agyReadiness, classifyAgyScreen } from "../src/shared/job-queue";
 import type { JobQueue, RunStatus } from "../src/shared/schemas";
 
 const item = (id: string, status: JobQueue["items"][number]["status"] = "queued", sentAt: string | null = null) => ({ id, url: `https://jobs.example.com/${id}`, addedAt: "2026-10-25T10:00:00Z", status, sentAt, finishedAt: null, jobId: null });
@@ -57,5 +57,15 @@ describe("job queue", () => {
     expect(agyReadiness({ ...base, recentOutput: "You are currently not signed in. Signing in...Accessing workspace: /tmp/ws Do you trust the contents of this project? Antigravity CLI requires permission to read, edit, and execute files here. > Yes, I trust this folder No, exit ↑/↓ Navigate · enter ConfirmGemini 3.8 Flash · medium" }, now)).toBe(false);
     expect(agyReadiness({ ...base, recentOutput: "Waiting for authentication (timeout 60s)... Or, paste the authorization code here" }, now)).toBe(false);
     expect(advanceQueue(waiting.queue, null, now, true).send?.id).toBe("job-aaaa");
+  });
+
+  it("keeps the screen state when the status line scrolls out of the buffer", () => {
+    const now = Date.parse("2026-10-25T12:00:00Z");
+    expect(classifyAgyScreen("> ? for shortcutsGemini 4 Argon · medium")).toBe("ready");
+    expect(classifyAgyScreen("┃ Verbosity is now medium by default ┃ esc to dismiss")).toBe("unknown");
+    expect(classifyAgyScreen("Gemini 4 Argon · medium ⣯ Generating... ⚠ Individual quota reached. Please upgrade your subscription to increase your limits.")).toBe("blocked");
+    // The main process remembers "ready" even though the recent output no longer contains the status line.
+    expect(agyReadiness({ running: true, agy: true, startedAt: now - 60_000, lastOutputAt: now - 20_000, recentOutput: "(Google AI Pro)", screen: "ready" }, now)).toBe(true);
+    expect(agyReadiness({ running: true, agy: true, startedAt: now - 60_000, lastOutputAt: now - 20_000, recentOutput: "(Google AI Pro)", screen: "blocked" }, now)).toBe(false);
   });
 });

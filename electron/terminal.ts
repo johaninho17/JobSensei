@@ -2,6 +2,7 @@ import type { IPty } from "node-pty";
 import { statSync } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
 import type { ContextManifest } from "../src/shared/schemas";
+import { classifyAgyScreen, plainTerminalText } from "../src/shared/job-queue";
 
 let ptyModule: typeof import("node-pty") | null = null;
 let ptyLoadError: string | null = null;
@@ -81,10 +82,12 @@ export class TerminalSession {
   private runningAgy = false;
   private recentOutput = "";
   private lastOutputAt: number | null = null;
+  private plainTail = "";
+  private screen: "ready" | "blocked" | "unknown" = "unknown";
 
   /** What the job queue needs to know before it sends a prompt (see agyReadiness). */
-  status(): { running: boolean; agy: boolean; startedAt: number | null; lastOutputAt: number | null; recentOutput: string } {
-    return { running: Boolean(this.process), agy: this.runningAgy, startedAt: this.startedAt, lastOutputAt: this.lastOutputAt, recentOutput: this.recentOutput.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "") };
+  status(): { running: boolean; agy: boolean; startedAt: number | null; lastOutputAt: number | null; screen: "ready" | "blocked" | "unknown"; recentOutput: string } {
+    return { running: Boolean(this.process), agy: this.runningAgy, startedAt: this.startedAt, lastOutputAt: this.lastOutputAt, screen: this.screen, recentOutput: this.recentOutput.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "") };
   }
 
   setAgyHome(home: string | null): void { this.agyHome = home; }
@@ -112,7 +115,15 @@ export class TerminalSession {
     this.runningAgy = Boolean(agyPath);
     this.recentOutput = "";
     this.lastOutputAt = null;
-    this.process.onData((data) => { this.lastOutputAt = Date.now(); this.recentOutput = (this.recentOutput + data).slice(-6000); this.onDataCallback?.(data); });
+    this.plainTail = "";
+    this.screen = "unknown";
+    this.process.onData((data) => {
+      this.lastOutputAt = Date.now();
+      this.recentOutput = (this.recentOutput + data).slice(-6000);
+      // Classify as output arrives, so the screen state survives long stretches of partial redraws.
+      this.plainTail = (this.plainTail + plainTerminalText(data)).slice(-2000);
+      const screen = classifyAgyScreen(this.plainTail);
+      if (screen !== "unknown") this.screen = screen; this.onDataCallback?.(data); });
     const ptyProcess = this.process;
     ptyProcess.onExit(({ exitCode }) => { if (this.process === ptyProcess) this.process = null; this.onExitCallback?.(exitCode); });
     for (const input of this.pendingInput.splice(0)) ptyProcess.write(input);
