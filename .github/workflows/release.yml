@@ -64,6 +64,11 @@ jobs:
       - name: Build application bundle
         run: npm run build
 
+      - name: Record the release source for the update notice
+        shell: bash
+        run: |
+          printf '{"repository":"%s"}\n' "$GITHUB_REPOSITORY" > dist-electron/release-source.json
+
       - name: Configure macOS signing (only when secrets exist)
         if: matrix.platform == 'mac'
         shell: bash

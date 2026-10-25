@@ -3,6 +3,8 @@ import type { SenseiApi } from "../src/shared/schemas";
 
 const api: SenseiApi = {
   app: {
+    checkUpdate: () => ipcRenderer.invoke("app:check-update"),
+    openRelease: (url) => ipcRenderer.invoke("app:open-release", url),
     copyText: (text) => ipcRenderer.invoke("app:copy-text", text),
   },
   workspace: {

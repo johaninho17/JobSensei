@@ -1101,6 +1101,9 @@ export type RunStatus = {
 export interface SenseiApi {
   app: {
     copyText(text: string): Promise<void>;
+    /** A newer GitHub release, or null (also null for builds without a recorded release source). */
+    checkUpdate(): Promise<{ version: string; url: string } | null>;
+    openRelease(url: string): Promise<void>;
   };
   workspace: {
     getSummary(): Promise<WorkspaceSummary>;

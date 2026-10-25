@@ -217,6 +217,15 @@ describe("design system (Phase 3)", () => {
     expect(app).toContain('return stored === "list" ? "list" : "cards";');
   });
 
+  it("has toasts with undo, a shortcuts list, and a palette without all-caps tags", async () => {
+    const [app, palette] = await Promise.all(["App.tsx", "SearchPalette.tsx"].map((file) => readFile(join(process.cwd(), "src/renderer", file), "utf8")));
+    expect(app).toMatch(/function ToastRegion[\s\S]*role="status" aria-live="polite"[\s\S]*Undo/);
+    expect(app).toMatch(/updateTracker\(jobId, \{ status: previousStatus \}, \{ quiet: true \}\)/);
+    expect(app).toContain("function ShortcutsPanel");
+    expect(palette).not.toMatch(/"(?:JOB|CTX|INT|APP|ACT|ESC)"|>(?:JOB|CTX|INT|APP|ACT|ESC)</);
+    expect(palette).toContain("rememberRecent(entry.action.id)");
+  });
+
   it("keeps the terminal panel dark in both themes", async () => {
     const tokens = await readFile(join(process.cwd(), "src/renderer/tokens.css"), "utf8");
     expect(tokens).toMatch(/\.terminal-panel \{[^}]*--canvas: var\(--term-bg\)/);

@@ -7,7 +7,18 @@ export type PaletteAction = {
   subtitle: string;
   keywords: string;
   run: () => void;
+  /** Shown next to the action so people learn the shortcut. */
+  shortcut?: string;
 };
+
+const RECENTS_KEY = "sensei-palette-recent";
+function readRecents(): string[] {
+  try { return JSON.parse(window.localStorage.getItem(RECENTS_KEY) ?? "[]") as string[]; } catch { return []; }
+}
+function rememberRecent(id: string): void {
+  try { window.localStorage.setItem(RECENTS_KEY, JSON.stringify([id, ...readRecents().filter((value) => value !== id)].slice(0, 5))); } catch { /* storage unavailable */ }
+}
+const KIND_LABEL: Record<SearchResultKind, string> = { job: "Job", career: "Context", application: "File", interview: "Interview", action: "Action" };
 
 type PaletteEntry =
   | { type: "result"; result: SearchResult }
@@ -15,9 +26,9 @@ type PaletteEntry =
 
 const resultGroups: Array<[SearchResultKind, string]> = [
   ["job", "Jobs"],
-  ["career", "Career Context"],
-  ["application", "Application Artifacts"],
-  ["interview", "Interview & Challenge Material"],
+  ["career", "Career context"],
+  ["application", "Application files"],
+  ["interview", "Interview and challenge material"],
 ];
 
 export function SearchPalette({ open, actions, onClose, onOpenResult }: { open: boolean; actions: PaletteAction[]; onClose: () => void; onOpenResult: (result: SearchResult) => void }) {
@@ -61,8 +72,14 @@ export function SearchPalette({ open, actions, onClose, onOpenResult }: { open: 
 
   const matchingActions = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return actions.filter((action) => !normalized || `${action.title} ${action.subtitle} ${action.keywords}`.toLowerCase().includes(normalized));
-  }, [actions, query]);
+    if (!normalized) {
+      // Before typing: recent actions first, then the rest.
+      const recents = readRecents();
+      return [...recents.map((id) => actions.find((action) => action.id === id)).filter((action): action is PaletteAction => Boolean(action)), ...actions.filter((action) => !recents.includes(action.id))];
+    }
+    const words = normalized.split(/\s+/);
+    return actions.filter((action) => { const text = `${action.title} ${action.subtitle} ${action.keywords}`.toLowerCase(); return words.every((word) => text.includes(word)); });
+  }, [actions, query, open]);
   const orderedResults = useMemo(() => resultGroups.flatMap(([kind]) => results.filter((result) => result.kind === kind)), [results]);
   const entries = useMemo<PaletteEntry[]>(() => [
     ...orderedResults.map((result) => ({ type: "result" as const, result })),
@@ -75,7 +92,7 @@ export function SearchPalette({ open, actions, onClose, onOpenResult }: { open: 
 
   function choose(entry: PaletteEntry) {
     if (entry.type === "result") onOpenResult(entry.result);
-    else entry.action.run();
+    else { rememberRecent(entry.action.id); entry.action.run(); }
     onClose();
   }
 
@@ -104,7 +121,7 @@ export function SearchPalette({ open, actions, onClose, onOpenResult }: { open: 
             if (event.key === "Escape") onClose();
           }}
         />
-        <kbd>ESC</kbd>
+        <kbd>Esc</kbd>
       </div>
       <div className="search-results" role="listbox" aria-label="Search results">
         {loading && <p className="search-state">Searching local workspace…</p>}
@@ -115,21 +132,22 @@ export function SearchPalette({ open, actions, onClose, onOpenResult }: { open: 
           return <section className="search-group" key={kind}><h2>{label}<span>{grouped.length}</span></h2>{grouped.map((result) => {
             const index = indexForResult(result.id);
             return <button key={result.id} className={index === activeIndex ? "is-active" : ""} role="option" aria-selected={index === activeIndex} disabled={!result.relativePath} onMouseEnter={() => setActiveIndex(index)} onClick={() => choose({ type: "result", result })}>
-              <span className="search-result-icon">{kind === "job" ? "JOB" : kind === "career" ? "CTX" : kind === "interview" ? "INT" : "APP"}</span>
+              <span className="search-result-icon">{KIND_LABEL[kind]}</span>
               <span className="search-result-copy"><strong>{result.title}</strong><small>{[result.subtitle, result.relativePath].filter(Boolean).join(" · ")}</small>{result.excerpt && <em>{result.excerpt}</em>}</span>
             </button>;
           })}</section>;
         })}
-        {!loading && matchingActions.length > 0 && <section className="search-group"><h2>Actions<span>{matchingActions.length}</span></h2>{matchingActions.map((action) => {
+        {!loading && matchingActions.length > 0 && <section className="search-group"><h2>{query.trim() ? "Actions" : "Actions, recent first"}<span>{matchingActions.length}</span></h2>{matchingActions.map((action) => {
           const index = indexForAction(action.id);
           return <button key={action.id} className={index === activeIndex ? "is-active" : ""} role="option" aria-selected={index === activeIndex} onMouseEnter={() => setActiveIndex(index)} onClick={() => choose({ type: "action", action })}>
-            <span className="search-result-icon">ACT</span>
+            <span className="search-result-icon">Action</span>
             <span className="search-result-copy"><strong>{action.title}</strong><small>{action.subtitle}</small></span>
+            {action.shortcut && <kbd className="search-shortcut">{action.shortcut}</kbd>}
           </button>;
         })}</section>}
         {!loading && !error && query.trim() && results.length === 0 && matchingActions.length === 0 && <p className="search-state">No matching workspace results.</p>}
       </div>
-      <footer className="search-footer"><span>↑↓ Navigate</span><span>↵ Open</span><span>Ctrl/⌘ K Toggle</span></footer>
+      <footer className="search-footer"><span>↑↓ to move</span><span>↵ to open</span><span>? for all shortcuts</span></footer>
     </section>
   </div>;
 }

@@ -101,6 +101,12 @@ function WorkspaceApp() {
   const [treeRevealPath, setTreeRevealPath] = useState<string | null>(null);
   const [promptRequest, setPromptRequest] = useState<PromptRequest | null>(null);
   const promptRequestId = useRef(0);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [jobsStatusGroup, setJobsStatusGroup] = useState<string | null>(null);
+  const [update, setUpdate] = useState<{ version: string; url: string } | null>(null);
+  const [notificationsOn, setNotificationsOn] = useState(() => { try { return window.localStorage.getItem("sensei-notifications") !== "off"; } catch { return true; } });
+  useEffect(() => { try { window.localStorage.setItem("sensei-notifications", notificationsOn ? "on" : "off"); } catch { /* storage unavailable */ } }, [notificationsOn]);
   const [jobQueue, setJobQueue] = useState<JobQueue>({ autoRun: true, items: [] });
   const queueRef = useRef(jobQueue);
   useEffect(() => { if (workspace.status === "ready") void window.sensei.queue.get().then((queue) => { queueRef.current = queue; setJobQueue(queue); }).catch(() => undefined); }, [workspace.status]);
@@ -118,7 +124,16 @@ function WorkspaceApp() {
     const tick = async () => {
       const latest = await window.sensei.runs.latest().catch(() => null);
       if (cancelled) return;
-      const { queue, send } = advanceQueue(queueRef.current, latest, Date.now());
+      const before = queueRef.current;
+      const { queue, send } = advanceQueue(before, latest, Date.now());
+      for (const item of queue.items) {
+        const was = before.items.find((candidate) => candidate.id === item.id)?.status;
+        if (was === "running" && item.status === "done") notify("Application drafted", latest?.label ?? item.url);
+        if (was === "running" && item.status === "needs_attention") notify("A queued job needs attention", item.url);
+      }
+      if (before.items.some((item) => item.status === "running") && !queue.items.some((item) => item.status === "queued" || item.status === "running")) {
+        notify("Job queue finished", `${queue.items.filter((item) => item.status === "done").length} drafted, ${queue.items.filter((item) => item.status === "needs_attention").length} need attention`);
+      }
       if (JSON.stringify(queue) !== JSON.stringify(queueRef.current)) await saveQueue(queue);
       if (send) { setRightPanelOpen(true); await window.sensei.terminal.write(`${queuePrompt(send.url)}\r`); }
     };
@@ -126,6 +141,69 @@ function WorkspaceApp() {
     const timer = window.setInterval(() => void tick(), 5000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [jobQueue.autoRun, queueActivity]);
+  // Run watcher: notify when a pipeline run finishes, even with the Agy panel closed.
+  const lastRunRef = useRef<RunStatus | null>(null);
+  useEffect(() => {
+    if (workspace.status !== "ready") return;
+    let cancelled = false;
+    const tick = async () => {
+      const run = await window.sensei.runs.latest().catch(() => null);
+      if (cancelled) return;
+      const previous = lastRunRef.current;
+      lastRunRef.current = run;
+      if (previous?.state === "running" && run && run.state !== "running" && previous.kind === run.kind && previous.jobId === run.jobId) {
+        notify(`${RUN_KIND_LABEL[run.kind]} finished`, `${run.label}: ${RUN_STATE_LABEL[run.state]}`);
+      }
+    };
+    void tick();
+    const timer = window.setInterval(() => void tick(), 8000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [workspace.status, notificationsOn]);
+  // Once a day: follow-ups due. Once per launch: a newer release.
+  useEffect(() => {
+    if (!jobs.length) return;
+    const today = new Date().toISOString().slice(0, 10);
+    let last: string | null = null;
+    try { last = window.localStorage.getItem("sensei-followups-notified"); } catch { last = null; }
+    if (last === today) return;
+    const due = jobs.filter((job) => { const days = followUpDays(job.tracker); return days !== null && days <= 0 && ["applied", "interviewing", "offer", "saved"].includes(effectiveStatus(job)); });
+    if (due.length) notify(`${due.length} follow-up${due.length === 1 ? "" : "s"} due`, due.slice(0, 3).map((job) => job.company ?? displayJobName(job.name)).join(", "));
+    try { window.localStorage.setItem("sensei-followups-notified", today); } catch { /* storage unavailable */ }
+  }, [jobs.length > 0]);
+  useEffect(() => { if (workspace.status === "ready") void window.sensei.app.checkUpdate().then(setUpdate).catch(() => undefined); }, [workspace.status]);
+  // Keyboard shortcuts (the "?" panel lists them). Ignored while typing or when a dialog is open.
+  const goPrefix = useRef(0);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.defaultPrevented || target?.matches("input, textarea, select, [contenteditable='true']")) return;
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && event.key.toLowerCase() === "j") { event.preventDefault(); setRightPanelOpen((open) => !open); return; }
+      if (mod && event.key === ",") { event.preventDefault(); setSettingsModalOpen(true); return; }
+      if (mod || event.altKey || document.querySelector("[aria-modal='true']")) return;
+      if (event.key === "?") { event.preventDefault(); setShortcutsOpen(true); return; }
+      if (event.key === "g") { goPrefix.current = Date.now(); return; }
+      if (Date.now() - goPrefix.current < 1200) {
+        goPrefix.current = 0;
+        const page = ({ j: "jobs-home", i: "interviews-home", c: "context-home" } as const)[event.key as "j" | "i" | "c"];
+        if (page) { event.preventDefault(); showPage(page); }
+        return;
+      }
+      const location = navigationHistory[navigationIndex];
+      const job = location?.kind === "job" ? jobs.find((candidate) => candidate.id === location.jobId) : null;
+      if (!job) return;
+      if (event.key === "[" || event.key === "]") {
+        const index = jobs.findIndex((candidate) => candidate.id === job.id);
+        const next = jobs[index + (event.key === "]" ? 1 : -1)];
+        if (next) { event.preventDefault(); openJob(next.id); }
+      } else if (/^[1-6]$/.test(event.key)) {
+        event.preventDefault();
+        void updateTracker(job.id, { status: TRACKER_STATUSES[Number(event.key) - 1]! });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   const [storyBankPath, setStoryBankPath] = useState<string | null>(null);
   useEffect(() => { if (workspace.status === "ready") void window.sensei.profile.preview().then((preview) => setStoryBankPath(preview.storyBankPath)).catch(() => undefined); }, [workspace.status, jobTree]);
   const [recentJobIds, setRecentJobIds] = useState<string[]>(() => { try { return JSON.parse(window.localStorage.getItem("sensei-recent-jobs") ?? "[]") as string[]; } catch { return []; } });
@@ -359,15 +437,32 @@ function WorkspaceApp() {
     setPromptRequest({ id: promptRequestId.current, text: action.prompt, label: action.label });
   }
 
-  async function updateTracker(jobId: string, update: JobTrackerUpdate) {
+  async function updateTracker(jobId: string, update: JobTrackerUpdate, options: { quiet?: boolean } = {}) {
     setError(null);
     try {
       const job = jobs.find((candidate) => candidate.id === jobId);
+      const previousStatus = job ? effectiveStatus(job) : null;
       // The first save keeps the derived status and applied date, so editing a note never resets a job to Saved.
       const seeded: JobTrackerUpdate = job && !job.tracker ? { status: effectiveStatus(job), appliedAt: effectiveAppliedAt(job), ...update } : update;
       const tracker = await window.sensei.jobs.updateTracker(jobId, seeded);
       setJobs((current) => current.map((job) => job.id === jobId ? { ...job, tracker } : job));
+      if (!options.quiet && job && update.status && previousStatus && update.status !== previousStatus) {
+        showToast(`${job.company ?? displayJobName(job.name)}: ${TRACKER_LABELS[update.status]}`, () => void updateTracker(jobId, { status: previousStatus }, { quiet: true }));
+      }
     } catch (caught) { setError(messageOf(caught, "Unable to save the job status.")); }
+  }
+
+  function showToast(message: string, undo?: () => void) {
+    const id = Date.now() + Math.random();
+    setToasts((current) => [...current.slice(-2), { id, message, undo }]);
+    window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), undo ? 8000 : 5000);
+  }
+
+  /** A desktop notification when the window is in the background; a toast when it is in front. */
+  function notify(title: string, body: string) {
+    if (!notificationsOn) return;
+    if (document.hasFocus()) { showToast(`${title}. ${body}`); return; }
+    try { new Notification(title, { body, silent: false }); } catch { showToast(`${title}. ${body}`); }
   }
 
   async function updateContext(careerPaths: string[], jobPaths: string[]) {
@@ -489,12 +584,23 @@ function WorkspaceApp() {
     actionTargetJob?.id === viewedJobId ? interviewOverview : null,
     actionTargetJob?.id === viewedJobId ? applicationStatus : null,
   );
+  const recentForStatus = recentJobIds.slice(0, 3).map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job) && job!.id !== viewedJob?.id);
   const paletteActions: PaletteAction[] = [
+    { id: "go-jobs", title: "Go to Jobs", subtitle: "All jobs, the queue, and the status strip", keywords: "home list cards", shortcut: "g j", run: () => showPage("jobs-home") },
+    { id: "go-interviews", title: "Go to Interviews", subtitle: "Every job with interview prep", keywords: "rounds prep", shortcut: "g i", run: () => showPage("interviews-home") },
+    { id: "go-context", title: "Go to Career context", subtitle: "Resumes and sources Agy reads", keywords: "files sources resume", shortcut: "g c", run: () => showPage("context-home") },
+    ...[["interviewing", "Interviewing"], ["applied", "Applied"], ["offer", "Offer"], ["closed", "Closed"], ["saved", "Saved"]].map(([group, label]) => ({ id: `filter:${group}`, title: `Show ${label.toLowerCase()} jobs`, subtitle: "Filter the Jobs page by status", keywords: `status:${group} filter`, run: () => { setJobsStatusGroup(group!); showPage("jobs-home"); } })),
+    ...recentForStatus.flatMap((job) => TRACKER_STATUSES.filter((status) => status !== effectiveStatus(job)).map((status) => ({ id: `tracker:${job.id}:${status}`, title: `Mark ${job.company ?? displayJobName(job.name)} as ${TRACKER_LABELS[status].toLowerCase()}`, subtitle: job.title ?? "Recent job", keywords: `status ${status}`, run: () => void updateTracker(job.id, { status }) }))),
+    { id: "export-csv", title: "Export all jobs to CSV", subtitle: "Save a spreadsheet of every job", keywords: "csv excel spreadsheet download", run: () => void window.sensei.jobs.exportCsv(jobsToCsv(jobs)).then((path) => { if (path) showToast(`Saved ${jobs.length} jobs to ${path.split(/[\\/]/).pop()}`); }) },
+    { id: "queue-toggle", title: jobQueue.autoRun ? "Pause the job queue" : "Resume the job queue", subtitle: `${jobQueue.items.filter((item) => item.status === "queued").length} waiting`, keywords: "queue links automatic", run: () => void saveQueue({ ...jobQueue, autoRun: !jobQueue.autoRun }) },
+    { id: "notifications", title: notificationsOn ? "Turn notifications off" : "Turn notifications on", subtitle: "Run finished, queue done, follow-ups due", keywords: "alerts notify", run: () => setNotificationsOn((on) => !on) },
+    { id: "shortcuts", title: "Show keyboard shortcuts", subtitle: "Every shortcut in one list", keywords: "keys help", shortcut: "?", run: () => setShortcutsOpen(true) },
     ...(viewedJob ? TRACKER_STATUSES.filter((status) => status !== effectiveStatus(viewedJob)).map((status) => ({
       id: `tracker:${status}`,
       title: `Mark as ${TRACKER_LABELS[status].toLowerCase()}`,
       subtitle: `${viewedJob.company ?? displayJobName(viewedJob.name)}, ${viewedJob.title ?? "this job"}`,
       keywords: `status tracker ${status}`,
+      shortcut: String(TRACKER_STATUSES.indexOf(status) + 1),
       run: () => void updateTracker(viewedJob.id, { status }),
     })) : []),
     ...jobActions.map((action) => ({
@@ -513,6 +619,7 @@ function WorkspaceApp() {
     },
     {
       id: "toggle-terminal",
+      shortcut: IS_MAC ? "⌘J" : "Ctrl J",
       title: rightPanelOpen ? "Hide Command Center" : "Show Command Center",
       subtitle: "Adjust workspace panels",
       keywords: "terminal codex antigravity command center",
@@ -527,6 +634,7 @@ function WorkspaceApp() {
     },
     {
       id: "open-settings",
+      shortcut: IS_MAC ? "⌘," : "Ctrl ,",
       title: "Preferences & Voice Settings",
       subtitle: "Customize tone, resume tailoring, reusable bullets, and identity",
       keywords: "settings preferences tone voice bullets summary",
@@ -573,6 +681,7 @@ function WorkspaceApp() {
         </nav>
         {configured && <button className="search-trigger" onClick={() => setSearchOpen(true)}><span>Search jobs, files, and actions</span><kbd>{IS_MAC ? "⌘K" : "Ctrl K"}</kbd></button>}
         <span className="topbar-spacer" />
+        {update && <button className="update-pill" onClick={() => void window.sensei.app.openRelease(update.url)} title="Open the release page to download it">Version {update.version} is available</button>}
         <button className="topbar-toggle" aria-pressed={rightPanelOpen} title={`Agy terminal. Context: ${activeContextDetail}`} onClick={() => setRightPanelOpen((open) => !open)}><span className={`status-dot ${configured ? "is-ready" : ""}`} aria-hidden="true" />Agy</button>
         <TopbarMenu
           theme={theme}
@@ -580,6 +689,9 @@ function WorkspaceApp() {
           navigationOpen={leftPanelOpen}
           onToggleNavigation={() => setLeftPanelOpen((open) => !open)}
           onRescan={configured ? () => void refresh() : null}
+          notificationsOn={notificationsOn}
+          onToggleNotifications={() => setNotificationsOn((on) => { if (!on) void Notification.requestPermission?.(); return !on; })}
+          onShowShortcuts={() => setShortcutsOpen(true)}
           onOpenSettings={configured ? () => setSettingsModalOpen(true) : null}
           note={configured ? `${workspace.contextFileCount} context files and ${workspace.jobCount} job folders. Everything stays on this computer; career sources are never changed.` : "No workspace selected."}
         />
@@ -604,12 +716,14 @@ function WorkspaceApp() {
             <section className="context-block"><h2>Career sources</h2><p>Checked files are what Agy reads as facts about you. Structured files are the strongest evidence.</p><div className="context-tree">{tree.length ? tree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedCareerPaths} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No career context folders found.</p>}</div></section>
             <section className="context-block"><h2>Job files in context</h2><p>Add a job's files when you want Agy to use them outside that job, for example an earlier letter that worked well.</p><button className="btn-link" onClick={() => { setSelectedJobFiles([]); void updateContext(selectedCareerPaths, []); }} disabled={!selectedJobFiles.length}>Clear job files ({selectedJobFiles.length})</button><div className="context-tree">{jobTree.length ? jobTree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedJobFiles} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No job folders yet.</p>}</div></section>
           </ContextHome>
-          : <JobsHome jobs={jobs} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} onUpdateTracker={updateTracker} queue={jobQueue} onSaveQueue={(next) => void saveQueue(next)} setup={<SetupChecklist items={setupItems} onOpenSettings={() => setSettingsModalOpen(true)} onOpenContext={() => showPage("context-home")} />} />}
+          : <JobsHome jobs={jobs} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} onUpdateTracker={updateTracker} onToast={showToast} statusGroup={jobsStatusGroup} onStatusGroup={setJobsStatusGroup} queue={jobQueue} onSaveQueue={(next) => void saveQueue(next)} setup={<SetupChecklist items={setupItems} onOpenSettings={() => setSettingsModalOpen(true)} onOpenContext={() => showPage("context-home")} />} />}
         {loading && <div className="viewer-state">Reading local workspace…</div>}
         {error && <p className="error-copy viewer-error">{error}</p>}
       </section>
     </div>
     <div className={`panel-resizer is-right ${rightPanelOpen ? "" : "is-collapsed"}`} role="separator" aria-label="Resize terminal panel" aria-orientation="vertical" aria-valuemin={RIGHT_PANEL_MIN} aria-valuemax={panelMaximum("right")} aria-valuenow={rightPanelWidth} tabIndex={rightPanelOpen ? 0 : -1} onPointerDown={(event) => beginPanelResize("right", event)} onKeyDown={(event) => resizePanelWithKeyboard("right", event)} />
+    <ToastRegion toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
+    {shortcutsOpen && <ShortcutsPanel onClose={() => setShortcutsOpen(false)} />}
     <TerminalPanel cwd={workspace.repositoryRoot || workspace.path} selectedJobFiles={selectedJobFiles} selectedCareerPaths={selectedCareerPaths} theme={theme} visible={rightPanelOpen && !needsSetup} onClose={() => setRightPanelOpen(false)} jobActions={jobActions} promptRequest={promptRequest} onPromptHandled={(id) => setPromptRequest((request) => request?.id === id ? null : request)} onInsertPrompt={insertJobPrompt} onOpenRun={(run) => { if (run.jobId && jobs.some((job) => job.id === run.jobId)) openJobView(run.jobId, run.kind === "interview" ? "interview" : "application", run.roundId ?? undefined); }} />
   </main>;
 }
@@ -625,14 +739,52 @@ function NavIcon({ name }: { name: "jobs" | "interviews" | "context" | "settings
   return <svg className="nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d={paths[name]} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
+type Toast = { id: number; message: string; undo?: () => void };
+
+/** Short confirmations with Undo, announced to screen readers. */
+function ToastRegion({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {
+  return <div className="toast-region" role="status" aria-live="polite">
+    {toasts.map((toast) => <div key={toast.id} className="toast">
+      <span>{toast.message}</span>
+      {toast.undo && <button className="btn-link" onClick={() => { toast.undo!(); onDismiss(toast.id); }}>Undo</button>}
+      <button className="toast-close" aria-label="Dismiss" onClick={() => onDismiss(toast.id)}>×</button>
+    </div>)}
+  </div>;
+}
+
+const SHORTCUTS: Array<[string, string]> = [
+  ["⌘K or Ctrl K", "Search jobs, files, and actions"],
+  ["g then j / i / c", "Go to Jobs, Interviews, or Career context"],
+  ["[ and ]", "Previous or next job (on a job page)"],
+  ["1 – 6", "Set the open job to Saved, Applied, Interviewing, Offer, Rejected, Withdrawn"],
+  ["⌘J or Ctrl J", "Show or hide Agy"],
+  ["⌘, or Ctrl ,", "Settings"],
+  ["Alt ← / Alt →", "Back or forward"],
+  ["/ and L", "Interview tab: search the round, start live mode"],
+  ["?", "This list"],
+];
+
+function ShortcutsPanel({ onClose }: { onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { const opener = document.activeElement as HTMLElement | null; ref.current?.focus(); return () => opener?.focus?.(); }, []);
+  return <div className="search-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="shortcuts-panel" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" tabIndex={-1} ref={ref} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }}>
+      <header><h2 id="shortcuts-title">Keyboard shortcuts</h2><button className="btn-quiet" onClick={onClose}>Close</button></header>
+      <dl>{SHORTCUTS.map(([keys, action]) => <div key={keys}><dt><kbd>{keys}</kbd></dt><dd>{action}</dd></div>)}</dl>
+    </div>
+  </div>;
+}
+
 /** Settings menu in the top bar: theme, navigation, rescan, and Settings. Keyboard: arrows move, Escape closes. */
-function TopbarMenu({ theme, onToggleTheme, navigationOpen, onToggleNavigation, onRescan, onOpenSettings, note }: { theme: "dark" | "light"; onToggleTheme: () => void; navigationOpen: boolean; onToggleNavigation: () => void; onRescan: (() => void) | null; onOpenSettings: (() => void) | null; note: string }) {
+function TopbarMenu({ theme, onToggleTheme, navigationOpen, onToggleNavigation, onRescan, onOpenSettings, notificationsOn, onToggleNotifications, onShowShortcuts, note }: { theme: "dark" | "light"; onToggleTheme: () => void; navigationOpen: boolean; onToggleNavigation: () => void; onRescan: (() => void) | null; onOpenSettings: (() => void) | null; notificationsOn: boolean; onToggleNotifications: () => void; onShowShortcuts: () => void; note: string }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const items = [
     { label: theme === "dark" ? "Use light theme" : "Use dark theme", run: onToggleTheme },
     { label: navigationOpen ? "Hide sidebar" : "Show sidebar", run: onToggleNavigation },
+    { label: notificationsOn ? "Turn notifications off" : "Turn notifications on", run: onToggleNotifications },
+    { label: "Keyboard shortcuts  ?", run: onShowShortcuts },
     ...(onRescan ? [{ label: "Rescan workspace", run: onRescan }] : []),
     ...(onOpenSettings ? [{ label: "Settings…", run: onOpenSettings }] : []),
   ];
@@ -772,10 +924,9 @@ const STATUS_GROUPS: Array<{ id: string; label: string; statuses: TrackerStatus[
 const STALE_DAYS = 30;
 const ACTIVE_STATUSES: TrackerStatus[] = ["saved", "applied", "interviewing", "offer"];
 
-function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTrash, onUpdateTracker, queue, onSaveQueue, setup }: { queue: JobQueue; onSaveQueue: (queue: JobQueue) => void; setup: React.ReactNode; jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onOpenJobView: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onOpenEvaluation: (jobId: string) => void; onMoveToTrash: (jobId: string) => void; onUpdateTracker: (jobId: string, update: JobTrackerUpdate) => Promise<void> }) {
+function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTrash, onUpdateTracker, onToast, statusGroup, onStatusGroup: setStatusGroup, queue, onSaveQueue, setup }: { onToast: (message: string, undo?: () => void) => void; statusGroup: string | null; onStatusGroup: (group: string | null) => void; queue: JobQueue; onSaveQueue: (queue: JobQueue) => void; setup: React.ReactNode; jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onOpenJobView: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onOpenEvaluation: (jobId: string) => void; onMoveToTrash: (jobId: string) => void; onUpdateTracker: (jobId: string, update: JobTrackerUpdate, options?: { quiet?: boolean }) => Promise<void> }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<JobsFilter>("all");
-  const [statusGroup, setStatusGroup] = useState<string | null>(null);
   const [exported, setExported] = useState("");
   const [closing, setClosing] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(storedFavoriteJobIds);
@@ -833,7 +984,9 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
   async function closeStale() {
     if (!window.confirm(`Mark ${stale.length} application${stale.length === 1 ? "" : "s"} with no reply after ${STALE_DAYS} days as rejected? You can change any of them back later.`)) return;
     setClosing(true);
-    try { for (const job of stale) await onUpdateTracker(job.id, { status: "rejected" }); } finally { setClosing(false); }
+    const closed = [...stale];
+    try { for (const job of closed) await onUpdateTracker(job.id, { status: "rejected" }, { quiet: true }); } finally { setClosing(false); }
+    onToast(`Marked ${closed.length} application${closed.length === 1 ? "" : "s"} as rejected`, () => void (async () => { for (const job of closed) await onUpdateTracker(job.id, { status: "applied" }, { quiet: true }); })());
   }
   const menuHandlers = (job: JobFolderSummary): JobMenuHandlers => ({ onOpen: () => onOpenJob(job.id), onOpenEvaluation: () => onOpenEvaluation(job.id), onOpenInterview: job.interviewRoundLabel ? () => onOpenJobView(job.id, "interview") : null, onMoveToTrash: () => onMoveToTrash(job.id), onSetStatus: (status) => void onUpdateTracker(job.id, { status }) });
   const filterLabels: Record<JobsFilter, string> = { all: "All", active: "Active", interviewing: "Interviewing", "follow-up": "Follow-up due", review: "Needs review", favorites: "Favorites" };

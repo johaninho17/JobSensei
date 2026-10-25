@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, session } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from "electron";
 import { watch, type FSWatcher } from "node:fs";
 import { updateJobTracker } from "./tracker";
 import { latestRun } from "./run-status";
@@ -295,6 +295,31 @@ ipcMain.handle("jobs:export-csv", async (_event, csv: unknown) => {
   if (result.canceled || !result.filePath) return null;
   await writeFile(result.filePath, csv, "utf8");
   return result.filePath;
+});
+// Update notice: release builds record their GitHub repository at build time (release.yml); other builds skip the check.
+async function releaseRepository(): Promise<string | null> {
+  const raw = await readFile(join(app.getAppPath(), "dist-electron", "release-source.json"), "utf8").catch(() => null);
+  const repository = raw ? (JSON.parse(raw) as { repository?: string }).repository : null;
+  return repository && /^[\w.-]+\/[\w.-]+$/.test(repository) ? repository : null;
+}
+function newerVersion(latest: string, current: string): boolean {
+  const parse = (value: string) => value.replace(/^v/, "").split(/[.-]/).slice(0, 3).map((part) => Number.parseInt(part, 10) || 0);
+  const [a, b] = [parse(latest), parse(current)];
+  for (let index = 0; index < 3; index += 1) if (a[index] !== b[index]) return a[index]! > b[index]!;
+  return false;
+}
+ipcMain.handle("app:check-update", async () => {
+  const repository = await releaseRepository();
+  if (!repository) return null;
+  const response = await fetch(`https://api.github.com/repos/${repository}/releases/latest`, { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(8000) }).catch(() => null);
+  if (!response?.ok) return null;
+  const release = await response.json() as { tag_name?: string; html_url?: string };
+  if (!release.tag_name || !release.html_url || !newerVersion(release.tag_name, app.getVersion())) return null;
+  return { version: release.tag_name.replace(/^v/, ""), url: release.html_url };
+});
+ipcMain.handle("app:open-release", async (_event, url: unknown) => {
+  const repository = await releaseRepository();
+  if (typeof url === "string" && repository && url.startsWith(`https://github.com/${repository}/releases/`)) await shell.openExternal(url);
 });
 ipcMain.handle("runs:latest", async () => latestRun(requireWorkspace()));
 ipcMain.handle("jobs:update-tracker", async (_event, jobId: unknown, update: unknown) => updateJobTracker(requireWorkspace(), String(jobId), update));

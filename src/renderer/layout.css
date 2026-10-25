@@ -410,3 +410,22 @@
 .job-card-menu .job-menu-status button span { color: var(--leaf); }
 .job-card-menu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
 .export-note { margin: 0 0 var(--space-3); color: var(--muted); font-size: var(--fs-13); }
+
+/* ---------- Phase B: toasts, shortcuts, update notice, palette ---------- */
+.toast-region { position: fixed; z-index: 90; bottom: var(--space-4); left: 50%; display: grid; gap: var(--space-2); transform: translateX(-50%); }
+.toast { display: flex; align-items: center; gap: var(--space-3); min-width: 280px; max-width: min(560px, 90vw); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border-radius: var(--radius-m); color: var(--canvas); background: var(--ink); box-shadow: var(--shadow); font-size: var(--fs-13); }
+.toast > span { flex: 1; }
+.toast .btn-link { color: var(--canvas); font-weight: 650; }
+.toast-close { width: 28px; height: 28px; border: 0; border-radius: var(--radius-s); color: var(--canvas); background: none; font-size: var(--fs-18); cursor: pointer; opacity: .7; }
+.toast-close:hover { opacity: 1; }
+.shortcuts-panel { width: min(560px, 92vw); margin: 10vh auto 0; padding: var(--space-4) var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-m); color: var(--ink); background: var(--raised); box-shadow: var(--shadow); }
+.shortcuts-panel:focus { outline: none; }
+.shortcuts-panel header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
+.shortcuts-panel h2 { margin: 0; }
+.shortcuts-panel dl { display: grid; gap: var(--space-2); margin: 0; }
+.shortcuts-panel dl > div { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: var(--space-3); align-items: baseline; }
+.shortcuts-panel dd { margin: 0; color: var(--muted); }
+.shortcuts-panel kbd, .search-shortcut { padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--canvas); font: var(--fs-12) var(--font-ui); white-space: nowrap; }
+.search-shortcut { margin-left: auto; color: var(--muted); }
+.search-palette .search-result-icon { min-width: 64px; padding: 1px 8px; border-radius: var(--radius-pill); color: var(--muted); background: var(--sunken); font: 600 var(--fs-12) var(--font-ui); letter-spacing: 0; text-align: center; text-transform: none; }
+.update-pill { min-height: 30px; padding: 0 var(--space-3); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: var(--radius-pill); color: var(--accent) !important; background: color-mix(in srgb, var(--accent) 10%, transparent); font-size: var(--fs-13) !important; font-weight: 650; cursor: pointer; }
