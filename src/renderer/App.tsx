@@ -697,11 +697,11 @@ function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBa
     ["Local workspace", Boolean(workspace.path), workspace.path || "Created automatically on first launch"],
     ["Candidate profile", Boolean(profile), profile ? `${profile.identity.fullName} · ${profile.identity.artifactPrefix}` : "Add your name and artifact prefix"],
     ["Base resume", Boolean(settings.baseResumePath && workspace.hasBaseResume), settings.baseResumePath ?? "Choose a Markdown, PDF, or DOCX resume"],
-    ["Career context", workspace.contextFileCount > 0, workspace.contextFileCount ? `${workspace.contextFileCount} local files` : "Add files under data/context"],
+    ["Career context", workspace.contextFileCount > 0, workspace.contextFileCount ? `${workspace.contextFileCount} local files` : "Add files to the context folder in your workspace"],
     ["Agy terminal", workspace.agyAvailable, workspace.agyAvailable ? "Agy ready (offline bundled or installed)" : "Install Agy or add it to PATH"],
   ] as const;
   return <section className="get-started">
-    <div className="get-started-copy"><span className="eyebrow">Private local setup</span><h1>Get JobSensei ready</h1><p>Your workspace stays in <code>data/</code>. Resume and context files are never committed by the public repository.</p></div>
+    <div className="get-started-copy"><h1>Get JobSensei ready</h1><p>Your files stay on this computer, in your workspace folder. Nothing is uploaded except what Agy reads to draft for you.</p></div>
     <div className="get-started-grid">
       <ol>{steps.map(([label, complete, detail], index) => <li className={complete ? "is-complete" : ""} key={label}><span>{complete ? "✓" : index + 1}</span><div><strong>{label}</strong><small>{detail}</small></div></li>)}</ol>
       <div className="setup-card">
@@ -711,7 +711,7 @@ function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBa
           <label>Full name<input value={fullName} onChange={(event) => updateName(event.target.value)} placeholder="Alex Morgan" /></label>
           <label>Artifact prefix<input value={artifactPrefix} onChange={(event) => setArtifactPrefix(event.target.value.replace(/[^A-Za-z0-9_-]/g, ""))} placeholder="Alex_Morgan" /></label>
           <details className="setup-story-accordion">
-            <summary>Career Story & Narrative Pillars (Optional)</summary>
+            <summary>Career story (optional)</summary>
             <p className="setup-story-hint">
               Answer these 3 questions now or edit them anytime in Settings. JobSensei uses them so your cover letters reflect your authentic journey instead of repeating the job description.
             </p>

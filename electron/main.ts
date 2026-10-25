@@ -25,6 +25,8 @@ import { loadCanonicalResumeBaseline } from "./canonical-resume";
 import { readBulletBank, saveBulletBank } from "./bullet-bank";
 import { generateJobClarifyingQuestions, saveJobClarificationAnswers } from "./clarifying-questions";
 
+// Tests and the new-user check run the app with a throwaway settings folder, so real settings are never touched.
+if (process.env.SENSEI_USER_DATA) app.setPath("userData", resolve(process.env.SENSEI_USER_DATA));
 if (process.argv.includes("--dev") && !process.env.VITE_DEV_SERVER_URL) {
   process.env.VITE_DEV_SERVER_URL = "http://127.0.0.1:5173";
 }
