@@ -4,9 +4,9 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { DEFAULT_PDF_TEXT_SIZE, TRACKER_STATUSES, type JobQueue, type JobTrackerUpdate, type RunStatus, type TrackerStatus } from "../shared/schemas";
-import { advanceQueue, pastedJdPrompt, queuePrompt } from "../shared/job-queue";
+import { advanceQueue, agyReadiness, pastedJdPrompt, queuePrompt } from "../shared/job-queue";
 import { jobsToCsv } from "../shared/jobs-csv";
-import { TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, followUpDays } from "../shared/tracker";
+import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, followUpDays, staleApplications } from "../shared/tracker";
 import { FIT_CLASSIFICATION_CREDIT } from "../shared/fit-credit";
 import type { ApplicationStatus, ApplicationValidationReport, CandidateProfile, ChallengeExercise, ChallengePractice, ContextManifest, FilePreview, FileTreeNode, InterviewOverview, JobFolderSummary, PdfTextSize, SearchResult, Settings, WorkspaceSummary } from "../shared/schemas";
 // pdfjs-dist ships the browser runtime without declarations for this subpath.
@@ -108,6 +108,7 @@ function WorkspaceApp() {
   const [notificationsOn, setNotificationsOn] = useState(() => { try { return window.localStorage.getItem("sensei-notifications") !== "off"; } catch { return true; } });
   useEffect(() => { try { window.localStorage.setItem("sensei-notifications", notificationsOn ? "on" : "off"); } catch { /* storage unavailable */ } }, [notificationsOn]);
   const [jobQueue, setJobQueue] = useState<JobQueue>({ autoRun: true, items: [] });
+  const [agyReady, setAgyReady] = useState(false);
   const queueRef = useRef(jobQueue);
   useEffect(() => { if (workspace.status === "ready") void window.sensei.queue.get().then((queue) => { queueRef.current = queue; setJobQueue(queue); }).catch(() => undefined); }, [workspace.status]);
   async function saveQueue(next: JobQueue) {
@@ -122,10 +123,12 @@ function WorkspaceApp() {
     if (!jobQueue.items.some((item) => item.status === "queued" || item.status === "running")) return;
     let cancelled = false;
     const tick = async () => {
-      const latest = await window.sensei.runs.latest().catch(() => null);
+      const [latest, terminalState] = await Promise.all([window.sensei.runs.latest().catch(() => null), window.sensei.terminal.status().catch(() => null)]);
       if (cancelled) return;
       const before = queueRef.current;
-      const { queue, send } = advanceQueue(before, latest, Date.now());
+      const ready = terminalState ? agyReadiness(terminalState, Date.now()) : false;
+      setAgyReady(ready);
+      const { queue, send } = advanceQueue(before, latest, Date.now(), ready);
       for (const item of queue.items) {
         const was = before.items.find((candidate) => candidate.id === item.id)?.status;
         if (was === "running" && item.status === "done") notify("Application drafted", latest?.label ?? item.url);
@@ -169,6 +172,14 @@ function WorkspaceApp() {
     const due = jobs.filter((job) => { const days = followUpDays(job.tracker); return days !== null && days <= 0 && ["applied", "interviewing", "offer", "saved"].includes(effectiveStatus(job)); });
     if (due.length) notify(`${due.length} follow-up${due.length === 1 ? "" : "s"} due`, due.slice(0, 3).map((job) => job.company ?? displayJobName(job.name)).join(", "));
     try { window.localStorage.setItem("sensei-followups-notified", today); } catch { /* storage unavailable */ }
+    // Once a week: applications with no reply after 30 days.
+    let lastNudge = 0;
+    try { lastNudge = Date.parse(window.localStorage.getItem("sensei-stale-nudged") ?? "") || 0; } catch { lastNudge = 0; }
+    if (Date.now() - lastNudge > 7 * 86_400_000) {
+      const stale = staleApplications(jobs);
+      if (stale.length) notify(`${stale.length} application${stale.length === 1 ? " has" : "s have"} had no reply for ${STALE_DAYS}+ days`, "Open Jobs to mark them as rejected in one step.");
+      try { window.localStorage.setItem("sensei-stale-nudged", new Date().toISOString()); } catch { /* storage unavailable */ }
+    }
   }, [jobs.length > 0]);
   useEffect(() => { if (workspace.status === "ready") void window.sensei.app.checkUpdate().then(setUpdate).catch(() => undefined); }, [workspace.status]);
   // Keyboard shortcuts (the "?" panel lists them). Ignored while typing or when a dialog is open.
@@ -204,6 +215,15 @@ function WorkspaceApp() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+  // New career files since the user last reviewed Career context (first run: everything counts as seen).
+  const [knownContext, setKnownContext] = useState<string[] | null>(() => { try { const raw = window.localStorage.getItem("sensei-known-context"); return raw ? JSON.parse(raw) as string[] : null; } catch { return null; } });
+  const contextFiles = filePaths(tree).filter((path) => path.startsWith("context/"));
+  const newContextFiles = knownContext ? contextFiles.filter((path) => !knownContext.includes(path)) : [];
+  function markContextReviewed() {
+    setKnownContext(contextFiles);
+    try { window.localStorage.setItem("sensei-known-context", JSON.stringify(contextFiles)); } catch { /* storage unavailable */ }
+  }
+  useEffect(() => { if (knownContext === null && contextFiles.length) markContextReviewed(); }, [knownContext === null, contextFiles.length]);
   const [storyBankPath, setStoryBankPath] = useState<string | null>(null);
   useEffect(() => { if (workspace.status === "ready") void window.sensei.profile.preview().then((preview) => setStoryBankPath(preview.storyBankPath)).catch(() => undefined); }, [workspace.status, jobTree]);
   const [recentJobIds, setRecentJobIds] = useState<string[]>(() => { try { return JSON.parse(window.localStorage.getItem("sensei-recent-jobs") ?? "[]") as string[]; } catch { return []; } });
@@ -662,7 +682,7 @@ function WorkspaceApp() {
       <ul className="side-nav">
         <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
         <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{interviewingJobs.length > 0 && <span className="side-count">{interviewingJobs.length}</span>}</button></li>
-        <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context<span className="side-count">{sourceCount}</span></button></li>
+        <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context{newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>
       </ul>
       {recentJobs.length > 0 && <section className="side-recent" aria-labelledby="side-recent-title">
         <h2 id="side-recent-title">Recent jobs</h2>
@@ -712,11 +732,17 @@ function WorkspaceApp() {
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
           : currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
           : currentLocation.kind === "context-home" ? <ContextHome>
+            {newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">
+              <h2 id="new-files-title">New since you last looked</h2>
+              <p>Check each one, then tick it below if Agy should use it as evidence.</p>
+              <ul>{newContextFiles.map((path) => <li key={path}><button className="btn-link" onClick={() => void selectFile(path)}>{path.replace(/^context\//, "")}</button>{selectedCareerPaths.includes(path) ? <span className="doc-state is-ready">Used by Agy</span> : <span className="doc-state">Not used yet</span>}</li>)}</ul>
+              <button className="btn-quiet" onClick={markContextReviewed}>Mark as reviewed</button>
+            </section>}
             <section className="context-block"><h2>Resumes</h2><ResumeSources settings={resumeSettings} selectedPath={selectedPath} onSelect={selectFile} onChoose={chooseResume} onRemoveSecondary={removeSecondary} /></section>
             <section className="context-block"><h2>Career sources</h2><p>Checked files are what Agy reads as facts about you. Structured files are the strongest evidence.</p><div className="context-tree">{tree.length ? tree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedCareerPaths} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No career context folders found.</p>}</div></section>
             <section className="context-block"><h2>Job files in context</h2><p>Add a job's files when you want Agy to use them outside that job, for example an earlier letter that worked well.</p><button className="btn-link" onClick={() => { setSelectedJobFiles([]); void updateContext(selectedCareerPaths, []); }} disabled={!selectedJobFiles.length}>Clear job files ({selectedJobFiles.length})</button><div className="context-tree">{jobTree.length ? jobTree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedJobFiles} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No job folders yet.</p>}</div></section>
           </ContextHome>
-          : <JobsHome jobs={jobs} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} onUpdateTracker={updateTracker} onToast={showToast} statusGroup={jobsStatusGroup} onStatusGroup={setJobsStatusGroup} queue={jobQueue} onSaveQueue={(next) => void saveQueue(next)} setup={<SetupChecklist items={setupItems} onOpenSettings={() => setSettingsModalOpen(true)} onOpenContext={() => showPage("context-home")} />} />}
+          : <JobsHome jobs={jobs} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} onUpdateTracker={updateTracker} onToast={showToast} statusGroup={jobsStatusGroup} onStatusGroup={setJobsStatusGroup} queue={jobQueue} agyReady={agyReady} onOpenAgy={() => setRightPanelOpen(true)} onSaveQueue={(next) => void saveQueue(next)} setup={<SetupChecklist items={setupItems} onOpenSettings={() => setSettingsModalOpen(true)} onOpenContext={() => showPage("context-home")} />} />}
         {loading && <div className="viewer-state">Reading local workspace…</div>}
         {error && <p className="error-copy viewer-error">{error}</p>}
       </section>
@@ -921,10 +947,9 @@ const STATUS_GROUPS: Array<{ id: string; label: string; statuses: TrackerStatus[
   { id: "offer", label: "Offer", statuses: ["offer"] },
   { id: "closed", label: "Closed", statuses: ["rejected", "withdrawn"] },
 ];
-const STALE_DAYS = 30;
 const ACTIVE_STATUSES: TrackerStatus[] = ["saved", "applied", "interviewing", "offer"];
 
-function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTrash, onUpdateTracker, onToast, statusGroup, onStatusGroup: setStatusGroup, queue, onSaveQueue, setup }: { onToast: (message: string, undo?: () => void) => void; statusGroup: string | null; onStatusGroup: (group: string | null) => void; queue: JobQueue; onSaveQueue: (queue: JobQueue) => void; setup: React.ReactNode; jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onOpenJobView: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onOpenEvaluation: (jobId: string) => void; onMoveToTrash: (jobId: string) => void; onUpdateTracker: (jobId: string, update: JobTrackerUpdate, options?: { quiet?: boolean }) => Promise<void> }) {
+function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTrash, onUpdateTracker, onToast, statusGroup, onStatusGroup: setStatusGroup, queue, agyReady, onOpenAgy, onSaveQueue, setup }: { agyReady: boolean; onOpenAgy: () => void; onToast: (message: string, undo?: () => void) => void; statusGroup: string | null; onStatusGroup: (group: string | null) => void; queue: JobQueue; onSaveQueue: (queue: JobQueue) => void; setup: React.ReactNode; jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onOpenJobView: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onOpenEvaluation: (jobId: string) => void; onMoveToTrash: (jobId: string) => void; onUpdateTracker: (jobId: string, update: JobTrackerUpdate, options?: { quiet?: boolean }) => Promise<void> }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<JobsFilter>("all");
   const [exported, setExported] = useState("");
@@ -973,14 +998,7 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
         return Date.parse(b.createdAt) - Date.parse(a.createdAt) || text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
       });
   }, [jobs, query, filter, sort, favorites, statusGroup]);
-  // Applications with no reply after STALE_DAYS: applied (set or derived), applied date that old, and no status change since.
-  const staleCutoff = Date.now() - STALE_DAYS * 86_400_000;
-  const stale = jobs.filter((job) => {
-    if (effectiveStatus(job) !== "applied") return false;
-    const appliedAt = effectiveAppliedAt(job);
-    const lastTouch = Math.max(appliedAt ? Date.parse(appliedAt) : 0, job.tracker?.updatedAt ? Date.parse(job.tracker.updatedAt) : 0);
-    return lastTouch > 0 && lastTouch < staleCutoff;
-  });
+  const stale = staleApplications(jobs);
   async function closeStale() {
     if (!window.confirm(`Mark ${stale.length} application${stale.length === 1 ? "" : "s"} with no reply after ${STALE_DAYS} days as rejected? You can change any of them back later.`)) return;
     setClosing(true);
@@ -992,7 +1010,7 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
   const filterLabels: Record<JobsFilter, string> = { all: "All", active: "Active", interviewing: "Interviewing", "follow-up": "Follow-up due", review: "Needs review", favorites: "Favorites" };
   return <section className="jobs-home">
     <header className="page-head"><div><h1>Jobs</h1><p>{visibleJobs.length === jobs.length ? `${jobs.length} job${jobs.length === 1 ? "" : "s"}` : `${visibleJobs.length} of ${jobs.length} jobs shown`}. Open one to see its application and interview prep.</p></div></header>
-    <JobQueueBox queue={queue} jobs={jobs} onSave={onSaveQueue} onOpenJob={onOpenJob} />
+    <JobQueueBox queue={queue} jobs={jobs} agyReady={agyReady} onOpenAgy={onOpenAgy} onSave={onSaveQueue} onOpenJob={onOpenJob} />
     <nav className="status-strip" aria-label="Jobs by status">
       {STATUS_GROUPS.map((group) => { const count = jobs.filter((job) => group.statuses.includes(effectiveStatus(job))).length; return <button key={group.id} className={`status-step is-${group.id}`} aria-pressed={statusGroup === group.id} onClick={() => setStatusGroup(statusGroup === group.id ? null : group.id)}><strong className="tabular">{count}</strong><span>{group.label}</span></button>; })}
       {stale.length > 0 && <p className="status-strip-note">{stale.length} application{stale.length === 1 ? " has" : "s have"} had no reply for {STALE_DAYS}+ days. <button className="btn-link" disabled={closing} onClick={() => void closeStale()}>{closing ? "Closing…" : "Mark them as rejected"}</button></p>}
@@ -1028,7 +1046,7 @@ function SetupChecklist({ items, onOpenSettings, onOpenContext }: { items: Setup
 const QUEUE_LABEL: Record<JobQueue["items"][number]["status"], string> = { queued: "Waiting", running: "Running in Agy", done: "Done", needs_attention: "Needs attention" };
 
 /** Job links waiting for Agy. With "Run automatically" on, the next link is sent (and run) when Agy is idle. */
-function JobQueueBox({ queue, jobs, onSave, onOpenJob }: { queue: JobQueue; jobs: JobFolderSummary[]; onSave: (queue: JobQueue) => void; onOpenJob: (jobId: string) => void }) {
+function JobQueueBox({ queue, jobs, agyReady, onOpenAgy, onSave, onOpenJob }: { queue: JobQueue; jobs: JobFolderSummary[]; agyReady: boolean; onOpenAgy: () => void; onSave: (queue: JobQueue) => void; onOpenJob: (jobId: string) => void }) {
   const [url, setUrl] = useState("");
   const value = url.trim();
   const duplicate = queue.items.some((item) => item.url === value && item.status !== "done");
@@ -1041,6 +1059,11 @@ function JobQueueBox({ queue, jobs, onSave, onOpenJob }: { queue: JobQueue; jobs
     onSave({ ...queue, items: [...queue.items, { id, url: value, addedAt: new Date().toISOString(), status: "queued", sentAt: null, finishedAt: null, jobId: null }] });
     setUrl("");
   }
+  // Last batch summary: shown once nothing is waiting or running.
+  const idle = !queue.items.some((item) => item.status === "queued" || item.status === "running");
+  const recentDone = queue.items.filter((item) => item.status === "done" && item.finishedAt && Date.now() - Date.parse(item.finishedAt) < 86_400_000);
+  const recentFits = recentDone.map((item) => jobs.find((job) => job.id === item.jobId)).filter((job): job is JobFolderSummary => Boolean(job && job.rating !== null)).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+  const attention = queue.items.filter((item) => item.status === "needs_attention").length;
   const visible = queue.items.filter((item) => item.status !== "done").concat(queue.items.filter((item) => item.status === "done").slice(-3));
   const waiting = queue.items.filter((item) => item.status === "queued").length;
   return <section className="job-queue" aria-labelledby="job-queue-title">
@@ -1051,6 +1074,7 @@ function JobQueueBox({ queue, jobs, onSave, onOpenJob }: { queue: JobQueue; jobs
       <p id="add-job-help">{duplicate ? "That link is already in the queue." : <>Agy runs one link at a time: it reads the posting, scores your fit, and drafts the resume and cover letter.</>}</p>
       <label className="queue-auto"><input type="checkbox" checked={queue.autoRun} onChange={(event) => onSave({ ...queue, autoRun: event.target.checked })} /> Run automatically when Agy is free</label>
     </form>
+    {idle && recentDone.length > 0 && <p className="queue-summary" role="status">Last batch: {recentDone.length} drafted{attention ? `, ${attention} need attention` : ""}.{recentFits[0] && <> Best fit: <button className="btn-link" onClick={() => onOpenJob(recentFits[0]!.id)}>{recentFits[0].company ?? displayJobName(recentFits[0].name)}, {recentFits[0].rating!.toFixed(1)}</button>.</>}</p>}
     {visible.length > 0 && <ol className="queue-list" aria-label="Job queue">{visible.map((item) => {
       const job = item.jobId ? jobs.find((candidate) => candidate.id === item.jobId) : null;
       return <li key={item.id} className={`queue-item is-${item.status}`}>
@@ -1064,6 +1088,7 @@ function JobQueueBox({ queue, jobs, onSave, onOpenJob }: { queue: JobQueue; jobs
         </span>
       </li>;
     })}</ol>}
+    {queue.autoRun && waiting > 0 && !agyReady && !queue.items.some((item) => item.status === "running") && <p className="queue-wait">{waiting} waiting for Agy. The queue starts by itself once Agy is open and signed in. <button className="btn-link" onClick={onOpenAgy}>Open Agy</button></p>}
     {!queue.autoRun && waiting > 0 && <button className="btn-quiet" onClick={() => onSave({ ...queue, autoRun: true })}>Start the queue ({waiting})</button>}
   </section>;
 }
@@ -1223,6 +1248,9 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
   const jobDescription = files.find((file) => /^original_jd\./i.test(file.name));
   const rounds = overview?.rounds ?? [];
   const [next, ...more] = jobActions;
+  // After a run: the most important warnings from the last check, errors first.
+  const allIssues = status?.validation?.issues ?? [];
+  const reviewIssues = [...allIssues].sort((a, b) => Number(b.severity === "error") - Number(a.severity === "error")).slice(0, 4);
   function navigateRound(roundId: string) {
     void window.sensei.interviews.setCurrentRound(job.id, roundId).catch(() => undefined);
     onNavigate(job.id, "interview", roundId);
@@ -1249,6 +1277,14 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
       {next && <section className="next-step" aria-labelledby="next-step-title">
         <div><p className="next-step-label" id="next-step-title">Next step</p><h2>{next.label}</h2><p>Sends this request to Agy for {job.company ?? displayJobName(job.name)}, {job.title ?? "this job"}.</p></div>
         <div className="next-step-actions"><button className="btn-primary" onClick={() => onInsertPrompt(next)}>Send to Agy</button>{more.slice(0, 3).map((action) => <button key={action.id} className="btn-quiet" onClick={() => onInsertPrompt(action)}>{action.label}</button>)}</div>
+      </section>}
+      {reviewIssues.length > 0 && <section className="review-list" aria-labelledby="review-title">
+        <div className="review-head"><h2 id="review-title">Check before you send</h2><button className="btn-link" onClick={() => onNavigate(job.id, "application")}>All {allIssues.length} from the last check</button></div>
+        <ul>{reviewIssues.map((issue, index) => { const file = files.find((candidate) => candidate.name === issue.artifact || candidate.relativePath.endsWith(`/${issue.artifact}`)); return <li key={`${issue.code}-${index}`} className={`is-${issue.severity}`}>
+          <span className="review-kind">{issue.severity === "error" ? "Fix" : "Check"}</span>
+          <span className="review-text">{issue.message}</span>
+          {file && <button className="btn-link" onClick={() => onSelect(file.relativePath)}>Open {file.name.replace(/\.md$/i, "").replaceAll("_", " ")}</button>}
+        </li>; })}</ul>
       </section>}
       <div className="overview-grid">
         <section className="overview-panel">

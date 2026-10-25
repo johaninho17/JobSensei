@@ -5,6 +5,12 @@ import { readJson, writeJsonAtomic } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
 
 const JOB_ID = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+export const DEFAULT_FOLLOW_UP_DAYS = 7;
+
+function addDays(date: Date, days: number): string {
+  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+}
 
 function trackerPath(jobPath: string): string {
   return join(jobPath, ".sensei", "tracker.json");
@@ -29,6 +35,9 @@ export async function updateJobTracker(workspacePath: string, jobId: string, inp
     ...update,
     appliedAt: update.appliedAt !== undefined ? update.appliedAt
       : statusChanged && update.status === "applied" && !current.appliedAt ? now.toISOString().slice(0, 10) : current.appliedAt,
+    // Applying sets a follow-up a week out, unless the user already has one or sets one now.
+    nextFollowUpAt: update.nextFollowUpAt !== undefined ? update.nextFollowUpAt
+      : statusChanged && update.status === "applied" && !current.nextFollowUpAt ? addDays(now, DEFAULT_FOLLOW_UP_DAYS) : current.nextFollowUpAt,
     history: statusChanged ? [...current.history, { at: now.toISOString(), status: update.status! }].slice(-200) : current.history,
     updatedAt: now.toISOString(),
   });

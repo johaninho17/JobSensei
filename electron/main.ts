@@ -371,6 +371,7 @@ ipcMain.handle("terminal:resize", async (_event, input: { cols: number; rows: nu
   if (!Number.isInteger(input?.cols) || !Number.isInteger(input?.rows) || input.cols < 2 || input.rows < 2 || input.cols > 500 || input.rows > 200) return;
   return terminal.resize(input.cols, input.rows);
 });
+ipcMain.handle("terminal:status", async () => terminal.status());
 ipcMain.handle("terminal:restart", async () => terminal.restart());
 ipcMain.handle("terminal:stop", async () => terminal.stop());
 

@@ -77,6 +77,15 @@ export class TerminalSession {
   private onExitCallback: ((code: number) => void) | null = null;
   /** App-owned Agy home (see agy-home.ts); null runs Agy with the user's own home. */
   private agyHome: string | null = null;
+  private startedAt: number | null = null;
+  private runningAgy = false;
+  private recentOutput = "";
+  private lastOutputAt: number | null = null;
+
+  /** What the job queue needs to know before it sends a prompt (see agyReadiness). */
+  status(): { running: boolean; agy: boolean; startedAt: number | null; lastOutputAt: number | null; recentOutput: string } {
+    return { running: Boolean(this.process), agy: this.runningAgy, startedAt: this.startedAt, lastOutputAt: this.lastOutputAt, recentOutput: this.recentOutput.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "") };
+  }
 
   setAgyHome(home: string | null): void { this.agyHome = home; }
 
@@ -99,7 +108,11 @@ export class TerminalSession {
     // --sandbox keeps Agy's shell commands from writing outside the workspace (macOS/Linux; untested on Windows).
     const args = agyPath ? (windows ? [] : ["--sandbox"]) : (windows ? [] : ["-l"]);
     this.process = ptyModule.spawn(executable, args, { name: "xterm-256color", cols: 100, rows: 28, cwd: this.cwd, env: this.environment(Boolean(agyPath)) });
-    this.process.onData((data) => this.onDataCallback?.(data));
+    this.startedAt = Date.now();
+    this.runningAgy = Boolean(agyPath);
+    this.recentOutput = "";
+    this.lastOutputAt = null;
+    this.process.onData((data) => { this.lastOutputAt = Date.now(); this.recentOutput = (this.recentOutput + data).slice(-6000); this.onDataCallback?.(data); });
     const ptyProcess = this.process;
     ptyProcess.onExit(({ exitCode }) => { if (this.process === ptyProcess) this.process = null; this.onExitCallback?.(exitCode); });
     for (const input of this.pendingInput.splice(0)) ptyProcess.write(input);

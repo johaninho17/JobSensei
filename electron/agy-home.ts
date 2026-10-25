@@ -63,6 +63,8 @@ export async function prepareAgyHome(userDataPath: string, workspacePath: string
   const keptDeny = (current.permissions?.deny ?? []).filter((rule) => !previous.has(rule));
   const next: AgySettings = {
     ...current,
+    // The app opens Agy only in this workspace, so it is trusted up front (the trust question would block the queue).
+    trustedWorkspaces: [...new Set([...((current.trustedWorkspaces as string[] | undefined) ?? []), realPath(workspacePath)])],
     toolPermission: "always-proceed",
     artifactReviewPolicy: "always-proceed",
     permissions: { ...current.permissions, allow: current.permissions?.allow ?? [], deny: [...new Set([...keptDeny, ...generated])] },

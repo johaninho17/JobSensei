@@ -31,3 +31,16 @@ export function followUpDays(tracker: Pick<JobTracker, "nextFollowUpAt"> | null,
   const base = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
   return Math.round((due - base) / 86_400_000);
 }
+
+export const STALE_DAYS = 30;
+
+/** Applied jobs (set or derived) whose applied date and last tracker change are both older than STALE_DAYS. */
+export function staleApplications<T extends TrackedJob & { tracker: (TrackedJob["tracker"] & { updatedAt?: string | null }) | null }>(jobs: T[], now = Date.now()): T[] {
+  const cutoff = now - STALE_DAYS * 86_400_000;
+  return jobs.filter((job) => {
+    if (effectiveStatus(job) !== "applied") return false;
+    const appliedAt = effectiveAppliedAt(job);
+    const lastTouch = Math.max(appliedAt ? Date.parse(appliedAt) : 0, job.tracker?.updatedAt ? Date.parse(job.tracker.updatedAt) : 0);
+    return lastTouch > 0 && lastTouch < cutoff;
+  });
+}

@@ -429,3 +429,21 @@
 .search-shortcut { margin-left: auto; color: var(--muted); }
 .search-palette .search-result-icon { min-width: 64px; padding: 1px 8px; border-radius: var(--radius-pill); color: var(--muted); background: var(--sunken); font: 600 var(--fs-12) var(--font-ui); letter-spacing: 0; text-align: center; text-transform: none; }
 .update-pill { min-height: 30px; padding: 0 var(--space-3); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: var(--radius-pill); color: var(--accent) !important; background: color-mix(in srgb, var(--accent) 10%, transparent); font-size: var(--fs-13) !important; font-weight: 650; cursor: pointer; }
+.queue-wait { margin: 0; color: var(--muted); font-size: var(--fs-13); }
+
+/* Check before you send (job Overview) */
+.review-list { padding: var(--space-3) var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); }
+.review-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.review-head h2 { margin: 0 0 var(--space-2); font-size: var(--fs-18); }
+.review-list ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.review-list li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: baseline; gap: var(--space-3); font-size: var(--fs-13); }
+.review-kind { padding: 1px 8px; border-radius: var(--radius-pill); color: var(--brass); background: var(--brass-tint); font-weight: 650; text-align: center; }
+.review-list li.is-error .review-kind { color: var(--risk); background: var(--risk-tint); }
+.review-text { overflow-wrap: anywhere; }
+.queue-summary { margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-s); background: var(--leaf-tint); font-size: var(--fs-13); }
+.new-files { padding: var(--space-3) var(--space-4); border: 1px solid color-mix(in srgb, var(--brass) 40%, transparent); border-radius: var(--radius-m); background: var(--brass-tint); }
+.new-files ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.new-files li { display: flex; justify-content: space-between; gap: var(--space-3); }
+.new-files .btn-quiet { justify-self: start; }
+.side-nav button { white-space: nowrap; }
+.side-nav button .side-due { padding: 0 5px; font-size: 11px; }

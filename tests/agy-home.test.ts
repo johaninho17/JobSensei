@@ -35,7 +35,7 @@ describe("app-owned Agy home", () => {
     const home = await prepareAgyHome(userData, workspace);
     expect(home).toBe(join(userData, "agy-home"));
     const first = JSON.parse(await readFile(settingsPath, "utf8"));
-    expect(first).toMatchObject({ toolPermission: "always-proceed" });
+    expect(first).toMatchObject({ toolPermission: "always-proceed", trustedWorkspaces: [workspace] });
     expect(first.permissions.deny).toContain("command(python3 -c)");
     // The user adds a model and their own rules; the workspace moves.
     first.model = "Gemini Flash";
