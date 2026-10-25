@@ -152,3 +152,11 @@ Avoid embedding names, employers, exact personal claims, credentials, or machine
 The repository ignores `data/`, local plans, environment files, build output, and caches. Before publishing a fork, inspect the complete tracked-file list and run credential and identity scans. The fictional workspace under `examples/` is the only candidate data intended for source control.
 
 See [Privacy](docs/privacy.md), [Workspace Format](docs/workspace-format.md), and [Security](SECURITY.md) for the supporting contracts.
+
+## Using the app
+
+- **Add jobs:** paste posting links into the job queue on the Jobs page. Agy runs one at a time; with "Run automatically" on, the next link starts when the last application finishes. A link that stalls is marked "Needs attention" and pauses the queue.
+- **Track:** status is automatic (drafts mean Applied, interview prep means Interviewing) until you set it on the job page. Set follow-up dates and notes in Tracking. The status strip filters jobs; old applications with no reply can be closed in one step.
+- **Interview:** the Interviews page lists every job with prep. A job's Interview tab shows the round stepper, question cards, key points, and a readiness checklist. Start live mode in the app, or open the small always-on-top Live window during the call.
+- **Watch runs:** the bar at the top of the Agy panel shows the latest run, its result, and its top issues.
+

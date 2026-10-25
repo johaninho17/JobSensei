@@ -40,3 +40,6 @@ Audit date: 2026-10-23, updated after Phase 4. ⚠ marks copies still known to c
 | Unchanged bullets in the bundle | `{ "baseline": N }` refs + omitted employers, expanded by `expandBundleBaselines` (`application-finalize.ts`) | Pipeline skill step 5 + contract example; `tests/pipeline-speed.test.ts` |
 | UI colors, type, spacing | `src/renderer/tokens.css` (values); meaning in `UI_DESIGN_SYSTEM.md` | None. `tests/workspace-search.test.ts` fails on new hex values or all-caps labels |
 | Interview question cards (UI) | `parseInterviewCards` in `src/renderer/interview-cards.ts`, rendered by `InterviewView.tsx` (job tab and pop-out window) | Card format owner stays the pipeline SKILL "Question card"; `tests/interview-cards.test.ts` |
+| How much to change a resume | `jobsensei-resume-tailor` SKILL ("Surgical, not maximal") | `workflow-contract.md` points to it; `RESUME_TAILORING_TOO_SIMILAR` is a floor only; `tests/resume-tailoring-similarity.test.ts` |
+| No personal data in tracked files | `tests/privacy-scan.test.ts` (+ gitignored `dev-notes/privacy-terms.txt`) | `CLAUDE.md` rule 9 |
+| Job status and queue | `src/shared/tracker.ts` (derived status), `src/shared/job-queue.ts` (`advanceQueue`) | `docs/workspace-format.md` describes the files |

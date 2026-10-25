@@ -72,3 +72,14 @@ describe("resume tailoring similarity", () => {
     expect(result.nearIdenticalBulletRatio).toBeLessThan(0.7);
   });
 });
+
+describe("tailoring amount has one owner (surgical, not maximal)", () => {
+  it("keeps the rule in the resume-tailor skill and no 'across employers' quota elsewhere", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const tailor = await readFile(".agents/skills/jobsensei-resume-tailor/SKILL.md", "utf8");
+    const contract = await readFile(".agents/skills/jobsensei-application-pipeline/references/workflow-contract.md", "utf8");
+    expect(tailor).toContain("Surgical, not maximal");
+    expect(contract).not.toMatch(/12-18 rows|across relevant employers and time periods/);
+    expect(contract).toContain("jobsensei-resume-tailor");
+  });
+});
