@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -14,16 +14,29 @@ const PATTERNS: Array<[string, RegExp]> = [
   ["phone number (555 numbers are fictional)", /\(?\b(?!555)\d{3}\)?[ .-](?!555\b)\d{3}[ .-]\d{4}\b/],
 ];
 
+function privateTerms(): string[] {
+  const path = join(process.cwd(), "dev-notes", "privacy-terms.txt");
+  return existsSync(path) ? readFileSync(path, "utf8").split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#")) : [];
+}
+
 function trackedFiles(): string[] {
   return execFileSync("git", ["ls-files"], { encoding: "utf8" }).split("\n").filter((file) => file && TEXT.test(file) && !SKIP.test(file));
 }
 
 describe("privacy scan of tracked files", () => {
+  it("finds no private terms in built output that gets packaged", () => {
+    const terms = privateTerms();
+    const hits: string[] = [];
+    const walk = (dir: string): string[] => existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]) : [];
+    for (const file of [...walk("dist-electron"), ...walk("dist-renderer")].filter((path) => /\.(?:js|css|html|json)$/.test(path))) {
+      const text = readFileSync(file, "utf8").toLowerCase();
+      for (const term of terms) if (text.includes(term.toLowerCase())) hits.push(`${file}: private term #${terms.indexOf(term) + 1}`);
+    }
+    expect(hits).toEqual([]);
+  });
+
   it("finds no personal data or secrets", () => {
-    const privateTermsPath = join(process.cwd(), "dev-notes", "privacy-terms.txt");
-    const terms = existsSync(privateTermsPath)
-      ? readFileSync(privateTermsPath, "utf8").split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#"))
-      : [];
+    const terms = privateTerms();
     const hits: string[] = [];
     for (const file of trackedFiles()) {
       if (!existsSync(file)) continue;

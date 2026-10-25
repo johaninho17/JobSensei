@@ -48,16 +48,31 @@ jobs:
       - name: Build application bundle
         run: npm run build
 
+      - name: Configure macOS signing (only when secrets exist)
+        if: matrix.platform == 'mac'
+        shell: bash
+        env:
+          P12: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          NOTARY_ID: ${{ secrets.APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          NOTARY_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        # An empty CSC_LINK is read as a file path and fails the build, so variables are set only
+        # when the secrets exist (docs/release-signing.md). Otherwise the app is ad-hoc signed.
+        run: |
+          if [ -n "$P12" ]; then
+            echo "CSC_LINK=$P12" >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=$P12_PASSWORD" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$NOTARY_ID" ]; then
+            echo "APPLE_ID=$NOTARY_ID" >> "$GITHUB_ENV"
+            echo "APPLE_APP_SPECIFIC_PASSWORD=$NOTARY_PASSWORD" >> "$GITHUB_ENV"
+            echo "APPLE_TEAM_ID=$NOTARY_TEAM" >> "$GITHUB_ENV"
+          fi
+
       - name: Package and publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          # macOS signing and notarization (docs/release-signing.md). Without these secrets the
-          # app is ad-hoc signed and users must click "Open Anyway" once.
-          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MAC_CERT_P12_BASE64 || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MAC_CERT_PASSWORD || '' }}
-          APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
         run: |
           npx electron-builder --publish always

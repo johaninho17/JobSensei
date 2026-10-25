@@ -13,7 +13,7 @@
   "scripts": {
     "predev": "tsc -p tsconfig.electron.json",
     "dev": "concurrently -k \"vite --host 127.0.0.1 --port 5173 --strictPort\" \"wait-on http-get://127.0.0.1:5173 && electron . --dev\"",
-    "build": "tsc -b && vite build && tsc -p tsconfig.electron.json",
+    "build": "npm run clean && tsc -b && vite build && tsc -p tsconfig.electron.json",
     "typecheck": "tsc -b --pretty false && tsc -p tsconfig.electron.json --noEmit",
     "test": "vitest run",
     "context:snapshot": "tsc -p tsconfig.electron.json && node dist-electron/electron/evidence-snapshot.js",
@@ -30,7 +30,8 @@
     "dist:mac": "node scripts/prepare-bundled-binaries.mjs --platform=mac && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
     "dist:win": "node scripts/prepare-bundled-binaries.mjs --platform=win && npm run build && electron-builder --win",
     "interview:context": "tsc -p tsconfig.electron.json && node dist-electron/electron/interview-context.js",
-    "interview:check": "tsc -p tsconfig.electron.json && node dist-electron/electron/interview-check.js"
+    "interview:check": "tsc -p tsconfig.electron.json && node dist-electron/electron/interview-check.js",
+    "clean": "node -e \"for (const dir of ['dist-electron', 'dist-renderer']) require('node:fs').rmSync(dir, { recursive: true, force: true })\""
   },
   "dependencies": {
     "@fontsource-variable/atkinson-hyperlegible-next": "5.3.0",
