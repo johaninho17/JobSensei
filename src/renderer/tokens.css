@@ -1,0 +1,111 @@
+/* Light is the default theme (App reads "sensei-theme-v2"); dark is neutral graphite with green accents.
+   Design tokens: the single owner of color, type, spacing, radius, and elevation.
+   Rationale and usage: UI_DESIGN_SYSTEM.md.
+   Brass means "do this next" (one per screen) and focus. Leaf means met/ready. Risk means blocked/error. */
+:root {
+  color-scheme: dark;
+  --canvas: #181c1a;
+  --raised: #212724;
+  --ink: #eef2ef;
+  --muted: #aab6af;
+  --brass: #e3c07c;
+  --leaf: #8fd3a8;
+  --risk: #f2a291;
+
+  --sunken: color-mix(in srgb, var(--canvas) 72%, #000);
+  --line: color-mix(in srgb, var(--ink) 12%, transparent);
+  --line-strong: color-mix(in srgb, var(--ink) 26%, transparent);
+  --hover: color-mix(in srgb, var(--ink) 6%, transparent);
+  --accent: #8fd3a8;
+  --on-accent: #10261a;
+  --brass-tint: color-mix(in srgb, var(--brass) 15%, transparent);
+  --leaf-tint: color-mix(in srgb, var(--leaf) 14%, transparent);
+  --risk-tint: color-mix(in srgb, var(--risk) 14%, transparent);
+  --scrim: rgba(4, 10, 7, .62);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 8px 24px rgba(0, 0, 0, .22);
+
+  /* The terminal stays dark in both themes. */
+  --term-bg: #0e1913;
+  --term-raised: #15241c;
+  --term-ink: #e6eee7;
+  --term-muted: #93a99a;
+  --term-line: rgba(230, 238, 231, .12);
+  --term-brass: #d8b26b;
+  --term-leaf: #82c99d;
+  --term-risk: #ec9483;
+
+  --font-ui: "Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Newsreader Variable", "Newsreader", ui-serif, Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Type scale: 1.25 ratio on a 15px base. */
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-15: 15px;
+  --fs-18: 18px;
+  --fs-22: 22px;
+  --fs-28: 28px;
+  --fs-35: 35px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-pill: 999px;
+  --focus: 0 0 0 2px var(--canvas), 0 0 0 4px var(--brass);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --canvas: #f6f7f5;
+  --raised: #ffffff;
+  --ink: #16231b;
+  --muted: #55635a;
+  --brass: #835a0c;
+  --leaf: #28704a;
+  --risk: #a63d2c;
+  --accent: #1d5c3f;
+  --on-accent: #ffffff;
+  --sunken: color-mix(in srgb, var(--canvas) 94%, var(--ink));
+  --scrim: rgba(21, 39, 30, .32);
+  --shadow: 0 1px 2px rgba(21, 39, 30, .08), 0 8px 24px rgba(21, 39, 30, .08);
+}
+
+:root { color: var(--ink); background: var(--canvas); font-family: var(--font-ui); font-size: var(--fs-15); line-height: 1.5; font-synthesis: none; -webkit-font-smoothing: antialiased; }
+body { background: var(--canvas); }
+:focus-visible { outline: none; box-shadow: var(--focus); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* Base type. Titles and question text use the display serif; labels are sentence case, never all caps. */
+h1, h2, h3 { font-family: var(--font-display); font-weight: 560; letter-spacing: -.005em; line-height: 1.2; text-wrap: balance; }
+h1 { font-size: var(--fs-35); }
+h2 { font-size: var(--fs-22); }
+h3 { font-size: var(--fs-18); }
+p, li { text-wrap: pretty; }
+code, pre, kbd, samp { font-family: var(--font-mono); }
+.tabular, td, .count { font-variant-numeric: tabular-nums; }
+
+/* The terminal panel is always dark: re-scope the color tokens inside it. */
+.terminal-panel {
+  color-scheme: dark;
+  --canvas: var(--term-bg);
+  --raised: var(--term-raised);
+  --ink: var(--term-ink);
+  --muted: var(--term-muted);
+  --brass: var(--term-brass);
+  --leaf: var(--term-leaf);
+  --risk: var(--term-risk);
+  --sunken: #0a130e;
+  --accent: var(--term-ink);
+  --on-accent: var(--term-bg);
+  color: var(--ink);
+  background: var(--canvas);
+}

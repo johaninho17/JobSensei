@@ -16,7 +16,7 @@ describe("public application workflow", () => {
     expect(classifyApplicationArtifact("Alex_Morgan_Example_Labs_Resume.md")).toBe("resume");
     expect(classifyApplicationArtifact("cover_letter.md")).toBe("cover-letter");
     expect(pdfOutputName("/workspace/jobs/example/Alex_Morgan_Example_Labs_Resume.md", "resume", "Alex_Morgan")).toBe("Alex_Morgan_Resume.pdf");
-    expect(pdfExportRequestSchema.parse({ relativePath: "jobs/example/cover_letter.md" }).textSize).toBe("auto");
+    expect(pdfExportRequestSchema.parse({ relativePath: "jobs/example/cover_letter.md" }).textSize).toBe("large"); // 5% larger is the default (decision 2026-10-25)
   });
 
   it("keeps provenance out of employer-facing artifacts", () => {

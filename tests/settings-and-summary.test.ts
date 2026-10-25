@@ -6,6 +6,7 @@ import { buildCoverLetterBrief, compactStyleRules, profileInstructionLines } fro
 import { composeCanonicalResume, loadCanonicalResumeBaseline, summaryIsEditable } from "../electron/canonical-resume";
 import { jobDescriptionEchoes } from "../electron/application-validation";
 import { deriveVoicePresets } from "../src/shared/voice-presets";
+import { DEFAULT_PDF_TEXT_SIZE, pdfExportRequestSchema } from "../src/shared/schemas";
 import type { CandidateProfile } from "../src/shared/schemas";
 
 const temps: string[] = [];
@@ -115,5 +116,12 @@ describe("resume summary support", () => {
     const composed = composeCanonicalResume(parsed, draft, { includeSummary: true });
     expect(composed).not.toContain("Summary");
     expect(composed).not.toContain("explains data to customers");
+  });
+});
+
+describe("PDF export default (ledger R10)", () => {
+  it("defaults to 5% larger everywhere", () => {
+    expect(DEFAULT_PDF_TEXT_SIZE).toBe("large");
+    expect(pdfExportRequestSchema.parse({ relativePath: "jobs/a/resume.md" }).textSize).toBe("large");
   });
 });

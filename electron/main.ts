@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, session } from "electron";
 import { watch, type FSWatcher } from "node:fs";
+import { updateJobTracker } from "./tracker";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { copyFile, mkdir, readFile, stat } from "node:fs/promises";
 import type { Settings } from "../src/shared/schemas";
@@ -130,6 +131,7 @@ ipcMain.handle("profile:update-details", async (_event, details) => updateCandid
   transitionSummary: typeof details?.transitionSummary === "string" ? details.transitionSummary : undefined,
   confidentialNames: Array.isArray(details?.confidentialNames) ? details.confidentialNames.filter((value: unknown): value is string => typeof value === "string") : undefined,
   boundaries: Array.isArray(details?.boundaries) ? details.boundaries.filter((value: unknown): value is string => typeof value === "string") : undefined,
+  interviewLogistics: details?.interviewLogistics && typeof details.interviewLogistics === "object" ? details.interviewLogistics : undefined,
 }));
 ipcMain.handle("profile:preview", async () => {
   const workspace = requireWorkspace();
@@ -142,6 +144,9 @@ ipcMain.handle("profile:preview", async () => {
     styleRules: compactStyleRules(voiceText, profile),
     instructions: profileInstructionLines(profile),
     baseResumeHasSummary: baseline ? Boolean(baseline.originalSummaryLines?.length) : null,
+    interviewLogistics: Object.entries(profile?.preferences.interview ?? {})
+      .map(([key, value]) => `${key}: ${value || "⚠ not set (prep will ask you to fill it in)"}`),
+    storyBankPath: await readFile(assertInsideWorkspace(workspace, join(workspace, "profile", "story_bank.md")), "utf8").then(() => "profile/story_bank.md", () => null),
   };
 });
 ipcMain.handle("bullet-bank:get", async () => readBulletBank(requireWorkspace()));
@@ -247,6 +252,7 @@ ipcMain.handle("jobs:preview-artifact", async (_event, jobId: string, relativePa
   return previewFile(requireWorkspace(), relativePath);
 });
 ipcMain.handle("jobs:get-application-status", async (_event, jobId: string) => getJobApplicationStatus(requireWorkspace(), jobId));
+ipcMain.handle("jobs:update-tracker", async (_event, jobId: unknown, update: unknown) => updateJobTracker(requireWorkspace(), String(jobId), update));
 ipcMain.handle("jobs:validate-application", async (_event, jobId: string) => validateJobApplication(requireWorkspace(), jobId, false));
 
 ipcMain.handle("interviews:get-overview", async (_event, jobId: string) => getInterviewOverview(requireWorkspace(), jobId));

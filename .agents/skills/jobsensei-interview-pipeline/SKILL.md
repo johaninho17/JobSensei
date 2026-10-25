@@ -5,192 +5,80 @@ description: Advance an existing JobSensei job into stage-aware interview prepar
 
 # JobSensei Interview Pipeline
 
-This is the sole orchestrator for moving an existing application through interview rounds. Load `data/profile/candidate.json` for identity, career chronology, source roots, and preferences. Delegate text mocks and answer feedback to `$jobsensei-interview-coach`.
+This is the sole owner of interview preparation rules: the One-Pass flow, framing, the knowability test, the question card, and gap questions. `AGENTS.md`, the coach, and the challenge skill point here. Each round's question archetypes and `prep.md` sections live in `references/stage-0N-*.md`. Mock practice belongs to `$jobsensei-interview-coach`; practice labs to `$jobsensei-technical-challenge`.
 
-Do not activate because a pasted JD contains the word `interview`. Never run from screening, intake, matching, resume tailoring, cover-letter generation, or `$jobsensei-application-pipeline`.
+Do not activate because a pasted JD contains the word `interview`. Never run from screening, matching, resume, cover-letter, or `$jobsensei-application-pipeline` work.
 
 ## Resolve The Existing Job
 
-1. Read `data/.sensei/active-context.json` when present. Prefer one selected job whose `.sensei/job.json` company or title matches the prompt.
-2. If selection does not resolve the prompt, inspect only `data/jobs/*/.sensei/job.json` metadata. Root-level `job.json` is a legacy fallback only. Do not read sibling application artifacts.
-3. Require exactly one existing canonical workspace containing `.sensei/job.json` and `original_jd.md` (fall back to legacy `original_jd.txt`). Accept root-level `job.json` only for legacy workspaces. Never create a new `data/jobs/` workspace from an interview prompt.
-4. If no workspace matches, ask the user to select the job or run the JD pipeline. If multiple match, show the choices and wait.
-5. Normalize the requested stage to one of:
-   - `recruiter_screen`
-   - `hiring_manager`
-   - `practical_evaluation` (or `technical`)
-   - `final_panel` (or `team_panel` / `team panel` / `panel` / `onsite` / `executive`)
-   - `take_home`
-   - `unknown`
-6. For interview preparation creation, use the isolated canonical 4-stage layout:
-   - `01-recruiter-screen/`: Non-technical 15–20 min Talent Acquisition screen. Bounded strictly to 6–8 questions covering background arc, motivation, role fit, checklist qualifications, logistics (location, comp, authorization, timeline), and reverse questions. Zero low-level architecture or debugging scenarios.
-   - `02-hiring-manager/`: 30–45 min manager screen. Bounded strictly to 8–10 questions covering end-to-end ownership, cross-functional collaboration, navigating ambiguity, and 30-60-90 day thinking.
-   - `03-practical-evaluation/` (or `03-technical/`): 45–60 min assessment. Role-aware: "Role-Play & Pitch Simulation" for BDR/Sales; "Technical & System Design" for Engineering; "Product Sense & Case Study" for PM; "Scenario Modeling" for Ops. Bounded to 6–8 practical scenarios.
-   - `04-final-panel/`: 30–45 min leadership round. Bounded to 6–8 strategic questions covering mission alignment, culture fit, and executive reverse questions.
-7. An initial recruiter screen prompt creates or updates only `01-recruiter-screen`. An explicit hiring-manager prompt creates or updates `02-hiring-manager`. An explicit practical or technical prompt creates or updates `03-practical-evaluation` (or `03-technical`). An explicit team panel, final panel, executive, or onsite prompt creates or updates `04-final-panel`. Technical challenge material remains opt-in under `challenge/`.
+1. Resolve the job by the `AGENTS.md` rule: a `(job: <job-id>)` in the prompt wins; otherwise match company and title in `data/jobs/*/.sensei/job.json`.
+2. Require exactly one job with `.sensei/job.json` and `original_jd.md`. Never create a job from an interview prompt. If none or several match, ask the user.
+3. Map the requested stage to one canonical round: `01-recruiter-screen`, `02-hiring-manager`, `03-practical-evaluation`, or `04-final-panel` (team panel, onsite, executive → `04-final-panel`; technical, case, role-play → `03-practical-evaluation`). Prepare only that round. A reported future round goes in `knownProcess`; it does not create a folder.
 
-## Round Storage Contract
+## One-Pass Flow
 
-Use `data/jobs/<job-id>/interviews/interview.json` as the job-level index:
+Commands use `npm --prefix "$JOBSENSEI_APP_ROOT" run …`.
 
-```json
-{
-  "schemaVersion": 2,
-  "jobId": "<job-id>",
-  "company": "<display company>",
-  "role": "<display role>",
-  "currentRoundId": "01-recruiter-screen",
-  "rounds": [],
-  "knownProcess": []
-}
-```
+1. If `data/profile/story_bank.md` does not exist, run `.agents/workflows/jobsensei-story-bank.md` first (once per candidate), then continue.
+2. Run `interview:context -- <job-id> <stage>` exactly once.
+3. Read `jobs/<job-id>/interviews/.sensei/interview_context.json` once, in a single full read. It holds the JD's required items and responsibilities, the candidate's gaps, citable evidence, the story bank, the candidate's career story and interview voice, logistics from the candidate profile (`data/profile/candidate.json`), matched role memory, everything earlier rounds already used, and the question limits. Do not read context files, other jobs, or transcripts separately.
+4. If `interviews/company_research.md` does not exist and internet access is available, write it following `references/research.md`. Otherwise reuse it.
+5. In one file-writing turn, write `interviews/<round-id>/prep.md` and `interviews/<round-id>/question_bank.md` following this skill and the round's stage reference.
+6. Run `interview:check -- <job-id> <round-id>` once. It validates the files and registers the round in `interview.json` (the app builds the dashboard from the files; never write `dashboardBrief`). Report its status, duration, and at most five issues, then stop. Do not repair in a loop; a warning is a finished run.
 
-Each round record contains `id`, `sequence`, `stage`, `label`, nullable `interviewer`, `format`, and `scheduledDate`, `status`, `artifactPaths`, `debriefSourcePaths`, and `dashboardBrief`. Allowed statuses are `planned`, `prep_ready`, `completed`, and `debriefed`.
+## Framing: honest and strong
 
-`dashboardBrief` is a source-linked projection of the round files for the Sensei interview dashboard. It must not introduce new claims or replace the source artifacts. Preserve the six legacy category arrays for compatibility and also populate `references` as the complete navigation index:
+- Present real work at its strongest, with the confidence of the candidate's base resume. Say the ownership qualifier once ("not the sole owner of the architecture"), then stop underselling.
+- Never invent a scenario, incident, client, metric, tool, duration, or result. A "Real example" cites a story ID (`S3`) or an evidence ID from the context file.
+- A hypothetical ("what would you do if…") is answered as an approach, never as "when I did X".
+- Gaps are strengths in progress, never apologies: name the gap plainly → the closest real experience → a concrete ramp plan.
+- Logistics (location, authorization, compensation, notice, work arrangement) come only from `logistics` in the context file, word for word. A `null` value is written as `⚠ Fill in Settings → Interview Prep` — never guessed, never defaulted.
 
-```json
-{
-  "priorityQuestions": [{ "title": "<question>", "text": "<complete prepared answer>", "sourcePath": "jobs/<job-id>/interviews/<round-id>/question_bank.md", "anchor": "<exact question heading>", "category": "question", "priority": "primary", "sourceType": "round_artifact" }],
-  "quickAnswers": [],
-  "companyFacts": [],
-  "questionsToAsk": [],
-  "cautions": [],
-  "technicalTopics": [],
-  "references": [{ "title": "<reference title>", "text": "<full useful answer, fact, caution, or cue>", "sourcePath": "jobs/<job-id>/interviews/<round-id>/<source>", "anchor": "<exact Markdown heading or null>", "category": "question|answer|career_story|company_fact|process|technical|challenge|reverse_question|caution|debrief_lesson|source", "priority": "primary|secondary|reference", "sourceType": "round_artifact|official|reported|career_evidence|generated_projection" }],
-  "availableArtifactCount": 3,
-  "expectedArtifactCount": 3
-}
-```
+## Knowability test
 
-Keep each legacy list bounded to the most useful 6-10 items. Put every high-value prepared answer, company fact, process note, technical topic, challenge reference, reverse question, caution, and debrief lesson in `references`; do not truncate a useful answer with ellipses. `sourcePath` must exist, and `anchor` must exactly match a Markdown heading when present. Every item must be copied or faithfully condensed from its named source. When updating a source file, refresh its dashboard entries in the same write stage. Existing rounds without `dashboardBrief` remain valid because the app derives a read-only fallback from their files.
+Every question and exercise must be answerable by a strong outside candidate using general skill in the field, the JD, and public information.
+- Out: the company's internal systems, unreleased products, private architecture, and niche protocols the JD does not list as required.
+- Tailor through the JD's responsibilities and required items, translated into generic situations ("a customer's data sync is failing", not the company's product name).
+- Public product knowledge belongs in `prep.md` under `## Learn before the interview` (what they sell in one line, who buys it, public docs worth skimming, and a ready "why this company" answer), marked as study, not expected knowledge.
 
-- Store new artifacts under canonical folders: `01-recruiter-screen/`, `02-hiring-manager/`, `03-practical-evaluation/`, and `04-final-panel/`.
-- **Shared Company Research Contract:**
-  - Company-wide background (mission, leadership, funding, core products, customer logos, market category) is researched once and saved to `interviews/company_research.md`.
-  - Round folders must NEVER duplicate identical company research files. A round-level `research.md` is strictly optional and only created when there is specific intel on the interviewer persona or unique evaluation rubric.
-  - In `interview.json`, `artifactPaths.research` defaults to `jobs/<job-id>/interviews/company_research.md`.
-- **Dedicated Stage Specifications:**
-  - When preparing a round, the pipeline MUST load and strictly adhere to the dedicated stage specification in `references/`:
-    - `01-recruiter-screen`: Follows `references/stage-01-recruiter.md` (The 1-Page Recruiter Battlecard).
-    - `02-hiring-manager`: Follows `references/stage-02-hiring-manager.md` (The Managerial Ownership & Decision Playbook).
-    - `03-practical-evaluation`: Follows `references/stage-03-practical.md` (The Live Diagnostic & Execution Framework).
-    - `04-final-panel`: Follows `references/stage-04-final-panel.md` (The Strategic Vision & Culture Alignment Guide).
-- **Strict Story Partitioning & Zero Cannibalization:** Never duplicate the same stories, anecdotes, or reverse questions across multiple rounds:
-  - *Recruiter Screen:* High-level trajectory arc, checklist stack verification, and compensation/location logistics. Zero deep architecture monologues.
-  - *Hiring Manager:* Ownership under ambiguity, handling customer/stakeholder pushback, prioritization under tight deadlines, and 30-60-90 day impact.
-  - *Practical Evaluation / Technical:* Live problem-solving, trade-off analysis, domain frameworks, and live simulations. Focus on real-time execution rather than retrospective story monologues.
-  - *Final Panel:* Strategic market alignment, executive vision, culture add, and high-impact macro business outcomes.
-- Round preparation creates stage-specific `prep.md` and `question_bank.md` tailored to that round's archetype. Technical challenge artifacts remain opt-in under `challenge/`.
-- Debrief analysis may add only `debrief_analysis.md` in the completed round.
-- Text mock coaching may add numbered mock and feedback files in that round.
-- Existing flat `interviews/research.md`, `prep.md`, and `question_bank.md` form a read-only legacy first round. Do not move, overwrite, or silently regenerate them.
-- Create exactly one requested round or optional challenge artifact set. A reported future process step belongs in `knownProcess`; it does not authorize creating its folder or artifacts. Existing legacy rounds are read-only until the user explicitly requests migration.
-- Do not modify submitted application artifacts, the JD, evaluation, match, or audits.
+## Question card (the only format)
 
-## Preparation Sources
-
-After resolving one job:
-
-1. Read that job's JD, metadata, status, submitted application files, evaluation, match, interview index, and the **files of all preceding rounds** (`prep.md`, `question_bank.md`) as well as the active round's prior files:
-   - Build an explicit **Non-Overlap / Exclusion Boundary**: Inspect the questions, anecdotes, past project examples, and reverse questions from all preceding rounds (`01-`, `02-`, etc.).
-   - Strictly prohibit re-asking questions, recycling career anecdotes, or reusing reverse questions in the current round.
-   - For `03-practical-evaluation`, enforce first-principles scenarios and live problem-solving; never re-tell Round 02 retrospective stories.
-2. Use `$jobsensei-career-evidence` with the selected context manifest. Preserve evidence IDs, source families, ownership, and current-versus-prior tense.
-3. Read the matching generalized role-memory record only under the memory contract. Do not scan old jobs or transcripts.
-4. Research the current company and requested stage when internet access is available:
-   - Perform general company research once and save to `interviews/company_research.md`.
-   - Prefer official company, careers, engineering, product, and interview guidance.
-   - Use no more than three public candidate-report sources.
-   - Record title, URL, access date, and `official`, `reported`, or `inferred`.
-   - Candidate reports are anecdotal and cannot establish candidate facts or guarantee a question.
-   - Put the best official facts, reported process details, and likely stage-specific questions into `dashboardBrief.references` with `sourceType`, the local `company_research.md` (or round `research.md`) path, and an exact heading anchor.
-5. Update `status.json` history without deleting prior entries. Record only the requested round.
-
-## Stage Distribution & Universal Multi-Disciplinary Standards
-
-The stage and target discipline must strictly control the artifact structure, questions, and preparation focus.
-
-**Zero Fabricated Incidents / Zero Hallucinated Drama:**
-- Never invent customer names, partner crises, production outages, port collisions, or imaginary incidents out of local development notes or fragments.
-- For behavioral questions, provide **generalizable decision frameworks and operating philosophy** anchored in the candidate's real, verified evidence from `data/context/`.
-
-**Universal Role Mapping Across Disciplines:**
-- *Engineering / Technical:* "Technical & System Design" — first-principles architecture, data flow, telemetry/metrics, debugging trees, and live code walkthroughs.
-- *Sales / BDR / Account Executive:* "Role-Play & Pitch Simulation" — mock cold outreach, discovery questioning (MEDDPICC/BANT), objection handling, deal stage progression, and pricing negotiation.
-- *Product Management:* "Product Sense & Case Study" — user personas, problem definition, North Star metrics, feature prioritization (RICE), and trade-off matrices.
-- *Operations / Strategy / Finance:* "Operational Scenario & Case Modeling" — process bottlenecks, capacity planning, unit economics, supply chain modeling, and KPI dashboards.
-- *Customer Success / Implementation:* "Client Onboarding & Escalation Simulation" — technical kickoff walkthroughs, churn risk diagnosis, QBR presentations, and SLA recovery.
-
-### Modular Stage Specifications:
-For each round, follow the dedicated specification module in `references/`:
-1. `01-recruiter-screen`: Read and follow `references/stage-01-recruiter.md`. (15–20 min non-technical filter, 1-page battlecard, logistics matrix, checkboxes).
-2. `02-hiring-manager`: Read and follow `references/stage-02-hiring-manager.md`. (30–45 min manager screen, ownership & decision playbooks, generalizable mental models, truthful anchors).
-3. `03-practical-evaluation`: Read and follow `references/stage-03-practical.md`. (45–60 min assessment, diagnostic decision trees, trade-off matrices, first-principles architectures).
-4. `04-final-panel`: Read and follow `references/stage-04-final-panel.md`. (30–45 min leadership round, strategic vision, culture alignment, intellectual humility).
-
-### Take-Home & Unknown
-- Take-Home produces the expected evaluation rubric, constraints and assumptions, execution plan, validation checklist, submission explanation, self-review, and likely review questions.
-- `unknown` uses recruiter-screen preparation as primary and labels later-stage material as secondary.
-
-`question_bank.md` must use these exact top-level sections:
-
-- `## Primary for this round`
-- `## Likely follow-ups`
-- `## Secondary / later-round preparation`
-- `## Questions to ask`
-
-### Standardized Question Bank Contract (Glanceable Framework Cues)
-
-Never produce full-prose conversational monologues, scripted pitches, answers in quotation marks, or rigid `Situation / Context -> Action & Mechanism -> Result & Impact` bullet scripts. Every primary and follow-up question must be formatted as clean, glanceable bullet cues that candidates use as 3-second memory triggers while speaking naturally in their own authentic voice:
-
-Every question under `## Primary for this round` must follow this structure:
+`question_bank.md` sections, in order: `## Primary for this round`, `## Gap questions`, `## Likely follow-ups`, `## Questions to ask`. The primary count must stay inside `questionLimits`.
 
 ```markdown
-### Question <N>: <Question Text>?
-
-* **Core Takeaway:**
-  - <1-2 punchy lines delivering the bottom-line answer (scannable in 3 seconds)>
-* **Interviewer Intent:**
-  - <What the interviewer is actually testing: systematic deconstruction, ownership, trade-off awareness>
-* **Generalizable Framework (Mental Model):**
-  - <Step 1: Deconstruct / Isolate / Clarify>
-  - <Step 2: Validate / Minimal Reproduction / Concrete Action>
-  - <Step 3: Communicate / Collaborate / Deliver>
-* **Truthful Career Anchor:**
-  - <Ground in verified evidence from data/context/ without inflating scope or inventing fake customer drama>
-* **Glanceable Talking Cues:**
-  - <Punchy 1-line talking trigger 1>
-  - <Punchy 1-line talking trigger 2>
-  - <Punchy 1-line talking trigger 3>
-* **Truth Boundary & Cautions:**
-  - <1 concise line clarifying scope boundaries or key logistical facts>
+### Question <N>: <question as an interviewer would ask it>?
+- **Why they ask:** <what they are checking, one line>
+- **Real example:** S2 · <story title>   (only when the story truly answers this question; otherwise `none`)
+- **Cues:** <3–8 words> · <3–8 words> · <3–8 words>
+- **Your approach:** 1) <step> 2) <step> 3) <step>   (only for hypotheticals and scenarios)
+- **Land on:** <3–6 plain spoken words naming the point to finish on>
+- **Careful:** <one scope boundary>   (optional)
 ```
 
-Use `proof of concept`, `production`, `contributed`, `led`, `customer enablement`, and `full account ownership` precisely. Unknown preferences or logistics must be marked for user confirmation, never filled in.
+```markdown
+### Gap <N>: <how an interviewer would raise the gap>?
+- **Gap:** <the requirement>
+- **Closest real experience:** <story or evidence ID> · <cue>
+- **Ramp plan:** <concrete, short>
+- **Land on:** <3–6 words>
+```
+
+- Pick the field by question type. Motivation, background, and logistics questions: cues only (from `careerStory`, `logistics`, and the JD), with `Real example: none` unless a story is the honest answer. "Tell me about a time" questions: a real example. Hypotheticals and scenarios: your approach. Never attach a story just to fill the field.
+- Cues and "Land on" are memory triggers in the candidate's own words (use `voice.phrases`; no corporate rewording). Never full sentences, paragraphs, quotation marks, STAR scripts, or slogans ("full-lifecycle engineer bridge", "high-reliability infrastructure at scale"). Test: would the candidate say these words out loud?
+- Gap questions: 1–3 per round from `gaps`. Recruiter: "do you have X?"; hiring manager: "how would you ramp up on X?"; practical: a foundation-level task touching X.
+- When `roleMemory` shows interviewers in this role family ask a question (e.g. "why are you leaving", "how do you rate your performance without metrics", "a time you told a customer no"), prepare it in the round it was asked.
+- No overlap: never repeat a question, story ID, or reverse question listed in `priorRounds`.
+
+## `prep.md`
+
+Starts with `## 3 things to get across`: the three points this interviewer should remember, each pairing one of the JD's top required items with the candidate's strongest true evidence (story or evidence ID), in plain words. Then `## Before you start`: the candidate's `voice.deliveryFixes` (at most 3) as one-line reminders. Then `## Learn before the interview`, then the stage reference's sections. Keep it to one screen per section; no scripts.
 
 ## Debrief Mode
 
-A prompt such as `<Company> debrief` analyzes the latest completed or current round; it does not prepare a new round.
-
-1. Resolve raw sources under `data/debrief/<company>/` and link their relative paths in the round record. Never copy, edit, or relocate them.
-2. Treat the transcript as the primary performance record and generated summaries as secondary. Record conflicts, uncertain transcription, and missing context.
-3. Create `debrief_analysis.md` containing:
-   - Actual questions and meaningful follow-up chains
-   - Concise answer summaries
-   - What worked
-   - Weak, unclear, incomplete, or overstated answers
-   - Questions the preparation missed
-   - Interviewer signals without inferring pass/fail
-   - Process and next steps with source classification
-   - Changes recommended for the next confirmed round
-4. Interview statements are performance context, not career evidence. Corroborate any new factual claim against selected career evidence before reuse.
-5. Mark the round `debriefed`. Add reported future rounds to `knownProcess` with `sourceType: reported_by_interviewer`, but do not create them.
-6. Update only the matching generalized role-memory record. Store reusable patterns, not transcript text, employer details, compensation, or confidential material.
+A prompt such as `<Company> debrief` analyzes the latest completed round instead of preparing one. Follow `references/debrief.md`.
 
 ## Stop Conditions
 
-- Stop after preparing the requested round.
-- Stop after debrief analysis when the prompt is a debrief.
-- Start a mock only when the user explicitly asks to practice or start a mock.
-- Never infer interview success or advance the job based only on positive interviewer language.
+- Stop after `interview:check` for a preparation request, or after the debrief analysis for a debrief.
+- Start a mock only when the user asks to practice.
+- Never infer interview success or advance the job from positive interviewer language.

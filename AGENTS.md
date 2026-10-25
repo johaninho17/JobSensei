@@ -13,6 +13,7 @@ JobSensei is a local-first career workspace. Candidate identity, chronology, pre
 - Apply the candidate's voice profile (`styleRules`) last, for wording only; it cannot create or strengthen a claim.
 - Never modify source resumes or career-context documents.
 - Never read sibling jobs, prior tailored applications, or unselected context unless the user explicitly selects or names them.
+- A prompt ending in `(job: <job-id>)` names exactly one job: use `jobs/<job-id>/` and nothing else. Without a job ID, match company **and** title; if more than one job still matches, list them and ask. Never pick a job by company alone.
 - Enforce the Universal Surgical Diffing Standard: Never rewrite historical or earlier career experience unless explicitly relevant. Keep foundational past roles frozen verbatim from the base resume, focusing tailoring strictly on the top skills categories and the 3–4 target bullets at the current/most recent employer.
 - Keep evidence IDs, warnings, hashes, and provenance out of employer-facing files.
 - Never name clients or partners in a resume or cover letter (see the profile's `truth.confidentialNames`); describe them by industry instead.
@@ -31,33 +32,7 @@ Default application output is limited to `original_jd.md`, `evaluation.md`, the 
 
 Use `$jobsensei-interview-pipeline` only after the user explicitly asks to prepare an existing job for an interview. Use `$jobsensei-technical-challenge` only for an explicitly requested challenge or test. A pasted JD never creates interview content.
 
-### Interview Rules & Quality Standards:
-- **Universal Role Agnosticism (For Anyone in Any Field):** JobSensei serves candidates across Engineering, Sales, Product Management, Operations, Customer Success, Marketing, and Finance. Every stage and scenario must adapt naturally to the target discipline without assuming software engineering terminology:
-  - *Sales / BDR / Commercial:* Territory planning, cold outreach, objection handling, qualification frameworks (MEDDPICC/BANT), deal velocity, pipeline generation, and customer pitch simulations.
-  - *Product Management:* User journey mapping, North Star metrics, feature prioritization (RICE), cross-functional consensus, PRD design, and product sense case studies.
-  - *Operations / Strategy / Finance:* Process bottleneck identification, unit economics, supply chain modeling, vendor negotiation, and spreadsheet scenario modeling.
-  - *Customer Success / Implementation:* Account onboarding escalations, churn prevention, QBR presentations, and customer relationship recovery.
-  - *Engineering / Technical:* First-principles system design, distributed data contracts, diagnostic troubleshooting, and code walkthroughs.
-- **Zero Proprietary Over-Fitting / First-Principles Standard:** Never ask, expect, or coach a candidate to explain the hiring company's internal, proprietary architecture, private backend systems, or unreleased product roadmap. Real interviewers test generalizable domain principles, problem-solving methodology, and the candidate's own past career track record. Always frame questions around industry-standard concepts and the candidate's verified evidence.
-- **Strict Story Partitioning & Zero Cannibalization:** Never duplicate the same primary STAR stories or anecdotes across multiple rounds. A candidate cannot tell the Hiring Manager in Round 02 the exact same 3 stories they tell in Round 03. When preparing any round, inspect all preceding rounds to construct an explicit non-overlap boundary—never re-ask prior questions, never recycle the same career anecdotes, and never repeat reverse questions:
-  - *Round 01:* High-level career trajectory arc, checklist stack verification, and compensation/location logistics. Zero deep architecture monologues.
-  - *Round 02:* Deep ownership under ambiguity, handling customer/stakeholder pushback, prioritization under tight deadlines, and 30-60-90 day impact.
-  - *Round 03:* Live interactive problem-solving, trade-off analysis, domain frameworks, and live simulations. Focus on real-time execution rather than retrospective story monologues.
-  - *Round 04:* Strategic market alignment, executive vision, culture add, and high-impact macro business outcomes.
-- **Differentiated Reverse Questions by Persona:** Reverse questions must be strictly unique to the target interviewer persona:
-  - *Recruiter:* Hiring process milestones, team growth rate, and onboarding expectations.
-  - *Hiring Manager:* Team operating cadences, managing stakeholder/client escalations, and balancing bespoke customer requests against core roadmaps and workflows.
-  - *Practical / Peer:* Real-world day-to-day tooling bottlenecks, domain standards, and cross-functional peer collaboration.
-  - *Executive:* Long-term market positioning, 2-to-3-year company vision, and key strategic priorities.
-- **No Scripted Pitches or Fake Incidents (Generalize Frameworks, Anchor Truthfully):** Never generate verbatim monologue scripts, quotation marks, or canned STAR mini-scripts. Never invent fake customer outages, imaginary partner crises, or fake technical parameters out of local development notes. Structure preparation around **Generalizable Decision Mental Models**, **Truthful Real Evidence Anchors**, and **Glanceable Talking Cues** that candidates use as cognitive anchors while speaking naturally in their own authentic voice.
-- **Strict Stage Isolation (The 4 Canonical Rounds):**
-  1. `01-recruiter-screen`: 15–20 min non-technical filter. Bounded to 6–8 questions covering background arc, role motivation, checklist qualifications, logistics (location, comp band, authorization, timeline), and reverse questions. Zero low-level architecture or debugging scenarios.
-  2. `02-hiring-manager`: 30–45 min manager screen. Bounded to 8–10 questions covering end-to-end ownership, cross-functional collaboration, navigating ambiguity, and 30-60-90 day thinking.
-  3. `03-practical-evaluation`: Role-aware assessment bounded to 6–8 practical scenarios. Uses role-appropriate terminology (e.g., "Role-Play & Pitch Simulation" for BDR/Sales; "Technical & System Design" for Engineering; "Product Sense & Case Study" for PM; "Scenario Modeling" for Ops).
-  4. `04-final-panel`: 30–45 min leadership round bounded to 6–8 strategic questions covering mission alignment, culture fit, and executive reverse questions.
-- **Cognitive Bounds & Glanceability:** Strip internal audit metadata (`Category`, `What it tests`, `Evidence Anchor`, `Scope Boundary`) from primary question cards. Keep answers immediately scannable in under 5 seconds during live calls.
-- **Zero Corporate/AI Filler:** Strictly enforce the anti-slop dictionary. Ground all points in verified candidate evidence without corporate jargon or exaggerated titles.
-- **Evidence Integrity:** Interview research may use current public sources when requested, but external information cannot become candidate career evidence. Transcripts are performance records, not factual career sources.
+Interview preparation follows `$jobsensei-interview-pipeline` (One-Pass flow with `interview:context` and `interview:check`). It owns every interview rule: framing (strong but never invented), the knowability test (no company-internal or impossible questions), the question card (short cues, no scripts), gap questions, and no overlap between rounds. Logistics come only from the candidate's Settings. The candidate's own work stories from interviews become career evidence only after the user confirms them into `context/structured/interview-stories.md`.
 
 ## Engineering work
 

@@ -1,7 +1,7 @@
 import { delimiter, join, resolve, sep } from "node:path";
 import { stat } from "node:fs/promises";
-import type { CandidateProfile, CandidateProfileCreate, Settings } from "../src/shared/schemas";
-import { candidateProfileCreateSchema, candidateProfileSchema } from "../src/shared/schemas";
+import type { CandidateProfile, CandidateProfileCreate, InterviewLogistics, Settings } from "../src/shared/schemas";
+import { EMPTY_INTERVIEW_LOGISTICS, candidateProfileCreateSchema, candidateProfileSchema } from "../src/shared/schemas";
 import { readJson, writeJsonAtomic } from "./persistence";
 
 export const candidateProfileRelativePath = "profile/candidate.json";
@@ -123,7 +123,7 @@ export async function updateCandidateProfilePreferences(
 /** Settings fields that live outside `preferences`: career direction and the candidate's truth rules. */
 export async function updateCandidateProfileDetails(
   workspacePath: string,
-  details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[] },
+  details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[]; interviewLogistics?: Partial<InterviewLogistics> },
 ): Promise<CandidateProfile> {
   const current = await readCandidateProfile(workspacePath);
   if (!current) throw new Error("No candidate profile found to update.");
@@ -134,6 +134,17 @@ export async function updateCandidateProfileDetails(
       ...current.career,
       ...(details.transitionSummary !== undefined ? { transitionSummary: details.transitionSummary.trim() } : {}),
     },
+    ...(details.interviewLogistics ? {
+      preferences: {
+        ...current.preferences,
+        interview: {
+          ...current.preferences.interview,
+          ...Object.fromEntries(Object.entries(details.interviewLogistics)
+            .filter(([key, value]) => Object.hasOwn(EMPTY_INTERVIEW_LOGISTICS, key) && typeof value === "string")
+            .map(([key, value]) => [key, (value as string).trim()])),
+        },
+      },
+    } : {}),
     truth: {
       ...current.truth,
       ...(details.confidentialNames ? { confidentialNames: clean(details.confidentialNames) } : {}),

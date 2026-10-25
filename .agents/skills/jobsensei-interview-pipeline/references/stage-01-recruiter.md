@@ -1,76 +1,38 @@
-# Stage 01: Recruiter Screen Specification
+# Stage 01: Recruiter Screen
 
-**Stage ID:** `01-recruiter-screen`  
-**Stage Name:** Recruiter Screen  
-**Duration & Format:** 15–20 minute non-technical screen via phone or Zoom  
-**Interviewer Persona:** Talent Acquisition Partner, Recruiter, or Recruiting Coordinator  
+**Round ID:** `01-recruiter-screen` · 15–30 min phone or video · Talent acquisition partner or recruiter.
+Card format, framing, gap questions, and limits are owned by the pipeline `SKILL.md`. This file only defines what this round covers.
 
----
+## What the recruiter is checking
 
-## 1. Stage Objective & Scope
+1. Clear, concise communication (answers under about 60 seconds).
+2. A believable career story and genuine motivation for this company and role.
+3. Checklist fit: the core skills, tools, and customer- or stakeholder-facing experience the JD requires.
+4. Logistics: location, work arrangement, authorization, compensation, start timing.
 
-The Recruiter Screen is an initial operational and qualification filter. The recruiter's scorecard evaluates:
-1. Basic communication clarity and professional demeanor.
-2. High-level career trajectory arc and genuine role motivation.
-3. Checklist verification of core domain, key tools/methods, and customer-facing or stakeholder requirements.
-4. Practical logistics: location/commute, compensation expectations, work authorization, and transition timeline.
+Some recruiters also ask one or two light judgment scenarios (prioritizing several customers, a conflict between stakeholders, telling a customer they are wrong). Include up to two when `roleMemory` shows recruiters for this role family ask them. Keep them at the approach level; no deep technical design.
 
-**The Golden Rule of Round 01:** Keep answers concise (under 60 seconds). Never explain low-level mechanics or architecture, never recite detailed debugging or procedural monologues, and never burn deep problem-solving stories on an initial recruiter call.
+## `question_bank.md` primary archetypes (6–8)
 
----
+1. Walk me through your background / what you focus on today.
+2. Why are you looking to leave now, and what are you looking for next? (Cues come from `careerStory`, never generic ambition lines.)
+3. How familiar are you with us, and why this company? (Answer from `## Learn before the interview`.)
+4. Why this kind of role (e.g. customer-facing vs. pure engineering, post-sales vs. pre-sales)?
+5. Working with customers, partners, or cross-functional teams.
+6. Day-to-day tools and skills the JD requires (including how you use AI tools, when relevant).
+7. Logistics (from `logistics` only).
+8. Optional: one light judgment scenario, per above.
 
-## 2. Artifact Layout & Content Archetype
+`## Questions to ask`: 3–4 recruiter questions (process and timeline, why the role is open, how the team works, what successful new hires do in the first months).
 
-This round produces **The 1-Page Recruiter Battlecard**:
-- `interviews/01-recruiter-screen/prep.md`: Single-page glanceable battlecard.
-- `interviews/01-recruiter-screen/question_bank.md`: Bounded strictly to 6–8 primary questions.
-- Company-wide background belongs once at `interviews/company_research.md`. Do not duplicate company research inside this folder unless specific recruiter intel is discovered.
+## `prep.md` sections
 
-### `prep.md` Required Sections:
-1. **45-Second Career Trajectory Arc:** High-level narrative (where the candidate started, how they grew, and why this role is the natural next step).
-2. **Core Motivation:** Why this specific company, why this discipline, and why right now.
-3. **Logistics Matrix:** 
-   - *Target Location / Commute:* Metro area, remote/hybrid status, and physical office access.
-   - *Work Authorization:* U.S. work authorized (confirming sponsorship need or lack thereof).
-   - *Compensation Band:* Target base + bonus/equity aligned with verified market rates.
-   - *Notice Period & Start Date:* Standard transition timeline (e.g., 2–3 weeks).
-4. **Qualification Checkboxes:** 4–5 bullet cues confirming daily tool proficiency, customer-facing comfort, and relevant domain background from verified evidence.
+1. `## Before you start` and `## Learn before the interview` (pipeline-owned).
+2. `## 45-second career story`: 3–4 cues: where you started, the turn you chose, what you do now, why this role is next.
+3. `## Why this company, why now`: 2–3 cues.
+4. `## Logistics`: a table filled only from `logistics`.
+5. `## Checklist`: 4–5 cues confirming required skills, each with a story or evidence ID.
 
----
+## Not in this round
 
-## 3. `question_bank.md` Structure & Format Standard
-
-The question bank must contain **strictly 6–8 primary questions**:
-1. High-level career walkthrough / current focus.
-2. Company motivation (why this company now).
-3. Role alignment (why this specific job title).
-4. Working with external partners, clients, or cross-functional stakeholders (verified scope).
-5. Day-to-day stack / tooling checkboxes (proficient tools from verified evidence).
-6. Logistics verification (location, compensation, authorization, start timeline).
-7. 3–4 Recruiter Reverse Questions (process timeline, team growth targets, onboarding culture).
-
-### Primary Question Card Format:
-Never write scripted paragraphs or `Situation -> Action -> Result` monologues. Structure every question card as:
-
-```markdown
-### Question <N>: <Question Title>?
-
-* **Core Takeaway:**
-  - One punchy sentence summarizing the candidate's core answer.
-* **Interviewer Intent:**
-  - What the recruiter is checking off their evaluation rubric.
-* **Glanceable Talking Cues:**
-  - Concise bullet anchor 1 (Context / Positioning).
-  - Concise bullet anchor 2 (Concrete tool or verified mechanism).
-  - Concise bullet anchor 3 (Real outcome / impact).
-* **Truth Boundary & Cautions:**
-  - Explicit boundary: what to confirm vs. what not to claim or exaggerate.
-```
-
----
-
-## 4. Strict Prohibitions
-- **NO Fabricated Experience:** Never invent client names, incidents, or metrics.
-- **NO Scripted Monologues:** Never output text inside quotation marks or write paragraphs for the candidate to memorize.
-- **NO Low-Level Mechanics or Trivia:** Zero deep system designs, zero low-level debugging or niche mechanics, zero complex math or algorithmic trivia.
-- **NO Recycled Stories:** Do not use retrospective managerial crisis stories here; save those for Round 02.
+Deep architecture or debugging walkthroughs, long retrospective crisis stories (save them for Round 02), and algorithm trivia.

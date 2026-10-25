@@ -1,7 +1,7 @@
 import { BrowserWindow } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
-import { exportedPdfSchema, type ExportedPdf, type PdfTextSize } from "../src/shared/schemas";
+import { DEFAULT_PDF_TEXT_SIZE, exportedPdfSchema, type ExportedPdf, type PdfTextSize } from "../src/shared/schemas";
 import { classifyApplicationArtifact, type ApplicationArtifactType } from "./application-artifacts";
 import { assertInsideWorkspace } from "./workspace";
 import { writeBinaryAtomic } from "./persistence";
@@ -177,7 +177,7 @@ export function pdfValidationStatus(
   return "failed";
 }
 
-export async function exportMarkdownPdf(workspacePath: string, relativePath: string, textSize: PdfTextSize = "auto"): Promise<ExportedPdf> {
+export async function exportMarkdownPdf(workspacePath: string, relativePath: string, textSize: PdfTextSize = DEFAULT_PDF_TEXT_SIZE): Promise<ExportedPdf> {
   const isResumeSource = relativePath.startsWith("resumes/");
   if ((!relativePath.startsWith("jobs/") && !isResumeSource) || extname(relativePath).toLowerCase() !== ".md") throw new Error("Only Markdown files inside a job workspace or resumes directory can be exported.");
   const sourcePath = assertInsideWorkspace(workspacePath, resolve(workspacePath, relativePath));

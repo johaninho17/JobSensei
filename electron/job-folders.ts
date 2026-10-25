@@ -5,6 +5,7 @@ import { previewFile } from "./files";
 import { assertInsideWorkspace } from "./workspace";
 import { normalizeEvidenceClassifications, scoreEvaluation } from "./fit-scoring";
 import { parseJobDescriptionMetadata } from "./job-description";
+import { readJobTracker } from "./tracker";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -37,7 +38,7 @@ function headingMetadata(markdown: string): { company: string | null; title: str
 
 async function legacyJobMetadata(jobPath: string): Promise<{ company: string | null; title: string | null }> {
   const evaluation = await readFile(join(jobPath, "evaluation.md"), "utf8").catch(() => "");
-  const labeledEvaluation = parseJobDescriptionMetadata(evaluation);
+  const labeledEvaluation = parseJobDescriptionMetadata(evaluation, { headingFallback: false });
   if (labeledEvaluation.company || labeledEvaluation.title) {
     return { company: labeledEvaluation.company, title: labeledEvaluation.title };
   }
@@ -202,6 +203,7 @@ export async function listJobFolders(workspacePath: string): Promise<JobFolderSu
       location: stringValue(metadata.location, legacyStatus.location),
       interviewRoundLabel,
       hasApplicationMaterials,
+      tracker: await readJobTracker(path),
     });
   }
   return result.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.name.localeCompare(b.name));

@@ -22,4 +22,6 @@ The configured base resume protects identity, chronology, section order, and pre
 
 Each accepted job uses `jobs/<job-id>/` with `original_jd.md`, `evaluation.md`, a profile-named resume, `cover_letter.md`, `pdfs/`, and hidden `.sensei/` run state. New runs generate one evidence-linked `.sensei/application_bundle.json`; finalization derives the legacy draft and verification files. Interview preparation is stored under `interviews/` only after explicit interview intent.
 
+The application tracker lives in `jobs/<job-id>/.sensei/tracker.json` and is written only when the user changes a job's status, dates, or notes in the app: `status` (`saved`, `applied`, `interviewing`, `offer`, `rejected`, `withdrawn`), `appliedAt` and `nextFollowUpAt` (`YYYY-MM-DD` or null), `notes`, and a `history` of status changes. Agy and the pipeline never write it. A job without the file shows as Saved.
+
 Files outside `data/` are application source and public documentation. Never place private candidate data in `examples/`; examples must remain fictional.

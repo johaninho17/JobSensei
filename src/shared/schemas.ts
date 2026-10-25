@@ -58,6 +58,17 @@ export const candidateNarrativePillarsSchema = z.object({
 });
 export type CandidateNarrativePillars = z.infer<typeof candidateNarrativePillarsSchema>;
 
+/** Interview logistics the candidate states themselves. Prep uses them verbatim and never fills a blank. */
+export const interviewLogisticsSchema = z.object({
+  location: z.string().default(""),
+  workAuthorization: z.string().default(""),
+  compensation: z.string().default(""),
+  noticePeriod: z.string().default(""),
+  workArrangement: z.string().default(""),
+});
+export type InterviewLogistics = z.infer<typeof interviewLogisticsSchema>;
+export const EMPTY_INTERVIEW_LOGISTICS: InterviewLogistics = { location: "", workAuthorization: "", compensation: "", noticePeriod: "", workArrangement: "" };
+
 export const candidateProfileSchema = z.object({
   schemaVersion: z.literal(1),
   identity: z.object({
@@ -111,6 +122,7 @@ export const candidateProfileSchema = z.object({
       interactiveQuestions: "on_gaps",
       narrativeDepth: "journey_first",
     }),
+    interview: interviewLogisticsSchema.default(EMPTY_INTERVIEW_LOGISTICS),
   }),
   truth: z.object({
     factualAuthority: z.string().default("Selected structured career evidence"),
@@ -193,10 +205,12 @@ export type MarkdownSaveInput = z.infer<typeof markdownSaveInputSchema>;
 
 export const pdfTextSizeSchema = z.enum(["auto", "large", "largest"]);
 export type PdfTextSize = z.infer<typeof pdfTextSizeSchema>;
+/** Default PDF text size: 5% larger reads best on one page. Single owner. */
+export const DEFAULT_PDF_TEXT_SIZE: PdfTextSize = "large";
 
 export const pdfExportRequestSchema = z.object({
   relativePath: z.string().min(1),
-  textSize: pdfTextSizeSchema.default("auto"),
+  textSize: pdfTextSizeSchema.default(DEFAULT_PDF_TEXT_SIZE),
 });
 export type PdfExportRequest = z.infer<typeof pdfExportRequestSchema>;
 
@@ -209,6 +223,30 @@ export const exportedPdfSchema = z.object({
   validationStatus: z.enum(["passed", "warning", "failed"]),
 });
 export type ExportedPdf = z.infer<typeof exportedPdfSchema>;
+
+/** Application tracker, one per job: `jobs/<id>/.sensei/tracker.json`. Written only when the user changes it. */
+export const TRACKER_STATUSES = ["saved", "applied", "interviewing", "offer", "rejected", "withdrawn"] as const;
+export const trackerStatusSchema = z.enum(TRACKER_STATUSES);
+export type TrackerStatus = z.infer<typeof trackerStatusSchema>;
+const trackerDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.");
+export const trackerEventSchema = z.object({ at: z.string(), status: trackerStatusSchema });
+export const jobTrackerSchema = z.object({
+  schemaVersion: z.literal(1).default(1),
+  status: trackerStatusSchema.default("saved"),
+  appliedAt: trackerDateSchema.nullable().default(null),
+  nextFollowUpAt: trackerDateSchema.nullable().default(null),
+  notes: z.string().max(5000).default(""),
+  history: z.array(trackerEventSchema).max(200).default([]),
+  updatedAt: z.string().nullable().default(null),
+});
+export type JobTracker = z.infer<typeof jobTrackerSchema>;
+export const jobTrackerUpdateSchema = z.object({
+  status: trackerStatusSchema.optional(),
+  appliedAt: trackerDateSchema.nullable().optional(),
+  nextFollowUpAt: trackerDateSchema.nullable().optional(),
+  notes: z.string().max(5000).optional(),
+}).strict();
+export type JobTrackerUpdate = z.infer<typeof jobTrackerUpdateSchema>;
 
 export const jobFolderSummarySchema = z.object({
   id: z.string(),
@@ -228,6 +266,8 @@ export const jobFolderSummarySchema = z.object({
   location: z.string().nullable().default(null),
   interviewRoundLabel: z.string().nullable().default(null),
   hasApplicationMaterials: z.boolean().default(false),
+  /** Null until the user sets a status; the UI then shows "Saved". */
+  tracker: jobTrackerSchema.nullable().default(null),
 });
 export type JobFolderSummary = z.infer<typeof jobFolderSummarySchema>;
 
@@ -381,6 +421,10 @@ export const challengeExerciseSchema = z.object({
   followUpProbes: z.array(z.string().min(1)).min(1),
   evaluationCriteria: z.array(z.string().min(1)).min(1),
   scoringRubric: z.array(challengeScoringCriterionSchema).min(1),
+  /** The JD line this exercise tests (required for new practice; checked by interview:check). */
+  jdRequirement: z.string().min(1).optional(),
+  /** "general craft" or "public docs: <url>": how a strong outside candidate could know this. */
+  knowableFrom: z.string().min(1).optional(),
 }).superRefine((exercise, context) => {
   if (exercise.type === "coding" && exercise.acceptanceTests.length === 0) {
     context.addIssue({ code: "custom", path: ["acceptanceTests"], message: "Coding labs require at least one acceptance test." });
@@ -399,6 +443,8 @@ export const challengePracticeSchema = z.object({
   sourceBasis: z.enum(["actual_prompt", "reported_process", "job_derived", "mixed"]),
   realPromptSupplied: z.boolean(),
   approximationNotice: z.string().nullable().default(null),
+  /** URLs behind a reported or official process; required when sourceBasis is reported_process. */
+  sources: z.array(z.string().min(1)).default([]),
   exercises: z.array(challengeExerciseSchema).min(1).max(12),
 });
 export type ChallengePractice = z.infer<typeof challengePracticeSchema>;
@@ -1037,9 +1083,9 @@ export interface SenseiApi {
     get(): Promise<CandidateProfile | null>;
     create(input: CandidateProfileCreate): Promise<CandidateProfile>;
     updatePreferences(preferences: CandidateProfile["preferences"]): Promise<CandidateProfile>;
-    updateDetails(details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[] }): Promise<CandidateProfile>;
+    updateDetails(details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[]; interviewLogistics?: Partial<InterviewLogistics> }): Promise<CandidateProfile>;
     /** What Agy will receive from the profile and voice profile on the next run. */
-    preview(): Promise<{ styleRules: string[]; instructions: string[]; baseResumeHasSummary: boolean | null }>;
+    preview(): Promise<{ styleRules: string[]; instructions: string[]; baseResumeHasSummary: boolean | null; interviewLogistics: string[]; storyBankPath: string | null }>;
   };
   bulletBank: {
     get(): Promise<BulletBank>;
@@ -1071,6 +1117,7 @@ export interface SenseiApi {
     previewArtifact(jobId: string, relativePath: string): Promise<FilePreview>;
     getApplicationStatus(jobId: string): Promise<ApplicationStatus>;
     validateApplication(jobId: string): Promise<ApplicationValidationReport>;
+    updateTracker(jobId: string, update: JobTrackerUpdate): Promise<JobTracker>;
   };
   interviews: {
     getOverview(jobId: string): Promise<InterviewOverview | null>;

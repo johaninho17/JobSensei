@@ -404,6 +404,47 @@ function buildResumePlan(
   };
 }
 
+/**
+ * Generic phrases banned in every generated text (letters, interview prep). Single owner.
+ * Candidate-specific allowances live in the private voice profile.
+ */
+export const BANNED_PHRASES: readonly string[] = [
+  "I am excited to apply",
+  "I thrive",
+  "the intersection of",
+  "at the intersection",
+  "the exact intersection",
+  "I would welcome the opportunity to discuss how my",
+  "I am thrilled to apply",
+  "I am interested in applying",
+  "I am writing to express my strong interest",
+  "aligns perfectly",
+  "I am drawn to the mission",
+  "I am passionate about your mission",
+  "democratizing access",
+  "Throughout my work, I have focused",
+  "Throughout my work, I have concentrated",
+  "Throughout my work as an engineer, I have focused",
+  "Throughout my work as a Customer Engineer, I have focused",
+  "I have focused on",
+  "I have concentrated on",
+  "making this position a natural continuation",
+  "making this role a natural next step",
+  "making this role a natural continuation",
+  "a natural continuation",
+  "a natural next step",
+  "I look forward to bringing",
+  "My background aligns",
+  "That background allows me to",
+  "Engineering teams need",
+  "I am excited to bring this combination",
+  "demands engineers who",
+  "operational rigor",
+  "high-ownership environment",
+  "measurable results",
+  "In today's fast-paced",
+];
+
 export function buildCoverLetterBrief(
   jobDescription: string,
   canonicalJob?: { title?: string | null; company?: string | null } | null,
@@ -445,40 +486,7 @@ export function buildCoverLetterBrief(
       "Use common spoken words; avoid AI filler (delve, leverage, tapestry, realm, pivotal, rule-of-three corporate lists).",
     ],
     prohibitedPatterns: [
-      "I am excited to apply",
-      "I thrive",
-      "the intersection of",
-      "at the intersection",
-      "the exact intersection",
-      "I would welcome the opportunity to discuss how my",
-      "I am thrilled to apply",
-      "I am interested in applying",
-      "I am writing to express my strong interest",
-      "aligns perfectly",
-      "I am drawn to the mission",
-      "I am passionate about your mission",
-      "democratizing access",
-      "Throughout my work, I have focused",
-      "Throughout my work, I have concentrated",
-      "Throughout my work as an engineer, I have focused",
-      "Throughout my work as a Customer Engineer, I have focused",
-      "I have focused on",
-      "I have concentrated on",
-      "making this position a natural continuation",
-      "making this role a natural next step",
-      "making this role a natural continuation",
-      "a natural continuation",
-      "a natural next step",
-      "I look forward to bringing",
-      "My background aligns",
-      "That background allows me to",
-      "Engineering teams need",
-      "I am excited to bring this combination",
-      "demands engineers who",
-      "operational rigor",
-      "high-ownership environment",
-      "measurable results",
-      "In today's fast-paced",
+      ...BANNED_PHRASES,
       ...(company ? [`As ${company}`, `${company}'s mission`, `${company}’s mission`] : []),
       ...confidentialNames,
     ],
@@ -746,6 +754,8 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
     })
   );
 
+  // Context files that declare `- employer: none` (personal or academic projects) are never attributed to an employer.
+  const noEmployerPaths = new Set<string>();
   for (const { relativePath, content } of fileContents) {
     if (!content) continue;
     const role = sourceRole(relativePath, manifest);
@@ -763,6 +773,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       ...(text && (role === "structured" || role === "employer-context" || role === "broad" || role === "policy" || role === "secondary-resume") ? { contextText: text } : {}),
     });
     if (role === "structured" && text) rows.push(...evidenceRows(text, relativePath, manifestSource?.sourceFamily ?? null));
+    if (role === "structured" && text && /^\s*[-*]\s*employer:\s*none\b/im.test(text)) noEmployerPaths.add(relativePath);
     if (role === "job-description" && text) {
       jobDescriptionText = text;
       rows.push({
@@ -789,7 +800,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
   const currentEmployerStartYear = Number(/\b(?:19|20)\d{2}\b/.exec(canonicalResult.canonicalResume?.employers[0]?.dateRange ?? "")?.[0]) || null;
   const normalizedRows = rows.map((row) => ({
     ...row,
-    employer: row.evidenceId.startsWith("job:") ? null : inferEmployer(row, canonicalEmployers, candidateProfile, currentEmployerStartYear),
+    employer: row.evidenceId.startsWith("job:") || noEmployerPaths.has(row.sourcePath) ? null : inferEmployer(row, canonicalEmployers, candidateProfile, currentEmployerStartYear),
   })).sort((a, b) => a.evidenceId.localeCompare(b.evidenceId));
   // The best eligible row for each of the posting's must-haves is always routed, so the run can cite it.
   const citableRows = normalizedRows.filter((row) => row.eligibility === "eligible" && !row.evidenceId.startsWith("job:"));

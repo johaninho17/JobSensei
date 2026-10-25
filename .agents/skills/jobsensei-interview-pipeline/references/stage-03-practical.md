@@ -1,118 +1,42 @@
-# Stage 03: Practical & Peer Evaluation Specification
+# Stage 03: Practical Evaluation
 
-**Stage ID:** `03-practical-evaluation` (or `03-technical`)  
-**Stage Name:** Practical & Peer Evaluation  
-**Duration & Format:** 45–60 minute interactive technical/practical assessment via Zoom / IDE / Whiteboard  
-**Interviewer Persona:** Senior Peer Practitioner, Staff/Principal Engineer, Senior Solutions Architect, Senior PM, or Senior AE  
+**Round ID:** `03-practical-evaluation` · 45–90 min live exercise, case, presentation, or role-play · A senior peer or panel.
+Card format, framing, the knowability test, gap questions, and limits are owned by the pipeline `SKILL.md`. This file only defines what this round covers.
 
----
+## The rule for this round
 
-## 1. Stage Objective & Scope
+The scenarios are **generic versions of the JD's own work**. Build each one from an item in `job.responsibilities` or `job.requiredItems`, translated so a strong candidate from another company could do it. Never test the company's internal systems, private data formats, or niche domain protocols the JD does not require. Difficulty matches the role's level. Name the JD line each scenario comes from under **Why they ask**.
 
-The Practical Evaluation evaluates live, real-time problem-solving, trade-off analysis, and functional execution:
-1. Real-time diagnostic reasoning (can the candidate isolate root causes systematically without guessing?).
-2. Architectural or functional system design grounded in first principles.
-3. Concrete trade-off evaluation (latency vs. accuracy, cost vs. quality, custom scripting vs. core platform features).
-4. Peer-level craft empathy and technical communication.
+## Pick the role family from the JD
 
-**The Golden Rules of Round 03:**
-- **Zero Retrospective Story Cannibalization:** Round 03 is forward-looking and interactive. Do NOT duplicate the career introduction, motivation, or retrospective behavioral stories from Rounds 01 and 02.
-- **Zero Proprietary Over-Fitting:** Real interviewers never test private, unreleased internal company stacks. Ground all scenarios in open, industry-standard patterns and verified candidate knowledge.
+| Role family | Typical practical | Scenario types |
+|---|---|---|
+| Solutions / forward-deployed / sales engineering | Customer scenario presentation (5–6 slides) or live working session | Break a messy business problem into parts; map customer requirements → platform capabilities → gaps → plan; integrate with a legacy system or API; debug a failing customer integration; explain a trade-off to a non-technical buyer |
+| Support / success engineering | Troubleshooting walkthrough or ticket triage | Triage a queue under time pressure; reproduce and isolate a reported bug; write the customer update and the engineering hand-off; spot a pattern and propose a fix or doc |
+| Customer success / implementation | Onboarding plan or account review | Kickoff and onboarding plan; an at-risk account; an executive check-in; scope creep during rollout |
+| Data / analytics | Take-home or live analysis | Write and explain a query; diagnose a metric drop; design a simple pipeline or dashboard; data quality checks |
+| Backend / software | Live coding or design discussion | A small realistic task in a language the JD names; design an API or service at the role's level; debug failing code |
+| Sales / BDR / account executive | Role-play and pitch | Discovery call; objection handling; a short value pitch; next-step and pipeline prioritization |
+| Product management | Product case | Define the problem and user; prioritize features; pick success metrics; trade-offs under a deadline |
+| Operations / finance / strategy | Scenario modeling | Find a process bottleneck; capacity or cost model; vendor or policy change; KPI review |
 
----
+Use the family whose responsibilities match the JD best; mix two only when the JD clearly spans both.
 
-## 2. Universal Discipline Adaptability
+## `question_bank.md` primary content (6–8)
 
-Round 03 automatically adapts terminology, frameworks, and scenarios to the candidate's target discipline:
-- **Engineering / AI / Solutions:** *Technical & System Design* — distributed tracing, telemetry pipelines, API data contracts, diagnostic troubleshooting trees, live code walkthroughs.
-- **Sales / BDR / Account Executive:** *Role-Play & Pitch Simulation* — discovery questioning (MEDDPICC/BANT), objection handling, live value pitch, and commercial contract boundaries.
-- **Product Management:** *Product Sense & Case Study* — customer journey mapping, feature prioritization matrices (RICE), North Star metrics, and cross-functional trade-offs.
-- **Operations / Strategy / CS:** *Operational Incident Triage & Scenario Modeling* — SLA breach response, process bottleneck identification, unit economics modeling, and customer de-escalation.
+Practical scenarios and live-design prompts as question cards. Use **Your approach** for every scenario; add **Real example** only when a true story fits. Include 1–2 likely follow-up probes per scenario under `## Likely follow-ups`.
 
----
+`## Questions to ask`: 4–5 peer questions (how the team works day to day, common customer or project problems, tools they use, what good looks like in this exercise).
 
-## 3. Artifact Layout & Content Archetype
+## `prep.md` sections
 
-This round produces **The Live Diagnostic & Execution Framework**:
-- `interviews/03-practical-evaluation/prep.md`: Live reference frameworks, trade-off matrices, and diagnostic trees.
-- `interviews/03-practical-evaluation/question_bank.md`: Bounded strictly to 6–8 practical scenarios or live design problems.
-- Company-wide background belongs once at `interviews/company_research.md`. Do not duplicate company research inside this folder.
+1. `## Before you start` and `## Learn before the interview` (pipeline-owned).
+2. `## How I approach these`: 2–3 short decision checklists (e.g. clarify → isolate → test → communicate) in the candidate's own words.
+3. `## Trade-offs to have ready`: 2–3 small tables (speed vs. quality, custom vs. standard, cost vs. coverage) relevant to the JD.
+4. `## Presentation outline` (when the family uses one): 5–6 slide titles with one cue each, plus 3 likely Q&A questions.
 
-### `prep.md` Required Sections:
-1. **30-Second Craft Positioning Statement:** Core methodologies, primary domain tools, and operating philosophy.
-2. **Live Decision & Diagnostic Trees:** 2–3 step-by-step diagnostic trees or decision rubrics for navigating live friction, trade-offs, or escalation paths.
-3. **Trade-Off Matrices:** Concrete trade-off comparisons across speed, quality, operational complexity, and resource cost.
-4. **Architectural / Operational Blueprint:** A clean, first-principles ASCII architecture diagram, operational workflow, or user/deal progression illustrating standard end-to-end flow.
-5. **Peer-Targeted Reverse Questions:** 5–6 high-impact questions on daily practitioner tooling, operational bottlenecks, friction points, and peer collaboration.
+Practice labs, when requested, are owned by `$jobsensei-technical-challenge` under `challenge/`.
 
----
+## Not in this round
 
-## 4. `question_bank.md` Structure & Format Standard
-
-The question bank must contain **strictly 6–8 practical scenarios** tailored to the candidate's target discipline:
-
-### Discipline-Specific Scenario Archetypes:
-- **Sales / Commercial / BDR ("Role-Play & Pitch Simulation"):**
-  1. Live discovery questioning under ambiguity (uncovering latent business pain, economic buyer identification).
-  2. Direct objection handling (pricing pushback, incumbent competitor entrenchment, internal inertia).
-  3. Tailored value-prop walkthrough for an executive buyer.
-  4. Pipeline triage and deal velocity prioritization across multiple stalled accounts.
-  5. Multi-threading complex buying committees across conflicting functional priorities.
-  6. Navigating commercial terms, legal redlines, or procurement hurdles without losing momentum.
-  7. Reverse questions for peer Account Executives / Sales Leads (quota attainment dynamics, enablement tooling).
-
-- **Product Management ("Product Sense & Case Study"):**
-  1. Product sense case study (designing a solution for an underserved persona or emerging market need).
-  2. Prioritization matrix (RICE framework balancing engineering debt vs. high-demand customer features).
-  3. Defining North Star and guardrail metrics for a critical launch.
-  4. Scoping trade-offs and MVP boundary enforcement under tight delivery deadlines.
-  5. Diagnosing a sudden KPI drop (retention, conversion, or engagement deconstruction).
-  6. Go-to-market rollout strategy and structured feedback loops.
-  7. Reverse questions for peer PMs (engineering-PM friction, roadmap planning cadences).
-
-- **Operations / Strategy / Customer Success / Finance ("Operational Scenario & Modeling"):**
-  1. Process bottleneck identification and workflow redesign.
-  2. Critical customer escalation triage and churn prevention recovery.
-  3. SLA breach mitigation and root-cause prevention workflow.
-  4. Unit economics or financial scenario modeling under shifting variable margins.
-  5. Vendor or partner contract renegotiation under constrained timelines.
-  6. Scaling operational processes while preserving quality and compliance standards.
-  7. Reverse questions for peer Operations / CS Leads (systemic process debt, internal tooling bottlenecks).
-
-- **Engineering / Technical / Solutions ("Technical & System Design"):**
-  1. End-to-end system instrumentation / architecture design.
-  2. Isolating live latency spikes or performance degradation.
-  3. Quality gates & evaluation strategies (deterministic checks vs. deep analysis).
-  4. State boundary enforcement / handling data corruption across steps.
-  5. Scaling telemetry / throughput architecture under high request loads.
-  6. Diagnostic network / connectivity troubleshooting across isolated environments.
-  7. Reverse questions for Peer Practitioners (tooling friction, deployment cadences).
-
-### Primary Question Card Format:
-```markdown
-### Question <N>: <Scenario / Architecture Prompt>?
-
-* **Core Takeaway:**
-  - One concise sentence summarizing the core technical stance or solution.
-* **Interviewer Intent:**
-  - What the peer interviewer is testing (e.g., diagnostic methodology, trade-off awareness, architectural cleanliness).
-* **Diagnostic / Architectural Framework:**
-  - Step 1: Boundary isolation / baseline telemetry.
-  - Step 2: Decoupling / queuing / asynchronous buffering.
-  - Step 3: Mitigation / validation criteria.
-* **Trade-Offs & Key Decisions:**
-  - Option A vs. Option B (e.g., latency budget vs. token cost).
-* **Glanceable Talking Cues:**
-  - Punchy 1-line talking trigger 1.
-  - Punchy 1-line talking trigger 2.
-  - Punchy 1-line talking trigger 3.
-* **Truth Boundary & Cautions:**
-  - Explicit boundary on scope and candidate background.
-```
-
----
-
-## 5. Strict Prohibitions
-- **NO Retrospective Behavioral Stories:** Do not ask or answer "Tell me about a time you..." questions; focus on "How do you design / diagnose / evaluate..." scenarios.
-- **NO Proprietary Guesswork:** Never ask the candidate to explain the hiring company's unreleased internal code or private architecture.
-- **NO Scripted Monologues:** Keep talking points glanceable and punchy.
+Retrospective "tell me about a time" stories already used in Rounds 01–02, company-internal trivia, and algorithm puzzles the JD does not call for.

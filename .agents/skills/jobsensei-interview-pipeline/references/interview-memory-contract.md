@@ -4,8 +4,8 @@ Store reusable interview learning under `data/debrief/interview-memory/`, outsid
 
 ## Records
 
-- `role-index.json` contains normalized role families, tags, source job IDs, artifact paths, and update timestamps.
-- `<role-family>.md` contains generalized question patterns, recurring feedback, story categories that worked, weak-answer patterns, and coaching adjustments.
+- `role-index.json`: `{ "roles": [{ "family": "solutions engineer", "aliases": ["sales engineer", "forward deployed engineer"], "path": "debrief/interview-memory/solutions-engineer.md", "updatedAt": "<iso>" }] }`. `interview:context` matches a job title against `family` and `aliases`.
+- `<role-family>.md` contains, per round (recruiter, hiring manager, practical, panel): the questions actually asked with how often they came up, the practical formats seen, recurring feedback, story themes that worked, weak-answer patterns, and coaching adjustments.
 - Do not copy complete transcripts, employer-specific facts, candidate reports, salary details, or confidential information into generalized memory.
 
 ## Similarity
@@ -25,6 +25,6 @@ Memory is coaching context, not career evidence. It cannot prove that the candid
 
 ## Write Boundary
 
-Update memory only after a mock, feedback session, or `debrief_analysis.md` has been completed and saved. Generalize the lesson, retain a pointer to its source artifact, and preserve earlier useful entries. Initial interview preparation does not create a success claim.
+Update memory only after a mock, feedback session, `debrief_analysis.md`, or an interview-review import (`.agents/workflows/jobsensei-interview-review.md`) the user confirmed. Generalize the lesson, retain a pointer to its source artifact, and preserve earlier useful entries. Initial interview preparation does not create a success claim.
 
 Record the stage that produced each lesson. Recruiter-screen patterns should not dominate technical-round preparation, and technical-loop patterns should not displace first-call questions. A debrief may improve question distribution and coaching but never proves that the candidate has a skill or that another employer follows the same process.

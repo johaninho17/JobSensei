@@ -18,10 +18,17 @@ function labeledValue(markdown: string, labels: string[]): string | null {
   return null;
 }
 
-export function parseJobDescriptionMetadata(markdown: string): JobDescriptionMetadata {
+/** The posting's first top-level heading (how `jd:fetch` writes the title) when no "Job Title:" label exists. */
+function headingTitle(markdown: string): string | null {
+  const heading = /^#\s+(.+?)\s*$/m.exec(markdown)?.[1]?.replace(/\*\*/g, "").trim();
+  return heading && !/^(?:original\s+)?job\s+description$|evaluation/i.test(heading) ? heading : null;
+}
+
+/** Parses labeled metadata. `headingFallback` (job postings only) takes the title from the first `#` heading. */
+export function parseJobDescriptionMetadata(markdown: string, options: { headingFallback?: boolean } = { headingFallback: true }): JobDescriptionMetadata {
   return {
     company: labeledValue(markdown, ["Company", "Employer"]),
-    title: labeledValue(markdown, ["Job Title", "Role", "Position"]),
+    title: labeledValue(markdown, ["Job Title", "Role", "Position"]) ?? (options.headingFallback ? headingTitle(markdown) : null),
     location: labeledValue(markdown, ["Location"]),
     jobId: labeledValue(markdown, ["Job ID", "Requisition ID"]),
     url: labeledValue(markdown, ["Source URL", "Job URL", "URL"]),

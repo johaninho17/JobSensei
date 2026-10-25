@@ -18,7 +18,7 @@ For a URL: run the `jd:fetch` script exactly once with the URL. It prints the cl
 ## One-Pass Flow
 
 1. Get the JD: for a URL, run `jd:fetch -- "<url>"`; for pasted text, use it as given. Screen it once.
-2. Score exactly six distinct capabilities: `core` 40%, `technical` 25%, `scope` 15%, `outcomes` 10%, `domain` 5%, and `learning` 5%. Use `direct` 1.00, `strong_transferable` 0.80, `adjacent_transferable` 0.65, `unclear` 0.25, and `gap` 0. Do not score personality, logistics, or ordinary learnable tools as standalone requirements. List every requirement the JD marks as required ("must", "required", "proficiency in") in the Must-Have table below. A learnable must-have never stops a screen; only a blocker does. Below `3.5/5` (before must-have penalties), report the screen and stop.
+2. Score exactly six distinct capabilities: `core` 40%, `technical` 25%, `scope` 15%, `outcomes` 10%, `domain` 5%, and `learning` 5%. Use `direct` 1.00, `strong_transferable` 0.80, `adjacent_transferable` 0.65, `unclear` 0.25, and `gap` 0. Do not score personality, logistics, or ordinary learnable tools as standalone requirements; required items go in the Must-Have table below. A learnable must-have never stops a screen; only a blocker does. Below `3.5/5` (before must-have penalties), report the screen and stop.
 3. Use the `suggestedJobId` from `jd:fetch` (or derive lowercase kebab-case `<company>-<role-title>` for pasted text). Never run `ls` or create folders, `pdfs/`, or metadata files yourself.
 4. Run the snapshot exactly once, then read `jobs/<job-id>/.sensei/application_context.json` once in a single full read:
    - URL: `context:snapshot -- <job-id> --from-fetched` (it creates the job folder and `original_jd.md` from the fetched posting).
@@ -40,17 +40,11 @@ For an explicit regeneration, the saved JD is the only job-specific input. Exist
 - Follow `resumePlan`, `resumeTemplate`, `footprint`, `denylistRules`, and the local candidate preferences. The finalizer restores protected identity, contact details, chronology, titles, dates, locations, education, and layout.
 - Unchanged base-resume bullets are the candidate's own approved claims: copy them word for word. A *rewritten* bullet must trace every claim to `evidenceRows`; the baseline wording shows the confidence level to match, not new facts to add.
 - Resume summary: only if `resumeTemplate.summary.editable` is true, add `"summary": { "text": ..., "evidenceIds": [...] }` to `resume` in the bundle (at most 3 lines, same truth rules as bullets). Otherwise leave it out; the base resume's own summary, if any, stays verbatim.
-- **Universal Surgical Diffing Standard (Applicable to Any Candidate in Any Field):**
-  - **Foundational & Historical Roles:** Earlier, less relevant historical roles (past contracts, internships, or earlier employment) stay exactly as in the base resume: leave those employers out of the bundle and the finalizer keeps them. Only include an earlier employer when selected evidence makes it directly relevant.
-  - **Skills Categories & Headings:** Curate `skillsLines` categories specifically for the target job's domain using eligible evidence (e.g. adapting headings from generic baselines to job-relevant categories matching the target domain).
-  - **Target Bullets (3–4 Bullets Only):** Substantively reframe only the 3–4 high-impact target bullets at the current or most recent role to align directly with the target job's core responsibilities and priorities using routed eligible evidence.
-  - **Natural Bullet Density:** Maintain natural bullet length (~16–20 words per bullet) consistent with the baseline footprint. Total experience word counts within ±15% of footprint automatically satisfy density tolerances without manual arithmetic.
+- Surgical tailoring (principle owned by `AGENTS.md`): earlier roles stay out of the bundle unless evidence makes them directly relevant; curate skills categories for the target domain; rework only 3–4 current-role bullets toward the JD's core work; keep bullets about 16–20 words. Within ±15% of the footprint needs no manual counting.
 - Align bullet emphasis with the core discipline of the target role (e.g., leadership, operations, commercial, technical, or people enablement) based on the candidate's supported background without exaggerating scope or ownership.
-- Use direct, natural professional language appropriate to the candidate's field. Strictly adhere to `$jobsensei-anti-slop` standards: eliminate machine clichés (delve, leverage, utilize, navigate, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, intersection, synergy, beacon, rule-of-three corporate lists). Prefer an accurate action, concrete method or tool, and supported purpose or result.
+- Plain professional language for the candidate's field (`$jobsensei-anti-slop`): an accurate action, a concrete method or tool, and a supported purpose or result.
 - Keep the cover letter candidate-first. `coverLetterBrief` in the application context is the only cover-letter specification (structure, opening, word range, banned phrases); follow it and nothing else.
-- Never name clients or partners in the resume or cover letter; describe them by industry instead (naming the industry is fine).
-- Apply `styleRules` last for wording only. They cannot support facts or alter evidence mappings.
-- Employer-facing files must never contain evidence IDs, warnings, hashes, or generation notes.
+- Client names, `styleRules`, and evidence IDs in public files follow the `AGENTS.md` core rules.
 
 ## Evaluation Table
 

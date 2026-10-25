@@ -38,7 +38,7 @@ const api: SenseiApi = {
     deletePath: (relativePath) => ipcRenderer.invoke("files:delete", relativePath),
     reveal: (relativePath) => ipcRenderer.invoke("files:reveal", relativePath),
     getBaseResume: () => ipcRenderer.invoke("files:get-base-resume"),
-    exportMarkdownPdf: (relativePath, textSize = "auto") => ipcRenderer.invoke("files:export-markdown-pdf", { relativePath, textSize }),
+    exportMarkdownPdf: (relativePath, textSize) => ipcRenderer.invoke("files:export-markdown-pdf", { relativePath, textSize }),
   },
   jobs: {
     list: () => ipcRenderer.invoke("jobs:list"),
@@ -47,6 +47,7 @@ const api: SenseiApi = {
     previewArtifact: (jobId, relativePath) => ipcRenderer.invoke("jobs:preview-artifact", jobId, relativePath),
     getApplicationStatus: (jobId) => ipcRenderer.invoke("jobs:get-application-status", jobId),
     validateApplication: (jobId) => ipcRenderer.invoke("jobs:validate-application", jobId),
+    updateTracker: (jobId, update) => ipcRenderer.invoke("jobs:update-tracker", jobId, update),
   },
   interviews: {
     getOverview: (jobId) => ipcRenderer.invoke("interviews:get-overview", jobId),

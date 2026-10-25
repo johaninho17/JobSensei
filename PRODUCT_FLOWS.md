@@ -22,7 +22,7 @@ The base resume protects presentation and fixed career fields. It is not trusted
 3. The user selects a base resume.
 4. Career evidence is added under `data/context/structured/`; source notes may be added under `data/context/broad/`.
 5. The app creates an active context manifest from the files selected in the interface.
-6. The Command Center launches Agy from the repository root so it can discover `.agents/skills/`.
+6. The Agy panel (top bar → Agy) launches Agy from the repository root so it can discover `.agents/skills/`.
 
 Personal information belongs in the ignored `data/` workspace. Public skills must remain candidate-neutral.
 
@@ -89,39 +89,25 @@ The interview pipeline resolves one existing job, identifies the requested stage
 | `jobsensei-interview-coach` | Runs text mocks, improves answers, and creates feedback or debrief analysis |
 | `jobsensei-technical-challenge` | Creates labs or scenarios only after an explicit challenge/test request |
 
-Recruiter and hiring-manager preparation emphasizes career narrative, motivation, scope, customer work, and logistics. Practical evaluation emphasizes real-world execution, trade-offs, and first-principles diagnostics. Challenge material is kept separate until explicitly requested.
+Challenge material is kept separate until explicitly requested.
 
-### Canonical Round Structure
+### How interview prep works
 
-JobSensei organizes interview preparation into 4 distinct, isolated stages to prevent redundant answers and story fatigue:
+The detailed rules live in `.agents/skills/jobsensei-interview-pipeline/SKILL.md`; this is the user-facing summary.
 
-1. `01-recruiter-screen`: 15–20 min non-technical filter. Bounded to 6–8 questions covering background arc, motivation, checklist qualifications, logistics (location, comp band, authorization, timeline), and recruiter reverse questions. Zero deep architectural monologues.
-2. `02-hiring-manager`: 30–45 min manager screen. Bounded to 8–10 questions covering managerial STAR stories (crisis handling, stakeholder navigation, ambiguity, prioritization), 30-60-90 day thinking, and team management reverse questions.
-3. `03-practical-evaluation`: 45–60 min role-aware assessment bounded to 6–8 practical scenarios or live decision frameworks. Uses role-appropriate terminology (e.g. Sales Pitch Simulation for Sales; Product Sense for PM; Technical & System Design for Engineering). STAR stories from Round 2 are purged in favor of real-time diagnostic frameworks.
-4. `04-final-panel`: 30–45 min leadership round bounded to 6–8 strategic questions covering mission alignment, company culture, executive communication, and high-level reverse questions.
+- **Four rounds, prepared one at a time:** recruiter screen, hiring manager, practical evaluation (named for the role: role-play for sales, product case for PM, customer scenario for solutions roles, and so on), and final panel. Rounds never repeat a question, story, or reverse question.
+- **Questions you could actually be asked:** every question and exercise is a generic version of the job's own work, answerable by a strong candidate from another company. Product knowledge you'd want goes in a short "Learn before the interview" list instead.
+- **Short cues, not scripts:** each card has why they ask, a real example from your story bank (or your approach), a few cue words, and a 3–6 word "land on" point to finish on.
+- **Your gaps, handled:** each round includes 1–3 questions about requirements you don't fully meet, answered as closest real experience plus a ramp plan.
+- **Your logistics, your words:** location, authorization, compensation, and notice come from Settings → Interview Prep and are never guessed.
+- **Checked:** `interview:check` flags invented logistics, unknown evidence, reused stories, scripted answers, banned phrases, local paths, and company-specific practice labs.
 
-### Universal Multi-Disciplinary Standard
+### Your story bank and interview voice
 
-JobSensei is built for candidates in any field:
-- **Engineering / AI**: Technical architecture, live debugging, telemetry scaling, deterministic eval harnesses.
-- **Sales / Account Exec / BDR**: Discovery frameworks, objection handling, commercial negotiation, pitch simulations.
-- **Product Management**: Product sense, feature prioritization, PRD trade-offs, metric instrumentation.
-- **Operations / Support / CS**: Incident triage, SLA mitigation, customer de-escalation, workflow automation.
-- **Marketing / Growth**: Campaign attribution, conversion funnel diagnostics, cross-channel experimentation.
-
-### Anti-Proprietary Over-Fitting (First-Principles Standard)
-
-Interviewers do not expect candidates to know their proprietary internal systems or unreleased specs end-to-end. Evaluators test fundamental reasoning:
-- Frame all practical evaluation questions, challenges, and mocks around industry-standard architectures, public APIs, and foundational patterns.
-- Never penalize or coach candidates to memorize unreleased internal company implementations.
-- Ground all candidate answers in verified past experience from `data/context/` rather than speculative guesses about the employer's internal tools.
-
-### Story Partitioning & Reverse Questions
-
-- **Story Allocation**: Retrospective STAR stories are anchored to `02-hiring-manager`. Round 3 replaces retrospective narratives with forward-looking diagnostic trees and architecture/execution trade-off matrices.
-- **Persona-Targeted Reverse Questions**: Recruiters receive recruiting questions (hiring timeline, team growth); hiring managers receive team execution questions (feedback cadences, team friction points); domain peers receive craft questions (tooling debt, operational bottlenecks); executives receive strategic vision questions.
-
-Raw transcripts remain performance records. They do not become career evidence automatically.
+- `profile/story_bank.md`: 6–8 true stories, built once and edited by you. Every round picks from it.
+- `profile/interview_voice.md`: the words you naturally use, how you structure answers, and 3–5 delivery fixes with a then → aim tracker. Prep opens with your fixes; practice mocks score each answer against them.
+- Import recorded interviews (Granola, Otter, notes) with the interview-review workflow. It drafts question patterns, voice notes, story proposals, and logistics; you confirm before anything is saved.
+- Transcripts are performance records. A work story you told becomes career evidence only after you confirm it into `context/structured/interview-stories.md`; then resumes, letters, and interviews can use it.
 
 ## Context Selection
 

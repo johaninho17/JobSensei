@@ -92,7 +92,7 @@ data/
 2. Select a Markdown, PDF, or DOCX base resume with the native file picker.
 3. Add normalized evidence to `data/context/structured/` and optional source material to `data/context/broad/` using Finder, File Explorer, or the terminal.
 4. Return to JobSensei; the workspace watcher refreshes the context view automatically.
-5. Confirm that Agy is available, then open the Command Center.
+5. Confirm that Agy is available, then open the Agy panel (top bar → Agy).
 
 JobSensei creates `data/profile/candidate.json`; users do not need to create it manually. The profile stores identity, source paths, chronology, and writing preferences, while detailed career facts remain in the context files.
 
@@ -112,7 +112,7 @@ Normal onboarding creates a separate private `data/` workspace.
 
 ## Application Workflow
 
-Paste a job description or direct posting URL into Agy from the Command Center. The `jobsensei-application-pipeline` skill:
+Paste a job description or direct posting URL into the Agy panel. The `jobsensei-application-pipeline` skill:
 
 1. Screens the role against the selected career evidence.
 2. Creates a job workspace only when the configured rating gate passes.

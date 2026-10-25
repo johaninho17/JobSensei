@@ -391,4 +391,28 @@ describe("context-authoritative evidence", () => {
     expect(() => validateCoverLetterAuditJson(falseCurrent, { publicMarkdown: falseCurrentText, publicArtifactName: "cover_letter.md", snapshot })).toThrow(/explicitly ongoing/i);
   });
 
+  it("never attributes a file that declares `employer: none` to an employer", async () => {
+    const workspace = await fixtureWorkspace();
+    await writeFile(join(workspace, "context", "structured", "side-projects.md"), `# Side projects
+
+- source_role: personal project notes
+- employer: none
+- confidence: high
+
+## Evidence Inventory
+
+| Evidence ID | Year | Project | Explicit claim | Scope note | Source locator | Confidence | Public use |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| context:side:app | 2025 | Weekend API app | Built a small API client app to learn integration testing. | Personal learning project. | README | high | eligible |
+`);
+    await buildContextManifest(
+      workspace,
+      { structuredPaths: ["context/structured/work.md", "context/structured/side-projects.md"], broadPaths: [], careerPaths: [], jobPaths: [], jobIds: [] },
+      { baseResumePath: "resumes/base.md", secondaryResumePaths: [], linkedinProfilePath: null },
+    );
+    const snapshot = await createEvidenceSnapshot(workspace, "sample-role");
+    expect(snapshot.evidenceRows.find((row) => row.evidenceId === "context:side:app")?.employer).toBeNull();
+    expect(snapshot.evidenceRows.find((row) => row.evidenceId === "context:work:api")?.employer).toBeTruthy();
+  });
+
 });

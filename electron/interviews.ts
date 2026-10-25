@@ -131,7 +131,14 @@ function questionItems(markdown: string, sourcePath: string, limit: number): Raw
       }
     }
     const coreTakeawayMatch = block.map((line) => /^\s*[-*]\s+\*\*Core Takeaway:\*\*\s*(.+)/i.exec(line)).find(Boolean);
-    const takeaway = coreTakeawayMatch?.[1] ? plainMarkdown(coreTakeawayMatch[1]) : null;
+    const cardField = (name: RegExp) => block.map((line) => /^\s*[-*]\s+\*\*([^*]+?):?\*\*:?\s*(.+)/.exec(line)).find((match) => match && name.test(match[1]))?.[2];
+    const cues = cardField(/^cues$/i);
+    const landOn = cardField(/^land on$/i);
+    const realExample = cardField(/^real example$|^closest real experience$/i);
+    const cardSummary = cues
+      ? plainMarkdown([cues, realExample && !/^none\b/i.test(realExample) ? `Example: ${realExample}` : null, landOn ? `Land on: ${landOn}` : null].filter(Boolean).join(" · "))
+      : null;
+    const takeaway = coreTakeawayMatch?.[1] ? plainMarkdown(coreTakeawayMatch[1]) : cardSummary;
     const answer = takeaway
       ?? firstUsefulText(answerLines.join("\n"), 420)
       ?? firstUsefulText(block.join("\n"), 340)

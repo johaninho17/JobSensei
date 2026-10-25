@@ -3,7 +3,10 @@ import { createPortal } from "react-dom";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import type { ApplicationStatus, ApplicationValidationReport, CandidateProfile, ChallengeExercise, ChallengePractice, ContextManifest, FilePreview, FileTreeNode, InterviewDashboardItem, InterviewOverview, InterviewRound, JobFolderSummary, PdfTextSize, SearchResult, Settings, WorkspaceSummary } from "../shared/schemas";
+import { DEFAULT_PDF_TEXT_SIZE, TRACKER_STATUSES, type JobTrackerUpdate, type TrackerStatus } from "../shared/schemas";
+import { TRACKER_LABELS, effectiveStatus, followUpDays, suggestsInterviewing } from "../shared/tracker";
+import { FIT_CLASSIFICATION_CREDIT } from "../shared/fit-credit";
+import type { ApplicationStatus, ApplicationValidationReport, CandidateProfile, ChallengeExercise, ChallengePractice, ContextManifest, FilePreview, FileTreeNode, InterviewOverview, JobFolderSummary, PdfTextSize, SearchResult, Settings, WorkspaceSummary } from "../shared/schemas";
 // pdfjs-dist ships the browser runtime without declarations for this subpath.
 // @ts-expect-error The Vite browser bundle is intentionally imported directly.
 import * as pdfjsLib from "pdfjs-dist/build/pdf.mjs";
@@ -12,14 +15,17 @@ import { filterChallengeExercises, parseChallengePractice, type ChallengeFilter 
 import { buildJobActions, type JobAction } from "./job-actions";
 import { evaluationCategoryLabels, evaluationCredits, evaluationLabel, evaluationSection, parseEvaluationRequirements } from "./evaluation-model";
 import { parseQuestionBank, type QuestionEntry } from "./question-navigation";
+import { inferCodeLanguage, markdownHtml, sanitizeHtml } from "./markdown";
 import { SearchPalette, type PaletteAction } from "./SearchPalette";
 import { SettingsModal } from "./SettingsModal";
+import { InterviewView } from "./InterviewView";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const emptyWorkspace: WorkspaceSummary = { path: "", repositoryRoot: "", status: "unconfigured", contextFileCount: 0, jobCount: 0, hasIndex: false, hasCandidateProfile: false, hasBaseResume: false, agyAvailable: false, warnings: [] };
 const emptySettings: Settings = { schemaVersion: 1, workspacePath: null, baseResumePath: null, secondaryResumePaths: [], linkedinProfilePath: null, updatedAt: "" };
 const LEFT_PANEL_MIN = 190;
+const IS_MAC = /mac/i.test(navigator.platform);
 const LEFT_PANEL_COLLAPSE_THRESHOLD = 120;
 const LEFT_PANEL_MAX = 560;
 const RIGHT_PANEL_MIN = 300;
@@ -28,10 +34,11 @@ const VIEWER_PANEL_MIN = 320;
 type PromptRequest = { id: number; text: string; label: string };
 type JobWorkspaceTab = "overview" | "application" | "interview" | "files";
 type JobLocation = { kind: "job"; jobId: string; tab: JobWorkspaceTab; roundId?: string };
+type PageLocation = { kind: "jobs-home" } | { kind: "interviews-home" } | { kind: "context-home" };
 type WorkspaceLocation =
-  | { kind: "jobs-home" }
+  | PageLocation
   | JobLocation
-  | { kind: "document"; relativePath: string; jobId: string | null; anchor?: string; returnTo: JobLocation | { kind: "jobs-home" } };
+  | { kind: "document"; relativePath: string; jobId: string | null; anchor?: string; returnTo: JobLocation | PageLocation };
 
 const JOB_FAVORITES_KEY = "sensei-job-favorites";
 
@@ -81,7 +88,6 @@ function WorkspaceApp() {
   const [applicationLoading, setApplicationLoading] = useState(false);
   const [editorDirty, setEditorDirty] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(() => window.localStorage.getItem("sensei-theme-v2") === "dark" ? "dark" : "light");
-  const [navigatorSection, setNavigatorSection] = useState<"jobs" | "context">("jobs");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => storedPanelNumber("sensei-left-panel-width", 260));
   const [rightPanelWidth, setRightPanelWidth] = useState(() => storedPanelNumber("sensei-right-panel-width", 430));
@@ -92,6 +98,15 @@ function WorkspaceApp() {
   const [treeRevealPath, setTreeRevealPath] = useState<string | null>(null);
   const [promptRequest, setPromptRequest] = useState<PromptRequest | null>(null);
   const promptRequestId = useRef(0);
+  const [recentJobIds, setRecentJobIds] = useState<string[]>(() => { try { return JSON.parse(window.localStorage.getItem("sensei-recent-jobs") ?? "[]") as string[]; } catch { return []; } });
+  useEffect(() => {
+    if (!activeJobId) return;
+    setRecentJobIds((current) => {
+      const next = [activeJobId, ...current.filter((id) => id !== activeJobId)].slice(0, 8);
+      try { window.localStorage.setItem("sensei-recent-jobs", JSON.stringify(next)); } catch { /* storage unavailable */ }
+      return next;
+    });
+  }, [activeJobId]);
   const [navigationHistory, setNavigationHistory] = useState<WorkspaceLocation[]>([{ kind: "jobs-home" }]);
   const [navigationIndex, setNavigationIndex] = useState(0);
   const previewRequestId = useRef(0);
@@ -244,14 +259,10 @@ function WorkspaceApp() {
     void applyLocation(location);
   }
 
-  function replaceLocation(location: WorkspaceLocation) {
-    setNavigationHistory((current) => current.map((entry, index) => index === navigationIndex ? location : entry));
-    void applyLocation(location);
-  }
 
-  function currentReturnLocation(jobId: string | null): JobLocation | { kind: "jobs-home" } {
+  function currentReturnLocation(jobId: string | null): JobLocation | PageLocation {
     const current = navigationHistory[navigationIndex];
-    if (current?.kind === "job") return current;
+    if (current?.kind === "job" || current?.kind === "interviews-home" || current?.kind === "context-home") return current;
     if (current?.kind === "document") return current.returnTo;
     return jobId ? { kind: "job", jobId, tab: "overview" } : { kind: "jobs-home" };
   }
@@ -295,16 +306,16 @@ function WorkspaceApp() {
   function openJob(jobId: string) {
     if (editorDirty && !window.confirm("Discard your unsaved Markdown changes?")) return;
     setEditorDirty(false);
-    setNavigatorSection("jobs");
     pushLocation({ kind: "job", jobId, tab: "overview" });
   }
 
-  function showJobsHome() {
+  function showPage(kind: PageLocation["kind"]) {
     if (editorDirty && !window.confirm("Discard your unsaved Markdown changes?")) return;
     setEditorDirty(false);
-    setNavigatorSection("jobs");
-    pushLocation({ kind: "jobs-home" });
+    if (currentLocation.kind === kind) return;
+    pushLocation({ kind });
   }
+  function showJobsHome() { showPage("jobs-home"); }
 
   function openJobView(jobId: string, tab: JobWorkspaceTab, roundId?: string) {
     const current = navigationHistory[navigationIndex];
@@ -312,10 +323,18 @@ function WorkspaceApp() {
     pushLocation({ kind: "job", jobId, tab, roundId });
   }
 
-  function insertJobPrompt(action: JobAction) {
+  function insertJobPrompt(action: Pick<JobAction, "prompt" | "label">) {
     promptRequestId.current += 1;
     setRightPanelOpen(true);
     setPromptRequest({ id: promptRequestId.current, text: action.prompt, label: action.label });
+  }
+
+  async function updateTracker(jobId: string, update: JobTrackerUpdate) {
+    setError(null);
+    try {
+      const tracker = await window.sensei.jobs.updateTracker(jobId, update);
+      setJobs((current) => current.map((job) => job.id === jobId ? { ...job, tracker } : job));
+    } catch (caught) { setError(messageOf(caught, "Unable to save the job status.")); }
   }
 
   async function updateContext(careerPaths: string[], jobPaths: string[]) {
@@ -403,7 +422,6 @@ function WorkspaceApp() {
   const viewedPath = preview?.relativePath ?? selectedPath;
   const viewedJobId = viewedPath?.match(/^jobs\/([^/]+)/)?.[1] ?? activeJobId;
   const viewedJob = viewedJobId ? jobs.find((job) => job.id === viewedJobId) ?? null : null;
-  const viewedCompany = preview?.jobCompany ?? viewedJob?.company ?? null;
   useEffect(() => {
     let cancelled = false;
     setInterviewOverview(null);
@@ -426,7 +444,6 @@ function WorkspaceApp() {
       .finally(() => { if (!cancelled) setApplicationLoading(false); });
     return () => { cancelled = true; };
   }, [viewedJobId, jobTree]);
-  const activeContextTitle = activeJobs.length === 0 ? "Career context only" : `Career + ${activeJobs.length} job${activeJobs.length === 1 ? "" : "s"}`;
   const sourceCount = [...(contextManifest?.selectedStructuredPaths ?? []), ...(contextManifest?.selectedBroadPaths ?? [])]
     .filter((path) => !path.startsWith("context/structured/company/") && !path.startsWith("context/broad/company/")).length;
   const activeContextDetail = configured
@@ -440,6 +457,13 @@ function WorkspaceApp() {
     actionTargetJob?.id === viewedJobId ? applicationStatus : null,
   );
   const paletteActions: PaletteAction[] = [
+    ...(viewedJob ? TRACKER_STATUSES.filter((status) => status !== effectiveStatus(viewedJob.tracker)).map((status) => ({
+      id: `tracker:${status}`,
+      title: `Mark as ${TRACKER_LABELS[status].toLowerCase()}`,
+      subtitle: `${viewedJob.company ?? displayJobName(viewedJob.name)}, ${viewedJob.title ?? "this job"}`,
+      keywords: `status tracker ${status}`,
+      run: () => void updateTracker(viewedJob.id, { status }),
+    })) : []),
     ...jobActions.map((action) => ({
       id: `job-action:${action.id}`,
       title: action.label,
@@ -476,77 +500,124 @@ function WorkspaceApp() {
       run: () => setSettingsModalOpen(true),
     },
   ];
-  const panelLayoutStyle = {
-    "--left-panel-width": `${leftPanelOpen ? leftPanelWidth : 0}px`,
-    "--left-resizer-width": leftPanelOpen ? "7px" : "0px",
+  const recentJobs = recentJobIds.map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job)).slice(0, 6);
+  const interviewingJobs = jobs.filter((job) => job.interviewRoundLabel);
+  const followUpsDue = jobs.filter((job) => { const days = followUpDays(job.tracker); return days !== null && days <= 0 && !["rejected", "withdrawn"].includes(effectiveStatus(job.tracker)); }).length;
+  const activePage = currentLocation.kind === "document" ? currentLocation.returnTo.kind : currentLocation.kind;
+  const shellStyle = {
     "--right-panel-width": `${rightPanelOpen ? rightPanelWidth : 0}px`,
     "--right-resizer-width": rightPanelOpen ? "7px" : "0px",
   } as CSSProperties;
-  return <main className="app-shell">
-    <header className="topbar">
-      <div className="wordmark"><span className="wordmark-mark">S</span><span>Sensei</span></div>
-      <nav className="history-controls" aria-label="Workspace history">
-        <button aria-label="Go back" title="Back" disabled={navigationIndex === 0} onClick={() => navigateHistory(-1)}>←</button>
-        <button aria-label="Go forward" title="Forward" disabled={navigationIndex >= navigationHistory.length - 1} onClick={() => navigateHistory(1)}>→</button>
-      </nav>
-      <button className="home-button" aria-label="Go to Home" title="Home" onClick={showJobsHome}>⌂<span>Home</span></button>
-      <div className="topbar-context" title={activeContextDetail}><span className="eyebrow">ACTIVE CONTEXT</span><strong>{configured ? activeContextTitle : "No active workspace"}</strong><span>{activeContextDetail}</span></div>
-      <div className="topbar-company" aria-live="polite" title={viewedCompany ?? undefined}>{viewedCompany ?? ""}</div>
-      <div className="panel-visibility-controls" aria-label="Workspace panels">
-        <button className={leftPanelOpen ? "is-active" : ""} aria-pressed={leftPanelOpen} onClick={() => setLeftPanelOpen((open) => !open)}>Navigation</button>
-        <button className={rightPanelOpen ? "is-active" : ""} aria-pressed={rightPanelOpen} onClick={() => setRightPanelOpen((open) => !open)}>Terminal</button>
+  return <main className={`shell ${leftPanelOpen ? "" : "is-sidebar-closed"}`} style={shellStyle}>
+    <nav className="app-sidebar" aria-label="Main" aria-hidden={!leftPanelOpen}>
+      <button className="wordmark" aria-label="Sensei: all jobs" onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span><span>Sensei</span></button>
+      <ul className="side-nav">
+        <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
+        <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{interviewingJobs.length > 0 && <span className="side-count">{interviewingJobs.length}</span>}</button></li>
+        <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context<span className="side-count">{sourceCount}</span></button></li>
+      </ul>
+      {recentJobs.length > 0 && <section className="side-recent" aria-labelledby="side-recent-title">
+        <h2 id="side-recent-title">Recent jobs</h2>
+        <ul>{recentJobs.map((job) => <li key={job.id}><button aria-current={activePage === "job" && viewedJobId === job.id ? "page" : undefined} onClick={() => openJob(job.id)}><strong>{job.company ?? displayJobName(job.name)}</strong><small>{job.title ?? "Role not recorded"}</small></button></li>)}</ul>
+      </section>}
+      <div className="side-foot">
+        <button onClick={() => setSettingsModalOpen(true)} disabled={!configured}><NavIcon name="settings" />Settings</button>
       </div>
-      <div className="topbar-status"><span className={`status-dot ${configured ? "is-ready" : ""}`} />{configured ? "Workspace ready" : "Choose a workspace"}</div>
-      {configured && <button className="topbar-button search-trigger" onClick={() => setSearchOpen(true)}><span aria-hidden="true">⌕</span>Search <kbd>Ctrl/⌘ K</kbd></button>}
-      {configured && <button className="topbar-button" onClick={() => void refresh()}>Rescan</button>}
-      {configured && <button className="topbar-button" onClick={() => setSettingsModalOpen(true)}>⚙ Settings</button>}
-      <button className="theme-toggle" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}><span aria-hidden="true">{theme === "dark" ? "☼" : "◐"}</span>{theme === "dark" ? "Day" : "Night"}</button>
-    </header>
-    <SearchPalette open={searchOpen} actions={paletteActions} onClose={() => setSearchOpen(false)} onOpenResult={openSearchResult} />
-    <SettingsModal
-      open={settingsModalOpen}
-      onClose={() => setSettingsModalOpen(false)}
-      profile={candidateProfile}
-      settings={resumeSettings}
-      onProfileUpdated={(updated) => setCandidateProfile(updated)}
-      onSettingsUpdated={(updated) => setResumeSettings(updated)}
-    />
-    <section className="workspace-grid" style={panelLayoutStyle}>
-      <section className={`workspace-main ${leftPanelOpen ? "" : "is-navigation-compact"}`}>
-        <aside className={`workspace-navigator ${leftPanelOpen ? "is-open" : "is-closed"}`} aria-label="Workspace navigation" aria-hidden={!leftPanelOpen}>
-          {leftPanelOpen && <div className="navigator-content">
-            <div className="navigator-heading"><div><span className="eyebrow">WORKSPACE</span><strong>{navigatorSection === "jobs" ? "Jobs" : "Career context"}</strong></div><span className="count">{navigatorSection === "jobs" ? jobs.length : selectedCareerPaths.length}</span></div>
-            <div className="navigator-switcher" role="tablist" aria-label="Workspace navigation sections">
-              <button role="tab" aria-selected={navigatorSection === "jobs"} className={navigatorSection === "jobs" ? "is-active" : ""} onClick={() => setNavigatorSection("jobs")}>Jobs</button>
-              <button role="tab" aria-selected={navigatorSection === "context"} className={navigatorSection === "context" ? "is-active" : ""} onClick={() => setNavigatorSection("context")}>Context</button>
-            </div>
-            <div className="tree-scroll">
-              {navigatorSection === "context" ? <>
-                <ResumeSources settings={resumeSettings} selectedPath={selectedPath} onSelect={selectFile} onChoose={chooseResume} onRemoveSecondary={removeSecondary} />
-                {tree.length ? tree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedCareerPaths} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No career context folders found.</p>}
-              </> : <>
-                <button className="all-jobs-button" onClick={showJobsHome}><span>All jobs</span><small>{jobs.length}</small></button>
-                <button className={`scope-clear ${selectedJobFiles.length ? "" : "is-active"}`} onClick={() => { setSelectedJobFiles([]); void updateContext(selectedCareerPaths, []); }}>Career context only</button>
-                {jobTree.length ? jobTree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedJobFiles} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No job folders yet.</p>}
-              </>}
-            </div>
-          </div>}
-        </aside>
-        <div className={`panel-resizer is-left ${leftPanelOpen ? "" : "is-collapsed"}`} role="separator" aria-label="Resize workspace navigation" aria-orientation="vertical" aria-valuemin={LEFT_PANEL_MIN} aria-valuemax={panelMaximum("left")} aria-valuenow={leftPanelWidth} tabIndex={leftPanelOpen ? 0 : -1} onPointerDown={(event) => beginPanelResize("left", event)} onKeyDown={(event) => resizePanelWithKeyboard("left", event)} />
-        <section className="viewer-panel">
-          {needsSetup ? <GetStarted workspace={workspace} profile={candidateProfile} settings={resumeSettings} onProfileCreated={async (profile) => { setCandidateProfile(profile); await refresh(); }} onChooseBase={() => void chooseResume("base")} /> : preview ? <>
-            <div className="viewer-header"><div><div className="eyebrow">DOCUMENT VIEWER</div><h1>{preview.name}</h1></div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="viewer-close" aria-label="Close document" title="Close document" onClick={closeDocument}>×</button></div></div>
-            <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
-          </> : viewedJobId && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.kind === "job" && currentLocation.jobId === viewedJob.id ? currentLocation.tab : "overview"} activeRoundId={currentLocation.kind === "job" && currentLocation.jobId === viewedJob.id ? currentLocation.roundId : undefined} onNavigate={openJobView} /> : <JobsHome jobs={jobs} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} />}
-          {loading && <div className="viewer-state">Reading local workspace…</div>}
-          {error && <p className="error-copy viewer-error">{error}</p>}
-        </section>
+    </nav>
+    <div className="shell-main">
+      <header className="topbar">
+        <button className="topbar-icon" aria-label={leftPanelOpen ? "Hide sidebar" : "Show sidebar"} aria-pressed={leftPanelOpen} title={leftPanelOpen ? "Hide sidebar" : "Show sidebar"} onClick={() => setLeftPanelOpen((open) => !open)}><NavIcon name="sidebar" /></button>
+        <nav className="history-controls" aria-label="History">
+          <button aria-label="Go back" title="Back" disabled={navigationIndex === 0} onClick={() => navigateHistory(-1)}><span aria-hidden="true">‹</span></button>
+          <button aria-label="Go forward" title="Forward" disabled={navigationIndex >= navigationHistory.length - 1} onClick={() => navigateHistory(1)}><span aria-hidden="true">›</span></button>
+        </nav>
+        {configured && <button className="search-trigger" onClick={() => setSearchOpen(true)}><span>Search jobs, files, and actions</span><kbd>{IS_MAC ? "⌘K" : "Ctrl K"}</kbd></button>}
+        <span className="topbar-spacer" />
+        <button className="topbar-toggle" aria-pressed={rightPanelOpen} title={`Agy terminal. Context: ${activeContextDetail}`} onClick={() => setRightPanelOpen((open) => !open)}><span className={`status-dot ${configured ? "is-ready" : ""}`} aria-hidden="true" />Agy</button>
+        <TopbarMenu
+          theme={theme}
+          onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
+          navigationOpen={leftPanelOpen}
+          onToggleNavigation={() => setLeftPanelOpen((open) => !open)}
+          onRescan={configured ? () => void refresh() : null}
+          onOpenSettings={configured ? () => setSettingsModalOpen(true) : null}
+          note={configured ? `${workspace.contextFileCount} context files and ${workspace.jobCount} job folders. Everything stays on this computer; career sources are never changed.` : "No workspace selected."}
+        />
+      </header>
+      <SearchPalette open={searchOpen} actions={paletteActions} onClose={() => setSearchOpen(false)} onOpenResult={openSearchResult} />
+      <SettingsModal
+        open={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        profile={candidateProfile}
+        settings={resumeSettings}
+        onProfileUpdated={(updated) => setCandidateProfile(updated)}
+        onSettingsUpdated={(updated) => setResumeSettings(updated)}
+      />
+      <section className="viewer-panel">
+        {needsSetup ? <GetStarted workspace={workspace} profile={candidateProfile} settings={resumeSettings} onProfileCreated={async (profile) => { setCandidateProfile(profile); await refresh(); }} onChooseBase={() => void chooseResume("base")} /> : preview ? <>
+          <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
+          <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
+        </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
+          : currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
+          : currentLocation.kind === "context-home" ? <ContextHome>
+            <section className="context-block"><h2>Resumes</h2><ResumeSources settings={resumeSettings} selectedPath={selectedPath} onSelect={selectFile} onChoose={chooseResume} onRemoveSecondary={removeSecondary} /></section>
+            <section className="context-block"><h2>Career sources</h2><p>Checked files are what Agy reads as facts about you. Structured files are the strongest evidence.</p><div className="context-tree">{tree.length ? tree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedCareerPaths} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No career context folders found.</p>}</div></section>
+            <section className="context-block"><h2>Job files in context</h2><p>Add a job's files when you want Agy to use them outside that job, for example an earlier letter that worked well.</p><button className="btn-link" onClick={() => { setSelectedJobFiles([]); void updateContext(selectedCareerPaths, []); }} disabled={!selectedJobFiles.length}>Clear job files ({selectedJobFiles.length})</button><div className="context-tree">{jobTree.length ? jobTree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedJobFiles} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No job folders yet.</p>}</div></section>
+          </ContextHome>
+          : <JobsHome jobs={jobs} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} onUpdateTracker={updateTracker} />}
+        {loading && <div className="viewer-state">Reading local workspace…</div>}
+        {error && <p className="error-copy viewer-error">{error}</p>}
       </section>
-      <div className={`panel-resizer is-right ${rightPanelOpen ? "" : "is-collapsed"}`} role="separator" aria-label="Resize terminal panel" aria-orientation="vertical" aria-valuemin={RIGHT_PANEL_MIN} aria-valuemax={panelMaximum("right")} aria-valuenow={rightPanelWidth} tabIndex={rightPanelOpen ? 0 : -1} onPointerDown={(event) => beginPanelResize("right", event)} onKeyDown={(event) => resizePanelWithKeyboard("right", event)} />
-      <TerminalPanel cwd={workspace.repositoryRoot || workspace.path} selectedJobFiles={selectedJobFiles} selectedCareerPaths={selectedCareerPaths} theme={theme} visible={rightPanelOpen && !needsSetup} onClose={() => setRightPanelOpen(false)} jobActions={jobActions} promptRequest={promptRequest} onPromptHandled={(id) => setPromptRequest((request) => request?.id === id ? null : request)} onInsertPrompt={insertJobPrompt} />
-    </section>
-    <footer className="statusbar"><span><i className="status-dot is-ready" />Local-only</span><span>Career sources stay read-only</span><span className="statusbar-right">{configured ? `${workspace.contextFileCount} context files · ${workspace.jobCount} job folders` : "No workspace selected"}</span></footer>
+    </div>
+    <div className={`panel-resizer is-right ${rightPanelOpen ? "" : "is-collapsed"}`} role="separator" aria-label="Resize terminal panel" aria-orientation="vertical" aria-valuemin={RIGHT_PANEL_MIN} aria-valuemax={panelMaximum("right")} aria-valuenow={rightPanelWidth} tabIndex={rightPanelOpen ? 0 : -1} onPointerDown={(event) => beginPanelResize("right", event)} onKeyDown={(event) => resizePanelWithKeyboard("right", event)} />
+    <TerminalPanel cwd={workspace.repositoryRoot || workspace.path} selectedJobFiles={selectedJobFiles} selectedCareerPaths={selectedCareerPaths} theme={theme} visible={rightPanelOpen && !needsSetup} onClose={() => setRightPanelOpen(false)} jobActions={jobActions} promptRequest={promptRequest} onPromptHandled={(id) => setPromptRequest((request) => request?.id === id ? null : request)} onInsertPrompt={insertJobPrompt} />
   </main>;
+}
+
+function NavIcon({ name }: { name: "jobs" | "interviews" | "context" | "settings" | "sidebar" }) {
+  const paths: Record<typeof name, string> = {
+    jobs: "M4 8h16v11H4zM9 8V5h6v3M4 13h16",
+    interviews: "M5 5h14v10H9l-4 4z M8.5 9.5h7 M8.5 12h4",
+    context: "M5 4h10l4 4v12H5z M15 4v4h4 M8 12h8 M8 16h6",
+    settings: "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1",
+    sidebar: "M4 5h16v14H4z M9 5v14",
+  };
+  return <svg className="nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d={paths[name]} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+/** Settings menu in the top bar: theme, navigation, rescan, and Settings. Keyboard: arrows move, Escape closes. */
+function TopbarMenu({ theme, onToggleTheme, navigationOpen, onToggleNavigation, onRescan, onOpenSettings, note }: { theme: "dark" | "light"; onToggleTheme: () => void; navigationOpen: boolean; onToggleNavigation: () => void; onRescan: (() => void) | null; onOpenSettings: (() => void) | null; note: string }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const items = [
+    { label: theme === "dark" ? "Use light theme" : "Use dark theme", run: onToggleTheme },
+    { label: navigationOpen ? "Hide sidebar" : "Show sidebar", run: onToggleNavigation },
+    ...(onRescan ? [{ label: "Rescan workspace", run: onRescan }] : []),
+    ...(onOpenSettings ? [{ label: "Settings…", run: onOpenSettings }] : []),
+  ];
+  useEffect(() => {
+    if (!open) return;
+    rootRef.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus();
+    const close = (event: globalThis.MouseEvent) => { if (!rootRef.current?.contains(event.target as Node)) setOpen(false); };
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [open]);
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") { event.preventDefault(); setOpen(false); triggerRef.current?.focus(); return; }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const buttons = [...(rootRef.current?.querySelectorAll<HTMLButtonElement>("[role=menuitem]") ?? [])];
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    buttons[(index + (event.key === "ArrowDown" ? 1 : buttons.length - 1)) % buttons.length]?.focus();
+  }
+  return <div className="topbar-menu" ref={rootRef} onKeyDown={onKeyDown}>
+    <button ref={triggerRef} className="topbar-menu-trigger" aria-haspopup="menu" aria-expanded={open} aria-label="Settings menu" title="Settings menu" onClick={() => setOpen((value) => !value)}><span aria-hidden="true">⚙</span></button>
+    {open && <div className="topbar-menu-list" role="menu" aria-label="Settings menu">
+      {items.map((item) => <button key={item.label} role="menuitem" onClick={() => { setOpen(false); item.run(); }}>{item.label}</button>)}
+      <p className="topbar-menu-note">{note}</p>
+    </div>}
+  </div>;
 }
 
 function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBase }: { workspace: WorkspaceSummary; profile: CandidateProfile | null; settings: Settings; onProfileCreated: (profile: CandidateProfile) => Promise<void>; onChooseBase: () => void }) {
@@ -590,7 +661,7 @@ function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBa
     ["Agy terminal", workspace.agyAvailable, workspace.agyAvailable ? "Agy ready (offline bundled or installed)" : "Install Agy or add it to PATH"],
   ] as const;
   return <section className="get-started">
-    <div className="get-started-copy"><span className="eyebrow">PRIVATE LOCAL SETUP</span><h1>Get JobSensei ready</h1><p>Your workspace stays in <code>data/</code>. Resume and context files are never committed by the public repository.</p></div>
+    <div className="get-started-copy"><span className="eyebrow">Private local setup</span><h1>Get JobSensei ready</h1><p>Your workspace stays in <code>data/</code>. Resume and context files are never committed by the public repository.</p></div>
     <div className="get-started-grid">
       <ol>{steps.map(([label, complete, detail], index) => <li className={complete ? "is-complete" : ""} key={label}><span>{complete ? "✓" : index + 1}</span><div><strong>{label}</strong><small>{detail}</small></div></li>)}</ol>
       <div className="setup-card">
@@ -649,16 +720,23 @@ function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBa
   </section>;
 }
 
-function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTrash }: { jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onOpenJobView: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onOpenEvaluation: (jobId: string) => void; onMoveToTrash: (jobId: string) => void }) {
+type JobsFilter = "all" | "active" | "interviewing" | "follow-up" | "review" | "favorites";
+type JobsView = "list" | "board" | "cards";
+const ACTIVE_STATUSES: TrackerStatus[] = ["saved", "applied", "interviewing", "offer"];
+
+function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTrash, onUpdateTracker }: { jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onOpenJobView: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onOpenEvaluation: (jobId: string) => void; onMoveToTrash: (jobId: string) => void; onUpdateTracker: (jobId: string, update: JobTrackerUpdate) => Promise<void> }) {
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "interviewing" | "review" | "favorites">("all");
+  const [filter, setFilter] = useState<JobsFilter>("all");
   const [favorites, setFavorites] = useState<Set<string>>(storedFavoriteJobIds);
-  const [sort, setSort] = useState<"added" | "company" | "company-desc" | "role">(() => {
+  const [sort, setSort] = useState<"added" | "company" | "role" | "follow-up" | "fit">(() => {
     const stored = window.localStorage.getItem("sensei-jobs-sort");
-    const normalized = stored === "updated" ? "added" : stored;
-    return ["added", "company", "company-desc", "role"].includes(normalized ?? "") ? normalized as "added" | "company" | "company-desc" | "role" : "added";
+    return ["added", "company", "role", "follow-up", "fit"].includes(stored ?? "") ? stored as "added" : "added";
   });
-  const [view, setView] = useState<"cards" | "table">("cards");
+  const [view, setView] = useState<JobsView>(() => {
+    const stored = window.localStorage.getItem("sensei-jobs-view");
+    return stored === "cards" || stored === "board" ? stored : "list";
+  });
+  useEffect(() => { window.localStorage.setItem("sensei-jobs-view", view); }, [view]);
   useEffect(() => { window.localStorage.setItem("sensei-jobs-sort", sort); }, [sort]);
   useEffect(() => { window.localStorage.setItem(JOB_FAVORITES_KEY, JSON.stringify([...favorites])); }, [favorites]);
   function toggleFavorite(jobId: string) {
@@ -669,39 +747,92 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
       return next;
     });
   }
+  const matches = (job: JobFolderSummary, value: JobsFilter) => {
+    const status = effectiveStatus(job.tracker);
+    const due = followUpDays(job.tracker);
+    return value === "all"
+      || (value === "active" && ACTIVE_STATUSES.includes(status))
+      || (value === "interviewing" && (status === "interviewing" || Boolean(job.interviewRoundLabel) && ACTIVE_STATUSES.includes(status)))
+      || (value === "follow-up" && due !== null && due <= 0 && ACTIVE_STATUSES.includes(status))
+      || (value === "review" && /review|pending|stale|invalid/.test(job.applicationStage?.toLowerCase() ?? ""))
+      || (value === "favorites" && favorites.has(job.id));
+  };
+  const filterCounts = Object.fromEntries((["all", "active", "interviewing", "follow-up", "review", "favorites"] as JobsFilter[]).map((value) => [value, jobs.filter((job) => matches(job, value)).length])) as Record<JobsFilter, number>;
   const visibleJobs = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const filtered = jobs.filter((job) => {
-      const stage = job.applicationStage?.toLowerCase() ?? "";
-      const matchesQuery = !normalized || `${job.company ?? ""} ${job.title ?? ""} ${job.name} ${stage} ${job.interviewRoundLabel ?? ""}`.toLowerCase().includes(normalized);
-      const matchesFilter = filter === "all"
-        || (filter === "interviewing" && Boolean(job.interviewRoundLabel))
-        || (filter === "review" && /review|pending|stale|invalid/.test(stage))
-        || (filter === "favorites" && favorites.has(job.id));
-      return matchesQuery && matchesFilter;
-    });
     const text = (value: string | null | undefined, fallback: string) => (value ?? fallback).toLowerCase();
-    return [...filtered].sort((a, b) => {
-      if (sort === "added") return Date.parse(b.createdAt) - Date.parse(a.createdAt) || text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
-      if (sort === "company") return text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
-      if (sort === "company-desc") return text(b.company, displayJobName(b.name)).localeCompare(text(a.company, displayJobName(a.name)));
-      if (sort === "role") return text(a.title, "").localeCompare(text(b.title, ""));
-      return text(a.applicationStage, "workspace").localeCompare(text(b.applicationStage, "workspace"));
-    });
+    return jobs
+      .filter((job) => matches(job, filter) && (!normalized || `${job.company ?? ""} ${job.title ?? ""} ${job.name} ${job.location ?? ""} ${effectiveStatus(job.tracker)} ${job.interviewRoundLabel ?? ""} ${job.tracker?.notes ?? ""}`.toLowerCase().includes(normalized)))
+      .sort((a, b) => {
+        if (sort === "company") return text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
+        if (sort === "role") return text(a.title, "").localeCompare(text(b.title, ""));
+        if (sort === "fit") return (b.rating ?? -1) - (a.rating ?? -1);
+        if (sort === "follow-up") return (followUpDays(a.tracker) ?? 9999) - (followUpDays(b.tracker) ?? 9999);
+        return Date.parse(b.createdAt) - Date.parse(a.createdAt) || text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
+      });
   }, [jobs, query, filter, sort, favorites]);
-  return <section className="jobs-home">
-    <header className="page-hero"><div><span className="eyebrow">JOB WORKSPACES</span><h1>Jobs</h1><p>Find an application, open its interview preparation, or return to recently updated material.</p></div><div className="page-count"><strong>{visibleJobs.length}</strong><span>of {jobs.length} jobs</span></div></header>
+  const filterLabels: Record<JobsFilter, string> = { all: "All", active: "Active", interviewing: "Interviewing", "follow-up": "Follow-up due", review: "Needs review", favorites: "Favorites" };
+  return <section className={`jobs-home ${view === "board" ? "is-board" : ""}`}>
+    <header className="page-head"><div><h1>Jobs</h1><p>{visibleJobs.length === jobs.length ? `${jobs.length} job${jobs.length === 1 ? "" : "s"}` : `${visibleJobs.length} of ${jobs.length} jobs shown`}. {view === "board" ? "Drag a card to change its status, or use the status menu on the card." : "Open one to see its application and interview prep."}</p></div></header>
     <div className="jobs-toolbar">
-      <label className="workspace-search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search company, role, stage, or interview…" aria-label="Search jobs" /></label>
-      <div className="jobs-filter" role="tablist" aria-label="Filter jobs">{(["all", "interviewing", "review", "favorites"] as const).map((value) => <button role="tab" aria-selected={filter === value} className={filter === value ? "is-active" : ""} key={value} onClick={() => setFilter(value)}>{value === "all" ? "All" : value === "review" ? "Needs review" : value[0].toUpperCase() + value.slice(1)}</button>)}</div>
-      <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option><option value="company">Company A-Z</option><option value="company-desc">Company Z-A</option><option value="role">Role A-Z</option></select></label>
-      <div className="view-switcher" aria-label="Job display"><button className={view === "cards" ? "is-active" : ""} aria-pressed={view === "cards"} onClick={() => setView("cards")}>Cards</button><button className={view === "table" ? "is-active" : ""} aria-pressed={view === "table"} onClick={() => setView("table")}>Table</button></div>
+      <label className="workspace-search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search company, role, location, or notes…" aria-label="Search jobs" /></label>
+      <div className="segmented" role="group" aria-label="Filter jobs">{(Object.keys(filterLabels) as JobsFilter[]).filter((value) => value === "all" || filterCounts[value] > 0 || filter === value).map((value) => <button aria-pressed={filter === value} key={value} onClick={() => setFilter(value)}>{filterLabels[value]}<span>{filterCounts[value]}</span></button>)}</div>
+      <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option><option value="follow-up">Follow-up date</option><option value="fit">Best fit</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
+      <div className="segmented" role="group" aria-label="Layout">{(["list", "board", "cards"] as JobsView[]).map((value) => <button key={value} aria-pressed={view === value} onClick={() => setView(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div>
     </div>
-    {visibleJobs.length ? view === "cards"
-      ? <div className="job-card-grid">{visibleJobs.map((job) => <JobCard key={job.id} job={job} favorite={favorites.has(job.id)} onToggleFavorite={() => toggleFavorite(job.id)} onOpen={() => onOpenJob(job.id)} onOpenView={(tab) => onOpenJobView(job.id, tab)} onOpenEvaluation={() => onOpenEvaluation(job.id)} onMoveToTrash={() => onMoveToTrash(job.id)} />)}</div>
-      : <div className="jobs-table-wrap"><table className="jobs-table"><thead><tr><th>Company</th><th>Role</th><th>Stage</th><th>Interview</th><th>Rating</th><th>Added</th></tr></thead><tbody>{visibleJobs.map((job) => <tr key={job.id} tabIndex={0} onClick={() => onOpenJob(job.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpenJob(job.id); }}><td><strong>{job.company ?? displayJobName(job.name)}</strong></td><td>{job.title ?? "Role not recorded"}</td><td><StatusPill value={job.applicationStage ?? "Workspace"} /></td><td>{job.interviewRoundLabel ?? "Not prepared"}</td><td>{job.rating === null ? "Not rated" : `${job.rating.toFixed(1)} / 5`}</td><td>{formatJobDate(job.createdAt)}</td></tr>)}</tbody></table></div>
-      : <div className="dashboard-empty"><h2>No jobs match this view</h2><p>Adjust the search or status filter to see more workspaces.</p></div>}
+    {!visibleJobs.length ? <div className="dashboard-empty"><h2>No jobs match this view</h2><p>Clear the search or pick another filter.</p></div>
+      : view === "board" ? <JobsBoard jobs={visibleJobs} onOpenJob={onOpenJob} onUpdateTracker={onUpdateTracker} />
+      : view === "cards" ? <div className="job-card-grid">{visibleJobs.map((job) => <JobCard key={job.id} job={job} favorite={favorites.has(job.id)} onToggleFavorite={() => toggleFavorite(job.id)} onOpen={() => onOpenJob(job.id)} onOpenView={(tab) => onOpenJobView(job.id, tab)} onOpenEvaluation={() => onOpenEvaluation(job.id)} onMoveToTrash={() => onMoveToTrash(job.id)} />)}</div>
+      : <div className="jobs-table-wrap"><table className="jobs-table"><thead><tr><th scope="col">Role</th><th scope="col">Fit</th><th scope="col">Status</th><th scope="col">Interview</th><th scope="col">Next</th><th scope="col">Added</th><th scope="col"><span className="sr-only">Favorite</span></th></tr></thead><tbody>{visibleJobs.map((job) => <tr key={job.id} tabIndex={0} onClick={() => onOpenJob(job.id)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onOpenJob(job.id); } }}><td className="jobs-role"><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></td><td><FitBadge rating={job.rating} /></td><td><TrackerPill status={effectiveStatus(job.tracker)} /></td><td>{job.interviewRoundLabel ? <button className="btn-link" onClick={(event) => { event.stopPropagation(); onOpenJobView(job.id, "interview"); }}>{job.interviewRoundLabel}</button> : <span className="muted">None</span>}</td><td><NextBadge job={job} /></td><td className="tabular muted">{formatJobDate(job.createdAt)}</td><td><button className={`job-favorite ${favorites.has(job.id) ? "is-favorite" : ""}`} aria-pressed={favorites.has(job.id)} aria-label={`Favorite ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => { event.stopPropagation(); toggleFavorite(job.id); }}>{favorites.has(job.id) ? "★" : "☆"}</button></td></tr>)}</tbody></table></div>}
   </section>;
+}
+
+function TrackerPill({ status }: { status: TrackerStatus }) {
+  return <span className={`tracker-pill is-${status}`}>{TRACKER_LABELS[status]}</span>;
+}
+
+/** Follow-up due, or the applied date, in plain words. */
+function NextBadge({ job, quiet = false }: { job: JobFolderSummary; quiet?: boolean }) {
+  const days = followUpDays(job.tracker);
+  const status = effectiveStatus(job.tracker);
+  if (days !== null && ACTIVE_STATUSES.includes(status)) {
+    const label = days < 0 ? `Follow up, ${-days} day${days === -1 ? "" : "s"} late` : days === 0 ? "Follow up today" : `Follow up in ${days} day${days === 1 ? "" : "s"}`;
+    return <span className={`next-badge ${days <= 0 ? "is-due" : ""}`}>{label}</span>;
+  }
+  if (job.tracker?.appliedAt) return <span className="muted">Applied {formatTrackerDate(job.tracker.appliedAt)}</span>;
+  return quiet ? null : <span className="muted">—</span>;
+}
+
+function formatTrackerDate(value: string): string {
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function JobsBoard({ jobs, onOpenJob, onUpdateTracker }: { jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onUpdateTracker: (jobId: string, update: JobTrackerUpdate) => Promise<void> }) {
+  const [dragOver, setDragOver] = useState<TrackerStatus | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  async function move(jobId: string, status: TrackerStatus) {
+    setBusy(jobId);
+    try { await onUpdateTracker(jobId, { status }); } finally { setBusy(null); }
+  }
+  return <div className="board" aria-label="Jobs by status">
+    {TRACKER_STATUSES.map((status) => {
+      const column = jobs.filter((job) => effectiveStatus(job.tracker) === status);
+      return <section key={status} className={`board-col is-${status} ${dragOver === status ? "is-over" : ""}`} aria-labelledby={`board-${status}`}
+        onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDragOver(status); }}
+        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragOver(null); }}
+        onDrop={(event) => { event.preventDefault(); setDragOver(null); const jobId = event.dataTransfer.getData("text/sensei-job"); if (jobId) void move(jobId, status); }}>
+        <h2 id={`board-${status}`}><TrackerPill status={status} /><span>{column.length}</span></h2>
+        <ul>{column.map((job) => <li key={job.id} className={`board-card ${busy === job.id ? "is-busy" : ""}`} draggable onDragStart={(event) => { event.dataTransfer.setData("text/sensei-job", job.id); event.dataTransfer.effectAllowed = "move"; }}>
+          <button className="board-card-open" onClick={() => onOpenJob(job.id)}><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></button>
+          <div className="board-card-meta"><FitBadge rating={job.rating} />{job.interviewRoundLabel && <span className="muted">{job.interviewRoundLabel}</span>}</div>
+          <NextBadge job={job} quiet />
+          <label className="board-card-move"><span className="sr-only">Status for {job.company ?? displayJobName(job.name)}, {job.title ?? "role"}</span><select value={status} disabled={busy === job.id} onChange={(event) => void move(job.id, event.target.value as TrackerStatus)}>{TRACKER_STATUSES.map((value) => <option key={value} value={value}>{TRACKER_LABELS[value]}</option>)}</select></label>
+        </li>)}</ul>
+        {!column.length && <p className="board-empty">Drop a job here</p>}
+      </section>;
+    })}
+  </div>;
 }
 
 function JobCard({ job, favorite, onToggleFavorite, onOpen, onOpenView, onOpenEvaluation, onMoveToTrash }: { job: JobFolderSummary; favorite: boolean; onToggleFavorite: () => void; onOpen: () => void; onOpenView: (tab: JobWorkspaceTab) => void; onOpenEvaluation: () => void; onMoveToTrash: () => void }) {
@@ -716,16 +847,75 @@ function JobCard({ job, favorite, onToggleFavorite, onOpen, onOpenView, onOpenEv
     <button onClick={() => { setMenu(null); void window.sensei.files.reveal(job.relativePath); }}>Show in file manager</button>
     <button className="is-destructive" onClick={() => { setMenu(null); onMoveToTrash(); }}>Move job to Trash</button>
   </div>, document.body);
-  return <article className="job-card" onClick={onOpen} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setMenu({ x: Math.max(8, Math.min(event.clientX, window.innerWidth - 240)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - 280)) }); }}><div className="job-card-heading"><span className="company-mark">{initials || "J"}</span><div><h2>{job.company ?? displayJobName(job.name)}</h2><p>{job.title ?? "Role not recorded"}</p></div><span className="job-card-badges"><span className={`job-rating ${job.rating === null ? "is-missing" : ""}`}>{job.rating === null ? "Not rated" : job.rating.toFixed(1)}</span></span></div><dl><div><dt>Status</dt><dd><StatusPill value={job.applicationStage ?? "Workspace"} /></dd></div><div><dt>Interview</dt><dd>{job.interviewRoundLabel ?? "Not prepared"}</dd></div><div><dt>Added</dt><dd className="job-card-added"><span>{formatJobDate(job.createdAt)}</span><button className={`job-favorite ${favorite ? "is-favorite" : ""}`} aria-label={`${favorite ? "Remove" : "Add"} ${job.company ?? displayJobName(job.name)} ${favorite ? "from" : "to"} favorites`} aria-pressed={favorite} title={favorite ? "Remove from favorites" : "Add to favorites"} onClick={(event) => { event.stopPropagation(); onToggleFavorite(); }}>{favorite ? "★" : "☆"}</button></dd></div></dl><button onClick={(event) => { event.stopPropagation(); onOpen(); }}>Open workspace <span>→</span></button>{menuView}</article>;
+  return <article className="job-card" onClick={onOpen} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setMenu({ x: Math.max(8, Math.min(event.clientX, window.innerWidth - 240)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - 280)) }); }}><div className="job-card-heading"><span className="company-mark">{initials || "J"}</span><div><h2>{job.company ?? displayJobName(job.name)}</h2><p>{job.title ?? "Role not recorded"}</p></div><span className="job-card-badges"><span className={`job-rating ${job.rating === null ? "is-missing" : ""}`}>{job.rating === null ? "Not rated" : job.rating.toFixed(1)}</span></span></div><dl><div><dt>Status</dt><dd><TrackerPill status={effectiveStatus(job.tracker)} /></dd></div><div><dt>Interview</dt><dd>{job.interviewRoundLabel ?? "Not prepared"}</dd></div><div><dt>Added</dt><dd className="job-card-added"><span>{formatJobDate(job.createdAt)}</span><button className={`job-favorite ${favorite ? "is-favorite" : ""}`} aria-label={`${favorite ? "Remove" : "Add"} ${job.company ?? displayJobName(job.name)} ${favorite ? "from" : "to"} favorites`} aria-pressed={favorite} title={favorite ? "Remove from favorites" : "Add to favorites"} onClick={(event) => { event.stopPropagation(); onToggleFavorite(); }}>{favorite ? "★" : "☆"}</button></dd></div></dl><button onClick={(event) => { event.stopPropagation(); onOpen(); }}>Open job</button>{menuView}</article>;
 }
 
 function StatusPill({ value }: { value: string }) {
-  const normalized = value.replaceAll("_", " ");
+  const spaced = value.replaceAll("_", " ");
+  const normalized = spaced.charAt(0).toUpperCase() + spaced.slice(1);
   const tone = /interview|ready|validated|applied/i.test(value) ? "positive" : /review|pending|stale|invalid/i.test(value) ? "warning" : "neutral";
   return <span className={`status-pill is-${tone}`}>{normalized}</span>;
 }
 
-function JobWorkspaceDashboard({ job, status, applicationLoading, overview, interviewLoading, jobTree, onStatus, onSelect, activeTab, activeRoundId, onNavigate }: { job: JobFolderSummary; status: ApplicationStatus | null; applicationLoading: boolean; overview: InterviewOverview | null; interviewLoading: boolean; jobTree: FileTreeNode[]; onStatus: (status: ApplicationStatus) => void; onSelect: (path: string, anchor?: string) => void; activeTab: JobWorkspaceTab; activeRoundId?: string; onNavigate: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void }) {
+function FitBadge({ rating }: { rating: number | null }) {
+  if (rating === null) return <span className="fit-badge is-none">—</span>;
+  const tone = rating >= 4 ? "high" : rating >= 3.5 ? "mid" : "low";
+  return <span className={`fit-badge is-${tone}`} title={`${rating.toFixed(1)} of 5 fit`}><span className="tabular">{rating.toFixed(1)}</span></span>;
+}
+
+function TrackerPanel({ job, onUpdate }: { job: JobFolderSummary; onUpdate: (update: JobTrackerUpdate) => Promise<void> }) {
+  const tracker = job.tracker;
+  const [notes, setNotes] = useState(tracker?.notes ?? "");
+  useEffect(() => { setNotes(tracker?.notes ?? ""); }, [job.id, tracker?.notes]);
+  const history = [...(tracker?.history ?? [])].reverse().slice(0, 4);
+  return <section className="overview-panel tracker-panel">
+    <h2>Tracking</h2>
+    <div className="tracker-dates">
+      <label><span>Applied</span><input type="date" value={tracker?.appliedAt ?? ""} onChange={(event) => void onUpdate({ appliedAt: event.target.value || null })} /></label>
+      <label><span>Follow up on</span><input type="date" value={tracker?.nextFollowUpAt ?? ""} onChange={(event) => void onUpdate({ nextFollowUpAt: event.target.value || null })} /></label>
+    </div>
+    <NextBadge job={job} />
+    <label className="tracker-notes"><span>Notes</span><textarea rows={3} value={notes} placeholder="Recruiter name, referral, what they said…" onChange={(event) => setNotes(event.target.value)} onBlur={() => { if (notes !== (tracker?.notes ?? "")) void onUpdate({ notes }); }} /></label>
+    {history.length > 0 && <ol className="tracker-history" aria-label="Status history">{history.map((event) => <li key={event.at}><TrackerPill status={event.status} /><span className="muted">{new Date(event.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span></li>)}</ol>}
+  </section>;
+}
+
+function InterviewsHome({ jobs, onOpen }: { jobs: JobFolderSummary[]; onOpen: (jobId: string, roundId?: string) => void }) {
+  const [overviews, setOverviews] = useState<Record<string, InterviewOverview | null>>({});
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(jobs.map(async (job) => [job.id, await window.sensei.interviews.getOverview(job.id).catch(() => null)] as const))
+      .then((entries) => { if (!cancelled) setOverviews(Object.fromEntries(entries)); });
+    return () => { cancelled = true; };
+  }, [jobs]);
+  const rows = jobs.map((job) => {
+    const overview = overviews[job.id];
+    const round = overview?.rounds.find((candidate) => candidate.id === overview.currentRoundId) ?? overview?.rounds.at(-1) ?? null;
+    return { job, overview, round };
+  }).sort((a, b) => Number(["rejected", "withdrawn"].includes(effectiveStatus(a.job.tracker))) - Number(["rejected", "withdrawn"].includes(effectiveStatus(b.job.tracker))) || (a.round?.scheduledDate ?? "9999").localeCompare(b.round?.scheduledDate ?? "9999") || Date.parse(b.job.modifiedAt) - Date.parse(a.job.modifiedAt));
+  return <section className="jobs-home">
+    <header className="page-head"><div><h1>Interviews</h1><p>{jobs.length ? `${jobs.length} job${jobs.length === 1 ? "" : "s"} with interview prep. Open one to practice its current round.` : "No interview prep yet. Open a job and prepare its first round when you get the call."}</p></div></header>
+    {rows.length > 0 && <ul className="interview-rows">{rows.map(({ job, overview, round }) => <li key={job.id} className={["rejected", "withdrawn"].includes(effectiveStatus(job.tracker)) ? "is-closed" : ""}>
+      <button className="interview-row" onClick={() => onOpen(job.id, round?.id)}>
+        <span className="interview-row-main"><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></span>
+        <TrackerPill status={effectiveStatus(job.tracker)} />
+        <span className="interview-row-round"><strong>{round?.label ?? job.interviewRoundLabel}</strong><span>{round ? (round.scheduledDate ?? (round.status === "prep_ready" ? "Prep ready" : round.status.replace("_", " "))) : "Loading…"}</span></span>
+        <span className="interview-row-steps" aria-label={`${overview?.rounds.length ?? 0} rounds`}>{(overview?.rounds ?? []).map((candidate) => <i key={candidate.id} className={`is-${candidate.status} ${candidate.id === round?.id ? "is-current" : ""}`} />)}</span>
+      </button>
+    </li>)}</ul>}
+  </section>;
+}
+
+function ContextHome({ children }: { children: React.ReactNode }) {
+  return <section className="jobs-home context-home">
+    <header className="page-head"><div><h1>Career context</h1><p>The sources Agy treats as facts about you. Source files are only read, never changed.</p></div></header>
+    {children}
+  </section>;
+}
+
+function JobWorkspaceDashboard({ job, status, applicationLoading, overview, interviewLoading, jobTree, jobActions, onStatus, onSelect, activeTab, activeRoundId, onNavigate, onInsertPrompt, onUpdateTracker }: { job: JobFolderSummary; status: ApplicationStatus | null; applicationLoading: boolean; overview: InterviewOverview | null; interviewLoading: boolean; jobTree: FileTreeNode[]; jobActions: JobAction[]; onStatus: (status: ApplicationStatus) => void; onSelect: (path: string, anchor?: string) => void; activeTab: JobWorkspaceTab; activeRoundId?: string; onNavigate: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onInsertPrompt: (action: Pick<JobAction, "prompt" | "label">) => void; onUpdateTracker: (update: JobTrackerUpdate) => Promise<void> }) {
+  const [dismissedSuggestion, setDismissedSuggestion] = useState(false);
+  const trackerStatus = effectiveStatus(job.tracker);
   const files = useMemo(() => {
     const root = findNode(jobTree, `jobs/${job.id}`);
     return root ? fileNodes([root]).filter((node) => !node.relativePath.includes("/.sensei/")) : [];
@@ -733,24 +923,75 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
   const applicationFiles = files.filter((file) => /evaluation|resume|cover_letter|original_jd/i.test(file.name));
   const resumeMarkdown = files.find((file) => /_Resume\.md$/i.test(file.name)) ?? files.find((file) => /resume\.md$/i.test(file.name));
   const coverLetterMarkdown = files.find((file) => file.name.toLowerCase() === "cover_letter.md");
+  const evaluation = files.find((file) => file.name.toLowerCase() === "evaluation.md");
+  const jobDescription = files.find((file) => /^original_jd\./i.test(file.name));
+  const rounds = overview?.rounds ?? [];
+  const [next, ...more] = jobActions;
   function navigateRound(roundId: string) {
     void window.sensei.interviews.setCurrentRound(job.id, roundId).catch(() => undefined);
     onNavigate(job.id, "interview", roundId);
   }
-  return <section className="job-workspace-dashboard">
-    <header className="page-hero job-hero"><div><span className="eyebrow">JOB WORKSPACE</span><h1>{job.company ?? displayJobName(job.name)}</h1><p>{job.title ?? "Role not recorded"}</p></div><div className="job-hero-status"><StatusPill value={job.interviewRoundLabel ? "Interviewing" : job.applicationStage ?? "Workspace"} />{job.rating !== null && <strong>{job.rating.toFixed(1)} <small>/ 5 fit</small></strong>}<JobPdfExportButton resumePath={resumeMarkdown?.relativePath ?? null} coverLetterPath={coverLetterMarkdown?.relativePath ?? null} /></div></header>
-    <nav className="workspace-tabs" role="tablist" aria-label="Job workspace sections">{(["overview", "application", "interview", "files"] as JobWorkspaceTab[]).map((value) => <button key={value} role="tab" aria-selected={activeTab === value} className={activeTab === value ? "is-active" : ""} onClick={() => onNavigate(job.id, value, value === "interview" ? activeRoundId : undefined)}>{value[0].toUpperCase() + value.slice(1)}{value === "files" ? <span>{files.length}</span> : null}</button>)}</nav>
-    {activeTab === "overview" && <div className="dashboard-stack"><ApplicationHealth job={job} files={applicationFiles} status={status} loading={applicationLoading} onStatus={onStatus} /><InterviewGuide jobId={job.id} overview={overview} loading={interviewLoading} activeRoundId={activeRoundId} onSelect={onSelect} onRoundChange={navigateRound} onOpenInterview={(roundId) => { navigateRound(roundId); }} /><CollapsibleDashboardSection eyebrow="QUICK ACCESS" title="Application material" count={`${applicationFiles.length} files`}><ArtifactTable files={applicationFiles.slice(0, 6)} onSelect={onSelect} empty="No application documents found." /></CollapsibleDashboardSection></div>}
-    {activeTab === "application" && <div className="dashboard-stack"><ApplicationHealth job={job} files={applicationFiles} status={status} loading={applicationLoading} onStatus={onStatus} /><CollapsibleDashboardSection eyebrow="APPLICATION FILES" title="Review and submission material" count={`${applicationFiles.length} files`}><ArtifactTable files={applicationFiles} onSelect={onSelect} empty="No application documents found." /></CollapsibleDashboardSection></div>}
-    {activeTab === "interview" && <InterviewDashboard job={job} overview={overview} loading={interviewLoading} onSelect={onSelect} initialRoundId={activeRoundId} onRoundChange={navigateRound} />}
-    {activeTab === "files" && <CollapsibleDashboardSection eyebrow="ALL FILES" title={`${job.company ?? displayJobName(job.name)} workspace`} count={`${files.length} files`}><ArtifactTable files={files} onSelect={onSelect} empty="This job workspace is empty." /></CollapsibleDashboardSection>}
+  const tabs: Array<[JobWorkspaceTab, string, number | null]> = [["overview", "Overview", null], ["application", "Application", null], ["interview", "Interview", rounds.length || null], ["files", "Files", files.length]];
+  const documents: Array<[string, FileTreeNode | undefined]> = [["Job description", jobDescription], ["Evaluation", evaluation], ["Resume", resumeMarkdown], ["Cover letter", coverLetterMarkdown]];
+  return <section className="job-page">
+    <header className="job-head">
+      <div className="job-head-text">
+        <p className="job-head-company">{job.company ?? displayJobName(job.name)}</p>
+        <h1>{job.title ?? "Role not recorded"}</h1>
+        <div className="job-head-meta">
+          <label className={`tracker-select is-${trackerStatus}`}><span className="sr-only">Application status</span><select value={trackerStatus} onChange={(event) => void onUpdateTracker({ status: event.target.value as TrackerStatus })}>{TRACKER_STATUSES.map((value) => <option key={value} value={value}>{TRACKER_LABELS[value]}</option>)}</select></label>
+          {job.applicationStage && <StatusPill value={job.applicationStage} />}
+          {job.rating !== null && <span><strong className="tabular">{job.rating.toFixed(1)}</strong> of 5 fit</span>}
+          {job.location && <span>{job.location}</span>}
+          <span>Added {formatJobDate(job.createdAt)}</span>
+        </div>
+      </div>
+      <div className="job-head-actions"><JobPdfExportButton resumePath={resumeMarkdown?.relativePath ?? null} coverLetterPath={coverLetterMarkdown?.relativePath ?? null} /></div>
+    </header>
+    <nav className="workspace-tabs" role="tablist" aria-label="Job sections">{tabs.map(([value, label, count]) => <button key={value} role="tab" aria-selected={activeTab === value} className={activeTab === value ? "is-active" : ""} onClick={() => onNavigate(job.id, value, value === "interview" ? activeRoundId : undefined)}>{label}{count !== null && <span>{count}</span>}</button>)}</nav>
+    {activeTab === "overview" && <div className="job-overview">
+      {!dismissedSuggestion && suggestsInterviewing(job.tracker, rounds.length > 0 || Boolean(job.interviewRoundLabel)) && <div className="suggestion" role="status">
+        <p>This job has interview prep. Mark it as interviewing?</p>
+        <button className="btn-quiet" onClick={() => void onUpdateTracker({ status: "interviewing" })}>Mark as interviewing</button>
+        <button className="btn-link" onClick={() => setDismissedSuggestion(true)}>Not now</button>
+      </div>}
+      {next && <section className="next-step" aria-labelledby="next-step-title">
+        <div><p className="next-step-label" id="next-step-title">Next step</p><h2>{next.label}</h2><p>Sends this request to Agy for {job.company ?? displayJobName(job.name)}, {job.title ?? "this job"}.</p></div>
+        <div className="next-step-actions"><button className="btn-primary" onClick={() => onInsertPrompt(next)}>Send to Agy</button>{more.slice(0, 3).map((action) => <button key={action.id} className="btn-quiet" onClick={() => onInsertPrompt(action)}>{action.label}</button>)}</div>
+      </section>}
+      <div className="overview-grid">
+        <section className="overview-panel">
+          <h2>Fit</h2>
+          {job.rating === null ? <p className="muted">Not rated yet. Ask Agy to evaluate this job.</p> : <>
+            <p className="fit-score"><strong className="tabular">{job.rating.toFixed(1)}</strong> of 5{job.ratingDecision ? `, ${job.ratingDecision}` : ""}</p>
+            <div className="fit-bar" aria-hidden="true"><span style={{ width: `${(job.rating / 5) * 100}%` }} /></div>
+            {job.ratingHighlights.length > 0 && <><h3>Strengths</h3><ul className="tick-list is-good">{job.ratingHighlights.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul></>}
+            {job.ratingGaps.some((item) => !/^none\b/i.test(item)) && <><h3>Gaps</h3><ul className="tick-list is-gap">{job.ratingGaps.filter((item) => !/^none\b/i.test(item)).slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul></>}
+            {evaluation && <button className="btn-link" onClick={() => onSelect(evaluation.relativePath)}>Read the full evaluation</button>}
+          </>}
+        </section>
+        <TrackerPanel job={job} onUpdate={onUpdateTracker} />
+        <section className="overview-panel">
+          <h2>Documents</h2>
+          <ul className="doc-list">{documents.map(([label, file]) => <li key={label}>{file ? <button className="btn-link" onClick={() => onSelect(file.relativePath)}>{label}</button> : <span className="muted">{label}</span>}<span className={file ? "doc-state is-ready" : "doc-state"}>{file ? "Ready" : "Not yet"}</span></li>)}</ul>
+          <button className="btn-link" onClick={() => onNavigate(job.id, "application")}>Check the application</button>
+        </section>
+        <section className="overview-panel">
+          <h2>Interviews</h2>
+          {interviewLoading ? <p className="muted">Reading rounds…</p> : rounds.length ? <ol className="round-list">{rounds.map((round) => <li key={round.id}><button className="btn-link" onClick={() => navigateRound(round.id)}>{round.label}</button><span className={`round-state is-${round.status}`}>{round.scheduledDate ?? round.status.replace("_", " ")}</span></li>)}</ol> : <p className="muted">No rounds yet. When you get an interview, prepare it from the Interview tab.</p>}
+        </section>
+      </div>
+    </div>}
+    {activeTab === "application" && <div className="dashboard-stack"><ApplicationHealth job={job} files={applicationFiles} status={status} loading={applicationLoading} onStatus={onStatus} /><section className="context-block"><h2>Application files</h2><ArtifactTable files={applicationFiles} onSelect={onSelect} empty="No application documents found." /></section></div>}
+    {activeTab === "interview" && <InterviewView job={job} overview={overview} loading={interviewLoading} initialRoundId={activeRoundId} onRoundChange={navigateRound} onOpenFile={(path) => onSelect(path)} onInsertPrompt={(text, label) => onInsertPrompt({ prompt: text, label })} />}
+    {activeTab === "files" && <section className="context-block"><h2>All files</h2><ArtifactTable files={files} onSelect={onSelect} empty="This job folder is empty." /></section>}
   </section>;
 }
 
 function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: string | null; coverLetterPath: string | null }) {
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
-  const [textSize, setTextSize] = useState<PdfTextSize>("auto");
+  const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
   const missing = !resumePath || !coverLetterPath;
   async function exportApplicationPdfs() {
     if (missing || !resumePath || !coverLetterPath) return;
@@ -769,93 +1010,12 @@ function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: strin
   return <span className="job-pdf-export"><PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} /><button className="export-button" disabled={missing || state === "working"} title={missing ? "Both a resume Markdown file and cover_letter.md are required" : "Create PDFs for this job's resume and cover letter"} onClick={() => void exportApplicationPdfs()}>{state === "working" ? "Creating PDFs…" : "Create PDFs"}</button>{message && <small className={`export-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</small>}</span>;
 }
 
-function CollapsibleDashboardSection({ eyebrow, title, count, children, open = true, tone = "default" }: { eyebrow: string; title: string; count?: string; children: React.ReactNode; open?: boolean; tone?: "default" | "warning" }) {
-  return <details className={`dashboard-section dashboard-collapsible is-${tone}`} open={open}>
-    <summary><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div><span className="dashboard-section-meta">{count}<b aria-hidden="true">⌄</b></span></summary>
-    <div className="dashboard-section-body">{children}</div>
-  </details>;
-}
 
-function InterviewDashboard({ job, overview, loading, onSelect, initialRoundId, onRoundChange, focusMode = false }: { job: JobFolderSummary; overview: InterviewOverview | null; loading: boolean; onSelect: (path: string, anchor?: string) => void; initialRoundId?: string; onRoundChange?: (roundId: string) => void; focusMode?: boolean }) {
-  const [selectedRoundId, setSelectedRoundId] = useState(initialRoundId ?? overview?.currentRoundId ?? overview?.rounds[0]?.id ?? "");
-  const [refreshedOverview, setRefreshedOverview] = useState<InterviewOverview | null>(null);
-  const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "refreshed" | "copied" | "error">("idle");
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
-  useEffect(() => { setRefreshedOverview(null); setSelectedRoundId(initialRoundId ?? overview?.currentRoundId ?? overview?.rounds[0]?.id ?? ""); }, [job.id, initialRoundId, overview?.currentRoundId]);
-  useEffect(() => {
-    if (!query.trim()) { setResults([]); setSearching(false); return; }
-    let cancelled = false;
-    setSearching(true);
-    const timer = window.setTimeout(() => { void window.sensei.search.query({ query, limit: 100 }).then((response) => { if (!cancelled) setResults(response.results.filter((result) => result.jobId === job.id)); }).catch(() => { if (!cancelled) setResults([]); }).finally(() => { if (!cancelled) setSearching(false); }); }, 140);
-    return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [query, job.id]);
-  if (loading) return <div className="dashboard-loading">Reading interview preparation…</div>;
-  const activeOverview = refreshedOverview ?? overview;
-  if (!activeOverview?.rounds.length) return <div className="dashboard-empty"><h2>No interview preparation yet</h2><p>Use Job Actions to prepare the first recruiter or hiring-manager round.</p></div>;
-  const round = activeOverview.rounds.find((candidate) => candidate.id === selectedRoundId) ?? activeOverview.rounds[0];
-  const brief = round.dashboardBrief;
-  const artifacts = Object.entries(round.artifactPaths).filter((entry): entry is [string, string] => Boolean(entry[1]));
-  const grouped = [
-    ["Questions", results.filter((result) => /question|prep/i.test(result.relativePath ?? ""))],
-    ["Research", results.filter((result) => /research/i.test(result.relativePath ?? ""))],
-    ["Challenges", results.filter((result) => /challenge|practice|lab/i.test(result.relativePath ?? ""))],
-    ["Notes and transcripts", results.filter((result) => /note|transcript|debrief/i.test(result.relativePath ?? ""))],
-    ["Other interview material", results.filter((result) => !/question|prep|research|challenge|practice|lab|note|transcript|debrief/i.test(result.relativePath ?? ""))],
-  ] as Array<[string, SearchResult[]]>;
-  function changeRound(roundId: string) {
-    setSelectedRoundId(roundId);
-    onRoundChange?.(roundId);
-  }
-  async function refreshFromFiles() {
-    setRefreshState("refreshing");
-    try {
-      const next = await window.sensei.interviews.refreshDashboard(job.id);
-      setRefreshedOverview(next);
-      setRefreshState("refreshed");
-    } catch { setRefreshState("error"); }
-  }
-  async function copyResearchPrompt() {
-    const prompt = `Refresh ${job.company ?? job.id} ${round.label} interview dashboard using the JobSensei interview pipeline. Update prep, question bank, company research with cited current internet sources, and dashboardBrief references without changing application artifacts.`;
-    try { await window.sensei.app.copyText(prompt); setRefreshState("copied"); }
-    catch { setRefreshState("error"); }
-  }
-  const readiness = brief ? Math.min(100, Math.round((brief.availableArtifactCount / Math.max(brief.expectedArtifactCount, 1)) * 100)) : 0;
-  const focusReferences = brief?.references.length ? brief.references : [...(brief?.quickAnswers ?? []), ...(brief?.priorityQuestions ?? []), ...(brief?.technicalTopics ?? []), ...(brief?.companyFacts ?? []), ...(brief?.questionsToAsk ?? []), ...(brief?.cautions ?? [])];
-  return <section className={`interview-dashboard ${focusMode ? "is-focus-mode" : ""}`}>
-    <div className="interview-dashboard-header"><div><span className="eyebrow">INTERVIEW DASHBOARD</span><h2>{round.label}</h2><p>{[round.interviewer, round.format].filter(Boolean).join(" · ") || "Preparation workspace"}</p></div><div className="interview-dashboard-actions"><label><span>Round</span><select value={round.id} onChange={(event) => changeRound(event.target.value)}>{activeOverview.rounds.map((candidate, index) => <option value={candidate.id} key={candidate.id}>Round {index + 1} · {candidate.label}</option>)}</select></label><button onClick={() => void refreshFromFiles()} disabled={refreshState === "refreshing"}>{refreshState === "refreshing" ? "Refreshing…" : refreshState === "refreshed" ? "Refreshed" : "Refresh from files"}</button><button onClick={() => void copyResearchPrompt()}>{refreshState === "copied" ? "Prompt copied" : "Update with research"}</button>{!focusMode && <button onClick={() => void window.sensei.interviews.openWorkspaceWindow(job.id, round.id)}>Focus mode</button>}</div></div>
-    <div className="interview-readiness-grid" aria-label="Interview readiness summary">
-      <span><small>PREPARATION</small><strong>{readiness}% ready</strong><em>{brief?.availableArtifactCount ?? artifacts.length} linked resources</em></span>
-      <span><small>ROUND STATUS</small><strong>{round.status.replaceAll("_", " ")}</strong><em>{stageLabel(round.stage)}</em></span>
-      <span><small>SCHEDULE</small><strong>{round.scheduledDate ?? "Not scheduled"}</strong><em>{round.format ?? "Format not recorded"}</em></span>
-      <span><small>DEBRIEF</small><strong>{round.artifactPaths.debriefAnalysis ? "Analyzed" : round.debriefSourcePaths.length ? "Sources ready" : "Not linked"}</strong><em>{round.debriefSourcePaths.length} source file{round.debriefSourcePaths.length === 1 ? "" : "s"}</em></span>
-    </div>
-    {activeOverview.knownProcess.length > 0 && <div className="interview-process" aria-label="Known interview process"><span>PROCESS</span>{activeOverview.knownProcess.map((step, index) => <button type="button" className={step.stage === round.stage ? "is-current" : ""} key={`${step.stage}-${index}`} onClick={() => { const matching = activeOverview.rounds.find((candidate) => candidate.stage === step.stage); if (matching) changeRound(matching.id); }}><b>{index + 1}</b>{step.label}<small>{step.sourceType.replaceAll("_", " ")}</small></button>)}</div>}
-    {focusMode && <section className="focus-reference-board" aria-label="Interview quick reference"><div className="focus-reference-heading"><div><span className="eyebrow">QUICK REFERENCE</span><h3>{focusReferences.length} prepared references</h3></div><span>{readiness}% ready</span></div><div className="focus-quick-grid">{focusReferences.map((item, index) => <button key={`${item.sourcePath}-${item.title}-${index}`} onClick={() => onSelect(item.sourcePath, item.anchor ?? item.title)}><small>{item.category.replaceAll("_", " ")}</small><strong>{item.title}</strong><p>{item.text}</p><em>Open source →</em></button>)}</div></section>}
-    <label className="interview-query"><span aria-hidden="true">⌕</span><div><strong>Search interview material</strong><small>Questions, stories, research, challenges, notes, and transcripts</small></div><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Try “why this company”, “prioritization”, or “trade-offs”…" aria-label="Search this job's interview material" /></label>
-    {!query.trim() ? <div className="interview-dashboard-stack">
-      <CollapsibleDashboardSection eyebrow="READY ANSWERS" title="Career story and motivation" count={`${brief?.quickAnswers.length ?? 0} cues`} open={false}><InterviewBriefList items={brief?.quickAnswers ?? []} onSelect={onSelect} empty="Open prep to review your introduction, motivation, and career story." /></CollapsibleDashboardSection>
-      <CollapsibleDashboardSection eyebrow="LIKELY QUESTIONS" title="Primary questions for this round" count={`${brief?.priorityQuestions.length ?? 0} prepared`} open={false}><InterviewBriefList items={brief?.priorityQuestions ?? []} onSelect={onSelect} empty="No primary questions could be summarized. Open the question bank directly." numbered /></CollapsibleDashboardSection>
-      {Boolean(brief?.technicalTopics.length) && <CollapsibleDashboardSection eyebrow="PRACTICAL & DOMAIN FOCUS" title="Concepts and scenarios to keep ready" count={`${brief?.technicalTopics.length ?? 0} topics`} open={false}><InterviewBriefList items={brief?.technicalTopics ?? []} onSelect={onSelect} empty="No practical or domain topics linked." compact /></CollapsibleDashboardSection>}
-      <div className="interview-dashboard-columns">
-        <CollapsibleDashboardSection eyebrow="COMPANY CONTEXT" title="Facts worth remembering" count={`${brief?.companyFacts.length ?? 0} notes`} open={false}><InterviewBriefList items={brief?.companyFacts ?? []} onSelect={onSelect} empty="Open research for company and role context." compact /></CollapsibleDashboardSection>
-        <CollapsibleDashboardSection eyebrow="REVERSE QUESTIONS" title="Questions to ask them" count={`${brief?.questionsToAsk.length ?? 0} questions`} open={false}><InterviewBriefList items={brief?.questionsToAsk ?? []} onSelect={onSelect} empty="Open the question bank for your prepared reverse questions." numbered compact /></CollapsibleDashboardSection>
-      </div>
-      {Boolean(brief?.cautions.length) && <CollapsibleDashboardSection eyebrow="TRUTH AND SCOPE" title="Claims to qualify or avoid" count={`${brief?.cautions.length ?? 0} cautions`} open={false} tone="warning"><InterviewBriefList items={brief?.cautions ?? []} onSelect={onSelect} empty="No cautions were extracted." compact /></CollapsibleDashboardSection>}
-      <CollapsibleDashboardSection eyebrow="ROUND LIBRARY" title="Preparation sources" count={`${artifacts.length} linked files`} open={false}><div className="interview-source-grid">{artifacts.map(([kind, path]) => <button key={path} onClick={() => onSelect(path)}><span>{artifactLabel(kind)}</span><strong>{path.split("/").at(-1)}</strong><small>{path}</small><em>Open →</em></button>)}</div>{!artifacts.length && <p className="dashboard-empty-copy">No files are linked to this round.</p>}</CollapsibleDashboardSection>
-    </div> : <div className="interview-results">{searching && <p>Searching this job…</p>}{!searching && results.length === 0 && <div className="dashboard-empty"><h2>No matching interview notes</h2><p>Try a shorter term or search the full workspace with ⌘K.</p></div>}{grouped.map(([label, group]) => group.length ? <section key={label}><h3>{label}<span>{group.length}</span></h3>{group.map((result) => <button key={result.id} onClick={() => result.relativePath && onSelect(result.relativePath)}><strong>{result.title}</strong><small>{result.relativePath}</small>{result.excerpt && <p>{result.excerpt}</p>}</button>)}</section> : null)}</div>}
-  </section>;
-}
 
-function InterviewBriefList({ items, onSelect, empty, numbered = false, compact = false }: { items: InterviewDashboardItem[]; onSelect: (path: string, anchor?: string) => void; empty: string; numbered?: boolean; compact?: boolean }) {
-  if (!items.length) return <p className="dashboard-empty-copy">{empty}</p>;
-  return <div className={`interview-brief-list ${compact ? "is-compact" : ""}`}>{items.map((item, index) => <article key={`${item.sourcePath}-${item.title}-${index}`}><span className="interview-brief-index">{numbered ? index + 1 : "•"}</span><div><h3>{item.title}</h3><p>{item.text}</p><button onClick={() => onSelect(item.sourcePath, item.anchor ?? item.title)}>Jump to source</button></div></article>)}</div>;
-}
 
 function ArtifactTable({ files, onSelect, empty }: { files: FileTreeNode[]; onSelect: (path: string) => void; empty: string }) {
   if (!files.length) return <p className="dashboard-empty-copy">{empty}</p>;
-  return <div className="artifact-table" role="table" aria-label="Workspace files"><div className="artifact-table-row is-heading" role="row"><span role="columnheader">Document</span><span role="columnheader">Type</span><span role="columnheader">Updated</span><span /></div>{files.map((file) => <button className="artifact-table-row" role="row" key={file.relativePath} onClick={() => onSelect(file.relativePath)}><span role="cell"><strong>{displayJobName(file.name.replace(/\.[^.]+$/, ""))}</strong><small>{file.relativePath}</small></span><span role="cell">{fileTypeLabel(file)}</span><span role="cell">{file.modifiedAt ? formatRelativeDate(file.modifiedAt) : "—"}</span><span role="cell">Open →</span></button>)}</div>;
+  return <div className="artifact-table" role="table" aria-label="Workspace files"><div className="artifact-table-row is-heading" role="row"><span role="columnheader">Document</span><span role="columnheader">Type</span><span role="columnheader">Updated</span><span /></div>{files.map((file) => <button className="artifact-table-row" role="row" key={file.relativePath} onClick={() => onSelect(file.relativePath)}><span role="cell"><strong>{displayJobName(file.name.replace(/\.[^.]+$/, ""))}</strong><small>{file.relativePath}</small></span><span role="cell">{fileTypeLabel(file)}</span><span role="cell">{file.modifiedAt ? formatRelativeDate(file.modifiedAt) : "—"}</span><span role="cell">Open</span></button>)}</div>;
 }
 
 function fileTypeLabel(file: FileTreeNode): string {
@@ -882,10 +1042,6 @@ function formatJobDate(value: string): string {
   return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
 }
 
-function formatEmailDate(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
 
 function ApplicationHealth({ job, files, status, loading, onStatus }: { job: JobFolderSummary; files: FileTreeNode[]; status: ApplicationStatus | null; loading: boolean; onStatus: (status: ApplicationStatus) => void }) {
   const jobId = job.id;
@@ -932,28 +1088,40 @@ function ApplicationHealth({ job, files, status, loading, onStatus }: { job: Job
         : lastReport.issues.some((issue) => issue.severity === "warning")
           ? "Review warnings"
           : "Validated";
-  return <section className={`application-health is-${status.state}`} aria-label="Application health">
-    <div className="application-health-heading">
-      <div><span className="eyebrow">APPLICATION HEALTH</span><strong>{status.state.replaceAll("_", " ")}</strong></div>
-      <button className={lastReport ? `is-${lastReport.status}` : ""} disabled={validating} onClick={() => void validate()}>{validationLabel}</button>
-    </div>
-    <div className="application-rating-summary">
-      <div className="application-score"><span>EVIDENCE-CALIBRATED FIT</span><strong>{job.rating === null ? "—" : job.rating.toFixed(1)}<small>{job.rating === null ? "Not recorded" : " / 5"}</small></strong><em>{job.ratingDecision ?? "Direct 100% · strong transferable 75% · adjacent 55%"}</em></div>
-      <div className="application-next-action"><span>NEXT RECOMMENDED ACTION</span><strong>{recommendedAction}</strong><small>{job.ratingConfidence ? `Confidence: ${job.ratingConfidence}` : "Based on the saved evaluation and artifact state"}</small></div>
-    </div>
-    <div className="application-document-status" aria-label="Application documents">
-      <span className={hasEvaluation ? "is-ready" : ""}><b>{hasEvaluation ? "✓" : "○"}</b> Evaluation</span>
-      <span className={hasResume ? "is-ready" : ""}><b>{hasResume ? "✓" : "○"}</b> Resume</span>
-      <span className={hasCoverLetter ? "is-ready" : ""}><b>{hasCoverLetter ? "✓" : "○"}</b> Cover letter</span>
-    </div>
+  const stateCopy: Record<ApplicationStatus["state"], string> = {
+    not_started: "Not started. Ask Agy to evaluate this job first.",
+    snapshot_ready: "Evidence gathered. Drafts are not written yet.",
+    matched: "Evaluated. Drafts are not written yet.",
+    drafted: "Drafted. Run a check before you send it.",
+    validated: "Checked and ready to send.",
+    stale: "Files changed since the last check. Run the check again.",
+    invalid: "The last check found problems to fix.",
+  };
+  return <section className={`app-check is-${status.state}`} aria-label="Application check">
+    <header className="app-check-head">
+      <div><h2>Application check</h2><p>{stateCopy[status.state]}</p></div>
+      <button className="btn-primary" disabled={validating} onClick={() => void validate()}>{validating ? "Checking…" : validationLabel === "Validate application" ? "Run check" : validationLabel}</button>
+    </header>
+    {message && <p className="app-check-message" role="status" aria-live="polite">{message}</p>}
+    <ul className="app-check-docs" aria-label="Application documents">
+      <li className={hasEvaluation ? "is-ready" : ""}><span aria-hidden="true">{hasEvaluation ? "✓" : "○"}</span>Evaluation</li>
+      <li className={hasResume ? "is-ready" : ""}><span aria-hidden="true">{hasResume ? "✓" : "○"}</span>Resume</li>
+      <li className={hasCoverLetter ? "is-ready" : ""}><span aria-hidden="true">{hasCoverLetter ? "✓" : "○"}</span>Cover letter</li>
+    </ul>
+    <p className="app-check-next"><strong>Next:</strong> {recommendedAction}.{job.rating !== null && <> Fit {job.rating.toFixed(1)} of 5{job.ratingConfidence ? `, ${job.ratingConfidence} confidence` : ""}.</>}</p>
+    {issues.length > 0 && <details className="application-issues" open={issuesOpen} onToggle={(event) => setIssuesOpen(event.currentTarget.open)}><summary>{plural(issues.filter((issue) => issue.severity === "error").length, "error")} and {plural(issues.filter((issue) => issue.severity === "warning").length, "warning")} from the last check</summary>{issues.map((issue, index) => <div className={`application-issue is-${issue.severity}`} key={`${issue.code}-${issue.artifact}-${index}`}><strong>{issue.severity === "warning" ? "Warning" : "Needs review"}</strong><span>{issue.code} · {issue.artifact}</span><p>{issue.message}</p>{issue.explanation && <div className="application-issue-explanation"><span><b>Sentence</b>{issue.explanation.sentence ?? "Unavailable"}</span><span><b>Source</b>{issue.explanation.sources.length ? issue.explanation.sources.map((source) => <span className="application-issue-source" key={`${source.evidenceId}-${source.sourcePath}`}><code>{source.evidenceId}</code> · <code>{source.sourcePath}</code><em>{source.claim}</em></span>) : "Unavailable"}</span></div>}<small>{issue.repairHint}</small></div>)}</details>}
+    {(job.ratingHighlights.length > 0 || job.ratingGaps.length > 0) && <details className="application-fit-details"><summary>Why this rating <span>{job.ratingHighlights.length} strengths · {job.ratingGaps.length} gaps</span></summary><div><section><h3>Strongest alignment</h3>{job.ratingHighlights.length ? <ul>{job.ratingHighlights.map((item) => <li key={item}>{item}</li>)}</ul> : <p>No direct-match summary was found.</p>}</section><section><h3>Gaps and risks</h3>{job.ratingGaps.length ? <ul>{job.ratingGaps.map((item) => <li key={item}>{item}</li>)}</ul> : <p>No material gaps were listed.</p>}</section></div></details>}
+    {(lastReport?.ats?.missingFields.length ?? 0) > 0 && <p className="app-check-message">ATS fields to review: {lastReport?.ats?.missingFields.join(", ")}</p>}
+    <details className="app-check-details"><summary>Pipeline details</summary>
     <div className="application-health-facts">
-      <span><small>SNAPSHOT</small>{status.snapshotConsistent ? "Pinned" : "Mismatch"}</span>
-      <span><small>MANIFEST</small>{status.manifestCurrent ? "Current" : "Stale"}</span>
-      <span><small>BASE RESUME</small>{footprint ? `${footprint.format.toUpperCase()} · ${footprint.status}` : "Not profiled"}</span>
-      <span><small>TEMPLATE LOCK</small>{status.templateIntegrity.replaceAll("_", " ")}</span>
-      <span><small>RESUME DENSITY</small>{status.resumeBulletCount === null ? "Not drafted" : `${status.resumeBulletCount} bullets · ${status.currentEmployerBulletCount ?? 0} current role`}</span>
-      <span><small>RECENT WORK</small>{status.recentCurrentEmployerBulletCount === null ? "Not audited" : `${status.recentCurrentEmployerBulletCount} evidence-backed`}</span>
-      <span><small>WORD TARGET</small>{footprint && footprint.targetWordMin !== null && footprint.targetWordMax !== null ? `${footprint.targetWordMin}-${footprint.targetWordMax}` : "Unavailable"}</span>
+      <span><small>Snapshot</small>{status.snapshotConsistent ? "Pinned" : "Mismatch"}</span>
+      <span><small>Manifest</small>{status.manifestCurrent ? "Current" : "Stale"}</span>
+      <span><small>Base resume</small>{footprint ? `${footprint.format.toUpperCase()}, ${footprint.status}` : "Not profiled"}</span>
+      <span><small>Template lock</small>{status.templateIntegrity.replaceAll("_", " ")}</span>
+      <span><small>Resume density</small>{status.resumeBulletCount === null ? "Not drafted" : `${status.resumeBulletCount} bullets, ${status.currentEmployerBulletCount ?? 0} in current role`}</span>
+      <span><small>Recent work</small>{status.recentCurrentEmployerBulletCount === null ? "Not audited" : `${status.recentCurrentEmployerBulletCount} evidence-backed`}</span>
+      <span><small>Word target</small>{footprint && footprint.targetWordMin !== null && footprint.targetWordMax !== null ? `${footprint.targetWordMin}-${footprint.targetWordMax}` : "Unavailable"}</span>
+      <span><small>Fit credit</small>{`Direct ${FIT_CLASSIFICATION_CREDIT.direct * 100}%, strong transferable ${FIT_CLASSIFICATION_CREDIT.strong_transferable * 100}%, adjacent ${FIT_CLASSIFICATION_CREDIT.adjacent_transferable * 100}%`}</span>
     </div>
     {(() => {
       const report = lastReport ?? status.validation;
@@ -964,71 +1132,14 @@ function ApplicationHealth({ job, files, status, loading, onStatus }: { job: Job
       const transferable = keywordClasses.filter((item) => item.classification === "transferable").length;
       const unsupported = keywordClasses.filter((item) => item.classification === "unsupported").length;
       return <div className="application-health-facts application-ats-facts">
-        {ats && <span><small>ATS PDF CHECK</small>{ats.status === "passed" ? "Readable · fields found" : ats.status === "not_exported" ? "Not exported" : ats.status === "unavailable" ? "Unavailable" : `${ats.missingFields.length} fields to review`}</span>}
-        {keywordClasses.length > 0 && <span><small>KEYWORD CLASS</small>{supported} supported · {transferable} transferable · {unsupported} unsupported</span>}
+        {ats && <span><small>ATS PDF check</small>{ats.status === "passed" ? "Readable · fields found" : ats.status === "not_exported" ? "Not exported" : ats.status === "unavailable" ? "Unavailable" : `${ats.missingFields.length} fields to review`}</span>}
+        {keywordClasses.length > 0 && <span><small>Keyword class</small>{supported} supported · {transferable} transferable · {unsupported} unsupported</span>}
       </div>;
     })()}
-    {(lastReport?.ats?.missingFields.length ?? 0) > 0 && <p className="application-health-message">ATS fields to review: {lastReport?.ats?.missingFields.join(", ")}</p>}
-    {(job.ratingHighlights.length > 0 || job.ratingGaps.length > 0) && <details className="application-fit-details"><summary>Why this rating <span>{job.ratingHighlights.length} strengths · {job.ratingGaps.length} gaps</span></summary><div><section><h3>Strongest alignment</h3>{job.ratingHighlights.length ? <ul>{job.ratingHighlights.map((item) => <li key={item}>{item}</li>)}</ul> : <p>No direct-match summary was found.</p>}</section><section><h3>Gaps and risks</h3>{job.ratingGaps.length ? <ul>{job.ratingGaps.map((item) => <li key={item}>{item}</li>)}</ul> : <p>No material gaps were listed.</p>}</section></div></details>}
-    {issues.length > 0 && <details className="application-issues" open={issuesOpen} onToggle={(event) => setIssuesOpen(event.currentTarget.open)}><summary>{issues.filter((issue) => issue.severity === "error").length} errors · {issues.filter((issue) => issue.severity === "warning").length} warnings</summary>{issues.map((issue, index) => <div className={`application-issue is-${issue.severity}`} key={`${issue.code}-${issue.artifact}-${index}`}><strong>{issue.severity === "warning" ? "Warning" : "Needs review"}</strong><span>{issue.code} · {issue.artifact}</span><p>{issue.message}</p>{issue.explanation && <div className="application-issue-explanation"><span><b>Sentence</b>{issue.explanation.sentence ?? "Unavailable"}</span><span><b>Source</b>{issue.explanation.sources.length ? issue.explanation.sources.map((source) => <span className="application-issue-source" key={`${source.evidenceId}-${source.sourcePath}`}><code>{source.evidenceId}</code> · <code>{source.sourcePath}</code><em>{source.claim}</em></span>) : "Unavailable"}</span></div>}<small>{issue.repairHint}</small></div>)}</details>}
-    {message && <p className="application-health-message" role="status" aria-live="polite">{message}</p>}
+    </details>
   </section>;
 }
 
-function InterviewGuide({ jobId, overview, loading, activeRoundId, onSelect, onRoundChange, onOpenInterview }: { jobId: string; overview: InterviewOverview | null; loading: boolean; activeRoundId?: string; onSelect: (path: string) => void; onRoundChange: (roundId: string) => void; onOpenInterview: (roundId: string) => void }) {
-  const [copied, setCopied] = useState("");
-  const [copyError, setCopyError] = useState("");
-  const [selectedRoundId, setSelectedRoundId] = useState(activeRoundId ?? overview?.currentRoundId ?? overview?.rounds.at(-1)?.id ?? "");
-  useEffect(() => setSelectedRoundId(activeRoundId ?? overview?.currentRoundId ?? overview?.rounds.at(-1)?.id ?? ""), [jobId, activeRoundId, overview?.currentRoundId]);
-  if (loading) return <section className="interview-guide is-loading"><span>Reading interview status…</span></section>;
-  if (!overview || !overview.rounds.length) return null;
-  const current = overview.rounds.find((round) => round.id === selectedRoundId) ?? overview.rounds.find((round) => round.id === overview.currentRoundId) ?? overview.rounds.at(-1)!;
-  const currentIndex = Math.max(0, overview.rounds.findIndex((round) => round.id === current.id));
-  const currentStepIndex = overview.knownProcess.findIndex((step) => step.stage === current.stage || ("roundId" in step && step.roundId === current.id));
-  const candidateSteps = currentStepIndex >= 0 ? overview.knownProcess.slice(currentStepIndex + 1) : overview.knownProcess;
-  const next = candidateSteps.find((step) => !overview.rounds.some((round) => round.stage === step.stage || ("roundId" in step && step.roundId === round.id)))
-    ?? overview.knownProcess.find((step) => !overview.rounds.some((round) => round.stage === step.stage || ("roundId" in step && step.roundId === round.id)));
-  const company = promptCompany(overview.company ?? overview.jobId);
-  const prompts = [
-    ...(current.debriefSourcePaths.length && !current.artifactPaths.debriefAnalysis ? [`${company} debrief`] : []),
-    ...(next ? [`Prepare ${company} ${stageLabel(next.stage).toLowerCase()} interview`] : []),
-    `Start ${company} ${stageLabel(current.stage).toLowerCase()} mock`,
-  ];
-  const artifacts = Object.entries(current.artifactPaths).filter((entry): entry is [string, string] => Boolean(entry[1]));
-  async function copyPrompt(prompt: string) {
-    setCopyError("");
-    try {
-      await window.sensei.app.copyText(prompt);
-      setCopied(prompt);
-      window.setTimeout(() => setCopied((value) => value === prompt ? "" : value), 1800);
-    } catch (caught) {
-      setCopyError(messageOf(caught, "The prompt could not be copied."));
-    }
-  }
-  return <section className="interview-guide" aria-label="Interview workspace">
-    <div className="interview-guide-heading"><div><span className="eyebrow">INTERVIEW WORKSPACE</span><strong>Round {current.sequence} · {current.label}</strong></div><span className={`round-status is-${current.status}`}>{current.status.replaceAll("_", " ")}</span></div>
-    <div className="interview-round-navigator" aria-label="Interview round selector">
-      <div className="interview-round-navigator-label"><span className="eyebrow">ACTIVE ROUND</span><small>{currentIndex + 1} OF {overview.rounds.length}</small></div>
-      <button className="round-nav-arrow" type="button" aria-label="Previous interview round" disabled={currentIndex === 0} onClick={() => { const roundId = overview.rounds[currentIndex - 1]?.id ?? current.id; setSelectedRoundId(roundId); onRoundChange(roundId); }}>‹</button>
-      <label className="interview-round-select"><span className="sr-only">Select interview round</span><select value={current.id} onChange={(event) => { setSelectedRoundId(event.target.value); onRoundChange(event.target.value); }}>{overview.rounds.map((round, index) => <option key={round.id} value={round.id}>Round {index + 1} · {round.label}</option>)}</select><span className="round-nav-stage">{stageLabel(current.stage)}</span></label>
-      <button className="round-nav-arrow" type="button" aria-label="Next interview round" disabled={currentIndex === overview.rounds.length - 1} onClick={() => { const roundId = overview.rounds[currentIndex + 1]?.id ?? current.id; setSelectedRoundId(roundId); onRoundChange(roundId); }}>›</button>
-    </div>
-    <div className="interview-facts">
-      <span><small>STAGE</small>{stageLabel(current.stage)}</span>
-      <span><small>INTERVIEWER</small>{current.interviewer ?? "Not specified"}</span>
-      <span><small>DATE / FORMAT</small>{[current.scheduledDate, current.format].filter(Boolean).join(" · ") || "Not specified"}</span>
-      <span><small>DEBRIEF</small>{current.artifactPaths.debriefAnalysis ? "Analyzed" : current.debriefSourcePaths.length ? `${current.debriefSourcePaths.length} source file${current.debriefSourcePaths.length === 1 ? "" : "s"} ready` : "Not linked"}</span>
-    </div>
-    {next && <p className="interview-next"><span>KNOWN NEXT ROUND</span><strong>{next.label}{next.interviewer ? ` · ${next.interviewer}` : ""}</strong><small>{next.sourceType.replaceAll("_", " ")}</small></p>}
-    <div className="interview-guide-actions">
-      {artifacts.map(([name, path]) => <button key={path} onClick={() => onSelect(path)}>{artifactLabel(name)}</button>)}
-      {prompts.map((prompt) => <span className="interview-prompt-pair" key={prompt}><button className="prompt-shortcut" onClick={() => void copyPrompt(prompt)} title={`Copy: ${prompt}`}>{copied === prompt ? "Copied" : prompt}</button></span>)}
-      <button className="open-interview-dashboard" onClick={() => onOpenInterview(current.id)}>Open interview workspace</button>
-    </div>
-    {copyError && <p className="inline-error" role="alert">{copyError}</p>}
-    {overview.isLegacy && <p className="legacy-note">Legacy interview files are shown without moving or rewriting them.</p>}
-  </section>;
-}
 
 function InterviewWorkspaceStandalone({ jobId, roundId }: { jobId: string; roundId: string }) {
   const [overview, setOverview] = useState<InterviewOverview | null>(null);
@@ -1061,41 +1172,17 @@ function InterviewWorkspaceStandalone({ jobId, roundId }: { jobId: string; round
   }
 
   return <main className="standalone-shell">
-    <header className="topbar standalone-topbar"><div className="wordmark"><span className="wordmark-mark">S</span><span>Sensei</span></div><nav className="focus-navigation" aria-label="Interview workspace navigation"><button onClick={() => setPreview(null)} disabled={!preview}>Dashboard</button></nav><div className="standalone-title"><span className="eyebrow">INTERVIEW WORKSPACE</span><strong>{job?.company ?? overview?.company ?? displayJobName(jobId)}</strong><small>{activeRound?.label ?? job?.title ?? "Interview preparation"}</small></div><button className="theme-toggle" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "Day" : "Night"}</button></header>
-    <section className="standalone-workspace">{error && <p className="inline-error">{error}</p>}{job && overview && activeRound ? preview ? <section className="viewer-panel standalone-document"><div className="viewer-header"><div><span className="eyebrow">INTERVIEW MATERIAL</span><h1>{preview.name}</h1></div><div className="viewer-header-actions"><span className="label source">{preview.fileType.toUpperCase()}</span><button className="viewer-close" onClick={() => setPreview(null)} aria-label="Return to interview dashboard">×</button></div></div><DocumentView preview={preview} isBaseResume={false} onExported={() => undefined} onDirtyChange={() => undefined} onSaved={async (saved) => setPreview(saved)} /></section> : <InterviewDashboard job={job} overview={overview} loading={false} onSelect={(path) => void selectDocument(path)} initialRoundId={activeRound.id} onRoundChange={setActiveRoundId} focusMode /> : !error && <p className="dashboard-loading">Loading interview workspace…</p>}</section>
+    <header className="topbar standalone-topbar"><div className="wordmark"><span className="wordmark-mark">S</span><span>Sensei</span></div><nav className="focus-navigation" aria-label="Interview window"><button className="btn-quiet" onClick={() => setPreview(null)} disabled={!preview}>Back to questions</button></nav><div className="standalone-title"><strong>{job?.company ?? overview?.company ?? displayJobName(jobId)}</strong><small>{activeRound?.label ?? job?.title ?? "Interview preparation"}</small></div><button className="theme-toggle" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "Day" : "Night"}</button></header>
+    <section className="standalone-workspace">{error && <p className="inline-error">{error}</p>}{job && overview && activeRound ? preview ? <section className="viewer-panel standalone-document"><div className="viewer-header"><div><h1>{preview.name}</h1></div><div className="viewer-header-actions"><span className="label source">{preview.fileType.toUpperCase()}</span><button className="viewer-close" onClick={() => setPreview(null)} aria-label="Return to interview dashboard">×</button></div></div><DocumentView preview={preview} isBaseResume={false} onExported={() => undefined} onDirtyChange={() => undefined} onSaved={async (saved) => setPreview(saved)} /></section> : <InterviewView job={job} overview={overview} loading={false} initialRoundId={activeRound.id} standalone onRoundChange={setActiveRoundId} onOpenFile={(path) => void selectDocument(path)} /> : !error && <p className="dashboard-loading">Loading interview workspace…</p>}</section>
   </main>;
 }
 
-function artifactLabel(name: string): string {
-  if (name === "questionBank") return "Question bank";
-  if (name === "challengeBrief") return "Challenge brief";
-  if (name === "practiceLabs") return "Practice labs";
-  if (name === "debriefAnalysis") return "Debrief analysis";
-  return name.charAt(0).toUpperCase() + name.slice(1);
-}
 
-function promptCompany(company: string): string {
-  return company.replace(/,\s*(inc|llc|ltd)\.?$/i, "").trim();
-}
 
-function stageLabel(stage: InterviewRound["stage"]): string {
-  return {
-    recruiter_screen: "Recruiter screen",
-    hiring_manager: "Hiring manager",
-    technical: "Technical interview",
-    practical_evaluation: "Practical evaluation",
-    technical_challenge: "Technical challenge",
-    take_home: "Take-home exercise",
-    onsite: "Onsite interview",
-    final_panel: "Final panel",
-    executive: "Executive interview",
-    unknown: "Interview",
-  }[stage];
-}
 
 function ResumeSources({ settings, selectedPath, onSelect, onChoose, onRemoveSecondary }: { settings: Settings; selectedPath: string | null; onSelect: (path: string) => void; onChoose: (role: "base" | "secondary") => void; onRemoveSecondary: (path: string) => void }) {
   const secondary = settings.secondaryResumePaths;
-  return <section className="resume-sources"><div className="resume-heading"><span>RESUME SOURCES</span><span className="count">{(settings.baseResumePath ? 1 : 0) + secondary.length}</span></div><div className="resume-row-label"><span>BASE RESUME</span><button className="mini-button" onClick={() => onChoose("base")}>Change</button></div>{settings.baseResumePath ? <button className={`resume-file ${selectedPath === settings.baseResumePath ? "is-selected" : ""}`} onClick={() => onSelect(settings.baseResumePath!)}><span className="file-icon">{settings.baseResumePath.endsWith("docx") ? "DOC" : "PDF"}</span><span className="tree-name">{settings.baseResumePath.split("/").pop()}</span><span className="base-mark">BASE</span></button> : <p className="empty-small">No base resume selected.</p>}<div className="resume-row-label"><span>SECONDARY RESUMES</span><button className="mini-button" onClick={() => onChoose("secondary")}>Add</button></div>{secondary.length ? secondary.map((path) => <div className="resume-file-row" key={path}><button className={`resume-file ${selectedPath === path ? "is-selected" : ""}`} onClick={() => onSelect(path)}><span className="file-icon">{path.endsWith("docx") ? "DOC" : "PDF"}</span><span className="tree-name">{path.split("/").pop()}</span></button><button className="remove-button" aria-label={`Remove ${path.split("/").pop()}`} title="Remove secondary resume" onClick={() => onRemoveSecondary(path)}>×</button></div>) : <p className="empty-small">Older resumes add historical support.</p>}<div className="resume-row-label education-label"><span>LINKEDIN PROFILE</span></div><p className="resume-note">Education and additional career context</p></section>;
+  return <section className="resume-sources"><div className="resume-heading"><span>Resume sources</span><span className="count">{(settings.baseResumePath ? 1 : 0) + secondary.length}</span></div><div className="resume-row-label"><span>Base resume</span><button className="mini-button" onClick={() => onChoose("base")}>Change</button></div>{settings.baseResumePath ? <button className={`resume-file ${selectedPath === settings.baseResumePath ? "is-selected" : ""}`} onClick={() => onSelect(settings.baseResumePath!)}><span className="file-icon">{settings.baseResumePath.endsWith("docx") ? "DOC" : "PDF"}</span><span className="tree-name">{settings.baseResumePath.split("/").pop()}</span><span className="base-mark">Base</span></button> : <p className="empty-small">No base resume selected.</p>}<div className="resume-row-label"><span>Secondary resumes</span><button className="mini-button" onClick={() => onChoose("secondary")}>Add</button></div>{secondary.length ? secondary.map((path) => <div className="resume-file-row" key={path}><button className={`resume-file ${selectedPath === path ? "is-selected" : ""}`} onClick={() => onSelect(path)}><span className="file-icon">{path.endsWith("docx") ? "DOC" : "PDF"}</span><span className="tree-name">{path.split("/").pop()}</span></button><button className="remove-button" aria-label={`Remove ${path.split("/").pop()}`} title="Remove secondary resume" onClick={() => onRemoveSecondary(path)}>×</button></div>) : <p className="empty-small">Older resumes add historical support.</p>}<div className="resume-row-label education-label"><span>LinkedIn profile</span></div><p className="resume-note">Education and additional career context</p></section>;
 }
 
 function TreeNode({ node, selectedPath, baseResume, onSelect, depth = 0, selectedPaths, onTogglePath, onDelete, revealPath: highlightedPath }: { node: FileTreeNode; selectedPath: string | null; baseResume: string | null; onSelect: (path: string) => void; depth?: number; selectedPaths: string[]; onTogglePath: (path: string, checked: boolean) => void; onDelete: (path: string) => void; revealPath: string | null }) {
@@ -1125,18 +1212,18 @@ function TreeNode({ node, selectedPath, baseResume, onSelect, depth = 0, selecte
     {canDelete && <button className="is-destructive" onClick={() => { closeMenu(); onDelete(node.relativePath); }}>Move {node.kind === "directory" ? "folder" : "file"} to Trash</button>}
   </div>, document.body);
   if (node.kind === "directory") return <div className="tree-group" onContextMenu={openMenu}><div className="tree-directory-row"><input ref={inputRef} className="context-check" type="checkbox" aria-label={`Include ${node.displayName ?? node.name} in terminal context`} checked={checked} onChange={(event) => onTogglePath(node.relativePath, event.target.checked)} /><button className="tree-directory" style={{ paddingLeft: `${12 + depth * 13}px` }} onClick={() => setOpen(!open)}><span className="tree-chevron">{open ? "▾" : "▸"}</span><span className="tree-directory-copy"><b>{node.displayName ?? node.name}</b>{node.subtitle && <em>{node.subtitle}</em>}</span>{node.rating !== undefined && <span className="tree-rating">{node.rating === null ? "—" : `${node.rating.toFixed(1)}/5`}</span>}<small>{node.children?.length ?? 0}</small></button></div>{open && node.children?.map((child) => <TreeNode key={child.relativePath} node={child} selectedPath={selectedPath} baseResume={baseResume} onSelect={onSelect} depth={depth + 1} selectedPaths={selectedPaths} onTogglePath={onTogglePath} onDelete={onDelete} revealPath={highlightedPath} />)}{menuView}</div>;
-  return <div className="tree-file-row" onContextMenu={openMenu}><button className={`tree-file ${selectedPath === node.relativePath ? "is-selected" : ""}`} style={{ paddingLeft: `${26 + depth * 13}px` }} onClick={() => onSelect(node.relativePath)}><input ref={inputRef} className="context-check" type="checkbox" aria-label={isPolicy ? `${node.name} is always enforced` : `Include ${node.name} in terminal context`} checked={checked} disabled={isPolicy} onClick={(event) => event.stopPropagation()} onChange={(event) => onTogglePath(node.relativePath, event.target.checked)} /><span className="file-icon">{node.fileType === "pdf" ? "PDF" : node.fileType === "docx" ? "DOC" : node.fileType === "text" || node.fileType === "json" || node.fileType === "rtf" ? "TXT" : "FILE"}</span><span className="tree-name" title={node.name}>{node.name}</span>{isPolicy && <span className="base-mark" title="Always-enforced career claim policy">POLICY</span>}{node.relativePath === baseResume && <span className="base-mark" title="Configured base resume">BASE</span>}</button>{menuView}</div>;
+  return <div className="tree-file-row" onContextMenu={openMenu}><button className={`tree-file ${selectedPath === node.relativePath ? "is-selected" : ""}`} style={{ paddingLeft: `${26 + depth * 13}px` }} onClick={() => onSelect(node.relativePath)}><input ref={inputRef} className="context-check" type="checkbox" aria-label={isPolicy ? `${node.name} is always enforced` : `Include ${node.name} in terminal context`} checked={checked} disabled={isPolicy} onClick={(event) => event.stopPropagation()} onChange={(event) => onTogglePath(node.relativePath, event.target.checked)} /><span className="file-icon">{node.fileType === "pdf" ? "PDF" : node.fileType === "docx" ? "DOC" : node.fileType === "text" || node.fileType === "json" || node.fileType === "rtf" ? "TXT" : "FILE"}</span><span className="tree-name" title={node.name}>{node.name}</span>{isPolicy && <span className="base-mark" title="Always-enforced career claim policy">Policy</span>}{node.relativePath === baseResume && <span className="base-mark" title="Configured base resume">Base</span>}</button>{menuView}</div>;
 }
 
 function DocumentView({ preview, isBaseResume, focusAnchor, onExported, onDirtyChange, onSaved }: { preview: FilePreview; isBaseResume: boolean; focusAnchor?: string; onExported: () => void; onDirtyChange: (dirty: boolean) => void; onSaved: (preview: FilePreview) => Promise<void> }) {
-  if (!preview.canPreview) return <div className="unsupported-state"><div className="file-badge">{preview.fileType.toUpperCase()}</div><h2>Preview unavailable</h2><p>{preview.message}</p><div className="file-meta"><span>{formatBytes(preview.sizeBytes)}</span><span>Modified {new Date(preview.modifiedAt).toLocaleString()}</span></div>{isBaseResume && <span className="label verified">CONFIGURED BASE RESUME</span>}</div>;
+  if (!preview.canPreview) return <div className="unsupported-state"><div className="file-badge">{preview.fileType.toUpperCase()}</div><h2>Preview unavailable</h2><p>{preview.message}</p><div className="file-meta"><span>{formatBytes(preview.sizeBytes)}</span><span>Modified {new Date(preview.modifiedAt).toLocaleString()}</span></div>{isBaseResume && <span className="label verified">Configured base resume</span>}</div>;
   if (preview.contentType === "data-url" && preview.dataUrl) return preview.fileType === "pdf" ? <PdfDocument preview={preview} /> : <div className="image-document"><img src={preview.dataUrl} alt={preview.name} /></div>;
-  if (preview.contentType === "html" && preview.content) return <article className="document rich-document"><div className="document-meta"><span>{preview.relativePath}</span><span>{formatBytes(preview.sizeBytes)} · {new Date(preview.modifiedAt).toLocaleDateString()}</span>{isBaseResume && <span className="label verified">CONFIGURED BASE RESUME</span>}</div><div dangerouslySetInnerHTML={{ __html: sanitizeHtml(preview.content) }} />{preview.message && <p className="preview-note">{preview.message}</p>}</article>;
+  if (preview.contentType === "html" && preview.content) return <article className="document rich-document"><div className="document-meta"><span>{preview.relativePath}</span><span>{formatBytes(preview.sizeBytes)} · {new Date(preview.modifiedAt).toLocaleDateString()}</span>{isBaseResume && <span className="label verified">Configured base resume</span>}</div><div dangerouslySetInnerHTML={{ __html: sanitizeHtml(preview.content) }} />{preview.message && <p className="preview-note">{preview.message}</p>}</article>;
   const challengePractice = preview.name === "practice_labs.json" ? parseChallengePractice(preview.content) : null;
   if (challengePractice) return <ChallengePracticeDocument preview={preview} practice={challengePractice} focusAnchor={focusAnchor} />;
   const isMarkdown = preview.name.toLowerCase().endsWith(".md");
   if (isMarkdown) return <MarkdownDocument preview={preview} focusAnchor={focusAnchor} onExported={onExported} onDirtyChange={onDirtyChange} onSaved={onSaved} />;
-  return <article className="document"><div className="document-meta"><span>{preview.relativePath}</span><span>{formatBytes(preview.sizeBytes)} · {new Date(preview.modifiedAt).toLocaleDateString()}</span>{isBaseResume && <span className="label verified">CONFIGURED BASE RESUME</span>}</div><pre>{preview.content}</pre></article>;
+  return <article className="document"><div className="document-meta"><span>{preview.relativePath}</span><span>{formatBytes(preview.sizeBytes)} · {new Date(preview.modifiedAt).toLocaleDateString()}</span>{isBaseResume && <span className="label verified">Configured base resume</span>}</div><pre>{preview.content}</pre></article>;
 }
 
 function ChallengePracticeDocument({ preview, practice, focusAnchor }: { preview: FilePreview; practice: ChallengePractice; focusAnchor?: string }) {
@@ -1193,11 +1280,11 @@ function ChallengePracticeDocument({ preview, practice, focusAnchor }: { preview
     <div className="document-meta">
       <span>{preview.relativePath}</span>
       <span>{formatBytes(preview.sizeBytes)} · {new Date(preview.modifiedAt).toLocaleDateString()}</span>
-      <span className="label verified">PRACTICE MODE</span>
+      <span className="label verified">Practice mode</span>
     </div>
     <header className="challenge-hero">
-      <div><span className="eyebrow">TECHNICAL CHALLENGE</span><h2>{practice.title}</h2><p>{practice.company} · {practice.role}</p></div>
-      <div className="challenge-mode"><small>ASSESSMENT MODE</small><strong>{practice.assessmentMode.replaceAll("_", " ")}</strong><span>{practice.sourceBasis.replaceAll("_", " ")}</span></div>
+      <div><span className="eyebrow">Technical challenge</span><h2>{practice.title}</h2><p>{practice.company} · {practice.role}</p></div>
+      <div className="challenge-mode"><small>Assessment mode</small><strong>{practice.assessmentMode.replaceAll("_", " ")}</strong><span>{practice.sourceBasis.replaceAll("_", " ")}</span></div>
     </header>
     {!practice.realPromptSupplied && <p className="challenge-notice"><strong>Practice approximation.</strong> {practice.approximationNotice ?? "These exercises are based on the known process and role, not an employer-supplied assessment prompt."}</p>}
     <div className="challenge-toolbar">
@@ -1205,7 +1292,7 @@ function ChallengePracticeDocument({ preview, practice, focusAnchor }: { preview
         {([["all", "All"], ["coding", "Coding labs"], ["verbal", "Verbal scenarios"]] as Array<[ChallengeFilter, string]>).map(([value, label]) => <button key={value} className={filter === value ? "is-active" : ""} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}
       </div>
       <div className="challenge-navigation">
-        <label><span>JUMP TO EXERCISE</span><select aria-label="Jump to challenge exercise" value={current?.id ?? ""} onChange={(event) => chooseExercise(event.target.value)}>{exercises.map((exercise) => <option key={exercise.id} value={exercise.id}>{exercise.title}</option>)}</select></label>
+        <label><span>Jump to exercise</span><select aria-label="Jump to challenge exercise" value={current?.id ?? ""} onChange={(event) => chooseExercise(event.target.value)}>{exercises.map((exercise) => <option key={exercise.id} value={exercise.id}>{exercise.title}</option>)}</select></label>
         <div className="challenge-stepper">
           <button disabled={currentIndex <= 0} onClick={() => step(-1)} aria-label="Previous exercise">←</button>
           <span>{exercises.length ? `${currentIndex + 1} of ${exercises.length}` : "No exercises"}</span>
@@ -1222,7 +1309,7 @@ function ChallengePracticeDocument({ preview, practice, focusAnchor }: { preview
 function ChallengeExerciseCard({ exercise, revealedHints, solutionOpen, onRevealHint, onToggleSolution }: { exercise: ChallengeExercise; revealedHints: string[]; solutionOpen: boolean; onRevealHint: (key: string) => void; onToggleSolution: () => void }) {
   return <section className="challenge-card">
     <div className="challenge-card-heading">
-      <div><span className={`challenge-type is-${exercise.type}`}>{exercise.type === "coding" ? "CODING / IMPLEMENTATION" : "VERBAL SCENARIO"}</span><h3>{exercise.title}</h3></div>
+      <div><span className={`challenge-type is-${exercise.type}`}>{exercise.type === "coding" ? "Coding / implementation" : "Verbal scenario"}</span><h3>{exercise.title}</h3></div>
       <div className="challenge-card-meta"><span>{exercise.difficulty}</span><strong>{exercise.timeboxMinutes} min</strong></div>
     </div>
     <p className="challenge-relevance"><strong>Why this fits the role</strong>{exercise.jobRelevance}</p>
@@ -1421,7 +1508,7 @@ function MarkdownDocument({ preview, focusAnchor, onExported, onDirtyChange, onS
     {message && <p className={`editor-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</p>}
     {mode === "view" && isQuestionBank && <QuestionBankToolbar value={questionFilter} onChange={setQuestionFilter} questions={questions} currentQuestionId={currentQuestionId} onJump={jumpToQuestion} onStep={stepQuestion} />}
     {mode === "edit"
-      ? <div className="markdown-editor-grid"><div className="editor-pane"><div className="editor-pane-title">MARKDOWN <span>CTRL/⌘ S TO SAVE</span></div><textarea aria-label={`Edit ${preview.name}`} value={draft} spellCheck="true" onChange={(event) => { setDraft(event.target.value); setState("idle"); setMessage(""); }} /></div><div className="editor-preview"><div className="editor-pane-title">LIVE PREVIEW</div><div dangerouslySetInnerHTML={{ __html: markdownHtml(draft) }} /></div></div>
+      ? <div className="markdown-editor-grid"><div className="editor-pane"><div className="editor-pane-title">Markdown <span>Ctrl/⌘ S to save</span></div><textarea aria-label={`Edit ${preview.name}`} value={draft} spellCheck="true" onChange={(event) => { setDraft(event.target.value); setState("idle"); setMessage(""); }} /></div><div className="editor-preview"><div className="editor-pane-title">Live preview</div><div dangerouslySetInnerHTML={{ __html: markdownHtml(draft) }} /></div></div>
       : isEvaluation
         ? <EvaluationDocument markdown={visibleMarkdown} />
         : <div className={isQuestionBank ? "question-bank-content" : undefined} dangerouslySetInnerHTML={{ __html: markdownHtml(visibleMarkdown, questions) }} />}
@@ -1463,20 +1550,20 @@ function EvaluationDocument({ markdown }: { markdown: string }) {
   }
   return <div className="evaluation-document">
     <section className="evaluation-summary" aria-label="Evaluation summary">
-      <div className="evaluation-score-card"><span>FIT SCORE</span><strong>{score.replace(/^.*?(\d(?:\.\d+)?\s*\/\s*5).*$/i, "$1")}</strong><small>Direct 100% · strong 75% · adjacent 55%</small></div>
-      <div><span>APPLY RECOMMENDATION</span><strong>{recommendation}</strong></div>
-      <div><span>CONFIDENCE</span><strong>{confidence}</strong></div>
+      <div className="evaluation-score-card"><span>Fit score</span><strong>{score.replace(/^.*?(\d(?:\.\d+)?\s*\/\s*5).*$/i, "$1")}</strong><small>Direct 100% · strong 75% · adjacent 55%</small></div>
+      <div><span>Apply recommendation</span><strong>{recommendation}</strong></div>
+      <div><span>Confidence</span><strong>{confidence}</strong></div>
     </section>
     <section className="evaluation-category-section">
-      <div className="evaluation-section-heading"><div><span className="eyebrow">CATEGORY COVERAGE</span><h2>Where the score comes from</h2></div><small>{requirements.length} scored requirements</small></div>
+      <div className="evaluation-section-heading"><div><span className="eyebrow">Category coverage</span><h2>Where the score comes from</h2></div><small>{requirements.length} scored requirements</small></div>
       <div className="evaluation-category-grid">{categories.map((group) => {
         const percent = group.available ? Math.round(group.earned / group.available * 100) : 0;
         return <button className={`evaluation-category-card ${activeCategory === group.category ? "is-active" : ""}`} type="button" key={group.category} aria-controls={`evaluation-category-${group.category}`} aria-expanded={activeCategory === group.category} onClick={() => openCategoryDetails(group.category)}><span>{evaluationCategoryLabels[group.category]}</span><strong>{group.earned.toFixed(1)} <small>/ {group.available}%</small></strong><span className="evaluation-category-bar" aria-label={`${percent}% credit`}><i style={{ width: `${percent}%` }} /></span><small>{percent}% of available credit · View requirements</small></button>;
       })}</div>
     </section>
-    {insights.length > 0 && <section className="evaluation-insights"><div className="evaluation-section-heading"><div><span className="eyebrow">DECISION CONTEXT</span><h2>What matters most</h2></div></div><div>{insights.map((section) => <article key={section.title}><h3>{section.title}</h3><div dangerouslySetInnerHTML={{ __html: markdownHtml(section.content) }} /></article>)}</div></section>}
+    {insights.length > 0 && <section className="evaluation-insights"><div className="evaluation-section-heading"><div><span className="eyebrow">Decision context</span><h2>What matters most</h2></div></div><div>{insights.map((section) => <article key={section.title}><h3>{section.title}</h3><div dangerouslySetInnerHTML={{ __html: markdownHtml(section.content) }} /></article>)}</div></section>}
     <section className="evaluation-requirements">
-      <div className="evaluation-section-heading"><div><span className="eyebrow">REQUIREMENT BREAKDOWN</span><h2>Evidence by requirement</h2></div><small>Open a category to inspect its evidence</small></div>
+      <div className="evaluation-section-heading"><div><span className="eyebrow">Requirement breakdown</span><h2>Evidence by requirement</h2></div><small>Open a category to inspect its evidence</small></div>
       {categories.map((group) => <details id={`evaluation-category-${group.category}`} key={group.category} open={activeCategory === group.category} onToggle={(event) => { if (event.currentTarget.open) setOpenCategory(group.category); }}><summary><span>{evaluationCategoryLabels[group.category]}</span><small>{group.rows.length} requirements · {group.earned.toFixed(1)} / {group.available}%</small></summary><div className="evaluation-requirement-list">{group.rows.map((row, rowIndex) => <article className="evaluation-requirement" key={`${row.requirement}-${rowIndex}`}><div><span className={`evaluation-classification is-${row.classification}`}>{row.classification.replaceAll("_", " ")}</span>{row.material && <span className="evaluation-material">Material</span>}<strong>{row.requirement}</strong></div><dl><div><dt>Weight</dt><dd>{row.weight}%</dd></div><div><dt>Evidence</dt><dd><code>{row.evidence || "No eligible evidence"}</code></dd></div></dl></article>)}</div></details>)}
     </section>
     {audit && <details className="evaluation-audit"><summary><span>Application audits and review warnings</span><small>Resume, cover letter, and grounding details</small></summary><div dangerouslySetInnerHTML={{ __html: markdownHtml(audit) }} /></details>}
@@ -1568,7 +1655,7 @@ function PdfTextSizeSelect({ value, onChange, disabled }: { value: PdfTextSize; 
 function MarkdownExportButton({ relativePath, onExported }: { relativePath: string; onExported: () => void }) {
   const [state, setState] = useState<"idle" | "working" | "done" | "warning" | "error">("idle");
   const [message, setMessage] = useState("");
-  const [textSize, setTextSize] = useState<PdfTextSize>("auto");
+  const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
   async function exportPdf() {
     setState("working");
     try {
@@ -1958,7 +2045,7 @@ function TerminalPanel({ cwd, selectedJobFiles, selectedCareerPaths, theme, visi
       <div className="terminal-header">
         <div className="terminal-header-title-group">
           <div className="terminal-brand-badge">
-            <div className="eyebrow">COMMAND CENTER</div>
+            <div className="terminal-title">Agy</div>
             <span className={`terminal-engine-tag ${agyActive ? "is-agy" : "is-shell"}`}>
               {agyActive ? "⚡ agy" : "🐚 shell"}
             </span>
@@ -2196,89 +2283,10 @@ function JobActionsMenu({ actions, onInsert }: { actions: JobAction[]; onInsert:
 }
 
 function formatBytes(bytes: number): string { if (bytes < 1024) return `${bytes} B`; if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`; return `${(bytes / (1024 * 1024)).toFixed(1)} MB`; }
+function plural(count: number, noun: string): string { return `${count} ${noun}${count === 1 ? "" : "s"}`; }
 function messageOf(caught: unknown, fallback: string): string { return caught instanceof Error ? caught.message : fallback; }
-function cleanLiveAnswer(value: string): string {
-  return value.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "").replace(/^\s*(?:analysis|reasoning|thinking)\s*:\s*/i, "").replace(/^\s*(?:here(?:'s| is) (?:a|the) )?suggested answer\s*:\s*/i, "");
-}
 function workspaceLabel(path: string): string { return path.split("/").filter(Boolean).pop() ?? "data"; }
 function filePaths(nodes: FileTreeNode[]): string[] { return nodes.flatMap((node) => node.kind === "directory" ? filePaths(node.children ?? []) : [node.relativePath]); }
 function fileNodes(nodes: FileTreeNode[]): FileTreeNode[] { return nodes.flatMap((node) => node.kind === "directory" ? fileNodes(node.children ?? []) : [node]); }
 function findNode(nodes: FileTreeNode[], path: string): FileTreeNode | null { for (const node of nodes) { if (node.relativePath === path) return node; const found = node.children ? findNode(node.children, path) : null; if (found) return found; } return null; }
 function terminalTheme(_theme: "dark" | "light") { return { background: "#0b0f0d", foreground: "#e4ece3", cursor: "#b5db63", selectionBackground: "#354b35", black: "#172019", brightBlack: "#718073", green: "#a7d66b", brightGreen: "#c7ed89" }; }
-function sanitizeHtml(value: string): string {
-  const document = new DOMParser().parseFromString(value, "text/html");
-  document.querySelectorAll("script, iframe, object, embed, link, style").forEach((element) => element.remove());
-  document.querySelectorAll("*").forEach((element) => [...element.attributes].forEach((attribute) => { if (attribute.name.toLowerCase().startsWith("on")) element.removeAttribute(attribute.name); }));
-  return document.body.innerHTML;
-}
-
-function normalizedCodeLanguage(value: string): string {
-  const language = value.trim().toLowerCase().split(/\s+/)[0] ?? "";
-  const aliases: Record<string, string> = { js: "javascript", jsx: "javascript", ts: "typescript", tsx: "typescript", py: "python", sh: "bash", shell: "bash", zsh: "bash", yml: "yaml", ps1: "powershell" };
-  return (aliases[language] ?? language) || "text";
-}
-
-function inferCodeLanguage(value: string): string {
-  if (/\b(?:interface|type)\s+[A-Z]|\b(?:const|let)\s+\w+\s*(?::[^=]+)?=|=>/.test(value)) return "typescript";
-  if (/^\s*(?:def|from|import)\s+/m.test(value)) return "python";
-  if (/\b(?:SELECT|INSERT|UPDATE|DELETE|CREATE TABLE)\b/i.test(value)) return "sql";
-  if (/\b(?:param|Write-Host|Get-ChildItem|New-Item)\b|\$[A-Za-z][\w-]*/.test(value)) return "powershell";
-  if (/^\s*(?:#!.*(?:ba|z|k)?sh|export\s+|(?:npm|git|curl|rg)\s+)/m.test(value)) return "bash";
-  return "text";
-}
-
-function highlightCode(value: string, language: string, escape: (value: string) => string): string {
-  const keywords: Record<string, string[]> = {
-    javascript: ["const", "let", "var", "function", "return", "async", "await", "if", "else", "for", "while", "class", "new", "import", "export", "from", "try", "catch", "throw"],
-    typescript: ["const", "let", "function", "return", "async", "await", "if", "else", "for", "interface", "type", "class", "new", "import", "export", "from", "extends", "implements"],
-    python: ["def", "return", "async", "await", "if", "elif", "else", "for", "while", "class", "import", "from", "try", "except", "raise", "with", "as", "in"],
-    bash: ["if", "then", "else", "fi", "for", "do", "done", "case", "esac", "function", "export"],
-    powershell: ["function", "param", "if", "else", "foreach", "return", "throw", "try", "catch", "switch"],
-    sql: ["select", "from", "where", "join", "on", "group", "by", "order", "insert", "update", "delete", "create", "table", "as", "and", "or"],
-  };
-  const keywordSet = new Set((keywords[language] ?? []).map((keyword) => keyword.toLowerCase()));
-  const tokenPattern = /(\/\/[^\n]*|#[^\n]*|--[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b\d+(?:\.\d+)?\b|\b[A-Za-z_$][\w$]*\b)/g;
-  let output = "";
-  let cursor = 0;
-  for (const match of value.matchAll(tokenPattern)) {
-    const index = match.index ?? 0;
-    const token = match[0];
-    output += escape(value.slice(cursor, index));
-    const lower = token.toLowerCase();
-    const tokenClass = /^(?:\/\/|#|--)/.test(token) ? "comment" : /^["'`]/.test(token) ? "string" : /^\d/.test(token) ? "number" : keywordSet.has(lower) ? "keyword" : "identifier";
-    output += `<span class="syntax-${tokenClass}">${escape(token)}</span>`;
-    cursor = index + token.length;
-  }
-  return output + escape(value.slice(cursor));
-}
-
-function markdownHtml(markdown: string, questionEntries: QuestionEntry[] = []): string {
-  const escape = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-  const inline = (value: string) => escape(value).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>');
-  const output: string[] = [];
-  let list: "ul" | "ol" | null = null;
-  let code = false;
-  let codeLanguage = "text";
-  let codeLines: string[] = [];
-  const closeList = () => { if (list) { output.push(`</${list}>`); list = null; } };
-  const questionIds = new Map(questionEntries.map((question) => [question.lineIndex, question.id]));
-  for (const [lineIndex, line] of markdown.replaceAll("\r\n", "\n").split("\n").entries()) {
-    if (line.trim().startsWith("```")) { if (code) { const codeValue = codeLines.join("\n"); output.push(`<div class="code-block language-${codeLanguage}"><div class="code-block-heading"><span>${escape(codeLanguage)}</span></div><pre><code>${highlightCode(codeValue, codeLanguage, escape)}</code></pre></div>`); codeLines = []; code = false; codeLanguage = "text"; } else { closeList(); code = true; codeLanguage = normalizedCodeLanguage(line.trim().slice(3)); } continue; }
-    if (code) { codeLines.push(line); continue; }
-    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
-    const bullet = /^\s*[-*+]\s+(.+)$/.exec(line);
-    const numbered = /^\s*\d+[.)]\s+(.+)$/.exec(line);
-    const questionId = questionIds.get(lineIndex);
-    const headingId = heading ? `heading-${heading[2].toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 54)}` : null;
-    const anchorId = questionId ?? headingId;
-    const anchor = anchorId ? ` id="${anchorId}" class="question-anchor"` : "";
-    if (heading) { closeList(); output.push(`<h${heading[1].length}${anchor}>${inline(heading[2])}</h${heading[1].length}>`); }
-    else if (bullet || numbered) { const next = bullet ? "ul" : "ol"; if (list !== next) { closeList(); list = next; output.push(`<${list}>`); } output.push(`<li${anchor}>${inline((bullet ?? numbered)![1])}</li>`); }
-    else if (/^\s*>\s?/.test(line)) { closeList(); output.push(`<blockquote>${inline(line.replace(/^\s*>\s?/, ""))}</blockquote>`); }
-    else if (!line.trim()) closeList();
-    else { closeList(); output.push(`<p>${inline(line)}</p>`); }
-  }
-  if (code) { const codeValue = codeLines.join("\n"); output.push(`<div class="code-block language-${codeLanguage}"><div class="code-block-heading"><span>${escape(codeLanguage)}</span></div><pre><code>${highlightCode(codeValue, codeLanguage, escape)}</code></pre></div>`); }
-  closeList();
-  return sanitizeHtml(output.join("\n"));
-}

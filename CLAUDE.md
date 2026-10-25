@@ -27,6 +27,7 @@ Commands: `npm run typecheck`, `npm test`, `npm run build`, `npm run dev`. Pipel
 
 | Skill | Use when |
 |---|---|
+| `lean-build` | Always: how to work with less context (find before reading, filter output, verify once) and how to write skills with progressive disclosure |
 | `jobsensei-architecture` | Before any change: how the app and Agy fit together, plus the **rule-ownership map** |
 | `edit-agy-skill` | Changing what Agy does (skills, AGENTS.md, snapshot instructions) so the change sticks |
 | `diagnose-agy-run` | An output regressed or looks wrong; trace it to its cause (read-only) |

@@ -8,7 +8,8 @@ description: Design, implement, or review JobSensei interfaces (React renderer, 
 A calm, credible desktop workspace that makes dense career evidence, drafts, and interview prep easy to scan and act on.
 
 ## Before designing
-1. Read `UI_DESIGN_SYSTEM.md`. It is the owner of visual style: tokens, typography, layout, and components in `src/renderer/styles.css`.
+0. Use Anthropic's `frontend-design` skill (plugin) for the design process and aesthetic direction. This skill only adds JobSensei specifics.
+1. Read `UI_DESIGN_SYSTEM.md` (what the tokens mean, layout, components). Values live only in `src/renderer/tokens.css`; layout in `layout.css` (shell, pages, interview) and `styles.css` (documents, terminal, Settings). Never add a hex value outside `tokens.css`; `tests/workspace-search.test.ts` checks this.
 2. Inspect the existing components in `src/renderer/` before creating new patterns.
 3. Name the one decision the user makes on this screen.
 4. Define every state: empty, loading, running (Agy working), success, partial, error, stale, disabled, destructive confirm.
@@ -26,7 +27,7 @@ A calm, credible desktop workspace that makes dense career evidence, drafts, and
 Semantic HTML and native controls, visible focus, logical tab order, WCAG AA contrast, reduced-motion support, and no status encoded by color alone.
 
 ## Verify visually
-1. Run `npm run dev` and open the app (use the built-in browser on `http://127.0.0.1:5173` for renderer checks).
+1. `npm run build`, then screenshot every main screen in light and dark with Playwright `_electron` (navigation clicks only; never select rounds or send prompts on real jobs). Restore the theme to light afterwards; the driver shares the app's localStorage.
 2. Exercise the main path plus the failure and retry paths.
 3. Check a normal desktop width and a narrow window, plus long titles and long content, for overflow, clipping, and wrapping.
 4. Fix visible defects before reporting. Never approve UI from source or tests alone.

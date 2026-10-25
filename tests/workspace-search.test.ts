@@ -93,8 +93,8 @@ describe("Job Actions", () => {
     const actions = buildJobActions(job, overview, null);
     const recommended = actions.find((action) => action.recommended);
 
-    expect(recommended?.prompt).toBe("Prepare Example Labs technical challenge");
-    expect(actions.some((action) => action.id === "team-panel-interview" && action.label === "Prepare team panel interview" && action.prompt === "Prepare Example Labs team panel interview" && action.group === "Interview")).toBe(true);
+    expect(recommended?.prompt).toMatch(/^Prepare Example Labs .*technical challenge \(job: [a-z0-9-]+\)$/);
+    expect(actions.some((action) => action.id === "team-panel-interview" && action.label === "Prepare team panel interview" && /^Prepare Example Labs.* team panel interview \(job: [a-z0-9-]+\)$/.test(action.prompt) && action.group === "Interview")).toBe(true);
     expect(actions.every((action) => !/[\r\n]/.test(action.prompt))).toBe(true);
   });
 
@@ -169,19 +169,55 @@ describe("Job Actions", () => {
     const recommended = actions.find((action) => action.recommended);
 
     expect(recommended?.label).toBe("Prepare team panel interview");
-    expect(recommended?.prompt).toBe("Prepare Example Labs team panel interview");
+    expect(recommended?.prompt).toMatch(/^Prepare Example Labs.* team panel interview \(job: [a-z0-9-]+\)$/);
   });
 
   it("keeps Job Actions unavailable without an unambiguous job", () => {
     expect(buildJobActions(null, null, null)).toEqual([]);
   });
 
-  it("places Search before Rescan and removes only the old terminal subtitle", async () => {
+  it("keeps the trimmed top bar: search, job chip, terminal toggle, one settings menu", async () => {
     const app = await readFile(join(process.cwd(), "src/renderer/App.tsx"), "utf8");
+    const header = app.slice(app.indexOf('<header className="topbar">'), app.indexOf("</header>", app.indexOf('<header className="topbar">')));
 
-    expect(app.indexOf('className="topbar-button search-trigger"')).toBeLessThan(app.indexOf(">Rescan</button>"));
-    expect(app).toContain("COMMAND CENTER");
+    expect(header).toContain('className="search-trigger"');
+    expect(header).toContain("<TopbarMenu");
+    expect(header).not.toContain(">Rescan</button>");
+    expect(app).not.toContain('className="statusbar"');
     expect(app).not.toContain("Codex / antigravity terminal");
     expect(app).toContain("window.sensei.terminal.insertPrompt");
+  });
+});
+
+describe("design system (Phase 3)", () => {
+  it("has one owner for color tokens and no all-caps UI labels", async () => {
+    const [styles, tokens, app, settings] = await Promise.all(["styles.css", "tokens.css", "App.tsx", "SettingsModal.tsx"].map((file) => readFile(join(process.cwd(), "src/renderer", file), "utf8")));
+
+    expect(tokens).toMatch(/--canvas:[\s\S]*--brass:[\s\S]*:root\[data-theme="light"\]/);
+    expect(styles).not.toMatch(/--(?:canvas|ink|brass|leaf|sensei-[a-z-]+):/);
+    expect(styles).not.toContain("text-transform: uppercase");
+    expect(styles.match(/#[0-9a-fA-F]{6}\b/g)?.length ?? 0).toBeLessThanOrEqual(8);
+    for (const source of [app, settings]) expect(source).not.toMatch(/>[A-Z][A-Z &/-]{5,}</);
+  });
+
+  it("keeps one navigation model and one interview view", async () => {
+    const app = await readFile(join(process.cwd(), "src/renderer/App.tsx"), "utf8");
+    const sidebar = app.slice(app.indexOf('className="app-sidebar"'), app.indexOf("</nav>", app.indexOf('className="app-sidebar"')));
+    for (const page of ["jobs-home", "interviews-home", "context-home"]) expect(sidebar).toContain(`showPage("${page}")`);
+    expect(app.match(/<InterviewView /g)?.length).toBe(2); // job tab and pop-out window
+    expect(app).not.toMatch(/function InterviewDashboard|function InterviewGuide/);
+    expect(app).toContain('window.localStorage.getItem("sensei-theme-v2") === "dark" ? "dark" : "light"');
+  });
+
+  it("lets the user track status from the job page and the board", async () => {
+    const app = await readFile(join(process.cwd(), "src/renderer/App.tsx"), "utf8");
+    expect(app).toContain('className={`tracker-select is-${trackerStatus}`}');
+    expect(app).toMatch(/function JobsBoard[\s\S]*onDrop[\s\S]*board-card-move/);
+    expect(app).toContain("suggestsInterviewing(job.tracker");
+  });
+
+  it("keeps the terminal panel dark in both themes", async () => {
+    const tokens = await readFile(join(process.cwd(), "src/renderer/tokens.css"), "utf8");
+    expect(tokens).toMatch(/\.terminal-panel \{[^}]*--canvas: var\(--term-bg\)/);
   });
 });

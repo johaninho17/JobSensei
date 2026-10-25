@@ -19,8 +19,17 @@ Audit date: 2026-10-23, updated after Phase 4. ⚠ marks copies still known to c
 | Resume summary | `canonical-resume.ts` (`summaryHeadingLine`, `summaryIsEditable`, compose) → `resumeTemplate.summary.editable` | Pipeline skill bullet; resume-tailor points to it. Tests in `settings-and-summary.test.ts` |
 | Letter echoes the JD / dense paragraphs | `COVER_LETTER_ECHOES_JD`, `COVER_LETTER_DENSE_PARAGRAPH` in `application-validation.ts` (warnings) | — |
 | Skills line count / Languages line | `application-artifacts.ts` | Pipeline skill "curate categories" (truth rule folded into AGENTS.md 2026-10-24) |
-| Interview round definitions | `interview-pipeline/references/stage-0N-*.md` | `AGENTS.md`, `PRODUCT_FLOWS.md` (⚠ STAR wording), `interview-pipeline/SKILL.md`, `interview-coach/SKILL.md` (⚠ STAR) |
-| No scripts / quotes in prep | stage refs | `AGENTS.md`, truth rule, quality-gate matrix |
+| Interview rules (framing, knowability, question card, gap questions, no overlap, One-Pass flow) | `interview-pipeline/SKILL.md` | Pointers: `AGENTS.md`, `PRODUCT_FLOWS.md` (user summary), coach + challenge skills. Checked by `interview:check`; tests in `interview-check.test.ts` |
+| Company research format | `interview-pipeline/references/research.md` (loaded only when research is written); checked by `interview:check` | — |
+| Debrief mode | `interview-pipeline/references/debrief.md` | Pipeline SKILL points to it |
+| Interview round archetypes and `prep.md` sections | `interview-pipeline/references/stage-0N-*.md` (no card format there) | — |
+| Round IDs and question limits | `INTERVIEW_STAGES` in `electron/interview-context.ts` | Stage refs state the same numbers for Agy |
+| Interview logistics | Profile `preferences.interview` (Settings → Interview Prep) → `interview:context` `logistics`; `INVENTED_COMPENSATION` / `INVENTED_NOTICE` in `interview-check.ts` | — |
+| Story bank format | `parseStoryBank` (`interview-context.ts`) + `workflows/jobsensei-story-bank.md` | Coach skill reads it |
+| Interview voice format and delivery tracker | `parseInterviewVoice` + `workflows/jobsensei-interview-review.md` | Coach scores against it |
+| Interview stories as evidence | User-confirmed rows in `context/structured/interview-stories.md` (review workflow; debrief proposes) | `AGENTS.md` pointer |
+| Banned phrases | `BANNED_PHRASES` in `electron/evidence-snapshot.ts` | Read by the letter brief and `interview:check` |
+| Interview dashboard | Derived by the app from round files (`electron/interviews.ts`); Agy never writes `dashboardBrief` | — |
 | Run budget (fetch, one snapshot, one bundle, one finalize; <60s) | `application-pipeline/SKILL.md` (One-Pass Flow) | Pointers: `AGENTS.md` "New job flow", `workflows/jobsensei-apply.md`. Timing recorded in `.sensei/run_timing.json`, reported as `durationSeconds` |
 | URL fetch | `npm run jd:fetch` (`electron/jd-fetch.ts`, JSON-LD first) + pipeline skill step 1 | `antigravity-permissions.md` allow list |
 | Client names out of public files | Profile `truth.confidentialNames` → brief prohibited list, snapshot instruction, validator `CONFIDENTIAL_NAME_PUBLIC` | `AGENTS.md` pointer |
@@ -29,3 +38,5 @@ Audit date: 2026-10-23, updated after Phase 4. ⚠ marks copies still known to c
 | Letter signature | `coverLetterSignatureName` in `canonical-resume.ts` (profile full name) | — |
 
 | Unchanged bullets in the bundle | `{ "baseline": N }` refs + omitted employers, expanded by `expandBundleBaselines` (`application-finalize.ts`) | Pipeline skill step 5 + contract example; `tests/pipeline-speed.test.ts` |
+| UI colors, type, spacing | `src/renderer/tokens.css` (values); meaning in `UI_DESIGN_SYSTEM.md` | None. `tests/workspace-search.test.ts` fails on new hex values or all-caps labels |
+| Interview question cards (UI) | `parseInterviewCards` in `src/renderer/interview-cards.ts`, rendered by `InterviewView.tsx` (job tab and pop-out window) | Card format owner stays the pipeline SKILL "Question card"; `tests/interview-cards.test.ts` |

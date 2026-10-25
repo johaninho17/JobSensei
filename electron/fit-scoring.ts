@@ -1,3 +1,4 @@
+import { FIT_CLASSIFICATION_CREDIT } from "../src/shared/fit-credit";
 export const FIT_CATEGORIES = ["core", "technical", "scope", "outcomes", "domain", "learning"] as const;
 export type FitCategory = typeof FIT_CATEGORIES[number];
 
@@ -50,13 +51,7 @@ export type FitClassificationAdjustment = {
   resolvedEvidence: string;
 };
 
-const CREDIT: Record<FitClassification, number> = {
-  direct: 1,
-  strong_transferable: 0.8,
-  adjacent_transferable: 0.65,
-  unclear: 0.25,
-  gap: 0,
-};
+const CREDIT: Record<FitClassification, number> = FIT_CLASSIFICATION_CREDIT;
 
 const EXPECTED_CATEGORY_WEIGHTS: Record<FitCategory, number> = {
   core: 40,
@@ -471,7 +466,18 @@ export function normalizeEvidenceClassifications(markdown: string, snapshot: Evi
   return { markdown: markdown.replace(table, rewritten), adjustments };
 }
 
-const REQUIRED_HEADING = /^(?:what you(?:'|’)?ll need|what you need|what you bring|what we(?:'|’)?re looking for|requirements|required|required qualifications|minimum qualifications|basic qualifications|qualifications|must[- ]haves?|you have|who you are|you(?:'|’)?ll have|about you)$/i;
+/** Headings are matched by meaning, not exact text, across ATS formats (Workday, Greenhouse, Lever, Ashby, bank postings). */
+const REQUIRED_HEADING = /\b(?:required|requirements?|minimum|basic qualifications|qualifications|what you(?:'|’)?ll need|what you need|what you(?:'|’)?ll bring|what you bring|what we(?:'|’)?re looking for|must[- ]haves?|you have|you(?:'|’)?ll have|who you are|about you|ideal candidate|(?:great|good) fit|a fit if|skills and experience)\b/i;
+const NOT_REQUIRED_HEADING = /\b(?:preferred|nice|bonus|plus(?:es)?|desired|desirable|optional|extra credit|benefits|perks|compensation|salary|about us|about the company)\b/i;
+/** A line that reads like a section heading: markdown heading, bold line, "Label:", or a short line without a full stop. */
+function isHeadingLike(line: string): boolean {
+  const trimmed = line.trim();
+  if (/^\s*(?:[-*•▪◦]|\d+[.)])\s+/.test(line) || trimmed.length > 80) return false;
+  return /^#/.test(trimmed) || /^\*\*[^*]+\*\*:?$/.test(trimmed) || /:$/.test(trimmed) || (trimmed.length <= 60 && !/[.!?]$/.test(trimmed));
+}
+function isRequiredHeading(text: string): boolean {
+  return REQUIRED_HEADING.test(text) && !NOT_REQUIRED_HEADING.test(text);
+}
 const MAX_REQUIRED_ITEMS = 12;
 /** Personality items are folded into observable work rows, never rated as must-haves. */
 const SOFT_REQUIREMENT = /\b(?:communicat\w*|mindset|self-starter|ambiguity|team player|attitude|curious|curiosity|passion\w*|instincts?|detail-oriented|collaborat\w*|proactive|interpersonal|fast-paced|enthusias\w*|empath\w*|humble|hungry|grit)\b/i;
@@ -495,8 +501,40 @@ export function extractRequiredItems(jobDescription: string): string[] {
       if (!SOFT_REQUIREMENT.test(item)) items.push(item);
       continue;
     }
-    if (inside && (items.length || /^#/.test(line.trim()))) break;
-    if (!inside && line.trim().length <= 80 && REQUIRED_HEADING.test(heading(line))) inside = true;
+    if (inside && isHeadingLike(line)) {
+      // A sub-heading like "Basic Qualifications" under "Qualifications" continues the section.
+      if (!items.length && isRequiredHeading(heading(line))) continue;
+      break;
+    }
+    if (inside && items.length) break;
+    if (!inside && isHeadingLike(line) && isRequiredHeading(heading(line))) inside = true;
+  }
+  return items.slice(0, MAX_REQUIRED_ITEMS);
+}
+
+const RESPONSIBILITY_HEADING = /\b(?:responsibilit(?:y|ies)|what you(?:'|’)?ll do|what you will do|what you(?:'|’)?ll be doing|the role|in this role|your role|your impact|day[- ]to[- ]day|duties|what you(?:'|’)?ll work on)\b/i;
+
+/**
+ * The posting's responsibilities: bullets under its "What you'll do" heading. Plain sub-headings
+ * inside that section are skipped; the next markdown or requirements heading ends it.
+ */
+export function extractResponsibilityItems(jobDescription: string): string[] {
+  const heading = (line: string) => line.replace(/^#+\s*/, "").replace(/[*_]/g, "").replace(/:\s*$/, "").trim();
+  const bullet = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
+  const items: string[] = [];
+  let inside = false;
+  for (const line of jobDescription.replaceAll("\r\n", "\n").split("\n")) {
+    if (!line.trim()) continue;
+    const item = bullet.exec(line)?.[1]?.replace(/[*_]/g, "").trim();
+    if (inside && item) {
+      items.push(item);
+      continue;
+    }
+    if (inside && (/^#/.test(line.trim()) || (isHeadingLike(line) && (isRequiredHeading(heading(line)) || NOT_REQUIRED_HEADING.test(heading(line)))))) {
+      if (/^#/.test(line.trim()) && RESPONSIBILITY_HEADING.test(heading(line)) && !items.length) continue;
+      break;
+    }
+    if (!inside && isHeadingLike(line) && RESPONSIBILITY_HEADING.test(heading(line))) inside = true;
   }
   return items.slice(0, MAX_REQUIRED_ITEMS);
 }

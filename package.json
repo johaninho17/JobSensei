@@ -28,30 +28,34 @@
     "pack:binaries": "node scripts/prepare-bundled-binaries.mjs",
     "dist": "npm run pack:binaries && npm run build && electron-builder",
     "dist:mac": "node scripts/prepare-bundled-binaries.mjs --platform=mac && npm run build && electron-builder --mac",
-    "dist:win": "node scripts/prepare-bundled-binaries.mjs --platform=win && npm run build && electron-builder --win"
+    "dist:win": "node scripts/prepare-bundled-binaries.mjs --platform=win && npm run build && electron-builder --win",
+    "interview:context": "tsc -p tsconfig.electron.json && node dist-electron/electron/interview-context.js",
+    "interview:check": "tsc -p tsconfig.electron.json && node dist-electron/electron/interview-check.js"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
+    "@fontsource-variable/atkinson-hyperlegible-next": "5.3.0",
+    "@fontsource-variable/newsreader": "5.3.0",
+    "@vitejs/plugin-react": "6.0.4",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "mammoth": "^1.12.0",
     "node-pty": "^1.1.0",
     "pdfjs-dist": "^6.2.108",
-    "react": "latest",
-    "react-dom": "latest",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "concurrently": "latest",
-    "electron": "latest",
+    "concurrently": "10.0.4",
+    "electron": "43.2.0",
     "electron-builder": "^26.15.3",
-    "typescript": "latest",
-    "vite": "latest",
+    "typescript": "7.0.2",
+    "vite": "8.1.5",
     "vitest": "^3.2.7",
-    "wait-on": "latest"
+    "wait-on": "9.1.0"
   },
   "build": {
     "appId": "com.jobsensei.desktop",

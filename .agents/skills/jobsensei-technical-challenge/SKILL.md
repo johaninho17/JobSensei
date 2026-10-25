@@ -19,7 +19,7 @@ Activate only for explicit assessment language such as:
 
 Do not activate for a pasted JD, application generation, `<company> interview`, or `<company> technical interview`. Those remain owned by the existing application and interview skills.
 
-Resolve exactly one existing job workspace using the active Sensei selection or that job's `.sensei/job.json`. Never create a job from a challenge prompt and never inspect sibling job artifacts.
+Resolve exactly one existing job workspace by the `AGENTS.md` job rule (a `(job: <job-id>)` in the prompt wins). Never create a job from a challenge prompt and never inspect sibling job artifacts.
 
 ## Source Order
 
@@ -52,7 +52,7 @@ Create only:
 
 Update `interviews/interview.json` only to register the requested round and these artifact paths. Do not modify existing resume, cover letter, evaluation, question bank, prep, mock, or debrief files.
 
-Refresh the technical round's `dashboardBrief.technicalTopics`, readiness counts, and `references` in the same write stage. Add each lab and verbal scenario as a `challenge` reference with its real source path, stable exercise ID or exact heading anchor, full prompt summary, and `primary` or `secondary` priority. Keep the challenge files authoritative; dashboard references navigate to them and must not replace prompts, tests, hints, answers, or scoring details.
+Never write `dashboardBrief`. After writing the files, run `npm --prefix "$JOBSENSEI_APP_ROOT" run interview:check -- <job-id> <round-id>` once; it validates the labs and registers them, and the app builds the dashboard from the files.
 
 `challenge.json` records schema version, job ID, round ID, assessment mode, known timebox, allowed tools, confirmed constraints, source basis, whether the real prompt was supplied, artifact paths, and unresolved unknowns.
 
@@ -60,7 +60,12 @@ Refresh the technical round's `dashboardBrief.technicalTopics`, readiness counts
 
 Write `practice_labs.json` against the app's `challengePracticeSchema`. Create 3-6 exercises unless the user requests another count. Include both coding/implementation labs and verbal scenarios when the format is mixed or unknown.
 
+The knowability test and framing rules in the interview pipeline `SKILL.md` apply to every exercise. Build each exercise from a JD responsibility or required item, as a generic version of that task a strong outside candidate could do. Use standard skills the JD names (a query, an API call, parsing JSON, debugging a failing request, a runbook, a customer plan); never the company's private systems, proprietary data formats, or niche protocols the JD does not require. The company name appears only in `jobRelevance`, never in `prompt`.
+
 Every exercise requires:
+
+- `jdRequirement`: the JD line it tests
+- `knowableFrom`: `"general craft"` or `"public docs: <url>"`
 
 - Stable ID, type, title, difficulty, and realistic timebox
 - Job relevance
@@ -73,7 +78,9 @@ Every exercise requires:
 - Common mistakes and likely follow-up probes
 - Evaluation criteria and a points-based self-scoring rubric
 
-Coding work should resemble realistic role tasks rather than difficult algorithm trivia unless the supplied assessment explicitly emphasizes algorithms. Verbal scenarios need a direct sample answer grounded in selected evidence, an answer-duration target inside the prompt or starter context, and truthfulness cautions.
+`sourceBasis: "reported_process"` requires at least one URL in `sources`; otherwise use `job_derived`.
+
+Coding work should resemble realistic role tasks rather than difficult algorithm trivia unless the supplied assessment explicitly emphasizes algorithms. Verbal scenarios need a short approach (steps, not a script) grounded in selected evidence, an answer-duration target inside the prompt or starter context, and truthfulness cautions.
 
 ## Boundaries
 

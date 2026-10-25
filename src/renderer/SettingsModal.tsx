@@ -1,10 +1,19 @@
-import { useEffect, useState } from "react";
-import type { BulletBank, BulletBankItem, CandidateProfile, Settings, VoiceSettings } from "../shared/schemas";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { EMPTY_INTERVIEW_LOGISTICS, type BulletBank, type BulletBankItem, type CandidateProfile, type InterviewLogistics, type Settings, type VoiceSettings } from "../shared/schemas";
 import { deriveVoicePresets } from "../shared/voice-presets";
 
-type SettingsTab = "voice" | "story" | "truth" | "resume" | "bullets" | "identity" | "preview";
+type SettingsTab = "voice" | "story" | "truth" | "interview" | "resume" | "bullets" | "identity" | "preview";
+const SETTINGS_TABS: SettingsTab[] = ["voice", "story", "truth", "interview", "resume", "bullets", "identity", "preview"];
 
-type ProfilePreview = { styleRules: string[]; instructions: string[]; baseResumeHasSummary: boolean | null };
+type ProfilePreview = { styleRules: string[]; instructions: string[]; baseResumeHasSummary: boolean | null; interviewLogistics: string[]; storyBankPath: string | null };
+
+const LOGISTICS_FIELDS: Array<{ key: keyof InterviewLogistics; label: string; placeholder: string }> = [
+  { key: "location", label: "Location", placeholder: "e.g., Portland, OR (open to relocating)" },
+  { key: "workAuthorization", label: "Work authorization", placeholder: "e.g., Authorized to work in the US, no sponsorship needed" },
+  { key: "compensation", label: "Compensation expectations", placeholder: "e.g., $90k+ base, flexible for the right role" },
+  { key: "noticePeriod", label: "Notice period / start date", placeholder: "e.g., Two weeks' notice" },
+  { key: "workArrangement", label: "Remote / hybrid / on-site", placeholder: "e.g., Hybrid or on-site; open to remote" },
+];
 
 export function SettingsModal({
   open,
@@ -44,6 +53,7 @@ export function SettingsModal({
   const [confidentialNamesText, setConfidentialNamesText] = useState("");
   const [boundariesText, setBoundariesText] = useState("");
   const [preview, setPreview] = useState<ProfilePreview | null>(null);
+  const [logistics, setLogistics] = useState<InterviewLogistics>(EMPTY_INTERVIEW_LOGISTICS);
 
   // Bullet Bank state
   const [bulletBank, setBulletBank] = useState<BulletBank | null>(null);
@@ -52,6 +62,15 @@ export function SettingsModal({
   const [newBulletEmployer, setNewBulletEmployer] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Focus moves into the dialog on open and returns to the opener on close.
+  useEffect(() => {
+    if (!open) return;
+    const opener = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => opener?.focus?.();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -85,6 +104,7 @@ export function SettingsModal({
       setTransitionSummary(profile.career?.transitionSummary ?? "");
       setConfidentialNamesText((profile.truth?.confidentialNames ?? []).join(", "));
       setBoundariesText((profile.truth?.boundaries ?? []).join("\n"));
+      setLogistics({ ...EMPTY_INTERVIEW_LOGISTICS, ...(profile.preferences.interview ?? {}) });
     }
     void window.sensei.profile.preview().then(setPreview).catch(() => setPreview(null));
     setSaveSuccess(false);
@@ -99,6 +119,16 @@ export function SettingsModal({
   }, [open, profile]);
 
   if (!open) return null;
+
+  function onTabKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const index = SETTINGS_TABS.indexOf(activeTab);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? SETTINGS_TABS.length - 1
+      : (index + (event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : SETTINGS_TABS.length - 1)) % SETTINGS_TABS.length;
+    setActiveTab(SETTINGS_TABS[next]!);
+    document.getElementById(`settings-tab-${SETTINGS_TABS[next]}`)?.focus();
+  }
 
   const handleSavePreferences = async () => {
     if (!profile) return;
@@ -126,6 +156,7 @@ export function SettingsModal({
         transitionSummary,
         confidentialNames: confidentialNamesText.split(/[,\n]/).map((name) => name.trim()).filter(Boolean),
         boundaries: boundariesText.split("\n").map((line) => line.trim()).filter(Boolean),
+        interviewLogistics: logistics,
       });
       onProfileUpdated(withDetails ?? updated);
       setPreview(await window.sensei.profile.preview().catch(() => null));
@@ -172,83 +203,115 @@ export function SettingsModal({
   const activeBullets = bulletBank?.bullets.filter((b) => b.themeId === selectedThemeId) ?? [];
 
   return (
-    <div className="settings-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="JobSensei Profile and Voice Settings">
-      <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="settings-overlay" onClick={onClose}>
+      <div className="settings-modal" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="settings-title" tabIndex={-1} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}>
         <div className="settings-header">
           <div>
-            <span className="eyebrow">PREFERENCES & VOICE</span>
-            <h2>Settings & Profile</h2>
+            <h2 id="settings-title">Settings</h2>
           </div>
           <button className="settings-close-btn" onClick={onClose} aria-label="Close settings">✕</button>
         </div>
 
-        <nav className="settings-nav" role="tablist">
+        <nav className="settings-nav" role="tablist" aria-label="Settings sections" aria-orientation="vertical" onKeyDown={onTabKeyDown}>
           <button
             role="tab"
+            id="settings-tab-voice"
+            aria-controls="settings-panel"
+            tabIndex={activeTab === "voice" ? 0 : -1}
             aria-selected={activeTab === "voice"}
             className={activeTab === "voice" ? "is-active" : ""}
             onClick={() => setActiveTab("voice")}
           >
-            Tone & Voice
+            Tone and voice
           </button>
           <button
             role="tab"
+            id="settings-tab-story"
+            aria-controls="settings-panel"
+            tabIndex={activeTab === "story" ? 0 : -1}
             aria-selected={activeTab === "story"}
             className={activeTab === "story" ? "is-active" : ""}
             onClick={() => setActiveTab("story")}
           >
-            Career Story & Pillars
+            Career story and pillars
           </button>
           <button
             type="button"
             role="tab"
+            id="settings-tab-truth"
+            aria-controls="settings-panel"
+            tabIndex={activeTab === "truth" ? 0 : -1}
             aria-selected={activeTab === "truth"}
             className={activeTab === "truth" ? "is-active" : ""}
             onClick={() => setActiveTab("truth")}
           >
-            Truth & Privacy
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === "resume"}
-            className={activeTab === "resume" ? "is-active" : ""}
-            onClick={() => setActiveTab("resume")}
-          >
-            Resume Tailoring
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === "bullets"}
-            className={activeTab === "bullets" ? "is-active" : ""}
-            onClick={() => setActiveTab("bullets")}
-          >
-            Reusable Bullet Bank
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === "identity"}
-            className={activeTab === "identity" ? "is-active" : ""}
-            onClick={() => setActiveTab("identity")}
-          >
-            Identity & Sources
+            Truth and privacy
           </button>
           <button
             type="button"
             role="tab"
+            id="settings-tab-interview"
+            aria-controls="settings-panel"
+            tabIndex={activeTab === "interview" ? 0 : -1}
+            aria-selected={activeTab === "interview"}
+            className={activeTab === "interview" ? "is-active" : ""}
+            onClick={() => setActiveTab("interview")}
+          >
+            Interview prep
+          </button>
+          <button
+            role="tab"
+            id="settings-tab-resume"
+            aria-controls="settings-panel"
+            tabIndex={activeTab === "resume" ? 0 : -1}
+            aria-selected={activeTab === "resume"}
+            className={activeTab === "resume" ? "is-active" : ""}
+            onClick={() => setActiveTab("resume")}
+          >
+            Resume tailoring
+          </button>
+          <button
+            role="tab"
+            id="settings-tab-bullets"
+            aria-controls="settings-panel"
+            tabIndex={activeTab === "bullets" ? 0 : -1}
+            aria-selected={activeTab === "bullets"}
+            className={activeTab === "bullets" ? "is-active" : ""}
+            onClick={() => setActiveTab("bullets")}
+          >
+            Reusable bullet bank
+          </button>
+          <button
+            role="tab"
+            id="settings-tab-identity"
+            aria-controls="settings-panel"
+            tabIndex={activeTab === "identity" ? 0 : -1}
+            aria-selected={activeTab === "identity"}
+            className={activeTab === "identity" ? "is-active" : ""}
+            onClick={() => setActiveTab("identity")}
+          >
+            Identity and sources
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="settings-tab-preview"
+            aria-controls="settings-panel"
+            tabIndex={activeTab === "preview" ? 0 : -1}
             aria-selected={activeTab === "preview"}
             className={activeTab === "preview" ? "is-active" : ""}
             onClick={() => setActiveTab("preview")}
           >
-            What Agy Sees
+            What Agy sees
           </button>
         </nav>
 
-        <div className="settings-body">
+        <div className="settings-body" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${activeTab}`}>
           {activeTab === "voice" && (
             <div className="settings-section">
               <div className="settings-group">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <label className="settings-group-title">Tone & Positioning Presets</label>
+                  <h3 className="settings-group-title" id="settings-tone-and-positioning-presets">Tone and positioning presets</h3>
                   <span style={{ fontSize: "0.75rem", color: "var(--color-fg-muted)" }}>
                     Generated dynamically from your profile & career discipline
                   </span>
@@ -271,9 +334,9 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
-                <label className="settings-group-title">Custom Voice & Tone Guidance (Optional)</label>
+                <h3 className="settings-group-title" id="settings-custom-voice-and-tone-guidance-optional">Custom voice and tone guidance (optional)</h3>
                 <p className="settings-group-desc">Provide your own voice instructions to customize drafts further (e.g., "Keep sentences punchy and conversational; emphasize commercial deal sizes; avoid jargon").</p>
-                <textarea
+                <textarea aria-labelledby="settings-custom-voice-and-tone-guidance-optional"
                   className="settings-textarea"
                   rows={3}
                   value={voice.customGuidance ?? ""}
@@ -294,11 +357,11 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
-                <label className="settings-group-title">Anti-AI Slop Filter</label>
+                <h3 className="settings-group-title" id="settings-anti-ai-slop-filter">Anti-AI slop filter</h3>
                 <p className="settings-group-desc">Enforces strict bans on machine clichés (delve, leverage, tapestry, realm, pivotal, rule-of-three corporate lists).</p>
                 <div className="settings-radio-row">
                   <label className="settings-radio-label">
-                    <input
+                    <input aria-labelledby="settings-anti-ai-slop-filter"
                       type="radio"
                       name="slopStrictness"
                       checked={voice.antiSlopStrictness === "aggressive"}
@@ -319,11 +382,11 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
-                <label className="settings-group-title">Cover Letter Narrative Depth</label>
+                <h3 className="settings-group-title" id="settings-cover-letter-narrative-depth">Cover letter narrative depth</h3>
                 <p className="settings-group-desc">Determine whether the cover letter is a human journey or technical proof points.</p>
                 <div className="settings-radio-row">
                   <label className="settings-radio-label">
-                    <input
+                    <input aria-labelledby="settings-cover-letter-narrative-depth"
                       type="radio"
                       name="narrativeDepth"
                       checked={voice.narrativeDepth === "journey_first"}
@@ -344,11 +407,11 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
-                <label className="settings-group-title">Interactive Clarifying Questions</label>
+                <h3 className="settings-group-title" id="settings-interactive-clarifying-questions">Interactive clarifying questions</h3>
                 <p className="settings-group-desc">When a job introduces adjacent tech domains (e.g. checkout, fintech, compliance), should JobSensei prompt you with multiple-choice questions?</p>
                 <div className="settings-radio-row">
                   <label className="settings-radio-label">
-                    <input
+                    <input aria-labelledby="settings-interactive-clarifying-questions"
                       type="radio"
                       name="interactiveQuestions"
                       checked={voice.interactiveQuestions === "on_gaps"}
@@ -382,18 +445,18 @@ export function SettingsModal({
           {activeTab === "story" && (
             <div className="settings-section">
               <div className="settings-group">
-                <label className="settings-group-title">Career Story & Narrative Pillars</label>
+                <h3 className="settings-group-title" id="settings-career-story-and-narrative-pillars">Career story and narrative pillars</h3>
                 <p className="settings-group-desc">
                   JobSensei uses your authentic human journey instead of parroting job descriptions. These three questions define your career transitions, problem-solving ethos, and person-fit across all cover letters and interviews.
                 </p>
               </div>
 
               <div className="settings-group">
-                <label className="settings-group-title">Career Direction</label>
+                <h3 className="settings-group-title" id="settings-career-direction">Career direction</h3>
                 <p className="settings-group-desc">
                   One or two sentences: where your career has been and where you are heading. Agy opens your story with this.
                 </p>
-                <textarea
+                <textarea aria-labelledby="settings-career-direction"
                   className="settings-textarea"
                   rows={2}
                   placeholder="e.g., Started in backend development and moved into customer-facing technical work; now looking for solutions roles that keep me close to both the code and the customer."
@@ -403,11 +466,11 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
-                <label className="settings-group-title">1. Career Transitions & Turning Points</label>
+                <h3 className="settings-group-title" id="settings-1-career-transitions-and-turning-points">1. Career transitions and turning points</h3>
                 <p className="settings-group-desc">
                   What motivated you to move between roles or step outside your comfort zone? What drives your career choices?
                 </p>
-                <textarea
+                <textarea aria-labelledby="settings-1-career-transitions-and-turning-points"
                   className="settings-textarea"
                   rows={3}
                   placeholder="e.g., I started my career focused on backend systems and architecture, but transitioned into solutions engineering to combine hands-on technical problem-solving with client-facing strategy."
@@ -417,11 +480,11 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
-                <label className="settings-group-title">2. Operating Style & Ownership</label>
+                <h3 className="settings-group-title" id="settings-2-operating-style-and-ownership">2. Operating style and ownership</h3>
                 <p className="settings-group-desc">
                   When a client, partner, or teammate runs into friction, how do you handle it?
                 </p>
-                <textarea
+                <textarea aria-labelledby="settings-2-operating-style-and-ownership"
                   className="settings-textarea"
                   rows={3}
                   placeholder="e.g., I take proactive ownership of the issue, diagnose the technical root cause alongside internal engineering and external stakeholders, and resolve blockers collaboratively rather than passing off responsibility."
@@ -431,11 +494,11 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
-                <label className="settings-group-title">3. Fit as a Person & Core Values</label>
+                <h3 className="settings-group-title" id="settings-3-fit-as-a-person-and-core-values">3. Fit as a person and core values</h3>
                 <p className="settings-group-desc">
                   Who are you as a person? What defines your character and motivation beyond daily task descriptions?
                 </p>
-                <textarea
+                <textarea aria-labelledby="settings-3-fit-as-a-person-and-core-values"
                   className="settings-textarea"
                   rows={3}
                   placeholder="e.g., I care about the people on the other side of the problem. I stay with an issue until it's actually fixed, and I'd rather say 'I don't know yet, let me find out' than guess."
@@ -449,11 +512,11 @@ export function SettingsModal({
           {activeTab === "truth" && (
             <div className="settings-section">
               <div className="settings-group">
-                <label className="settings-group-title">Clients & Partners Never to Name</label>
+                <h3 className="settings-group-title" id="settings-clients-and-partners-never-to-name">Clients and partners never to name</h3>
                 <p className="settings-group-desc">
                   These names never appear in your resume or cover letter. Agy describes them by industry instead (for example, "a global professional-services firm"). Separate names with commas.
                 </p>
-                <textarea
+                <textarea aria-labelledby="settings-clients-and-partners-never-to-name"
                   className="settings-textarea"
                   rows={2}
                   placeholder="e.g., Northwind Partners, Contoso Health"
@@ -462,11 +525,11 @@ export function SettingsModal({
                 />
               </div>
               <div className="settings-group">
-                <label className="settings-group-title">Claims I Never Make</label>
+                <h3 className="settings-group-title" id="settings-claims-i-never-make">Claims I never make</h3>
                 <p className="settings-group-desc">
                   One per line. Agy treats these as hard limits on every application.
                 </p>
-                <textarea
+                <textarea aria-labelledby="settings-claims-i-never-make"
                   className="settings-textarea"
                   rows={4}
                   placeholder="e.g., Never claim a professional license or certification I don't hold."
@@ -477,10 +540,45 @@ export function SettingsModal({
             </div>
           )}
 
+          {activeTab === "interview" && (
+            <div className="settings-section">
+              <div className="settings-group">
+                <h3 className="settings-group-title" id="settings-interview-logistics">Interview logistics</h3>
+                <p className="settings-group-desc">
+                  Interview prep uses these exactly as you write them. Leave a field blank and prep will remind you to fill it in; Agy never guesses.
+                </p>
+                <div className="settings-inputs-grid">
+                  {LOGISTICS_FIELDS.map((field) => (
+                    <label key={field.key}>
+                      {field.label}
+                      <input aria-labelledby="settings-interview-logistics"
+                        type="text"
+                        placeholder={field.placeholder}
+                        value={logistics[field.key]}
+                        onChange={(e) => setLogistics((current) => ({ ...current, [field.key]: e.target.value }))}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="settings-group">
+                <h3 className="settings-group-title" id="settings-story-bank">Story bank</h3>
+                <p className="settings-group-desc">
+                  6–8 true stories every interview round picks from. Agy builds it the first time you prepare an interview; you edit the file directly.
+                </p>
+                {preview?.storyBankPath ? (
+                  <button type="button" className="secondary-btn" onClick={() => void window.sensei.files.reveal(preview.storyBankPath!)}>
+                    Open story bank
+                  </button>
+                ) : <p className="empty-small">No story bank yet. It is created on your first interview prep.</p>}
+              </div>
+            </div>
+          )}
+
           {activeTab === "preview" && (
             <div className="settings-section">
               <div className="settings-group">
-                <label className="settings-group-title">What Agy Sees</label>
+                <h3 className="settings-group-title" id="settings-what-agy-sees">What Agy sees</h3>
                 <p className="settings-group-desc">
                   Exactly what your saved settings and voice profile give Agy on the next application. Save to refresh.
                 </p>
@@ -490,6 +588,8 @@ export function SettingsModal({
                     {preview.styleRules.length ? <ul className="settings-preview-list">{preview.styleRules.map((rule) => <li key={rule}>{rule}</li>)}</ul> : <p className="empty-small">Nothing yet. Fill in Voice and Career Story.</p>}
                     <strong>Rules for every application</strong>
                     <ul className="settings-preview-list">{preview.instructions.map((rule) => <li key={rule}>{rule}</li>)}</ul>
+                    <strong>Interview logistics</strong>
+                    <ul className="settings-preview-list">{preview.interviewLogistics.map((line) => <li key={line}>{line}</li>)}</ul>
                   </>
                 ) : <p className="empty-small">Preview unavailable.</p>}
               </div>
@@ -499,13 +599,13 @@ export function SettingsModal({
           {activeTab === "resume" && (
             <div className="settings-section">
               <div className="settings-group">
-                <label className="settings-group-title">Professional Summary</label>
+                <h3 className="settings-group-title" id="settings-professional-summary">Professional summary</h3>
                 <p className="settings-group-desc">
                   Only applies if your base resume already has a summary section. When on, Agy tailors that summary for each job; when off, it stays exactly as written.
                   {preview?.baseResumeHasSummary === false && <> <strong>Your base resume has no summary section, so this setting has no effect.</strong></>}
                 </p>
                 <label className="settings-toggle-row">
-                  <input
+                  <input aria-labelledby="settings-professional-summary"
                     type="checkbox"
                     checked={includeSummary}
                     onChange={(e) => setIncludeSummary(e.target.checked)}
@@ -518,12 +618,12 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
-                <label className="settings-group-title">Bullet Density Targets</label>
+                <h3 className="settings-group-title" id="settings-bullet-density-targets">Bullet density targets</h3>
                 <p className="settings-group-desc">Control how many experience bullets are budgeted across your resume.</p>
                 <div className="settings-inputs-grid">
                   <label>
                     <span>Total Experience Bullets (Min):</span>
-                    <input type="number" min={8} max={20} value={totalMin} onChange={(e) => setTotalMin(Number(e.target.value))} />
+                    <input aria-labelledby="settings-bullet-density-targets" type="number" min={8} max={20} value={totalMin} onChange={(e) => setTotalMin(Number(e.target.value))} />
                   </label>
                   <label>
                     <span>Total Experience Bullets (Max):</span>
@@ -545,7 +645,7 @@ export function SettingsModal({
           {activeTab === "bullets" && (
             <div className="settings-section">
               <div className="settings-group">
-                <label className="settings-group-title">Role Themes & Reusable Bullets</label>
+                <h3 className="settings-group-title" id="settings-role-themes-and-reusable-bullets">Role themes and reusable bullets</h3>
                 <p className="settings-group-desc">
                   JobSensei groups target jobs into common themes. Verified bullets saved here are automatically reused across similar jobs to save compute and preserve consistent, proven wording.
                 </p>
@@ -612,7 +712,7 @@ export function SettingsModal({
           {activeTab === "identity" && (
             <div className="settings-section">
               <div className="settings-group">
-                <label className="settings-group-title">Candidate Identity</label>
+                <h3 className="settings-group-title" id="settings-candidate-identity">Candidate identity</h3>
                 <p className="settings-group-desc">Read dynamically from your local workspace. Never checked into Git.</p>
                 <div className="identity-summary-card">
                   <div><span>Full Name:</span> <strong>{profile?.identity.fullName ?? "Not set"}</strong></div>
@@ -643,7 +743,7 @@ export function SettingsModal({
             disabled={saving}
             onClick={() => void handleSavePreferences()}
           >
-            {saving ? "Saving…" : "Save Preferences"}
+            {saving ? "Saving…" : "Save settings"}
           </button>
         </div>
       </div>
