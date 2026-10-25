@@ -69,14 +69,14 @@ export function deriveVoicePresets(profile: CandidateProfile | null): VoicePrese
         name: "Consultative Commercial Lead",
         tagline: "Enterprise discovery, value realized, and revenue expansion",
         description: "Focuses on uncovering client pain points, enterprise discovery, multi-stakeholder navigation, and driving revenue growth.",
-        toneGuidance: "Confident, consultative, outcome-driven, and articulate. Highlight customer discovery, deal navigation, and measurable revenue impact.",
+        toneGuidance: "Confident, consultative, outcome-driven, and articulate. Highlight customer discovery, deal navigation, and revenue the evidence actually shows.",
       },
       {
         id: "strategic_gtm",
         name: "Strategic GTM Operator",
         tagline: "Pipeline velocity, market expansion, and execution",
         description: "Emphasizes repeatable go-to-market systems, territory strategy, pipeline acceleration, and cross-functional enablement.",
-        toneGuidance: "Strategic, metrics-focused, and execution-oriented. Emphasize operational rigor, conversion rates, and collaborative GTM execution.",
+        toneGuidance: "Strategic, metrics-aware, and execution-oriented. Emphasize repeatable process, conversion rates, and collaborative GTM execution.",
       },
       {
         id: "customer_champion",

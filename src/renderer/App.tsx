@@ -555,6 +555,7 @@ function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBa
   const [turningPoints, setTurningPoints] = useState("");
   const [workingStyle, setWorkingStyle] = useState("");
   const [personalValues, setPersonalValues] = useState("");
+  const [transitionSummary, setTransitionSummary] = useState("");
   const [state, setState] = useState<"idle" | "saving" | "error">("idle");
   const [message, setMessage] = useState("");
   function updateName(value: string) {
@@ -573,7 +574,7 @@ function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBa
             personalValues: personalValues.trim(),
           }
         : undefined;
-      const next = await window.sensei.profile.create({ fullName, artifactPrefix, narrativePillars });
+      const next = await window.sensei.profile.create({ fullName, artifactPrefix, narrativePillars, transitionSummary: transitionSummary.trim() || undefined });
       await onProfileCreated(next);
       setState("idle");
     } catch (caught) {
@@ -603,6 +604,15 @@ function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBa
             <p className="setup-story-hint">
               Answer these 3 questions now or edit them anytime in Settings. JobSensei uses them so your cover letters reflect your authentic journey instead of repeating the job description.
             </p>
+            <label>
+              Career direction
+              <textarea
+                rows={2}
+                placeholder="One or two sentences: where your career has been and where you're heading."
+                value={transitionSummary}
+                onChange={(e) => setTransitionSummary(e.target.value)}
+              />
+            </label>
             <label>
               1. Career Transitions & Pivots
               <textarea

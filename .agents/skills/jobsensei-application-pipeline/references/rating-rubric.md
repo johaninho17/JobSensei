@@ -21,7 +21,7 @@ Classify every material JD requirement before scoring. A title, base-resume word
 
 Weight requirements by importance and whether they are reasonably required on entry. Group preferred tools, employer systems, and learnable domain knowledge instead of scoring each as a separate gap. Demonstrated learning supports ramp readiness and the Apply Recommendation but never erases a role-defining gap or turns transferable work into direct experience.
 
-Use exactly six capability rows, one per category above. Group related requirements within the appropriate row. Fold soft adjectives such as rigorous, detail-oriented, collaborative, proactive, or excellent communicator into observable QA, validation, stakeholder, or delivery work instead of scoring them separately. Keep logistics outside weighted capability fit unless they are genuine hard gates.
+Use exactly six capability rows, one per category above. Group related requirements within the appropriate row. Fold soft adjectives such as rigorous, detail-oriented, collaborative, proactive, or excellent communicator into observable QA, validation, stakeholder, or delivery work instead of scoring them separately. Keep logistics outside weighted capability fit unless they are genuine hard gates. Hard requirements also go in the `### Must-Have Requirements` table defined in the pipeline skill's Evaluation section (met / learnable / blocker); a learnable must-have lowers the visible score slightly but never decides the gate.
 
 Report category scores, weighted arithmetic, confidence, direct strengths, transferable strengths, gaps, contradictions, the Apply Recommendation, and two or three reasons the score is not higher. A score does not represent hiring probability.
 

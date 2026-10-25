@@ -13,13 +13,19 @@ Audit date: 2026-10-23, updated after Phase 4. ⚠ marks copies still known to c
 | Resume tailoring scope | Snapshot `instructions` (freeze earlier roles; rework 3–4 current bullets + skills) | Pointers: pipeline skill, resume-tailor skill. Validator `RESUME_TAILORING_TOO_SIMILAR` advice now matches |
 | Base-resume bullets as evidence | `baseline` claim type (`validateBaselineClaim` in `application-artifacts.ts`) | Same wording in the truth rule, career-evidence skill + refs, evidence-snapshot contract: verbatim allowed, no score credit, rewrites need evidence |
 | Baseline bullet evidence IDs | `evidence-snapshot.ts` (bullet-bank IDs only) + finalizer `claim()` | No fallback IDs anywhere. Test in `evidence-authority.test.ts` |
-| Fit-score categories & weights | `electron/fit-scoring.ts` | `application-pipeline/SKILL.md`, `rating-rubric.md`, `workflow-contract.md`, `job-match/SKILL.md`, `.agents/rules/jobsensei-truth.md` |
-| Skills line count / Languages line | `application-artifacts.ts` | ⚠ truth rule "three technical lines" vs pipeline "curate categories" |
+| Fit-score categories & weights | `electron/fit-scoring.ts` | `application-pipeline/SKILL.md`, `rating-rubric.md`, `workflow-contract.md`, `job-match/SKILL.md` |
+| Must-have requirements (learnable −0.15 each, cap −0.45; gate uses pre-penalty score; only blockers stop) | `parseMustHaves` / `applyMustHaves` / `gateStatusFor` in `electron/fit-scoring.ts`; the list comes from the posting (`extractRequiredItems` → context `mustHaves`), checked by `verifyMustHaves`; best evidence per item is routed (`bestEvidenceForRequirement`); table format in pipeline skill "Evaluation" | Pointers: `rating-rubric.md`, `job-match/SKILL.md`, `workflow-contract.md`. Tests in `fit-scoring.test.ts` |
+| Settings → Agy (story, career direction, tone, custom guidance, boundaries, confidential names, anti-slop) | `narrativeStoryLines` / `compactStyleRules` / `profileInstructionLines` in `evidence-snapshot.ts`; pillars stored only in `preferences.coverLetter.narrativePillars` | Settings "What Agy Sees" tab reads the same functions via `profile:preview`. Tests in `settings-and-summary.test.ts` |
+| Resume summary | `canonical-resume.ts` (`summaryHeadingLine`, `summaryIsEditable`, compose) → `resumeTemplate.summary.editable` | Pipeline skill bullet; resume-tailor points to it. Tests in `settings-and-summary.test.ts` |
+| Letter echoes the JD / dense paragraphs | `COVER_LETTER_ECHOES_JD`, `COVER_LETTER_DENSE_PARAGRAPH` in `application-validation.ts` (warnings) | — |
+| Skills line count / Languages line | `application-artifacts.ts` | Pipeline skill "curate categories" (truth rule folded into AGENTS.md 2026-10-24) |
 | Interview round definitions | `interview-pipeline/references/stage-0N-*.md` | `AGENTS.md`, `PRODUCT_FLOWS.md` (⚠ STAR wording), `interview-pipeline/SKILL.md`, `interview-coach/SKILL.md` (⚠ STAR) |
 | No scripts / quotes in prep | stage refs | `AGENTS.md`, truth rule, quality-gate matrix |
-| Run budget (one snapshot, one bundle, one finalize) | `application-pipeline/SKILL.md` | `AGENTS.md`, truth rule, `workflows/jobsensei-apply.md`, `PRODUCT_FLOWS.md`, `antigravity-permissions.md` (⚠ allows `validate`, not `finalize`) |
-| URL fetch | `application-pipeline/SKILL.md` (built-in fetch once; no scripts) | `antigravity-permissions.md` (⚠ allows `validate`, not `finalize`) |
+| Run budget (fetch, one snapshot, one bundle, one finalize; <60s) | `application-pipeline/SKILL.md` (One-Pass Flow) | Pointers: `AGENTS.md` "New job flow", `workflows/jobsensei-apply.md`. Timing recorded in `.sensei/run_timing.json`, reported as `durationSeconds` |
+| URL fetch | `npm run jd:fetch` (`electron/jd-fetch.ts`, JSON-LD first) + pipeline skill step 1 | `antigravity-permissions.md` allow list |
 | Client names out of public files | Profile `truth.confidentialNames` → brief prohibited list, snapshot instruction, validator `CONFIDENTIAL_NAME_PUBLIC` | `AGENTS.md` pointer |
 | What Agy loads at run time | `syncWorkspaceAgentFiles` in `electron/workspace-init.ts` (at launch and before each terminal start; backs up differing copies) | `tests/workspace-agent-sync.test.ts` |
-| Cover-letter word limits | `buildCoverLetterBrief` (250–350, hard 400) | `MIN/TARGET_MAX/MAX_COVER_LETTER_WORDS` in `application-artifacts.ts` (kept in sync) |
+| Cover-letter word limits | `buildCoverLetterBrief` (200–280, hard 330; ≤3 sentences per body paragraph) | `MIN/TARGET_MAX/MAX_COVER_LETTER_WORDS` in `application-artifacts.ts` (kept in sync) |
 | Letter signature | `coverLetterSignatureName` in `canonical-resume.ts` (profile full name) | — |
+
+| Unchanged bullets in the bundle | `{ "baseline": N }` refs + omitted employers, expanded by `expandBundleBaselines` (`application-finalize.ts`) | Pipeline skill step 5 + contract example; `tests/pipeline-speed.test.ts` |

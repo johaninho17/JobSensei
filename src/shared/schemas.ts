@@ -126,6 +126,7 @@ export const candidateProfileCreateSchema = z.object({
   fullName: z.string().trim().min(1).max(120),
   artifactPrefix: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/),
   narrativePillars: candidateNarrativePillarsSchema.optional(),
+  transitionSummary: z.string().trim().max(600).optional(),
 });
 export type CandidateProfileCreate = z.infer<typeof candidateProfileCreateSchema>;
 
@@ -473,6 +474,9 @@ export const canonicalResumeBaselineSchema = z.object({
   sourceSha256: z.string().min(1),
   structureSource: z.enum(["markdown", "docx"]),
   headerLines: z.array(z.string().min(1)).min(2),
+  /** Optional summary section between the header and Skills ("Summary", "Professional Summary", "Profile", "About"). */
+  summaryHeadingLine: z.string().min(1).optional(),
+  originalSummaryLines: z.array(z.string().min(1)).optional(),
   skillsHeadingLine: z.string().min(1),
   professionalHeadingLine: z.string().min(1),
   employers: z.array(canonicalResumeEmployerSchema).min(1),
@@ -490,6 +494,8 @@ export const applicationDraftSchema = z.object({
   evidenceSnapshotId: z.string().min(1),
   canonicalBaselineId: z.string().min(1),
   resume: z.object({
+    /** Tailored summary; used only when the base resume has one and summary tailoring is on. */
+    summary: z.string().min(1).optional(),
     skillsLines: z.array(z.string().min(1)).min(1),
     employers: z.array(z.object({
       name: z.string().min(1),
@@ -645,8 +651,8 @@ const compactEvidenceRowSchema = z.object({
   scope: z.string(),
   employer: z.string().nullable(),
   project: z.string(),
-  sourcePath: z.string().min(1),
-  sourceFamily: z.string().nullable(),
+  sourcePath: z.string().min(1).optional(),
+  sourceFamily: z.string().nullable().optional(),
   timeline: z.enum(["current", "recent", "prior", "unknown"]),
   eligibility: evidenceEligibilitySchema,
   maximumClassification: z.enum(["direct", "strong_transferable", "adjacent_transferable", "unclear", "gap"]),
@@ -670,16 +676,18 @@ const applicationContextV2Schema = z.object({
     artifactPrefix: z.string().min(1),
     transitionSummary: z.string(),
     preferredRoleFamilies: z.array(z.string()),
-    storyGuidance: z.array(z.string()),
-    voiceGuidance: z.array(z.string()),
+    storyGuidance: z.array(z.string()).optional(),
+    voiceGuidance: z.array(z.string()).optional(),
   }),
   resumeTemplate: z.object({
     baselineId: z.string().min(1),
+    /** Present only when the base resume has a summary; `editable` follows the Settings toggle. */
+    summary: z.object({ original: z.string(), editable: z.boolean() }).optional(),
     originalSkillsLines: z.array(z.string()),
     employers: z.array(z.object({
       name: z.string().min(1),
       originalBulletCount: z.number().int().nonnegative(),
-      originalBullets: z.array(z.string()),
+      originalBullets: z.array(z.string()).optional(),
       baselineBullets: z.array(z.object({
         text: z.string().min(1),
         evidenceIds: z.array(z.string().min(1)),
@@ -688,6 +696,8 @@ const applicationContextV2Schema = z.object({
     editableSkillCategories: z.array(z.string()),
   }),
   footprint: resumeFootprintSchema,
+  /** The posting's required items; the evaluation rates each one (must:N) in the Must-Have table. */
+  mustHaves: z.array(z.object({ id: z.string().min(1), requirement: z.string().min(1) })).optional(),
   evidenceRows: z.array(compactEvidenceRowSchema),
   denylistRules: z.array(z.object({
     ruleId: z.string().min(1),
@@ -824,6 +834,11 @@ const evidenceLinkedTextSchema = z.object({
   evidenceIds: z.array(z.string().min(1)).default([]),
 }).strict();
 
+/** Keep base-resume bullet N (1-based, from resumeTemplate.employers[i].baselineBullets) unchanged, without retyping it. */
+const baselineBulletRefSchema = z.object({
+  baseline: z.number().int().min(1),
+}).strict();
+
 export const applicationBundleSchema = z.object({
   schemaVersion: z.literal(1),
   applicationRunId: z.string().min(1),
@@ -831,10 +846,12 @@ export const applicationBundleSchema = z.object({
   canonicalBaselineId: z.string().min(1),
   evaluationMarkdown: z.string().min(1),
   resume: z.object({
+    summary: evidenceLinkedTextSchema.optional(),
     skillsLines: z.array(evidenceLinkedTextSchema).min(1),
+    /** Employers left out are kept exactly as in the base resume. */
     employers: z.array(z.object({
       name: z.string().min(1),
-      bullets: z.array(evidenceLinkedTextSchema).min(1),
+      bullets: z.array(z.union([evidenceLinkedTextSchema, baselineBulletRefSchema])).min(1),
     }).strict()).min(1),
   }).strict(),
   coverLetter: z.object({
@@ -850,6 +867,11 @@ export const applicationBundleSchema = z.object({
   warnings: z.array(z.string()).default([]),
 }).strict();
 export type ApplicationBundle = z.infer<typeof applicationBundleSchema>;
+export type EvidenceLinkedText = z.infer<typeof evidenceLinkedTextSchema>;
+/** A bundle after baseline references and omitted employers have been filled in. */
+export type ExpandedApplicationBundle = Omit<ApplicationBundle, "resume"> & {
+  resume: { summary?: EvidenceLinkedText; skillsLines: EvidenceLinkedText[]; employers: Array<{ name: string; bullets: EvidenceLinkedText[] }> };
+};
 
 export const applicationRunStateSchema = z.enum(["snapshot_ready", "matched", "drafted", "validated", "stale"]);
 export const applicationRunSchema = z.object({
@@ -1015,6 +1037,9 @@ export interface SenseiApi {
     get(): Promise<CandidateProfile | null>;
     create(input: CandidateProfileCreate): Promise<CandidateProfile>;
     updatePreferences(preferences: CandidateProfile["preferences"]): Promise<CandidateProfile>;
+    updateDetails(details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[] }): Promise<CandidateProfile>;
+    /** What Agy will receive from the profile and voice profile on the next run. */
+    preview(): Promise<{ styleRules: string[]; instructions: string[]; baseResumeHasSummary: boolean | null }>;
   };
   bulletBank: {
     get(): Promise<BulletBank>;

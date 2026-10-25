@@ -23,6 +23,7 @@ import {
   MAX_COVER_LETTER_PARAGRAPHS,
   currentEmployerRecencyStats,
   coverLetterBodyParagraphs,
+  MAX_COVER_LETTER_SENTENCES_PER_PARAGRAPH,
   resumeArtifactStats,
   validateApplicationArtifact,
   validateCoverLetterAuditJson,
@@ -50,6 +51,7 @@ interface LoadedApplication {
   coverMarkdown: string | null;
   applicationContext: ApplicationContext | null;
   candidateProfile: CandidateProfile | null;
+  jobDescriptionText: string | null;
 }
 
 type AtsCheck = {
@@ -157,15 +159,22 @@ function keywordClasses(loaded: LoadedApplication): ApplicationValidationReport[
     : { markdown: loaded.evaluationMarkdown, adjustments: [] };
   const scoring = scoreEvaluation(bounded.markdown);
   if (!scoring) return [];
-  return scoring.requirements.map((row) => ({
-    term: row.requirement,
-    classification: row.classification === "direct"
-      ? "supported"
-      : row.classification === "strong_transferable" || row.classification === "adjacent_transferable"
-        ? "transferable"
-        : "unsupported",
-    evidenceIds: keywordEvidenceIds(row.evidence),
-  }));
+  return [
+    ...scoring.requirements.map((row) => ({
+      term: row.requirement,
+      classification: row.classification === "direct"
+        ? "supported" as const
+        : row.classification === "strong_transferable" || row.classification === "adjacent_transferable"
+          ? "transferable" as const
+          : "unsupported" as const,
+      evidenceIds: keywordEvidenceIds(row.evidence),
+    })),
+    ...(scoring.mustHaves ?? []).map((row) => ({
+      term: `${row.requirement} (must-have)`,
+      classification: row.status === "met" ? "supported" as const : "unsupported" as const,
+      evidenceIds: keywordEvidenceIds(row.evidence),
+    })),
+  ];
 }
 
 function normalizeAtsText(value: string): string {
@@ -411,6 +420,33 @@ function validateRunIntegrity(loaded: LoadedApplication, issues: ValidationIssue
   }
 }
 
+function sentenceCount(paragraph: string): number {
+  return paragraph.split(/(?<=[.!?])\s+/).filter((sentence) => sentence.trim().split(/\s+/).length >= 3).length;
+}
+
+/**
+ * Runs of 6+ consecutive words the letter shares with the job description, ignoring the
+ * company and role names. These read as parroting the posting back to the employer.
+ */
+export function jobDescriptionEchoes(letter: string, jobDescription: string, ignore: Array<string | null | undefined> = []): string[] {
+  const words = (text: string) => {
+    let value = text.toLowerCase();
+    for (const term of ignore) if (term) value = value.split(term.toLowerCase()).join(" ");
+    return value.replace(/[^a-z0-9'\s]+/g, " ").split(/\s+/).filter(Boolean);
+  };
+  const jd = words(jobDescription);
+  if (jd.length < 6) return [];
+  const grams = new Set<string>();
+  for (let i = 0; i + 6 <= jd.length; i += 1) grams.add(jd.slice(i, i + 6).join(" "));
+  const body = words(letter.replace(/^[\s\S]*?\n(?:dear|to whom)[^\n]*\n/i, ""));
+  const found: string[] = [];
+  for (let i = 0; i + 6 <= body.length; i += 1) {
+    const gram = body.slice(i, i + 6).join(" ");
+    if (grams.has(gram) && !found.some((existing) => existing.includes(body.slice(i, i + 3).join(" ")))) found.push(gram);
+  }
+  return found;
+}
+
 /**
  * Opening sentences of 15+ words with no first-person reference. These are the
  * "lecture the employer about their own business" sentences the brief forbids.
@@ -441,7 +477,7 @@ export function confidentialNameIssues(
         artifact.name,
         null,
         `The file names a confidential client or partner: ${named.join(", ")}.`,
-        "Describe the client or partner generically (e.g. 'a global professional-services firm') before sending.",
+        "Describe the client or partner by industry instead (e.g. 'a global professional-services firm') before sending.",
         "warning",
       ));
     }
@@ -599,7 +635,7 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
       issues.push(issue("COVER_LETTER_INVALID", "cover_letter.md", null, error instanceof Error ? error.message : String(error), "Leave the draft pending review; do not enter an automatic repair loop.", "error"));
     }
     if (!result) return;
-    if (result.wordCount < 230) {
+    if (result.wordCount < 180) {
       issues.push(issue("COVER_LETTER_CONCISE", "cover_letter.md", "wordCount", `The cover letter has ${result.wordCount} words.`, "This is allowed; review whether the employer connection and career arc are sufficiently clear.", "warning"));
     }
     if ((result.paragraphCount ?? 0) < MIN_COVER_LETTER_PARAGRAPHS || (result.paragraphCount ?? 0) > MAX_COVER_LETTER_PARAGRAPHS) {
@@ -622,6 +658,29 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
     const namesCandidate = /\b(?:I|my)\b/i.test(firstParagraph);
     const namesCompany = !brief?.company || firstParagraph.toLowerCase().includes(brief.company.toLowerCase());
     const namesRole = !brief?.role || firstParagraph.toLowerCase().includes(brief.role.toLowerCase());
+    const bodyParagraphs = coverLetterBodyParagraphs(loaded.coverMarkdown);
+    const denseIndex = bodyParagraphs.findIndex((paragraph) => sentenceCount(paragraph) > MAX_COVER_LETTER_SENTENCES_PER_PARAGRAPH);
+    if (denseIndex >= 0) {
+      issues.push(issue(
+        "COVER_LETTER_DENSE_PARAGRAPH",
+        "cover_letter.md",
+        `bodyParagraphs.${denseIndex}`,
+        `Paragraph ${denseIndex + 1} has ${sentenceCount(bodyParagraphs[denseIndex]!)} sentences; at most ${MAX_COVER_LETTER_SENTENCES_PER_PARAGRAPH} reads well.`,
+        "Tell one or two examples properly instead of listing several.",
+        "warning",
+      ));
+    }
+    const echoes = jobDescriptionEchoes(loaded.coverMarkdown, loaded.jobDescriptionText ?? "", [brief?.company, brief?.role]);
+    if (echoes.length) {
+      issues.push(issue(
+        "COVER_LETTER_ECHOES_JD",
+        "cover_letter.md",
+        "bodyParagraphs",
+        `The letter repeats job-description wording: “${echoes[0]}”.`,
+        "Describe the candidate's own work in their own words; don't mirror the posting.",
+        "warning",
+      ));
+    }
     const employerSentences = openingSentencesNotAboutCandidate(firstParagraph);
     if (employerSentences.length) {
       issues.push(issue(
@@ -748,6 +807,7 @@ async function loadApplication(workspacePath: string, jobId: string): Promise<Lo
     coverMarkdown: await readOptionalText(join(jobPath, "cover_letter.md")),
     applicationContext,
     candidateProfile,
+    jobDescriptionText: await readOptionalText(join(jobPath, "original_jd.md")) ?? await readOptionalText(join(jobPath, "original_jd.txt")),
   };
 }
 

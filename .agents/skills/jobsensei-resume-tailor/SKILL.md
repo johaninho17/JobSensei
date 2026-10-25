@@ -20,11 +20,11 @@ Requirements:
 - Scope (same as the pipeline): keep earlier, less relevant roles word for word from `baselineBullets`; at the current employer, rework the 3–4 bullets that matter most for the JD and keep the rest as anchors; curate the skills lines. Rewriting the whole resume is not the goal; clearly fitting the target job category is.
 - Unchanged base-resume bullets are the candidate's own approved claims and keep the `evidenceIds` listed in `baselineBullets` (often none). Every rewritten or new claim must trace to evidence rows. Never borrow an unrelated evidence ID.
 - Frame rewritten bullets with the base resume's confidence: describe the kind of work strongly, without numbers that imply volume, and never add an event, metric, tool, or ownership that did not happen.
-- Never name clients or partners; describe them generically.
+- Never name clients or partners; describe them by industry instead (naming the industry is fine).
 - Follow `.sensei/application_context.json.resumePlan` as the run's deterministic allocation. Keep 10-14 experience bullets; when the plan targets 13 or 14, do not fall back to 12 merely because the prose is concise.
 - If `resumePlan.customerFacingRole` is true, satisfy `targetCurrentEmployerCustomerBullets` using only `customerFacingEvidenceIds`. Balance those bullets with technical current-employer work.
 - Follow the plan's allocation and profile preferences while preserving employer boundaries, timeline scope, and denylist limits.
-- Omit any resume summary section by default unless `preferences.resume.includeSummary` is explicitly enabled in the candidate profile.
+- Resume summary: follow the pipeline skill's summary rule (`resumeTemplate.summary.editable`).
 - Consult the candidate's Reusable Bullet Bank (`data/profile/bullet_bank.json`) when available. Where the candidate has pre-verified, high-impact bullets matching the role's themes, prioritize reusing or adapting those bullets to preserve proven wording, save compute, and maintain consistency across applications.
 - Use the profile's current-employer and total bullet ranges. Do not add a duplicate or unsupported bullet merely to reach a range.
 - Rank evidence by JD relevance (40%), evidence strength (25%), verified recency (20%), and role representation (15%). Relevance and truthfulness come before recency.

@@ -41,18 +41,19 @@ describe("cover letter brief and guidance contract", () => {
     expect(brief.role).toBe("Solution Analyst III");
   });
 
-  it("owns one college-style structure and a 250-350 word target", () => {
+  it("owns one college-style structure and a 200-280 word target", () => {
     const brief = buildCoverLetterBrief("Build integrations.", { title: "Solutions Engineer", company: "Acme" });
     expect(brief.structure).toHaveLength(3);
     expect(brief.structure?.[0]).toMatch(/applying for Solutions Engineer at Acme/);
     expect(brief.structure?.join(" ")).not.toMatch(/act\s*\d|3-act|4-act/i);
-    expect([brief.targetWordMin, brief.targetWordMax, brief.hardWordMax]).toEqual([250, 350, 400]);
+    expect([brief.targetWordMin, brief.targetWordMax, brief.hardWordMax]).toEqual([200, 280, 330]);
   });
 
   it("keeps every banned opener and the candidate's confidential client names in the prohibited list", () => {
     const brief = buildCoverLetterBrief("Build integrations.", { title: "Solutions Engineer", company: "Acme" }, {
       truth: { confidentialNames: ["Northwind Partners"] },
     } as never);
+    expect(brief.requiredElements.join(" ")).toMatch(/by industry/i);
     for (const phrase of ["I am excited to apply", "I am interested in applying", "aligns perfectly", "I am drawn to the mission", "Acme's mission", "Northwind Partners"]) {
       expect(brief.prohibitedPatterns).toContain(phrase);
     }

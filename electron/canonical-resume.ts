@@ -130,8 +130,15 @@ function parseCanonicalMarkdown(
     throw new Error("The configured base resume does not expose the required Skills, Professional Experience, and Education structure.");
   }
 
-  const rawHeaderLines = lines.slice(0, skillsIndex).map((line) => line.trim()).filter(Boolean);
+  // Optional summary section between the header and Skills. It is the candidate's own text:
+  // kept verbatim unless the user turns on summary tailoring in Settings.
+  const summaryIndex = lines.findIndex((line, index) => index < skillsIndex
+    && isHeading(line, /^(?:summary|professional\s+summary|career\s+summary|profile|professional\s+profile|about(?:\s+me)?)$/i));
+  const headerEnd = summaryIndex >= 0 ? summaryIndex : skillsIndex;
+  const rawHeaderLines = lines.slice(0, headerEnd).map((line) => line.trim()).filter(Boolean);
   const headerLines = sanitizeHeaderLines(rawHeaderLines);
+  const summaryHeadingLine = summaryIndex >= 0 ? lines[summaryIndex]!.trim() : undefined;
+  const originalSummaryLines = summaryIndex >= 0 ? lines.slice(summaryIndex + 1, skillsIndex).map((line) => line.trim()).filter(Boolean) : undefined;
   const originalSkillsLines = lines.slice(skillsIndex + 1, professionalIndex).map((line) => line.trim()).filter(Boolean);
   const professionalLines = lines.slice(professionalIndex + 1, educationIndex);
   const employers: CanonicalResumeEmployer[] = [];
@@ -172,6 +179,7 @@ function parseCanonicalMarkdown(
     sourceSha256,
     structureSource,
     headerLines,
+    ...(summaryHeadingLine ? { summaryHeadingLine, originalSummaryLines: originalSummaryLines ?? [] } : {}),
     skillsHeadingLine: lines[skillsIndex]!.trim(),
     professionalHeadingLine: lines[professionalIndex]!.trim(),
     employers,
@@ -263,7 +271,19 @@ export async function loadCanonicalResumeBaseline(workspacePath: string, relativ
   throw new Error("Protected resume baselines currently require a Markdown or DOCX base resume.");
 }
 
-export function composeCanonicalResume(baseline: CanonicalResumeBaseline, draft: ApplicationDraft["resume"]): string {
+/** Summary tailoring applies only when the base resume has a summary and the user turned it on. */
+export function summaryIsEditable(
+  baseline: CanonicalResumeBaseline,
+  profile: { preferences: { resume: { includeSummary?: boolean } } } | null | undefined,
+): boolean {
+  return Boolean(baseline.summaryHeadingLine && profile?.preferences.resume.includeSummary);
+}
+
+export function composeCanonicalResume(
+  baseline: CanonicalResumeBaseline,
+  draft: ApplicationDraft["resume"],
+  options: { includeSummary?: boolean } = {},
+): string {
   const draftEmployers = new Map(draft.employers.map((employer) => [normalized(employer.name), employer]));
   const baselineNames = baseline.employers.map((employer) => normalized(employer.name));
   if (draftEmployers.size !== baseline.employers.length || [...draftEmployers.keys()].some((name) => !baselineNames.includes(name))) {
@@ -274,8 +294,15 @@ export function composeCanonicalResume(baseline: CanonicalResumeBaseline, draft:
   const tailoredSkillsLines = draft.skillsLines.filter((line) => !isLanguagesLine(line));
   const composedSkillsLines = canonicalLanguagesLine ? [...tailoredSkillsLines, canonicalLanguagesLine] : tailoredSkillsLines;
   const header = sanitizeHeaderLines(baseline.headerLines).join("\n");
+  const summarySection = baseline.summaryHeadingLine
+    ? [
+      baseline.summaryHeadingLine,
+      options.includeSummary && draft.summary?.trim() ? draft.summary.trim() : (baseline.originalSummaryLines ?? []).join("\n"),
+    ].filter(Boolean)
+    : [];
   const sections = [
     header,
+    ...summarySection,
     baseline.skillsHeadingLine,
     composedSkillsLines.join("\n"),
     baseline.professionalHeadingLine,
@@ -343,7 +370,8 @@ export function canonicalResumeDrifts(markdown: string, baseline: CanonicalResum
   if (JSON.stringify(expectedHeader.slice(1)) !== JSON.stringify(actualHeader.slice(1))) {
     drifts.push({ code: "CONTACT_DRIFT", field: "contact", expected: expectedHeader.slice(1).join(" | "), actual: actualHeader.slice(1).join(" | ") });
   }
-  if (displayText(baseline.skillsHeadingLine) !== displayText(candidate.skillsHeadingLine)
+  if (Boolean(baseline.summaryHeadingLine) !== Boolean(candidate.summaryHeadingLine)
+    || displayText(baseline.skillsHeadingLine) !== displayText(candidate.skillsHeadingLine)
     || displayText(baseline.professionalHeadingLine) !== displayText(candidate.professionalHeadingLine)
     || displayText(baseline.educationHeadingLine) !== displayText(candidate.educationHeadingLine)
     || baseline.employers.length !== candidate.employers.length) {

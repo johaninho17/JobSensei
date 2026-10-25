@@ -13,6 +13,15 @@ export type FitRequirement = {
   evidence: string;
 };
 
+export const MUST_HAVE_STATUSES = ["met", "learnable", "blocker"] as const;
+export type MustHaveStatus = typeof MUST_HAVE_STATUSES[number];
+export type MustHaveRequirement = { requirement: string; status: MustHaveStatus; evidence: string; note: string };
+
+/** Each learnable must-have lowers the visible score by this much, up to the cap. */
+export const LEARNABLE_MUST_HAVE_PENALTY = 0.15;
+export const LEARNABLE_MUST_HAVE_PENALTY_CAP = 0.45;
+export const FIT_GATE = 3.5;
+
 export type FitScoreResult = {
   score: number;
   rawScore: number;
@@ -20,6 +29,12 @@ export type FitScoreResult = {
   directWeightPercent: number;
   directCorePercent: number;
   materialTransferableCoreCount: number;
+  /** Score before learnable must-have penalties. The apply gate uses this, so a learnable gap never turns YES into NO. */
+  scoreBeforeMustHaves?: number;
+  gateScore?: number;
+  mustHaves?: MustHaveRequirement[];
+  learnablePenalty?: number;
+  blockers?: MustHaveRequirement[];
   categoryCredits: Record<FitCategory, number>;
   requirements: FitRequirement[];
 };
@@ -143,9 +158,50 @@ export function parseFitRequirements(markdown: string): FitRequirement[] | null 
   })).filter((row) => row.requirement);
 }
 
+/** Parses the optional `### Must-Have Requirements` table (Requirement | Status | Evidence | Note). */
+export function parseMustHaves(markdown: string): MustHaveRequirement[] {
+  const section = /###\s+Must-Have Requirements\s*\n([\s\S]*?)(?=\n#{1,3}\s+|$)/i.exec(markdown)?.[1];
+  if (!section) return [];
+  const lines = section.split("\n").filter((line) => /^\s*\|.*\|\s*$/.test(line));
+  if (lines.length < 3) return [];
+  const cells = (line: string) => line.trim().slice(1, -1).split("|").map((value) => value.trim().replaceAll("`", ""));
+  const headers = cells(lines[0]!).map(normalizedHeader);
+  const index = (name: string) => headers.indexOf(name);
+  if (index("requirement") < 0 || index("status") < 0) return [];
+  return lines.slice(2).map(cells).map((row) => {
+    const raw = (row[index("status")] ?? "").toLowerCase();
+    const status: MustHaveStatus = raw.includes("block") ? "blocker" : raw.includes("learn") ? "learnable" : raw.includes("met") ? "met" : "learnable";
+    return {
+      requirement: row[index("requirement")] ?? "",
+      status,
+      evidence: index("evidence") >= 0 ? row[index("evidence")] ?? "" : "",
+      note: index("note") >= 0 ? row[index("note")] ?? "" : "",
+    };
+  }).filter((row) => row.requirement);
+}
+
+/**
+ * Learnable must-haves (e.g. a language the candidate can pick up) lower the visible score by
+ * 0.15 each, capped at 0.45, but the gate uses the score before that penalty. Only blockers
+ * (legal, credential, clearance, location) can stop an application.
+ */
+export function applyMustHaves(result: FitScoreResult, mustHaves: MustHaveRequirement[]): FitScoreResult {
+  const learnable = mustHaves.filter((row) => row.status === "learnable");
+  const blockers = mustHaves.filter((row) => row.status === "blocker");
+  const learnablePenalty = Math.round(Math.min(LEARNABLE_MUST_HAVE_PENALTY_CAP, learnable.length * LEARNABLE_MUST_HAVE_PENALTY) * 100) / 100;
+  const score = Math.max(0, Math.round((result.score - learnablePenalty) * 100) / 100);
+  const confidence = (learnable.length || blockers.length) && result.confidence === "high" ? "medium" : result.confidence;
+  return { ...result, score, confidence, scoreBeforeMustHaves: result.score, gateScore: result.score, mustHaves, learnablePenalty, blockers };
+}
+
+export function gateStatusFor(result: FitScoreResult): string {
+  if (result.blockers?.length) return "manual review: hard blocker";
+  return (result.gateScore ?? result.score) >= FIT_GATE ? "accepted" : "accepted at screening; evidence-calibrated score below threshold";
+}
+
 export function scoreEvaluation(markdown: string): FitScoreResult | null {
   const requirements = parseFitRequirements(markdown);
-  return requirements ? calculateFitScore(requirements) : null;
+  return requirements ? applyMustHaves(calculateFitScore(requirements), parseMustHaves(markdown)) : null;
 }
 
 const CLASSIFICATION_ORDER: FitClassification[] = ["gap", "unclear", "adjacent_transferable", "strong_transferable", "direct"];
@@ -415,8 +471,131 @@ export function normalizeEvidenceClassifications(markdown: string, snapshot: Evi
   return { markdown: markdown.replace(table, rewritten), adjustments };
 }
 
-export function normalizeEvaluationScore(markdown: string, snapshot?: EvidenceSnapshot): string {
-  const bounded = snapshot ? normalizeEvidenceClassifications(markdown, snapshot) : { markdown, adjustments: [] };
+const REQUIRED_HEADING = /^(?:what you(?:'|’)?ll need|what you need|what you bring|what we(?:'|’)?re looking for|requirements|required|required qualifications|minimum qualifications|basic qualifications|qualifications|must[- ]haves?|you have|who you are|you(?:'|’)?ll have|about you)$/i;
+const MAX_REQUIRED_ITEMS = 12;
+/** Personality items are folded into observable work rows, never rated as must-haves. */
+const SOFT_REQUIREMENT = /\b(?:communicat\w*|mindset|self-starter|ambiguity|team player|attitude|curious|curiosity|passion\w*|instincts?|detail-oriented|collaborat\w*|proactive|interpersonal|fast-paced|enthusias\w*|empath\w*|humble|hungry|grit)\b/i;
+/** Logistics can't be shown by career evidence; their status is taken as written. */
+const LOGISTICS_REQUIREMENT = /\b(?:authori[sz]ed|authori[sz]ation|visa|sponsorship|citizen\w*|clearance|relocat\w*|located|location|on-?site|in-office|travel|driver'?s licen[cs]e|background check|shifts?|weekends?)\b/i;
+
+/**
+ * The posting's required items: the bullets under its requirements heading, stopping at the
+ * next heading (so "Nice to have" / "Preferred" never count). Empty when no such section exists.
+ */
+export function extractRequiredItems(jobDescription: string): string[] {
+  const heading = (line: string) => line.replace(/^#+\s*/, "").replace(/[*_]/g, "").replace(/:\s*$/, "").trim();
+  const bullet = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
+  const lines = jobDescription.replaceAll("\r\n", "\n").split("\n");
+  const items: string[] = [];
+  let inside = false;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const item = bullet.exec(line)?.[1]?.replace(/[*_]/g, "").trim();
+    if (inside && item) {
+      if (!SOFT_REQUIREMENT.test(item)) items.push(item);
+      continue;
+    }
+    if (inside && (items.length || /^#/.test(line.trim()))) break;
+    if (!inside && line.trim().length <= 80 && REQUIRED_HEADING.test(heading(line))) inside = true;
+  }
+  return items.slice(0, MAX_REQUIRED_ITEMS);
+}
+
+const GENERIC_MUST_HAVE_TOKENS = new Set(["strong", "clear", "hands-on", "concept", "understanding", "including", "common", "similar", "role", "year", "years", "2+", "3+", "5+", "able", "comfort", "proficiency", "fluency", "familiarity", "solid", "good", "excellent", "plus", "etc", "other", "related", "both", "keep", "even", "when", "thing", "get", "hard", "natural"]);
+
+function meaningfulTokens(value: string): Set<string> {
+  return new Set([...fitTokens(value)].map((token) => token.replace(/\.+$/, "")).filter((token) => token.length >= 2 && !GENERIC_MUST_HAVE_TOKENS.has(token)));
+}
+
+/** The evidence row sharing the most concrete terms with a must-have, so the run can cite it. */
+export function bestEvidenceForRequirement(requirement: string, rows: Array<{ evidenceId: string; claim: string; scope?: string | null }>): string | null {
+  const wanted = meaningfulTokens(requirement);
+  const rowTokens = rows.map((row) => meaningfulTokens(`${row.claim} ${row.scope ?? ""}`));
+  // Rare shared terms (e.g. a specific language) outweigh terms many rows share (e.g. "data").
+  const frequency = new Map<string, number>();
+  for (const tokens of rowTokens) for (const token of tokens) if (wanted.has(token)) frequency.set(token, (frequency.get(token) ?? 0) + 1);
+  let best: string | null = null;
+  let bestScore = 0;
+  rows.forEach((row, index) => {
+    const score = [...rowTokens[index]!].filter((token) => wanted.has(token)).reduce((sum, token) => sum + 1 / (frequency.get(token) ?? 1), 0);
+    if (score > bestScore) { best = row.evidenceId; bestScore = score; }
+  });
+  return best;
+}
+
+/**
+ * Makes the Must-Have table answerable to the posting and the evidence:
+ * - one row per required item in the posting (missing items count as learnable, "not assessed");
+ * - rows the posting doesn't require are dropped, except blockers;
+ * - "met" needs a real evidence ID whose claim shares a concrete term with the requirement,
+ *   otherwise it becomes learnable.
+ */
+export function verifyMustHaves(markdown: string, requiredItems: string[], snapshot?: EvidenceSnapshot): { markdown: string; adjustments: string[] } {
+  const rows = parseMustHaves(markdown);
+  if (!requiredItems.length && !rows.length) return { markdown, adjustments: [] };
+  const adjustments: string[] = [];
+  const evidenceById = new Map((snapshot?.evidenceRows ?? []).map((row) => [row.evidenceId, `${row.claim} ${row.scope}`]));
+  const idPattern = /must:(\d+)/i;
+  const used = new Set<number>();
+  const matchRow = (item: string, index: number): MustHaveRequirement | undefined => {
+    const byId = rows.findIndex((row, rowIndex) => !used.has(rowIndex) && Number(idPattern.exec(row.requirement)?.[1]) === index + 1);
+    if (byId >= 0) { used.add(byId); return rows[byId]; }
+    let best = -1;
+    let bestCoverage = 0.3;
+    rows.forEach((row, rowIndex) => {
+      if (used.has(rowIndex) || idPattern.test(row.requirement)) return;
+      const coverage = tokenCoverage(row.requirement, item);
+      if (coverage >= bestCoverage) { best = rowIndex; bestCoverage = coverage; }
+    });
+    if (best >= 0) { used.add(best); return rows[best]; }
+    return undefined;
+  };
+  const verifyMet = (requirement: string, row: MustHaveRequirement): MustHaveRequirement => {
+    if (row.status !== "met" || !snapshot || LOGISTICS_REQUIREMENT.test(requirement)) return row;
+    const ids = evidenceIds(row.evidence).filter((id) => evidenceById.has(id));
+    const wanted = meaningfulTokens(requirement);
+    const shown = ids.some((id) => [...meaningfulTokens(evidenceById.get(id)!)].some((token) => wanted.has(token)));
+    if (shown) return row;
+    adjustments.push(`${requirement}: met -> learnable (cited evidence doesn't show it)`);
+    return { ...row, status: "learnable", note: `${row.note ? `${row.note}; ` : ""}cited evidence doesn't show this` };
+  };
+  const shorten = (value: string) => {
+    const sentence = value.split(/(?<=[.;])\s+/)[0]!.replace(/[.;]$/, "");
+    return sentence.length > 100 ? `${sentence.slice(0, 97).trimEnd()}...` : sentence;
+  };
+  const verified: MustHaveRequirement[] = requiredItems.length
+    ? requiredItems.map((item, index) => {
+      const row = matchRow(item, index);
+      if (!row) {
+        adjustments.push(`${shorten(item)}: not assessed -> learnable`);
+        return { requirement: shorten(item), status: "learnable" as const, evidence: "", note: "not assessed in the run" };
+      }
+      return verifyMet(item, { ...row, requirement: shorten(item) });
+    })
+    : rows.map((row) => verifyMet(row.requirement, row));
+  if (requiredItems.length) {
+    rows.forEach((row, rowIndex) => {
+      if (used.has(rowIndex)) return;
+      if (row.status === "blocker") verified.push(row);
+      else adjustments.push(`${row.requirement}: dropped (not a required item in the posting)`);
+    });
+  }
+  const table = [
+    "### Must-Have Requirements",
+    "| Requirement | Status | Evidence | Note |",
+    "| --- | --- | --- | --- |",
+    ...verified.map((row) => `| ${[row.requirement, row.status, row.evidence, row.note].map((cell) => cell.replaceAll("|", "/")).join(" | ")} |`),
+  ].join("\n");
+  const section = /###\s+Must-Have Requirements\s*\n[\s\S]*?(?=\n#{1,3}\s+|\n- \*\*|$)/i;
+  const updated = section.test(markdown)
+    ? markdown.replace(section, `${table}\n`)
+    : markdown.replace(/(###\s+Requirement Scoring\s*\n(?:\s*\|.*\|\s*\n?)+)/i, `$1\n${table}\n`);
+  return { markdown: updated, adjustments };
+}
+
+export function normalizeEvaluationScore(markdown: string, snapshot?: EvidenceSnapshot, requiredItems: string[] = []): string {
+  const checked = verifyMustHaves(markdown, requiredItems, snapshot).markdown;
+  const bounded = snapshot ? normalizeEvidenceClassifications(checked, snapshot) : { markdown: checked, adjustments: [] };
   const result = scoreEvaluation(bounded.markdown);
   if (!result) return bounded.markdown;
   const scoreLine = `- **Weighted Fit Score:** ${result.score.toFixed(2)} / 5`;
@@ -434,7 +613,7 @@ export function normalizeEvaluationScore(markdown: string, snapshot?: EvidenceSn
   normalized = confidencePattern.test(normalized)
     ? normalized.replace(confidencePattern, confidenceLine)
     : normalized.replace(scoreLine, `${scoreLine}\n${confidenceLine}`);
-  const gateLine = `- **Gate Status:** ${result.score >= 3.5 ? "accepted" : "accepted at screening; evidence-calibrated score below threshold"}`;
+  const gateLine = `- **Gate Status:** ${gateStatusFor(result)}`;
   const gatePattern = /^.*Gate Status\*{0,2}\s*:\*{0,2}\s*[^\n]+$/im;
   normalized = gatePattern.test(normalized)
     ? normalized.replace(gatePattern, gateLine)
@@ -453,6 +632,7 @@ export function normalizeEvaluationScore(markdown: string, snapshot?: EvidenceSn
     ...FIT_CATEGORIES.map((category) => `- **${categoryLabels[category]}:** ${result.categoryCredits[category].toFixed(1)} / ${EXPECTED_CATEGORY_WEIGHTS[category]}`),
     `- **Weighted total:** ${(result.rawScore * 20).toFixed(1)} / 100`,
     `- **Canonical fit score:** ${result.score.toFixed(2)} / 5`,
+    ...(result.learnablePenalty ? [`- **Fit before must-have gaps:** ${(result.scoreBeforeMustHaves ?? result.score).toFixed(2)} / 5 (learnable must-haves: −${result.learnablePenalty.toFixed(2)})`] : []),
   ].join("\n");
   const categoryPattern = /###\s+Category Summary\s*\n[\s\S]*?(?=\n#{1,3}\s+|$)/i;
   normalized = categoryPattern.test(normalized)
@@ -464,10 +644,14 @@ export function normalizeEvaluationScore(markdown: string, snapshot?: EvidenceSn
     [/Transferable Evidence/i, "## Transferable Evidence", result.requirements.filter((row) => row.classification === "strong_transferable" || row.classification === "adjacent_transferable")],
     [/(?:Important Gaps|Gaps and Risks|Hard Blockers)/i, "## Important Gaps or Hard Blockers", result.requirements.filter((row) => row.classification === "gap" || row.classification === "unclear")],
   ];
+  const mustHaveGaps = (result.mustHaves ?? []).filter((row) => row.status !== "met");
   for (const [heading, title, rows] of canonicalSections) {
-    const body = rows.length
-      ? rows.map((row) => `- **${row.requirement}:** ${row.classification.replaceAll("_", " ")} (${row.evidence || "no eligible evidence"}).`).join("\n")
-      : "- None identified in the calibrated requirement table.";
+    const isGaps = title.startsWith("## Important Gaps");
+    const lines = [
+      ...rows.map((row) => `- **${row.requirement}:** ${row.classification.replaceAll("_", " ")} (${row.evidence || "no eligible evidence"}).`),
+      ...(isGaps ? mustHaveGaps.map((row) => `- **${row.requirement}** (must-have, ${row.status === "blocker" ? "hard blocker" : "learnable"})${row.note ? `: ${row.note}` : "."}`) : []),
+    ];
+    const body = lines.length ? lines.join("\n") : "- None identified in the calibrated requirement table.";
     const section = `${title}\n${body}`;
     const pattern = new RegExp(`##\\s+[^\\n]*${heading.source}[^\\n]*\\n[\\s\\S]*?(?=\\n##\\s+|$)`, "i");
     normalized = pattern.test(normalized) ? normalized.replace(pattern, section) : `${normalized.trimEnd()}\n\n${section}\n`;

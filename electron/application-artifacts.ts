@@ -77,10 +77,10 @@ export const MIN_RESUME_BULLETS = 10;
 export const TARGET_RESUME_BULLETS = 12;
 export const MAX_RESUME_BULLETS = 14;
 export const MIN_CURRENT_EMPLOYER_BULLETS = 5;
-// Keep in sync with buildCoverLetterBrief (250-350 target, 400 hard), the owner of letter shape.
-export const MIN_COVER_LETTER_WORDS = 200;
-export const TARGET_MAX_COVER_LETTER_WORDS = 350;
-export const MAX_COVER_LETTER_WORDS = 400;
+// Keep in sync with buildCoverLetterBrief (200-280 target, 330 hard), the owner of letter shape.
+export const MIN_COVER_LETTER_WORDS = 160;
+export const TARGET_MAX_COVER_LETTER_WORDS = 280;
+export const MAX_COVER_LETTER_WORDS = 330;
 export const MIN_COVER_LETTER_PARAGRAPHS = 3;
 export const MAX_COVER_LETTER_PARAGRAPHS = 5;
 export const MAX_COVER_LETTER_SENTENCES_PER_PARAGRAPH = 3;

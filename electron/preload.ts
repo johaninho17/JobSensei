@@ -14,6 +14,8 @@ const api: SenseiApi = {
     get: () => ipcRenderer.invoke("profile:get"),
     create: (input) => ipcRenderer.invoke("profile:create", input),
     updatePreferences: (preferences) => ipcRenderer.invoke("profile:update-preferences", preferences),
+    updateDetails: (details) => ipcRenderer.invoke("profile:update-details", details),
+    preview: () => ipcRenderer.invoke("profile:preview"),
   },
   bulletBank: {
     get: () => ipcRenderer.invoke("bullet-bank:get"),

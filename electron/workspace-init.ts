@@ -5,13 +5,14 @@ import { join, relative } from "node:path";
 /** Agy runtime directories the app owns and keeps in sync inside the workspace. */
 export const MANAGED_AGENT_DIRS = ["skills", "rules", "workflows"] as const;
 
-/** Skills that used to ship to workspaces and must be removed from them. */
-export const RETIRED_WORKSPACE_SKILLS = [
-  "jobsensei-adk-typescript",
-  "jobsensei-feature-builder",
-  "jobsensei-local-data",
-  "jobsensei-quality-gate",
-  "jobsensei-ui-ux",
+/** Entries (relative to `<workspace>/.agents`) that used to ship to workspaces and must be removed. */
+export const RETIRED_WORKSPACE_ENTRIES = [
+  "skills/jobsensei-adk-typescript",
+  "skills/jobsensei-feature-builder",
+  "skills/jobsensei-local-data",
+  "skills/jobsensei-quality-gate",
+  "skills/jobsensei-ui-ux",
+  "rules/jobsensei-truth.md", // folded into AGENTS.md
 ] as const;
 
 export interface AgentSyncReport {
@@ -167,12 +168,12 @@ export async function syncWorkspaceAgentFiles(workspacePath: string, options: { 
     }
   }
 
-  for (const retired of RETIRED_WORKSPACE_SKILLS) {
-    const target = join(agentsRoot, "skills", retired);
+  for (const retired of RETIRED_WORKSPACE_ENTRIES) {
+    const target = join(agentsRoot, retired);
     if (await exists(target)) {
-      await backup(target, `skills/${retired}`);
+      await backup(target, retired);
       await rm(target, { recursive: true, force: true });
-      report.removed.push(`skills/${retired}`);
+      report.removed.push(retired);
     }
   }
 

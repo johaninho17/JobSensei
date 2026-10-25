@@ -9,23 +9,27 @@ Use this skill automatically for a pasted JD or direct job-posting URL. The cand
 
 ## Hard Boundary
 
-For a normal run, read only this skill, the supplied JD, and the new job's `.sensei/application_context.json`. Do not read `data/.sensei/active-context.json` or `.sensei/application_run.json` (the snapshot command reads active-context and outputs run metadata directly). Do not open source code, schemas, validators, other skills, raw context, the full snapshot, the base resume, or any existing job. Do not use subagents, scratch scripts, directory exploration, broad search, or prior application artifacts.
+For a normal run, read only this skill, the supplied JD, and the job's `.sensei/application_context.json` (once, the whole file). Do not read anything else.
 
-For a URL: fetch the posting once with your built-in web-fetch tool and keep only the readable job description. Never run inline scripts (`node -e`), piped sed/grep, or repeated fetches. If the fetch fails or hits an anti-bot screen, ask the user to paste the JD and stop.
+**Commands:** your terminal starts in the workspace. Run every npm command exactly as `npm --prefix "$JOBSENSEI_APP_ROOT" run <script> -- <args>`. Never `cd`, `pwd`, or `ls` to find the app. Do not open source code, schemas, validators, other skills, raw context, the full snapshot, the base resume, or any existing job. Do not use subagents, scratch scripts, directory exploration, broad search, or prior application artifacts.
+
+For a URL: run the `jd:fetch` script exactly once with the URL. It prints the clean JD plus the company, title, and a suggested job ID, and stages it for the snapshot. Never use curl, inline scripts (`node -e`, `python -c`), or a second fetch. If the command says it couldn't read the page, ask the user to paste the JD and stop.
 
 ## One-Pass Flow
 
-1. Extract the company, role, location, source URL, and clean JD. Screen it once.
-2. Score exactly six distinct capabilities: `core` 40%, `technical` 25%, `scope` 15%, `outcomes` 10%, `domain` 5%, and `learning` 5%. Use `direct` 1.00, `strong_transferable` 0.80, `adjacent_transferable` 0.65, `unclear` 0.25, and `gap` 0. Do not score personality, logistics, or ordinary learnable tools as standalone requirements. Only a genuine hard blocker prevents applying.
-3. Derive `<job-id>` directly as lowercase kebab-case `<company>-<role-title>` (e.g., `gitlab-solutions-architect-public-sector-west`). Never run `ls` or directory checks. Below `3.5/5`, save only the screened result and stop. At or above the gate, write ONLY `data/jobs/<job-id>/original_jd.md`. Never create `pdfs/`, `.gitkeep`, `.sensei/job.json`, or `.sensei/status.json` manually (the snapshot and finalizer commands automatically generate all metadata and folder scaffolding).
-4. Run `npm run context:snapshot -- <job-id>` exactly once. Note `snapshotId` and `runId` from the command's stdout.
-5. Read `.sensei/application_context.json` once in a single turn. The compact context fits completely in one view and contains every routed claim, resume footprint, and template needed for the run.
-6. In one file-writing turn, create only `.sensei/application_bundle.json` using the contract below. Follow the **Surgical Diffing Standard**:
-   - For earlier foundational employers, copy `resumeTemplate.employers[i].baselineBullets` (text and their `evidenceIds`, often empty) directly into `resume.employers[i].bullets`.
-   - For the current employer, rework only the 3–4 bullets that matter most for the JD and keep the remaining baseline bullets as anchors.
-   - Curate the skills categories from `resumeTemplate.editableSkillCategories`.
+1. Get the JD: for a URL, run `jd:fetch -- "<url>"`; for pasted text, use it as given. Screen it once.
+2. Score exactly six distinct capabilities: `core` 40%, `technical` 25%, `scope` 15%, `outcomes` 10%, `domain` 5%, and `learning` 5%. Use `direct` 1.00, `strong_transferable` 0.80, `adjacent_transferable` 0.65, `unclear` 0.25, and `gap` 0. Do not score personality, logistics, or ordinary learnable tools as standalone requirements. List every requirement the JD marks as required ("must", "required", "proficiency in") in the Must-Have table below. A learnable must-have never stops a screen; only a blocker does. Below `3.5/5` (before must-have penalties), report the screen and stop.
+3. Use the `suggestedJobId` from `jd:fetch` (or derive lowercase kebab-case `<company>-<role-title>` for pasted text). Never run `ls` or create folders, `pdfs/`, or metadata files yourself.
+4. Run the snapshot exactly once, then read `jobs/<job-id>/.sensei/application_context.json` once in a single full read:
+   - URL: `context:snapshot -- <job-id> --from-fetched` (it creates the job folder and `original_jd.md` from the fetched posting).
+   - Pasted text: first write `jobs/<job-id>/original_jd.md`, then `context:snapshot -- <job-id>`.
+5. In one file-writing turn, create only `.sensei/application_bundle.json` (contract below). Keep it short; the finalizer fills in everything unchanged:
+   - Leave out earlier employers entirely. They are kept exactly as in the base resume.
+   - For the current employer, write the 3–4 reworked bullets as text, and keep each remaining bullet as `{ "baseline": N }` (N = its position in `baselineBullets`, starting at 1), in the order you want.
+   - Curate the skills lines from `resumeTemplate.editableSkillCategories`.
+   - `evaluationMarkdown`: the scoring table, the must-have table, and at most three one-line bullets (top strength, main gap, apply recommendation).
    - Draft the cover letter exactly as `coverLetterBrief` specifies.
-7. Run `npm run application:finalize -- <job-id>` exactly once. Report its `fitScore`, `fitConfidence`, `gateStatus`, and warnings, then stop. Never inspect code, patch output, or retry after finalization.
+6. Run `application:finalize -- <job-id>` exactly once. Report its `fitScore`, `fitConfidence`, `gateStatus`, `durationSeconds`, and warnings, then stop. Never inspect code, patch output, or retry after finalization.
 
 For an explicit regeneration, the saved JD is the only job-specific input. Existing generated files are stale outputs, not references. Never read them before replacement.
 
@@ -35,16 +39,16 @@ For an explicit regeneration, the saved JD is the only job-specific input. Exist
 - Respect every row's employer, timeline, scope, eligibility, `maximumClassification`, and source authority. Every public claim must cite an `eligible` evidence row. Never cite a single `corroboration-required` row alone. Never invent an evidence ID.
 - Follow `resumePlan`, `resumeTemplate`, `footprint`, `denylistRules`, and the local candidate preferences. The finalizer restores protected identity, contact details, chronology, titles, dates, locations, education, and layout.
 - Unchanged base-resume bullets are the candidate's own approved claims: copy them word for word. A *rewritten* bullet must trace every claim to `evidenceRows`; the baseline wording shows the confidence level to match, not new facts to add.
-- Omit any resume summary section by default unless `preferences.resume.includeSummary` is explicitly enabled in the candidate profile.
+- Resume summary: only if `resumeTemplate.summary.editable` is true, add `"summary": { "text": ..., "evidenceIds": [...] }` to `resume` in the bundle (at most 3 lines, same truth rules as bullets). Otherwise leave it out; the base resume's own summary, if any, stays verbatim.
 - **Universal Surgical Diffing Standard (Applicable to Any Candidate in Any Field):**
-  - **Foundational & Historical Roles:** Earlier, less relevant historical roles (past contracts, internships, or earlier employment) must remain **frozen verbatim** directly from `resumeTemplate.employers[i].baselineBullets`. Do not rewrite, tweak, or touch historical experience unless there is explicit direct relevance or selected evidence for it.
+  - **Foundational & Historical Roles:** Earlier, less relevant historical roles (past contracts, internships, or earlier employment) stay exactly as in the base resume: leave those employers out of the bundle and the finalizer keeps them. Only include an earlier employer when selected evidence makes it directly relevant.
   - **Skills Categories & Headings:** Curate `skillsLines` categories specifically for the target job's domain using eligible evidence (e.g. adapting headings from generic baselines to job-relevant categories matching the target domain).
   - **Target Bullets (3–4 Bullets Only):** Substantively reframe only the 3–4 high-impact target bullets at the current or most recent role to align directly with the target job's core responsibilities and priorities using routed eligible evidence.
   - **Natural Bullet Density:** Maintain natural bullet length (~16–20 words per bullet) consistent with the baseline footprint. Total experience word counts within ±15% of footprint automatically satisfy density tolerances without manual arithmetic.
 - Align bullet emphasis with the core discipline of the target role (e.g., leadership, operations, commercial, technical, or people enablement) based on the candidate's supported background without exaggerating scope or ownership.
 - Use direct, natural professional language appropriate to the candidate's field. Strictly adhere to `$jobsensei-anti-slop` standards: eliminate machine clichés (delve, leverage, utilize, navigate, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, intersection, synergy, beacon, rule-of-three corporate lists). Prefer an accurate action, concrete method or tool, and supported purpose or result.
 - Keep the cover letter candidate-first. `coverLetterBrief` in the application context is the only cover-letter specification (structure, opening, word range, banned phrases); follow it and nothing else.
-- Never name clients or partners in the resume or cover letter; describe them generically.
+- Never name clients or partners in the resume or cover letter; describe them by industry instead (naming the industry is fine).
 - Apply `styleRules` last for wording only. They cannot support facts or alter evidence mappings.
 - Employer-facing files must never contain evidence IDs, warnings, hashes, or generation notes.
 
@@ -63,6 +67,24 @@ Put this table in `evaluationMarkdown`; the finalizer calculates the authoritati
 | Specialized product knowledge | domain | 5% | no | unclear | context:exact:id |
 | Learnable ramp-up requirement | learning | 5% | no | strong_transferable | context:exact:id |
 ```
+
+Then rate every item in the context's `mustHaves` list, one row each, in order, starting the Requirement cell with its ID. If `mustHaves` is empty, list the posting's hard requirements yourself.
+
+```markdown
+### Must-Have Requirements
+| Requirement | Status | Evidence | Note |
+| --- | --- | --- | --- |
+| must:1 Proficiency in Java or Kotlin | learnable | context:exact:id | Foundation in related languages; no production use |
+| must:2 Fluency in SQL | met | context:exact:id | |
+```
+
+The finalizer checks this table: an item you skip counts as learnable, and `met` needs an evidence ID whose claim actually shows the requirement (otherwise it becomes learnable). Don't add rows the posting doesn't require.
+
+- `met`: the cited evidence row shows it.
+- `learnable`: no production evidence, but it can be learned on the job (languages, frameworks, tools, methods). Cite foundation evidence (coursework, a related language) when it exists. Each learnable must-have lowers the visible score slightly; it never turns a YES into a NO.
+- `blocker`: only legal, credential, clearance, or location requirements the candidate cannot meet.
+
+Never hide a must-have inside a broader category row. Never present foundation or coursework as production experience.
 
 Functional equivalence may earn transferable credit even when tools differ. Direct credit still requires matching action, method, scope, and ownership. Exact tools, production scope, specialized domains, metrics, and outcomes stay strict.
 
@@ -85,7 +107,8 @@ Write `.sensei/application_bundle.json` only. Put exact evidence IDs beside each
       {
         "name": "<exact resumeTemplate employer name>",
         "bullets": [
-          { "text": "Built an evidence-backed integration.", "evidenceIds": ["context:exact:id"] }
+          { "text": "Built an evidence-backed integration.", "evidenceIds": ["context:exact:id"] },
+          { "baseline": 2 }
         ]
       }
     ]
@@ -114,8 +137,8 @@ Write `.sensei/application_bundle.json` only. Put exact evidence IDs beside each
 }
 ```
 
-Every editable skills line, rewritten bullet, and factual cover-letter sentence needs one or more exact routed evidence IDs. Unchanged baseline bullets keep the `evidenceIds` listed in `baselineBullets` (often an empty list); never borrow an unrelated ID for them. Personal motivation or a closing may use an empty list. Use at least two evidence-backed cover-letter sentences with distinct evidence so the career arc can be derived. Do not include protected resume fields in the bundle.
+Every editable skills line, rewritten bullet, and factual cover-letter sentence needs one or more exact routed evidence IDs. Unchanged baseline bullets are written as `{ "baseline": N }` and need no evidence IDs; never retype them or borrow an unrelated ID. Personal motivation or a closing may use an empty list. Use at least two evidence-backed cover-letter sentences with distinct evidence so the career arc can be derived. Do not include protected resume fields in the bundle.
 
 ## Time Budget
 
-Use at most 5 bounded operations: write `original_jd.md`, run `npm run context:snapshot`, read `.sensei/application_context.json`, write `.sensei/application_bundle.json`, and run `npm run application:finalize`. Never run exploratory directory listings (`ls`), never create empty `.gitkeep` files, and never read `active-context.json` or `application_run.json`. Target execution time is 30–45 seconds. A warning is a completed run, not permission to investigate or repair.
+Use at most 5 operations: `jd:fetch` (or write `original_jd.md` for pasted text), the snapshot, one context read, one bundle write, and the finalize. Never list directories, read files for context, or create scaffolding. Target: under 60 seconds end to end. A warning is a completed run, not permission to investigate or repair.

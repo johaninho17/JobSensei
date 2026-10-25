@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateFitScore, normalizeEvidenceClassifications, normalizeEvaluationScore, scoreEvaluation, type FitRequirement } from "../electron/fit-scoring";
+import { bestEvidenceForRequirement, calculateFitScore, extractRequiredItems, gateStatusFor, normalizeEvidenceClassifications, normalizeEvaluationScore, parseMustHaves, scoreEvaluation, verifyMustHaves, type FitRequirement } from "../electron/fit-scoring";
 import type { EvidenceSnapshot } from "../src/shared/schemas";
 
 const sampleRequirements: FitRequirement[] = [
@@ -333,5 +333,105 @@ describe("fit scoring", () => {
     expect(normalized).not.toContain("Everything is direct");
     expect(normalized).toContain("Recruiting and ATS integrations");
     expect(normalized).toContain("gap (none)");
+  });
+});
+
+describe("must-have requirements", () => {
+  const scoring = sampleRequirements.map((row) => `| ${row.requirement} | ${row.category} | ${row.weight}% | ${row.material ? "yes" : "no"} | ${row.classification} | ${row.evidence} |`).join("\n");
+  const evaluation = (mustHaveRows: string[]) => `# Evaluation\n\n### Requirement Scoring\n| Requirement | Category | Weight | Material | Classification | Evidence |\n| --- | --- | ---: | --- | --- | --- |\n${scoring}\n\n### Must-Have Requirements\n| Requirement | Status | Evidence | Note |\n| --- | --- | --- | --- |\n${mustHaveRows.join("\n")}\n\n## Important Gaps or Hard Blockers\n- None.\n`;
+
+  it("scores old evaluations without a must-have table exactly as before", () => {
+    const result = scoreEvaluation(`# Evaluation\n\n### Requirement Scoring\n| Requirement | Category | Weight | Material | Classification | Evidence |\n| --- | --- | ---: | --- | --- | --- |\n${scoring}\n`);
+    expect(result?.score).toBe(4.2);
+    expect(result?.learnablePenalty ?? 0).toBe(0);
+  });
+
+  it("lowers the visible score for learnable must-haves, capped, while the gate uses the score before the penalty", () => {
+    const two = scoreEvaluation(evaluation([
+      "| Proficiency in a JVM language | learnable | context:a:b | College foundation only |",
+      "| Kubernetes experience | learnable | | |",
+      "| Customer-facing experience | met | context:a:c | |",
+    ]))!;
+    expect(two.score).toBe(3.9);
+    expect(two.gateScore).toBe(4.2);
+    expect(gateStatusFor(two)).toBe("accepted");
+
+    const five = scoreEvaluation(evaluation(Array.from({ length: 5 }, (_, index) => `| Tool ${index + 1} | learnable | | |`)))!;
+    expect(five.learnablePenalty).toBe(0.45);
+    expect(five.score).toBe(3.75);
+  });
+
+  it("never turns a learnable gap into a NO; only a blocker needs manual review", () => {
+    const learnableOnly = scoreEvaluation(evaluation(Array.from({ length: 5 }, (_, index) => `| Language ${index + 1} | learnable | | |`)))!;
+    expect(gateStatusFor(learnableOnly)).toBe("accepted");
+    const blocked = scoreEvaluation(evaluation(["| Active security clearance | blocker | | Legal requirement |"]))!;
+    expect(gateStatusFor(blocked)).toBe("manual review: hard blocker");
+  });
+
+  it("always lists unmet must-haves as gaps in the normalized evaluation", () => {
+    const normalized = normalizeEvaluationScore(evaluation(["| Proficiency in a JVM language | learnable | | Coursework only |"]));
+    expect(normalized).toContain("**Weighted Fit Score:** 4.05 / 5");
+    expect(normalized).toContain("Fit before must-have gaps:** 4.20 / 5");
+    expect(normalized).toContain("**Proficiency in a JVM language** (must-have, learnable)");
+    expect(normalized).toContain("**Gate Status:** accepted");
+  });
+});
+
+describe("must-haves are checked against the posting and the evidence", () => {
+  const jd = [
+    "# Support Developer", "", "## What you'll do", "- Debug customer pipelines.", "",
+    "## **What You’ll Need:**",
+    "- 2+ years supporting developers or technical users.",
+    "- Fluency in SQL, including query plans.",
+    "- Proficiency in Java or Kotlin.",
+    "- Experience with JDBC drivers and SSH tunnel issues.",
+    "- Clear communication and a growth mindset.",
+    "", "## Nice To Have:", "- Experience with Snowflake.",
+  ].join("\n");
+  const snapshot = { evidenceRows: [
+    { evidenceId: "context:work:support", claim: "Supported developers and technical users through onboarding and troubleshooting.", scope: "" },
+    { evidenceId: "context:work:sql", claim: "Wrote SQL reports and tuned slow queries.", scope: "" },
+  ] } as unknown as EvidenceSnapshot;
+  const scoring = sampleRequirements.map((row) => `| ${row.requirement} | ${row.category} | ${row.weight}% | ${row.material ? "yes" : "no"} | ${row.classification} | ${row.evidence} |`).join("\n");
+  const evaluation = (rows: string[]) => `# Evaluation\n\n### Requirement Scoring\n| Requirement | Category | Weight | Material | Classification | Evidence |\n| --- | --- | ---: | --- | --- | --- |\n${scoring}\n\n### Must-Have Requirements\n| Requirement | Status | Evidence | Note |\n| --- | --- | --- | --- |\n${rows.join("\n")}\n\n- **Top strength:** x\n`;
+
+  it("reads only the required section and skips personality items", () => {
+    expect(extractRequiredItems(jd)).toEqual([
+      "2+ years supporting developers or technical users.",
+      "Fluency in SQL, including query plans.",
+      "Proficiency in Java or Kotlin.",
+      "Experience with JDBC drivers and SSH tunnel issues.",
+    ]);
+  });
+
+  it("counts skipped items as learnable, downgrades unshown 'met', and drops invented rows", () => {
+    const { markdown, adjustments } = verifyMustHaves(evaluation([
+      "| must:1 Years supporting developers | met | context:work:support | |",
+      "| must:2 SQL fluency | met | context:work:support | |",
+      "| must:3 Java or Kotlin | learnable | | College only |",
+      "| US work authorization | met | context:work:support | |",
+    ]), extractRequiredItems(jd), snapshot);
+    const rows = parseMustHaves(markdown);
+    expect(rows.map((row) => row.status)).toEqual(["met", "learnable", "learnable", "learnable"]);
+    expect(rows[3]!.note).toContain("not assessed");
+    expect(markdown).not.toContain("US work authorization");
+    expect(adjustments.length).toBe(3);
+    expect(scoreEvaluation(markdown)?.learnablePenalty).toBe(0.45);
+  });
+
+  it("keeps 'met' when the cited evidence shows the requirement", () => {
+    const { markdown } = verifyMustHaves(evaluation([
+      "| must:1 SQL fluency | met | context:work:sql | |",
+    ]), ["Fluency in SQL, including query plans."], snapshot);
+    expect(parseMustHaves(markdown)[0]!.status).toBe("met");
+  });
+});
+
+describe("must-have evidence reaches the run", () => {
+  it("picks the row that actually shows the requirement", () => {
+    expect(bestEvidenceForRequirement("Proficiency in Java or Kotlin.", [
+      { evidenceId: "context:work:git", claim: "Debugged code review workflows in GitLab.", scope: "" },
+      { evidenceId: "context:school:jvm", claim: "Used Java and Kotlin in college coursework.", scope: "" },
+    ])).toBe("context:school:jvm");
   });
 });

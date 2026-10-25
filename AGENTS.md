@@ -4,26 +4,24 @@ JobSensei is a local-first career workspace. Candidate identity, chronology, pre
 
 ## Core rules
 
-- Never invent candidate experience, tools, dates, metrics, ownership, credentials, projects, or outcomes.
+- Never invent candidate experience, tools, dates, metrics, ownership, credentials, projects, or outcomes. Frame real work confidently, but every claim must be defensible in an interview.
 - Treat selected structured career evidence as factual authority. Broad context clarifies; LinkedIn and secondary resumes corroborate history; the base resume protects identity, chronology, structure, and presentation.
+- Unchanged base-resume bullets are the candidate's own approved claims and may appear word for word, but they earn no fit-score credit, and any rewritten or new claim must trace to evidence in the current `application_context.json`. Conversation memory, prior jobs, and old applications are never evidence.
+- Always enforce the candidate's denylist. Never upgrade configuration, testing, integration, support, or enablement into architecture, sole ownership, production scope, or performance claims.
+- Classify important JD language as supported, transferable, or unsupported. State only supported capabilities directly, and never copy JD terminology into candidate history.
+- When AI is central to the JD and the evidence supports AI, agent, or model work, show that work in experience bullets, not only in Skills.
+- Apply the candidate's voice profile (`styleRules`) last, for wording only; it cannot create or strengthen a claim.
 - Never modify source resumes or career-context documents.
 - Never read sibling jobs, prior tailored applications, or unselected context unless the user explicitly selects or names them.
 - Enforce the Universal Surgical Diffing Standard: Never rewrite historical or earlier career experience unless explicitly relevant. Keep foundational past roles frozen verbatim from the base resume, focusing tailoring strictly on the top skills categories and the 3–4 target bullets at the current/most recent employer.
 - Keep evidence IDs, warnings, hashes, and provenance out of employer-facing files.
-- Never name clients or partners in a resume or cover letter (see the profile's `truth.confidentialNames`); describe them generically.
+- Never name clients or partners in a resume or cover letter (see the profile's `truth.confidentialNames`); describe them by industry instead.
 - The cover-letter specification lives only in the generated `coverLetterBrief`; skills point to it.
 - Keep candidate-specific guidance in the local ignored profile or context, not in public skills or repository rules.
 
 ## New job flow
 
-Use `$jobsensei-application-pipeline` as the sole orchestrator for a pasted JD or job URL. Follow its bounded read list and command budget exactly:
-
-1. Screen once.
-2. For accepted jobs, batch intake files.
-3. Run `npm run context:snapshot -- <job-id>` once.
-4. Read the compact application context once.
-5. Write one `.sensei/application_bundle.json` with evidence IDs inline.
-6. Run `npm run application:finalize -- <job-id>` once and stop.
+Use `$jobsensei-application-pipeline` as the sole orchestrator for a pasted JD or job URL. It owns the steps: `jd:fetch` for a URL, one snapshot (which prints the context), one `.sensei/application_bundle.json` write, one finalize, then stop. Target: under 60 seconds.
 
 Do not inspect implementation code, validators, schemas, package metadata, or other skills during a routine application. Do not use subagents, scratch scripts, manual word-count commands, converter searches, or repair loops. A finalization warning means the drafts are ready for human review.
 

@@ -55,6 +55,18 @@ export function resolveAgyExecutable(): string | null {
   return null;
 }
 
+/** Repository root holding package.json (compiled: dist-electron/electron → ../..; source: electron → ..). */
+function appRoot(): string {
+  for (const candidate of [resolve(__dirname, "..", ".."), resolve(__dirname, "..")]) {
+    try {
+      if (statSync(join(candidate, "package.json")).isFile()) return candidate;
+    } catch {
+      // try the next layout
+    }
+  }
+  return resolve(__dirname, "..", "..");
+}
+
 export class TerminalSession {
   private process: IPty | null = null;
   private cwd = process.cwd();
@@ -118,6 +130,8 @@ export class TerminalSession {
       PATH: augmentedPath,
       TERM: "xterm-256color",
       SENSEI_WORKSPACE: this.workspacePath,
+      // Where the app's npm scripts live, so Agy can run them from the workspace without searching.
+      JOBSENSEI_APP_ROOT: appRoot(),
       SENSEI_SELECTED_JOBS: this.manifest?.selectedJobIds.join(",") ?? "",
       SENSEI_SELECTED_CONTEXT_FILES: this.manifest?.selectedCareerPaths.concat(this.manifest.selectedJobFiles).join(",") ?? "",
       SENSEI_SELECTED_STRUCTURED_CONTEXT: this.manifest?.selectedStructuredPaths.join(",") ?? "",

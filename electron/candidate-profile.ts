@@ -49,9 +49,8 @@ export async function createCandidateProfile(
     career: {
       employers: [],
       education: [],
-      transitionSummary: "",
+      transitionSummary: value.transitionSummary ?? "",
       preferredRoleFamilies: [],
-      narrativePillars: value.narrativePillars,
     },
     preferences: {
       resume: {
@@ -114,6 +113,31 @@ export async function updateCandidateProfilePreferences(
         ...current.preferences.coverLetter,
         ...preferences.coverLetter,
       },
+    },
+    updatedAt: new Date().toISOString(),
+  });
+  await writeJsonAtomic(join(workspacePath, candidateProfileRelativePath), next);
+  return next;
+}
+
+/** Settings fields that live outside `preferences`: career direction and the candidate's truth rules. */
+export async function updateCandidateProfileDetails(
+  workspacePath: string,
+  details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[] },
+): Promise<CandidateProfile> {
+  const current = await readCandidateProfile(workspacePath);
+  if (!current) throw new Error("No candidate profile found to update.");
+  const clean = (values: string[] | undefined) => values?.map((value) => value.trim()).filter(Boolean);
+  const next = candidateProfileSchema.parse({
+    ...current,
+    career: {
+      ...current.career,
+      ...(details.transitionSummary !== undefined ? { transitionSummary: details.transitionSummary.trim() } : {}),
+    },
+    truth: {
+      ...current.truth,
+      ...(details.confidentialNames ? { confidentialNames: clean(details.confidentialNames) } : {}),
+      ...(details.boundaries ? { boundaries: clean(details.boundaries) } : {}),
     },
     updatedAt: new Date().toISOString(),
   });

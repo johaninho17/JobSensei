@@ -1,7 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, session } from "electron";
 import { watch, type FSWatcher } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
-import { copyFile, mkdir, stat } from "node:fs/promises";
+import { copyFile, mkdir, readFile, stat } from "node:fs/promises";
 import type { Settings } from "../src/shared/schemas";
 import { markdownSaveInputSchema, pdfExportRequestSchema } from "../src/shared/schemas";
 import { SettingsStore } from "./settings";
@@ -15,7 +15,9 @@ import { exportMarkdownPdf } from "./pdf-export";
 import { getInterviewOverview, listInterviewRounds, refreshInterviewDashboard, setCurrentInterviewRound } from "./interviews";
 import { invalidateSearchIndex, searchWorkspace } from "./search";
 import { getJobApplicationStatus, validateJobApplication } from "./application-validation";
-import { createCandidateProfile, readCandidateProfile, updateCandidateProfilePreferences, updateCandidateProfileSources } from "./candidate-profile";
+import { createCandidateProfile, readCandidateProfile, updateCandidateProfileDetails, updateCandidateProfilePreferences, updateCandidateProfileSources } from "./candidate-profile";
+import { compactStyleRules, profileInstructionLines } from "./evidence-snapshot";
+import { loadCanonicalResumeBaseline } from "./canonical-resume";
 import { readBulletBank, saveBulletBank } from "./bullet-bank";
 import { generateJobClarifyingQuestions, saveJobClarificationAnswers } from "./clarifying-questions";
 
@@ -124,6 +126,24 @@ ipcMain.handle("workspace:rescan", async () => {
 ipcMain.handle("profile:get", async () => readCandidateProfile(requireWorkspace()));
 ipcMain.handle("profile:create", async (_event, input) => createCandidateProfile(requireWorkspace(), input, await settingsStore.get()));
 ipcMain.handle("profile:update-preferences", async (_event, preferences) => updateCandidateProfilePreferences(requireWorkspace(), preferences));
+ipcMain.handle("profile:update-details", async (_event, details) => updateCandidateProfileDetails(requireWorkspace(), {
+  transitionSummary: typeof details?.transitionSummary === "string" ? details.transitionSummary : undefined,
+  confidentialNames: Array.isArray(details?.confidentialNames) ? details.confidentialNames.filter((value: unknown): value is string => typeof value === "string") : undefined,
+  boundaries: Array.isArray(details?.boundaries) ? details.boundaries.filter((value: unknown): value is string => typeof value === "string") : undefined,
+}));
+ipcMain.handle("profile:preview", async () => {
+  const workspace = requireWorkspace();
+  const profile = await readCandidateProfile(workspace);
+  const voicePath = profile?.sources.applicationVoicePath ?? "context/application_voice_profile.md";
+  const voiceText = await readFile(assertInsideWorkspace(workspace, join(workspace, voicePath)), "utf8").catch(() => "");
+  const basePath = profile?.sources.baseResumePath ?? (await settingsStore.get()).baseResumePath;
+  const baseline = basePath ? await loadCanonicalResumeBaseline(workspace, basePath).catch(() => null) : null;
+  return {
+    styleRules: compactStyleRules(voiceText, profile),
+    instructions: profileInstructionLines(profile),
+    baseResumeHasSummary: baseline ? Boolean(baseline.originalSummaryLines?.length) : null,
+  };
+});
 ipcMain.handle("bullet-bank:get", async () => readBulletBank(requireWorkspace()));
 ipcMain.handle("bullet-bank:save", async (_event, bank) => saveBulletBank(requireWorkspace(), bank));
 ipcMain.handle("clarifications:get-questions", async (_event, jobId: string) => generateJobClarifyingQuestions(requireWorkspace(), jobId));

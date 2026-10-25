@@ -19,7 +19,7 @@ Select the five or six highest-value JD requirements before expanding the comple
 
 Score each distinct capability once. Mark a row material only when it is reasonably needed on entry. Merge preferred tools, employer-specific systems, and learnable domain details into bounded rows instead of repeating them as separate penalties. The same underlying workflow or problem type can earn transferable credit when implementation vocabulary differs; exact tools, outcomes, scope, and ownership remain strict. Use `learning` once for demonstrated ramp readiness, never as a blanket bonus.
 
-Use exactly six capability rows, one for each weighted category. Group genuinely related entry-critical requirements instead of expanding the table. Never score soft adjectives such as rigorous, detail-oriented, collaborative, proactive, or strong communicator on their own; attach them to observable validation, QA, stakeholder, or delivery work.
+Use exactly six capability rows, one for each weighted category. Group genuinely related entry-critical requirements instead of expanding the table. Never score soft adjectives such as rigorous, detail-oriented, collaborative, proactive, or strong communicator on their own; attach them to observable validation, QA, stakeholder, or delivery work. Hard requirements also go in the `### Must-Have Requirements` table defined in the pipeline skill's Evaluation section (met / learnable / blocker); a learnable must-have lowers the visible score slightly but never decides the gate.
 
 Classify requirements as:
 

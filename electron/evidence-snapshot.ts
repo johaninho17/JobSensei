@@ -19,7 +19,8 @@ import {
   type EvidenceSnapshotRow,
 } from "../src/shared/schemas";
 import { profileBaseResume } from "./resume-footprint";
-import { loadCanonicalResumeBaseline } from "./canonical-resume";
+import { loadCanonicalResumeBaseline, summaryIsEditable } from "./canonical-resume";
+import { bestEvidenceForRequirement, extractRequiredItems } from "./fit-scoring";
 import { contextManifestHash } from "./context-manifest-hash";
 import { assertInsideWorkspace } from "./workspace";
 import { parseJobDescriptionMetadata, resolveJobDescriptionPath } from "./job-description";
@@ -27,6 +28,7 @@ import { readCandidateProfile } from "./candidate-profile";
 import { buildContextManifest, readActiveContextManifest } from "./context";
 import { deriveVoicePresets } from "../src/shared/voice-presets";
 import { readBulletBank } from "./bullet-bank";
+import { readFetchedJobDescription } from "./jd-fetch";
 
 const MANIFEST_PATH = ".sensei/active-context.json";
 const DENYLIST_PATH = "context/denylist.md";
@@ -96,6 +98,7 @@ function inferEmployer(
   row: Omit<EvidenceSnapshotRow, "employer">,
   canonicalEmployers: string[],
   candidateProfile?: CandidateProfile | null,
+  currentEmployerStartYear: number | null = null,
 ): string | null {
   const project = normalizedName(row.project);
   const evidenceId = normalizedName(row.evidenceId);
@@ -114,6 +117,8 @@ function inferEmployer(
     }
   }
   if (row.sourcePath.startsWith("context/structured/") && !row.evidenceId.startsWith("linkedin:")) {
+    // Never pin work that ended before the current job started (school, earlier roles) to the current employer.
+    if (currentEmployerStartYear !== null && row.endYear != null && row.endYear < currentEmployerStartYear) return null;
     return canonicalEmployers[0] ?? null;
   }
   return null;
@@ -417,15 +422,15 @@ export function buildCoverLetterBrief(
   // restate structure elsewhere. The JD is deliberately NOT summarized into the brief:
   // feeding JD responsibilities made letters lecture employers about their own business.
   return {
-    targetWordMin: 250,
-    targetWordMax: 350,
-    hardWordMax: 400,
+    targetWordMin: 200,
+    targetWordMax: 280,
+    hardWordMax: 330,
     company,
     role,
     structure: [
-      `Paragraph 1 (opening): state plainly that you are applying for ${roleLabel} at ${companyLabel}, say who you are professionally, and give one genuine reason this company or role fits your own direction. Every sentence is about the candidate; at most one short clause about the company.`,
-      "Paragraphs 2-3 (body, one or two paragraphs): two or three concrete, evidence-backed examples of work the candidate did. Show how they work: owning problems, handling friction with customers or partners, learning fast. Add detail the resume does not give; do not restate resume bullets.",
-      "Final paragraph (close): restate interest briefly, thank the reader, and invite a conversation. Warm and direct, no promises of impact.",
+      `Paragraph 1 (opening, 2-3 sentences): state plainly that you are applying for ${roleLabel} at ${companyLabel}, say who you are professionally, and give one genuine reason this role fits your own direction. Every sentence is about the candidate; at most one short clause about the company.`,
+      "Body (1-2 paragraphs, at most 3 sentences each): one or two concrete, evidence-backed examples told properly, not a list of several. Show how the candidate works: owning problems, handling friction, learning fast. Add detail the resume does not give; never restate resume bullets or claim an outcome the evidence doesn't show.",
+      "Close (1-2 sentences): thank the reader and invite a conversation. No separate 'why I fit' paragraph and no list of strengths.",
     ],
     introContract: [
       "The letter is about the candidate: their career direction, why they made their key moves, and how they operate. The job description only decides which real examples to pick.",
@@ -435,12 +440,17 @@ export function buildCoverLetterBrief(
     requiredElements: [
       "First-person throughout; most sentences start from I/my or the candidate's work.",
       "Concrete examples come from evidenceRows; framing may be confident but every claim must be defensible in an interview.",
-      "Describe clients and partners generically (e.g. 'a global professional-services firm'); never name them.",
+      "Never name clients or partners; describe them by industry instead (e.g. 'a global professional-services firm', 'a biotech research company'). Naming the industry is fine.",
       "No mini-resume tool inventories and no lists of matching requirements.",
       "Use common spoken words; avoid AI filler (delve, leverage, tapestry, realm, pivotal, rule-of-three corporate lists).",
     ],
     prohibitedPatterns: [
       "I am excited to apply",
+      "I thrive",
+      "the intersection of",
+      "at the intersection",
+      "the exact intersection",
+      "I would welcome the opportunity to discuss how my",
       "I am thrilled to apply",
       "I am interested in applying",
       "I am writing to express my strong interest",
@@ -475,7 +485,37 @@ export function buildCoverLetterBrief(
   };
 }
 
-function compactStyleRules(markdown: string, profile?: CandidateProfile | null): string[] {
+/** The candidate's own story from Settings/onboarding (single owner: preferences.coverLetter.narrativePillars). */
+export function narrativeStoryLines(profile?: CandidateProfile | null): string[] {
+  if (!profile) return [];
+  const pillars = profile.preferences.coverLetter.narrativePillars;
+  const fallback = profile.career.narrativePillars;
+  const pick = (key: "turningPoints" | "workingStyle" | "personalValues") => (pillars?.[key]?.trim() || fallback?.[key]?.trim() || "");
+  return [
+    ...(profile.career.transitionSummary?.trim() ? [`My career direction: ${profile.career.transitionSummary.trim()}`] : []),
+    ...(pick("turningPoints") ? [`My career story: ${pick("turningPoints")}`] : []),
+    ...(pick("workingStyle") ? [`How I work: ${pick("workingStyle")}`] : []),
+    ...(pick("personalValues") ? [`What I value: ${pick("personalValues")}`] : []),
+  ];
+}
+
+/** Profile-driven run instructions (truth boundaries, anti-slop strictness, confidential names). */
+export function profileInstructionLines(profile?: CandidateProfile | null): string[] {
+  const boundaries = (profile?.truth.boundaries ?? []).map((line) => line.trim()).filter(Boolean);
+  const confidentialNames = profile?.truth.confidentialNames ?? [];
+  const relaxed = profile?.preferences.voice.antiSlopStrictness === "standard";
+  return [
+    ...(boundaries.length ? [`The candidate's own truth boundaries (never cross them): ${boundaries.join(" ")}`] : []),
+    confidentialNames.length
+      ? `Never name these clients or partners in the resume or cover letter; describe them by industry instead (naming the industry is fine): ${confidentialNames.join(", ")}.`
+      : "Never name clients or partners in the resume or cover letter; describe them by industry instead (naming the industry is fine).",
+    relaxed
+      ? "Avoid the banned phrases in coverLetterBrief.prohibitedPatterns; otherwise ordinary professional wording is fine."
+      : "Avoid AI filler (delve, leverage, utilize, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, synergy, beacon, intersection) unless styleRules list a phrase as the candidate's own.",
+  ];
+}
+
+export function compactStyleRules(markdown: string, profile?: CandidateProfile | null): string[] {
   const documentRules = markdown.split(/\r?\n/)
     .map((line) => line.replace(/^\s*[-*+]\s+/, "").replace(/^#+\s+/, "").trim())
     .filter((line) => line.length >= 12 && line.length <= 240)
@@ -501,11 +541,12 @@ function compactStyleRules(markdown: string, profile?: CandidateProfile | null):
   }
 
   return [...new Set([
+    ...narrativeStoryLines(profile),
     ...activePresetGuidance,
     ...(profile?.preferences.coverLetter.voiceGuidance ?? []),
     ...(profile?.preferences.coverLetter.storyGuidance ?? []),
     ...documentRules,
-  ])].slice(0, 20);
+  ])].slice(0, 26);
 }
 
 async function resumeReferenceText(path: string, content: Buffer): Promise<string | undefined> {
@@ -612,7 +653,29 @@ async function writeTextAtomic(path: string, value: string): Promise<void> {
   await rename(tempPath, path);
 }
 
-export function serializeCompactApplicationContext(context: ApplicationContext): string {
+/**
+ * Drops model-facing duplicates before writing: original bullets repeated next to
+ * baselineBullets, source paths the model never uses (the finalizer derives them from
+ * evidence IDs), and voice/story guidance already merged into styleRules. Smaller
+ * context means less for the model to read on every run.
+ */
+function slimApplicationContext(context: ApplicationContext): ApplicationContext {
+  if (context.schemaVersion !== 2) return context;
+  const { storyGuidance: _story, voiceGuidance: _voice, ...candidate } = context.candidate;
+  return {
+    ...context,
+    candidate,
+    resumeTemplate: {
+      ...context.resumeTemplate,
+      employers: context.resumeTemplate.employers.map(({ originalBullets, ...employer }) =>
+        employer.baselineBullets?.length ? employer : { ...employer, originalBullets }),
+    },
+    evidenceRows: context.evidenceRows.map(({ sourcePath: _path, sourceFamily: _family, ...row }) => row),
+  };
+}
+
+export function serializeCompactApplicationContext(input: ApplicationContext): string {
+  const context = slimApplicationContext(input);
   if (!context.evidenceRows.length) {
     return JSON.stringify(context, null, 2);
   }
@@ -723,11 +786,17 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
 
   const manifestHash = contextManifestHash(manifest);
   const canonicalEmployers = canonicalResult.canonicalResume?.employers.map((employer) => employer.name) ?? [];
+  const currentEmployerStartYear = Number(/\b(?:19|20)\d{2}\b/.exec(canonicalResult.canonicalResume?.employers[0]?.dateRange ?? "")?.[0]) || null;
   const normalizedRows = rows.map((row) => ({
     ...row,
-    employer: row.evidenceId.startsWith("job:") ? null : inferEmployer(row, canonicalEmployers, candidateProfile),
+    employer: row.evidenceId.startsWith("job:") ? null : inferEmployer(row, canonicalEmployers, candidateProfile, currentEmployerStartYear),
   })).sort((a, b) => a.evidenceId.localeCompare(b.evidenceId));
-  const applicationRouting = buildApplicationRouting(normalizedRows, jobDescriptionText, [], canonicalEmployers);
+  // The best eligible row for each of the posting's must-haves is always routed, so the run can cite it.
+  const citableRows = normalizedRows.filter((row) => row.eligibility === "eligible" && !row.evidenceId.startsWith("job:"));
+  const mustHaveEvidenceIds = extractRequiredItems(jobDescriptionText)
+    .map((requirement) => bestEvidenceForRequirement(requirement, citableRows))
+    .filter((id): id is string => Boolean(id));
+  const applicationRouting = buildApplicationRouting(normalizedRows, jobDescriptionText, mustHaveEvidenceIds, canonicalEmployers);
   const snapshotCore = {
     schemaVersion: 1 as const,
     jobId,
@@ -832,6 +901,12 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
     for (const row of routedRows) {
       if (requiredEvidenceIds.has(row.evidenceId)) addLean(row);
     }
+    // The best row for each must-have always reaches the run, so it can be cited instead of a weaker one.
+    for (const requirement of extractRequiredItems(jobDescriptionText)) {
+      const id = bestEvidenceForRequirement(requirement, routedRows);
+      const row = id ? routedRows.find((candidate) => candidate.evidenceId === id) : undefined;
+      if (row) addLean(row);
+    }
     for (const emp of snapshot.canonicalResume.employers) {
       const empRows = routedRows.filter((r) => r.employer && normalizedName(r.employer) === normalizedName(emp.name));
       empRows.slice(0, 2).forEach(addLean);
@@ -872,11 +947,18 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       },
       resumeTemplate: {
         baselineId: snapshot.canonicalResume.baselineId,
+        ...(snapshot.canonicalResume.summaryHeadingLine ? {
+          summary: {
+            original: (snapshot.canonicalResume.originalSummaryLines ?? []).join("\n"),
+            editable: summaryIsEditable(snapshot.canonicalResume, candidateProfile),
+          },
+        } : {}),
         originalSkillsLines: snapshot.canonicalResume.originalSkillsLines,
         employers: resumeTemplateEmployers,
         editableSkillCategories,
       },
       footprint: snapshot.baseResumeFootprint,
+      mustHaves: extractRequiredItems(jobDescriptionText).map((requirement, index) => ({ id: `must:${index + 1}`, requirement })),
       evidenceRows: leanRows.map((row) => {
         const route = routeById.get(row.evidenceId);
         return {
@@ -902,11 +984,8 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
         "Resume scope: keep earlier, less relevant roles verbatim from resumeTemplate.employers[i].baselineBullets. At the current employer, rework the 3-4 bullets that matter most for this job and keep the rest of its baseline bullets as anchors; curate the skills lines for the role.",
         "Unchanged baseline bullets are the candidate's own approved claims: copy them word for word with the evidenceIds listed in baselineBullets (often none). Never attach an unrelated evidence ID to make a bullet look supported.",
         "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. Never add an event, metric, tool, or ownership that did not happen.",
-        ...(candidateProfile?.truth.confidentialNames.length
-          ? [`Never name these clients or partners in the resume or cover letter; describe them generically instead: ${candidateProfile.truth.confidentialNames.join(", ")}.`]
-          : ["Describe clients and partners generically in the resume and cover letter; do not name them."]),
+        ...profileInstructionLines(candidateProfile),
         "Maintain natural bullet length (~16-20 words) matching the baseline footprint; no word-by-word arithmetic.",
-        "Avoid AI filler (delve, leverage, utilize, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, synergy, beacon) unless styleRules list a phrase as the candidate's own.",
         "Cover letter: follow coverLetterBrief exactly. It owns the structure, opening, word range, and banned phrases. Do not use any other cover-letter structure.",
         "Only cite eligible evidence rows for standalone claims; do not cite a single corroboration-required row alone.",
         "Use direct, natural wording; denylistRules always win. Apply styleRules to wording only, never as evidence.",
@@ -965,26 +1044,51 @@ function defaultWorkspace(): string {
   return basename(process.cwd()) === "data" ? process.cwd() : resolve(process.cwd(), "data");
 }
 
+/**
+ * Creates the job folder from the staged `jd:fetch` posting when the job has no JD yet,
+ * so the model never has to retype the description. Returns when the run started.
+ */
+export async function stageFetchedJobDescription(workspacePath: string, jobId: string): Promise<string | null> {
+  const workspace = resolve(workspacePath);
+  const jobPath = assertInsideWorkspace(workspace, join(workspace, "jobs", jobId));
+  const jdPath = join(jobPath, "original_jd.md");
+  if (await stat(jdPath).catch(() => null)) return null;
+  const fetched = await readFetchedJobDescription(workspace);
+  if (!fetched) throw new Error("No fetched job description is staged. Run `npm run jd:fetch -- <url>` first, or write original_jd.md.");
+  await mkdir(jobPath, { recursive: true });
+  await writeTextAtomic(jdPath, fetched.markdown);
+  return fetched.fetchedAt;
+}
+
+/** Records when a run started and when its snapshot finished, for pipeline timing. */
+async function writeRunTiming(workspace: string, jobId: string, fetchedAt: string | null): Promise<void> {
+  const jobPath = join(workspace, "jobs", jobId);
+  const jdStat = await stat(join(jobPath, "original_jd.md")).catch(() => null);
+  const startedAt = fetchedAt ?? jdStat?.mtime.toISOString() ?? new Date().toISOString();
+  await writeTextAtomic(join(jobPath, ".sensei", "run_timing.json"), `${JSON.stringify({ startedAt, snapshotAt: new Date().toISOString() }, null, 2)}\n`);
+}
+
 if (require.main === module) {
   const jobId = process.argv[2];
+  const fromFetched = process.argv.includes("--from-fetched");
   if (!jobId) {
-    process.stderr.write("Usage: npm run context:snapshot -- <canonical-job-id>\n");
+    process.stderr.write("Usage: npm run context:snapshot -- <canonical-job-id> [--from-fetched]\n");
     process.exitCode = 1;
   } else {
-    createEvidenceSnapshot(defaultWorkspace(), jobId)
-      .then(async (snapshot) => {
-        const run = applicationRunSchema.parse(JSON.parse(await readFile(
-          join(defaultWorkspace(), "jobs", jobId, ".sensei", "application_run.json"),
-          "utf8",
-        )));
+    (fromFetched ? stageFetchedJobDescription(defaultWorkspace(), jobId) : Promise.resolve(null))
+      .then(async (fetchedAt) => ({ snapshot: await createEvidenceSnapshot(defaultWorkspace(), jobId), fetchedAt }))
+      .then(async ({ snapshot, fetchedAt }) => {
+        const statePath = join(defaultWorkspace(), "jobs", jobId, ".sensei");
+        const run = applicationRunSchema.parse(JSON.parse(await readFile(join(statePath, "application_run.json"), "utf8")));
+        await writeRunTiming(defaultWorkspace(), jobId, fetchedAt).catch(() => undefined);
+        // Keep stdout short: the Agy CLI truncates command output beyond ~4 KB, which forced
+        // extra partial reads. The model reads the context file once instead.
         process.stdout.write(`${JSON.stringify({
           runId: run.runId,
           snapshotId: snapshot.snapshotId,
-          manifestHash: snapshot.manifestHash,
-          baseResumePath: snapshot.baseResumePath,
           canonicalBaselineId: snapshot.canonicalResume?.baselineId ?? null,
-          applicationContextPath: `jobs/${jobId}/.sensei/application_context.json`,
           routedEvidenceCount: snapshot.applicationRouting?.selectedEvidenceIds.length ?? 0,
+          next: `Read jobs/${jobId}/.sensei/application_context.json once (the whole file), then write the bundle.`,
         }, null, 2)}\n`);
       })
       .catch((error: unknown) => {

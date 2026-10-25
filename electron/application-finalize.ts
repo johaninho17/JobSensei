@@ -15,17 +15,17 @@ import {
   type ApplicationEvidence,
   type EvidenceSnapshot,
   type ApplicationRun,
-  type ValidationIssue,
-} from "../src/shared/schemas";
+  type ValidationIssue, type ExpandedApplicationBundle, type ApplicationContext } from "../src/shared/schemas";
 import {
   canonicalCoverLetterDrifts,
   canonicalResumeDrifts,
   composeCanonicalCoverLetter,
   composeCanonicalResume,
+  summaryIsEditable,
 } from "./canonical-resume";
 import { contextManifestHash } from "./context-manifest-hash";
 import { mergeEvaluationAudit } from "./evaluation-audit";
-import { normalizeEvaluationScore, scoreEvaluation } from "./fit-scoring";
+import { extractRequiredItems, gateStatusFor, normalizeEvaluationScore, scoreEvaluation } from "./fit-scoring";
 import { validateJobApplication } from "./application-validation";
 import { writeJsonAtomic, writeTextAtomic } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
@@ -62,12 +62,57 @@ function publicResumeName(prefix: string, company: string | null | undefined): s
   return `${prefix}_${token}_Resume.md`;
 }
 
-function materializeBundle(
+/**
+ * Fills in baseline references ({ baseline: N }) and employers the model left out, so the
+ * model never has to retype unchanged base-resume bullets. Output order follows the base resume.
+ */
+export function expandBundleBaselines(
   bundle: ApplicationBundle,
+  canonical: NonNullable<EvidenceSnapshot["canonicalResume"]>,
+  context: ApplicationContext | null,
+): ExpandedApplicationBundle {
+  const key = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "").replace(/inc$/, "");
+  const templates = context?.schemaVersion === 2 ? context.resumeTemplate.employers : [];
+  const baselinesFor = (name: string) => {
+    const template = templates.find((employer) => key(employer.name) === key(name));
+    if (template?.baselineBullets?.length) return template.baselineBullets;
+    const original = canonical.employers.find((employer) => key(employer.name) === key(name));
+    return (original?.originalBullets ?? []).map((text) => ({ text, evidenceIds: [] as string[] }));
+  };
+  const expand = (name: string, bullets: ApplicationBundle["resume"]["employers"][number]["bullets"]) => bullets.map((bullet) => {
+    if (!("baseline" in bullet)) return bullet;
+    const reference = baselinesFor(name)[bullet.baseline - 1];
+    if (!reference) {
+      throw new ApplicationInputError(".sensei/application_bundle.json", new Error(`${name} has no base-resume bullet ${bullet.baseline}.`));
+    }
+    return { text: reference.text, evidenceIds: [...reference.evidenceIds] };
+  });
+  const drafted = bundle.resume.employers;
+  const employers = canonical.employers.map((employer) => {
+    const match = drafted.find((candidate) => key(candidate.name) === key(employer.name));
+    return match
+      ? { name: match.name, bullets: expand(employer.name, match.bullets) }
+      : { name: employer.name, bullets: baselinesFor(employer.name).map((bullet) => ({ text: bullet.text, evidenceIds: [...bullet.evidenceIds] })) };
+  });
+  // Employers that don't match the base resume pass through so validation can report them.
+  for (const extra of drafted.filter((candidate) => !canonical.employers.some((employer) => key(employer.name) === key(candidate.name)))) {
+    employers.push({ name: extra.name, bullets: expand(extra.name, extra.bullets) });
+  }
+  return { ...bundle, resume: { ...(bundle.resume.summary ? { summary: bundle.resume.summary } : {}), skillsLines: bundle.resume.skillsLines, employers } };
+}
+
+function materializeBundle(
+  bundle: ExpandedApplicationBundle,
   snapshot: EvidenceSnapshot,
   artifactPrefix: string,
   company: string | null | undefined,
+  summaryEditable = false,
 ): { draft: ApplicationDraft; evidence: ApplicationEvidence; evaluationMarkdown: string } {
+  // A tailored summary is used only when the base resume has one and the user turned summary tailoring on.
+  const summary = summaryEditable ? bundle.resume.summary : undefined;
+  const summaryWarnings = bundle.resume.summary && !summaryEditable
+    ? ["The bundle included a resume summary, but summary tailoring is off or the base resume has no summary; it was left out."]
+    : [];
   const rows = new Map(snapshot.evidenceRows.map((row) => [row.evidenceId, row]));
   const sourcePaths = (ids: string[]) => [...new Set(ids.map((id) => rows.get(id)?.sourcePath).filter((path): path is string => Boolean(path)))];
   const timeline = (ids: string[], employerSpecific = false): "current" | "prior" | "transition" | "employer-specific" | null => {
@@ -124,6 +169,7 @@ function materializeBundle(
       evidenceSnapshotId: bundle.evidenceSnapshotId,
       canonicalBaselineId: bundle.canonicalBaselineId,
       resume: {
+        ...(summary ? { summary: summary.text } : {}),
         skillsLines: bundle.resume.skillsLines.map((item) => item.text),
         employers: bundle.resume.employers.map((employer) => ({
           name: employer.name,
@@ -147,6 +193,7 @@ function materializeBundle(
       resume: {
         publicArtifact: resumeName,
         claimMappings: [
+          ...(summary ? [claim(summary)] : []),
           ...bundle.resume.skillsLines.map((item) => claim(item)),
           ...bundle.resume.employers.flatMap((employer) => employer.bullets.map((item) => claim(item, true, employer.name))),
         ],
@@ -157,7 +204,7 @@ function materializeBundle(
         careerArc,
       },
       excludedClaims: bundle.excludedClaims,
-      warnings: bundle.warnings,
+      warnings: [...bundle.warnings, ...summaryWarnings],
     }),
   };
 }
@@ -226,8 +273,10 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
     }
   }
   const jobCompany = applicationContext?.schemaVersion === 2 ? applicationContext.job.company : null;
-  const generated = bundle
-    ? materializeBundle(bundle, snapshot, candidateProfile?.identity.artifactPrefix ?? "Candidate", jobCompany)
+  const expandedBundle = bundle ? expandBundleBaselines(bundle, snapshot.canonicalResume, applicationContext) : null;
+  const summaryEditable = summaryIsEditable(snapshot.canonicalResume, candidateProfile);
+  const generated = expandedBundle
+    ? materializeBundle(expandedBundle, snapshot, candidateProfile?.identity.artifactPrefix ?? "Candidate", jobCompany, summaryEditable)
     : null;
   const [draft, evidence] = generated
     ? [generated.draft, generated.evidence]
@@ -252,7 +301,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
     throw new Error("The application evidence map does not match the pinned run.");
   }
 
-  const resumeMarkdown = composeCanonicalResume(snapshot.canonicalResume, draft.resume);
+  const resumeMarkdown = composeCanonicalResume(snapshot.canonicalResume, draft.resume, { includeSummary: summaryEditable });
   const coverMarkdown = composeCanonicalCoverLetter(snapshot.canonicalResume, draft.coverLetter, { fullName: candidateProfile?.identity.fullName });
   const resumeName = evidence.resume.publicArtifact;
   const escapedPrefix = (candidateProfile?.identity.artifactPrefix ?? "Candidate").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -269,7 +318,10 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
   const evaluationPath = assertInsideWorkspace(jobPath, join(jobPath, "evaluation.md"));
   const evaluationMarkdown = generated?.evaluationMarkdown
     ?? await readFile(evaluationPath, "utf8").catch(() => "# Application Evaluation");
-  const normalizedEvaluation = normalizeEvaluationScore(evaluationMarkdown, snapshot);
+  const jobDescription = await readFile(join(jobPath, "original_jd.md"), "utf8")
+    .catch(() => readFile(join(jobPath, "original_jd.txt"), "utf8"))
+    .catch(() => "");
+  const normalizedEvaluation = normalizeEvaluationScore(evaluationMarkdown, snapshot, extractRequiredItems(jobDescription));
   // The rating gate decides whether application documents exist. Grounding and
   // content checks annotate the persisted drafts for review; they do not suppress them.
   await Promise.all([
@@ -287,7 +339,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
     ...report,
     fitScore: fit?.score ?? null,
     fitConfidence: fit?.confidence ?? null,
-    gateStatus: fit ? (fit.score >= 3.5 ? "accepted" : "accepted at screening; evidence-calibrated score below threshold") : null,
+    gateStatus: fit ? gateStatusFor(fit) : null,
   });
   if (persistRunState) await writeJsonAtomic(join(statePath, "validation_report.json"), finalReport);
   await writeTextAtomic(evaluationPath, mergeEvaluationAudit(normalizedEvaluation, {
@@ -337,6 +389,16 @@ export async function finalizeApplication(workspacePath: string, jobId: string, 
   }
 }
 
+/** Completes `.sensei/run_timing.json` and returns the run's duration in seconds, if known. */
+export async function recordRunDuration(workspacePath: string, jobId: string, now = new Date()): Promise<number | null> {
+  const path = join(resolve(workspacePath), "jobs", jobId, ".sensei", "run_timing.json");
+  const timing = await readFile(path, "utf8").then((value) => JSON.parse(value) as { startedAt?: string }).catch(() => null);
+  if (!timing?.startedAt) return null;
+  const durationSeconds = Math.max(0, Math.round((now.getTime() - new Date(timing.startedAt).getTime()) / 1000));
+  await writeJsonAtomic(path, { ...timing, finalizedAt: now.toISOString(), durationSeconds });
+  return durationSeconds;
+}
+
 function defaultWorkspace(): string {
   const configured = process.env.SENSEI_WORKSPACE;
   if (configured) return resolve(configured);
@@ -351,8 +413,9 @@ if (require.main === module) {
     process.exitCode = 1;
   } else {
     finalizeApplication(defaultWorkspace(), jobId, !reviewOnly)
-      .then((report) => {
-        process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+      .then(async (report) => {
+        const durationSeconds = await recordRunDuration(defaultWorkspace(), jobId).catch(() => null);
+        process.stdout.write(`${JSON.stringify({ ...report, durationSeconds }, null, 2)}\n`);
         if (report.status !== "passed") process.exitCode = 1;
       })
       .catch((error: unknown) => {

@@ -53,16 +53,19 @@ describe("workspace Agy runtime sync", () => {
     expect(second.backupPath).toBeNull();
   });
 
-  it("removes retired builder skills from the workspace", async () => {
+  it("removes retired builder skills and the folded-in truth rule from the workspace", async () => {
     const repo = await fakeRepo("skill v2");
     const workspace = await temp("sensei-ws-");
     await mkdir(join(workspace, ".agents", "skills", "jobsensei-ui-ux"), { recursive: true });
     await writeFile(join(workspace, ".agents", "skills", "jobsensei-ui-ux", "SKILL.md"), "builder skill");
+    await mkdir(join(workspace, ".agents", "rules"), { recursive: true });
+    await writeFile(join(workspace, ".agents", "rules", "jobsensei-truth.md"), "old rule");
 
     const report = await syncWorkspaceAgentFiles(workspace, { sourceRoots: [repo] });
 
-    expect(report.removed).toContain("skills/jobsensei-ui-ux");
+    expect(report.removed).toEqual(expect.arrayContaining(["skills/jobsensei-ui-ux", "rules/jobsensei-truth.md"]));
     expect(await readdir(join(workspace, ".agents", "skills"))).not.toContain("jobsensei-ui-ux");
+    expect(await readdir(join(workspace, ".agents", "rules"))).not.toContain("jobsensei-truth.md");
   });
 
   it("seeds a new workspace from this repository's real Agy skills", async () => {

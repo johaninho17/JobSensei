@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import type { BulletBank, BulletBankItem, CandidateProfile, Settings, VoiceSettings } from "../shared/schemas";
 import { deriveVoicePresets } from "../shared/voice-presets";
 
-type SettingsTab = "voice" | "story" | "resume" | "bullets" | "identity";
+type SettingsTab = "voice" | "story" | "truth" | "resume" | "bullets" | "identity" | "preview";
+
+type ProfilePreview = { styleRules: string[]; instructions: string[]; baseResumeHasSummary: boolean | null };
 
 export function SettingsModal({
   open,
@@ -38,6 +40,10 @@ export function SettingsModal({
   const [turningPoints, setTurningPoints] = useState("");
   const [workingStyle, setWorkingStyle] = useState("");
   const [personalValues, setPersonalValues] = useState("");
+  const [transitionSummary, setTransitionSummary] = useState("");
+  const [confidentialNamesText, setConfidentialNamesText] = useState("");
+  const [boundariesText, setBoundariesText] = useState("");
+  const [preview, setPreview] = useState<ProfilePreview | null>(null);
 
   // Bullet Bank state
   const [bulletBank, setBulletBank] = useState<BulletBank | null>(null);
@@ -76,7 +82,11 @@ export function SettingsModal({
       setTurningPoints(profile.preferences.coverLetter?.narrativePillars?.turningPoints ?? profile.career?.narrativePillars?.turningPoints ?? "");
       setWorkingStyle(profile.preferences.coverLetter?.narrativePillars?.workingStyle ?? profile.career?.narrativePillars?.workingStyle ?? "");
       setPersonalValues(profile.preferences.coverLetter?.narrativePillars?.personalValues ?? profile.career?.narrativePillars?.personalValues ?? "");
+      setTransitionSummary(profile.career?.transitionSummary ?? "");
+      setConfidentialNamesText((profile.truth?.confidentialNames ?? []).join(", "));
+      setBoundariesText((profile.truth?.boundaries ?? []).join("\n"));
     }
+    void window.sensei.profile.preview().then(setPreview).catch(() => setPreview(null));
     setSaveSuccess(false);
 
     // Load bullet bank
@@ -112,7 +122,13 @@ export function SettingsModal({
           },
         },
       });
-      onProfileUpdated(updated);
+      const withDetails = await window.sensei.profile.updateDetails({
+        transitionSummary,
+        confidentialNames: confidentialNamesText.split(/[,\n]/).map((name) => name.trim()).filter(Boolean),
+        boundaries: boundariesText.split("\n").map((line) => line.trim()).filter(Boolean),
+      });
+      onProfileUpdated(withDetails ?? updated);
+      setPreview(await window.sensei.profile.preview().catch(() => null));
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
     } finally {
@@ -184,6 +200,15 @@ export function SettingsModal({
             Career Story & Pillars
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "truth"}
+            className={activeTab === "truth" ? "is-active" : ""}
+            onClick={() => setActiveTab("truth")}
+          >
+            Truth & Privacy
+          </button>
+          <button
             role="tab"
             aria-selected={activeTab === "resume"}
             className={activeTab === "resume" ? "is-active" : ""}
@@ -206,6 +231,15 @@ export function SettingsModal({
             onClick={() => setActiveTab("identity")}
           >
             Identity & Sources
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "preview"}
+            className={activeTab === "preview" ? "is-active" : ""}
+            onClick={() => setActiveTab("preview")}
+          >
+            What Agy Sees
           </button>
         </nav>
 
@@ -355,6 +389,20 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
+                <label className="settings-group-title">Career Direction</label>
+                <p className="settings-group-desc">
+                  One or two sentences: where your career has been and where you are heading. Agy opens your story with this.
+                </p>
+                <textarea
+                  className="settings-textarea"
+                  rows={2}
+                  placeholder="e.g., Started in backend development and moved into customer-facing technical work; now looking for solutions roles that keep me close to both the code and the customer."
+                  value={transitionSummary}
+                  onChange={(e) => setTransitionSummary(e.target.value)}
+                />
+              </div>
+
+              <div className="settings-group">
                 <label className="settings-group-title">1. Career Transitions & Turning Points</label>
                 <p className="settings-group-desc">
                   What motivated you to move between roles or step outside your comfort zone? What drives your career choices?
@@ -390,10 +438,60 @@ export function SettingsModal({
                 <textarea
                   className="settings-textarea"
                   rows={3}
-                  placeholder="e.g., High empathy for user friction, proactive ownership, and thriving at the intersection of hands-on technical execution and human communication. The cover letter is a journey of who I am as a person, not a restatement of daily tasks."
+                  placeholder="e.g., I care about the people on the other side of the problem. I stay with an issue until it's actually fixed, and I'd rather say 'I don't know yet, let me find out' than guess."
                   value={personalValues}
                   onChange={(e) => setPersonalValues(e.target.value)}
                 />
+              </div>
+            </div>
+          )}
+
+          {activeTab === "truth" && (
+            <div className="settings-section">
+              <div className="settings-group">
+                <label className="settings-group-title">Clients & Partners Never to Name</label>
+                <p className="settings-group-desc">
+                  These names never appear in your resume or cover letter. Agy describes them by industry instead (for example, "a global professional-services firm"). Separate names with commas.
+                </p>
+                <textarea
+                  className="settings-textarea"
+                  rows={2}
+                  placeholder="e.g., Northwind Partners, Contoso Health"
+                  value={confidentialNamesText}
+                  onChange={(e) => setConfidentialNamesText(e.target.value)}
+                />
+              </div>
+              <div className="settings-group">
+                <label className="settings-group-title">Claims I Never Make</label>
+                <p className="settings-group-desc">
+                  One per line. Agy treats these as hard limits on every application.
+                </p>
+                <textarea
+                  className="settings-textarea"
+                  rows={4}
+                  placeholder="e.g., Never claim a professional license or certification I don't hold."
+                  value={boundariesText}
+                  onChange={(e) => setBoundariesText(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          {activeTab === "preview" && (
+            <div className="settings-section">
+              <div className="settings-group">
+                <label className="settings-group-title">What Agy Sees</label>
+                <p className="settings-group-desc">
+                  Exactly what your saved settings and voice profile give Agy on the next application. Save to refresh.
+                </p>
+                {preview ? (
+                  <>
+                    <strong>Voice & story</strong>
+                    {preview.styleRules.length ? <ul className="settings-preview-list">{preview.styleRules.map((rule) => <li key={rule}>{rule}</li>)}</ul> : <p className="empty-small">Nothing yet. Fill in Voice and Career Story.</p>}
+                    <strong>Rules for every application</strong>
+                    <ul className="settings-preview-list">{preview.instructions.map((rule) => <li key={rule}>{rule}</li>)}</ul>
+                  </>
+                ) : <p className="empty-small">Preview unavailable.</p>}
               </div>
             </div>
           )}
@@ -402,7 +500,10 @@ export function SettingsModal({
             <div className="settings-section">
               <div className="settings-group">
                 <label className="settings-group-title">Professional Summary</label>
-                <p className="settings-group-desc">Toggle whether resumes include an executive summary at the top.</p>
+                <p className="settings-group-desc">
+                  Only applies if your base resume already has a summary section. When on, Agy tailors that summary for each job; when off, it stays exactly as written.
+                  {preview?.baseResumeHasSummary === false && <> <strong>Your base resume has no summary section, so this setting has no effect.</strong></>}
+                </p>
                 <label className="settings-toggle-row">
                   <input
                     type="checkbox"
@@ -411,7 +512,7 @@ export function SettingsModal({
                   />
                   <span>
                     <strong>Include Professional Summary</strong>
-                    <small>Default is OFF. When enabled, a 2–3 sentence tailored executive summary is placed at the top of the resume.</small>
+                    <small>Default is OFF. Agy never adds a summary your base resume doesn't have.</small>
                   </span>
                 </label>
               </div>
