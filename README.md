@@ -67,14 +67,28 @@ The viewer, dashboards, local organization, Markdown editing, search, and PDF ex
 
 ## Install
 
-### Download (macOS)
+### Download
 
-Download the `.dmg` (or `-mac.zip`) from the GitHub release and drag JobSensei to Applications. The app is ad-hoc signed but not notarized by Apple, so the first launch is blocked once:
+Get the installer for your system from the GitHub release. JobSensei is not yet signed with a paid Apple or Microsoft certificate, so each system asks you to trust it once.
 
-1. Open JobSensei; macOS says it can't verify the developer. Click **Done**.
-2. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to JobSensei.
+**macOS** (`.dmg` or `-mac.zip`)
+1. Open the `.dmg` and drag JobSensei to Applications.
+2. In Terminal, run this once to remove the download quarantine:
 
-Later launches open normally. Packaged builds keep the workspace in `~/Documents/JobSensei`.
+   ```bash
+   xattr -cr /Applications/JobSensei.app
+   ```
+3. Open JobSensei normally. (Without the command: open it once, then System Settings → Privacy & Security → **Open Anyway**.)
+
+**Windows** (`Setup.exe` installer or portable `.exe`)
+1. Run the installer. If Windows shows "Windows protected your PC", click **More info** → **Run anyway**. No command is needed.
+2. If the file was blocked as downloaded from the internet (Properties shows an **Unblock** box), tick **Unblock**, or run this in PowerShell first:
+
+   ```powershell
+   Unblock-File -Path "$env:USERPROFILE\Downloads\JobSensei*.exe"
+   ```
+
+Packaged builds keep the workspace in your Documents folder (`Documents/JobSensei`). Maintainers: see `docs/release-signing.md` to sign and notarize releases so these steps go away.
 
 ### From source
 

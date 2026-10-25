@@ -51,5 +51,13 @@ jobs:
       - name: Package and publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # macOS signing and notarization (docs/release-signing.md). Without these secrets the
+          # app is ad-hoc signed and users must click "Open Anyway" once.
+          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MAC_CERT_P12_BASE64 || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MAC_CERT_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
         run: |
           npx electron-builder --publish always

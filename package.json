@@ -27,7 +27,7 @@
     "postinstall": "node scripts/ensure-pty-helper.cjs",
     "pack:binaries": "node scripts/prepare-bundled-binaries.mjs",
     "dist": "npm run pack:binaries && npm run build && electron-builder",
-    "dist:mac": "node scripts/prepare-bundled-binaries.mjs --platform=mac && npm run build && electron-builder --mac",
+    "dist:mac": "node scripts/prepare-bundled-binaries.mjs --platform=mac && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
     "dist:win": "node scripts/prepare-bundled-binaries.mjs --platform=win && npm run build && electron-builder --win",
     "interview:context": "tsc -p tsconfig.electron.json && node dist-electron/electron/interview-context.js",
     "interview:check": "tsc -p tsconfig.electron.json && node dist-electron/electron/interview-check.js"
@@ -98,7 +98,12 @@
         "dmg",
         "zip"
       ],
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build-config/entitlements.mac.plist",
+      "entitlementsInherit": "build-config/entitlements.mac.plist",
+      "notarize": true
     },
     "win": {
       "target": [
