@@ -3,6 +3,11 @@ import type { JobQueue, JobQueueItem, RunStatus } from "./schemas";
 /** Minutes a sent link may run without a finished application before it needs attention. */
 export const QUEUE_TIMEOUT_MINUTES = 12;
 
+/** The one line Agy gets after the app stages a pasted JD (`jd:fetch -- --staged` prints it). */
+export function pastedJdPrompt(note = ""): string {
+  return `Evaluate the job description I pasted and draft the application${note ? ` (${note.replace(/[\r\n]+/g, " ").slice(0, 200)})` : ""}`;
+}
+
 export function queuePrompt(url: string): string {
   return `Evaluate this job and draft the application: ${url}`;
 }

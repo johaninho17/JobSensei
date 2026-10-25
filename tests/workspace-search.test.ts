@@ -213,6 +213,7 @@ describe("design system (Phase 3)", () => {
     const app = await readFile(join(process.cwd(), "src/renderer/App.tsx"), "utf8");
     expect(app).toContain('className={`tracker-select is-${trackerStatus}`}');
     expect(app).toContain('className="status-strip"');
+    expect(app).toMatch(/function JobMenu[\s\S]*TRACKER_STATUSES\.map[\s\S]*role="menuitemradio"[\s\S]*handlers\.onSetStatus\(status\)/);
     expect(app).toContain('return stored === "list" ? "list" : "cards";');
   });
 

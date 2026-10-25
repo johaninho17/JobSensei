@@ -1,6 +1,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { writeJsonAtomic, writeTextAtomic } from "./persistence";
+import { parseJobDescriptionMetadata } from "./job-description";
 
 /** Fetched postings are staged here until the job is accepted and a job folder exists. */
 export const FETCHED_JD_PATH = ".sensei/fetched_jd.md";
@@ -142,6 +143,39 @@ export async function fetchJobDescription(workspacePath: string, url: string, fe
   return fetched;
 }
 
+const MAX_PASTED_CHARS = 200_000;
+
+/**
+ * Stages a JD the user pasted in the app, in the same slot `jd:fetch` uses for a link, so Agy gets one
+ * short prompt instead of the whole text typed into its input, and the pipeline runs unchanged.
+ */
+export async function stagePastedJobDescription(workspacePath: string, input: unknown, now = new Date()): Promise<Omit<FetchedJobDescription, "markdown">> {
+  if (typeof input !== "string") throw new Error("The pasted job description must be text.");
+  const text = input.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim();
+  if (text.length < MIN_DESCRIPTION_CHARS) throw new Error("That paste is too short to be a job description.");
+  if (text.length > MAX_PASTED_CHARS) throw new Error("That paste is too long for a job description.");
+  const metadata = parseJobDescriptionMetadata(text);
+  const staged: FetchedJobDescription = {
+    url: metadata.url ?? "pasted",
+    fetchedAt: now.toISOString(),
+    title: metadata.title,
+    company: metadata.company,
+    location: metadata.location,
+    suggestedJobId: suggestJobId(metadata.company, metadata.title),
+    markdown: `${text}\n`,
+  };
+  const workspace = resolve(workspacePath);
+  await mkdir(join(workspace, ".sensei"), { recursive: true });
+  await writeTextAtomic(join(workspace, FETCHED_JD_PATH), staged.markdown);
+  const { markdown: _markdown, ...meta } = staged;
+  await writeJsonAtomic(join(workspace, FETCHED_JD_META_PATH), meta);
+  return meta;
+}
+
+function printStaged(markdown: string, meta: Partial<FetchedJobDescription>): void {
+  process.stdout.write(`${markdown}\n---\n${JSON.stringify({ company: meta.company ?? null, title: meta.title ?? null, location: meta.location ?? null, suggestedJobId: meta.suggestedJobId ?? null, stagedAt: FETCHED_JD_PATH }, null, 2)}\n`);
+}
+
 export async function readFetchedJobDescription(workspacePath: string): Promise<{ markdown: string; fetchedAt: string | null } | null> {
   const workspace = resolve(workspacePath);
   const markdown = await readFile(join(workspace, FETCHED_JD_PATH), "utf8").catch(() => null);
@@ -158,14 +192,21 @@ function defaultWorkspace(): string {
 
 if (require.main === module) {
   const url = process.argv[2];
-  if (!url) {
-    process.stderr.write("Usage: npm run jd:fetch -- <job-posting-url>\n");
+  if (url === "--staged") {
+    // A JD the user pasted in the app: print what the app staged, exactly like a fetch.
+    const workspace = defaultWorkspace();
+    Promise.all([readFile(join(workspace, FETCHED_JD_PATH), "utf8"), readFile(join(workspace, FETCHED_JD_META_PATH), "utf8").then((raw) => JSON.parse(raw) as Partial<FetchedJobDescription>)])
+      .then(([markdown, meta]) => printStaged(markdown, meta))
+      .catch(() => {
+        process.stderr.write("No pasted job description is staged. Ask the user to paste the JD again.\n");
+        process.exitCode = 2;
+      });
+  } else if (!url) {
+    process.stderr.write("Usage: npm run jd:fetch -- <job-posting-url> | --staged\n");
     process.exitCode = 1;
   } else {
     fetchJobDescription(defaultWorkspace(), url)
-      .then((fetched) => {
-        process.stdout.write(`${fetched.markdown}\n---\n${JSON.stringify({ company: fetched.company, title: fetched.title, location: fetched.location, suggestedJobId: fetched.suggestedJobId, stagedAt: FETCHED_JD_PATH }, null, 2)}\n`);
-      })
+      .then((fetched) => printStaged(fetched.markdown, fetched))
       .catch((error: unknown) => {
         process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
         process.exitCode = 2;

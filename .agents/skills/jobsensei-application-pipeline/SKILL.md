@@ -15,14 +15,16 @@ For a normal run, read only this skill, the supplied JD, and the job's `.sensei/
 
 For a URL: run the `jd:fetch` script exactly once with the URL. It prints the clean JD plus the company, title, and a suggested job ID, and stages it for the snapshot. Never use curl, inline scripts (`node -e`, `python -c`), or a second fetch. If the command says it couldn't read the page, ask the user to paste the JD and stop.
 
+For a JD pasted in the app ("Evaluate the job description I pasted…"): the app already saved it. Run `jd:fetch -- --staged` once; it prints the JD, company, title, and suggested job ID exactly like a URL fetch. Then follow the URL path.
+
 ## One-Pass Flow
 
-1. Get the JD: for a URL, run `jd:fetch -- "<url>"`; for pasted text, use it as given. Screen it once.
+1. Get the JD: for a URL, run `jd:fetch -- "<url>"`; for a JD pasted in the app, run `jd:fetch -- --staged`; for text pasted any other way, use it as given. Screen it once.
 2. Score exactly six distinct capabilities: `core` 40%, `technical` 25%, `scope` 15%, `outcomes` 10%, `domain` 5%, and `learning` 5%. Use `direct` 1.00, `strong_transferable` 0.80, `adjacent_transferable` 0.65, `unclear` 0.25, and `gap` 0. Do not score personality, logistics, or ordinary learnable tools as standalone requirements; required items go in the Must-Have table below. A learnable must-have never stops a screen; only a blocker does. Below `3.5/5` (before must-have penalties), report the screen and stop.
 3. Use the `suggestedJobId` from `jd:fetch` (or derive lowercase kebab-case `<company>-<role-title>` for pasted text). Never run `ls` or create folders, `pdfs/`, or metadata files yourself.
 4. Run the snapshot exactly once, then read `jobs/<job-id>/.sensei/application_context.json` once in a single full read:
-   - URL: `context:snapshot -- <job-id> --from-fetched` (it creates the job folder and `original_jd.md` from the fetched posting).
-   - Pasted text: first write `jobs/<job-id>/original_jd.md`, then `context:snapshot -- <job-id>`.
+   - URL or JD pasted in the app: `context:snapshot -- <job-id> --from-fetched` (it creates the job folder and `original_jd.md` from the staged posting).
+   - Text pasted outside the app: first write `jobs/<job-id>/original_jd.md`, then `context:snapshot -- <job-id>`.
 5. In one file-writing turn, create only `.sensei/application_bundle.json` (contract below). Keep it short; the finalizer fills in everything unchanged:
    - Leave out earlier employers entirely. They are kept exactly as in the base resume.
    - For the current employer, write the 3–4 reworked bullets as text, and keep each remaining bullet as `{ "baseline": N }` (N = its position in `baselineBullets`, starting at 1), in the order you want.
@@ -135,4 +137,4 @@ Every editable skills line, rewritten bullet, and factual cover-letter sentence 
 
 ## Time Budget
 
-Use at most 5 operations: `jd:fetch` (or write `original_jd.md` for pasted text), the snapshot, one context read, one bundle write, and the finalize. Never list directories, read files for context, or create scaffolding. Target: under 60 seconds end to end. A warning is a completed run, not permission to investigate or repair.
+Use at most 5 operations: `jd:fetch` (URL or `--staged`; write `original_jd.md` only for text pasted outside the app), the snapshot, one context read, one bundle write, and the finalize. Never list directories, read files for context, or create scaffolding. Target: under 60 seconds end to end. A warning is a completed run, not permission to investigate or repair.

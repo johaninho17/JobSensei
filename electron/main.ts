@@ -2,9 +2,10 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, session } from "electro
 import { watch, type FSWatcher } from "node:fs";
 import { updateJobTracker } from "./tracker";
 import { latestRun } from "./run-status";
+import { stagePastedJobDescription } from "./jd-fetch";
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
-import { copyFile, mkdir, readFile, stat } from "node:fs/promises";
+import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import type { Settings } from "../src/shared/schemas";
 import { markdownSaveInputSchema, pdfExportRequestSchema } from "../src/shared/schemas";
 import { SettingsStore } from "./settings";
@@ -282,6 +283,16 @@ ipcMain.handle("jobs:preview-artifact", async (_event, jobId: string, relativePa
 ipcMain.handle("jobs:get-application-status", async (_event, jobId: string) => getJobApplicationStatus(requireWorkspace(), jobId));
 ipcMain.handle("queue:get", async () => readJobQueue(requireWorkspace()));
 ipcMain.handle("queue:save", async (_event, queue: unknown) => saveJobQueue(requireWorkspace(), queue));
+ipcMain.handle("jobs:stage-pasted-jd", async (_event, text: unknown) => stagePastedJobDescription(requireWorkspace(), text));
+// Writes only to the file the user picks in the save dialog.
+ipcMain.handle("jobs:export-csv", async (_event, csv: unknown) => {
+  if (typeof csv !== "string" || !csv.startsWith("\uFEFF") || csv.length > 10_000_000) throw new Error("The export is invalid.");
+  const options = { title: "Export jobs", defaultPath: join(app.getPath("documents"), `jobs-${new Date().toISOString().slice(0, 10)}.csv`), filters: [{ name: "CSV", extensions: ["csv"] }] };
+  const result = mainWindow ? await dialog.showSaveDialog(mainWindow, options) : await dialog.showSaveDialog(options);
+  if (result.canceled || !result.filePath) return null;
+  await writeFile(result.filePath, csv, "utf8");
+  return result.filePath;
+});
 ipcMain.handle("runs:latest", async () => latestRun(requireWorkspace()));
 ipcMain.handle("jobs:update-tracker", async (_event, jobId: unknown, update: unknown) => updateJobTracker(requireWorkspace(), String(jobId), update));
 ipcMain.handle("jobs:validate-application", async (_event, jobId: string) => validateJobApplication(requireWorkspace(), jobId, false));

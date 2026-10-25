@@ -48,6 +48,8 @@ const api: SenseiApi = {
     getApplicationStatus: (jobId) => ipcRenderer.invoke("jobs:get-application-status", jobId),
     validateApplication: (jobId) => ipcRenderer.invoke("jobs:validate-application", jobId),
     updateTracker: (jobId, update) => ipcRenderer.invoke("jobs:update-tracker", jobId, update),
+    stagePastedJd: (text) => ipcRenderer.invoke("jobs:stage-pasted-jd", text),
+    exportCsv: (csv) => ipcRenderer.invoke("jobs:export-csv", csv),
   },
   interviews: {
     getOverview: (jobId) => ipcRenderer.invoke("interviews:get-overview", jobId),

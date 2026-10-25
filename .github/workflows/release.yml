@@ -16,7 +16,23 @@ permissions:
   contents: write
 
 jobs:
+  # Create the draft once, so the Mac and Windows builds upload to the same release
+  # (when both create it at the same time, GitHub ends up with two drafts for one tag).
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create the draft release for this tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --title "JobSensei ${TAG#v}" --notes "Installers for macOS and Windows. See the README for the one-time trust step."
+          fi
+
   release:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:

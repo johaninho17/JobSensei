@@ -401,3 +401,12 @@
 .queue-item.is-needs_attention { border-color: color-mix(in srgb, var(--risk) 45%, transparent); }
 .queue-item.is-needs_attention .queue-state { color: var(--risk); }
 @media (max-width: 900px) { .queue-item { grid-template-columns: 1fr; } }
+
+/* Job menu status group */
+.job-card-menu .job-menu-label { margin: 0; padding: 6px 12px 2px; color: var(--muted); font-size: var(--fs-12); font-weight: 650; }
+.job-card-menu .job-menu-status { display: grid; }
+.job-card-menu .job-menu-status button { display: grid; grid-template-columns: 16px 1fr; gap: 4px; }
+.job-card-menu .job-menu-status button.is-current { font-weight: 650; }
+.job-card-menu .job-menu-status button span { color: var(--leaf); }
+.job-card-menu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
+.export-note { margin: 0 0 var(--space-3); color: var(--muted); font-size: var(--fs-13); }

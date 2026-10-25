@@ -1146,6 +1146,10 @@ export interface SenseiApi {
     getApplicationStatus(jobId: string): Promise<ApplicationStatus>;
     validateApplication(jobId: string): Promise<ApplicationValidationReport>;
     updateTracker(jobId: string, update: JobTrackerUpdate): Promise<JobTracker>;
+    /** Saves a pasted JD where `jd:fetch` stages links; Agy then gets one short prompt. */
+    /** Saves CSV text to a file the user picks; returns its path, or null when cancelled. */
+    exportCsv(csv: string): Promise<string | null>;
+    stagePastedJd(text: string): Promise<{ company: string | null; title: string | null; suggestedJobId: string | null }>;
   };
   interviews: {
     getOverview(jobId: string): Promise<InterviewOverview | null>;
