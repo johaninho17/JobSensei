@@ -126,6 +126,7 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
       <div className="iv-head-actions">
         {onInsertPrompt && <button className="btn-quiet" onClick={() => onInsertPrompt(`Refresh ${company} ${job.title ?? ""} ${round.label} interview prep with current research ${jobRef}`.replace(/\s+/g, " "), "Update research")}>Update research</button>}
         {!standalone && <button className="btn-quiet" onClick={() => void window.sensei.interviews.openWorkspaceWindow(job.id, round.id)}>Open in window</button>}
+        <button className="btn-quiet" title="A small window that stays on top of your video call" onClick={() => void window.sensei.interviews.openWorkspaceWindow(job.id, round.id, true)}>Live window</button>
         <button className="btn-primary" disabled={!liveCards.length} onClick={() => setLiveIndex(0)} title="Shortcut: L">Start live mode</button>
       </div>
     </header>
@@ -196,8 +197,14 @@ function InterviewCardItem({ card, index, open, stories, onToggle, onLive }: { c
   </li>;
 }
 
-function LiveMode({ cards, index, stories, reminder, title, onIndex, onClose }: { cards: InterviewCard[]; index: number; stories: Record<string, string>; reminder: string | null; title: string; onIndex: (index: number) => void; onClose: () => void }) {
+function LiveMode({ cards, index, stories, reminder, title, onIndex, onClose, compact = false }: { cards: InterviewCard[]; index: number; stories: Record<string, string>; reminder: string | null; title: string; onIndex: (index: number) => void; onClose: () => void; compact?: boolean }) {
   const [seconds, setSeconds] = useState(0);
+  const [collapsed, setCollapsed] = useState(false);
+  function toggleCollapsed() {
+    const next = !collapsed;
+    setCollapsed(next);
+    void window.sensei.interviews.setLiveCollapsed(next).catch(() => undefined);
+  }
   const dialogRef = useRef<HTMLDivElement>(null);
   const card = cards[index]!;
   useEffect(() => { setSeconds(0); }, [index]);
@@ -212,24 +219,50 @@ function LiveMode({ cards, index, stories, reminder, title, onIndex, onClose }: 
     else if (event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === " ") { event.preventDefault(); onIndex(Math.min(cards.length - 1, index + 1)); }
     else if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); onIndex(Math.max(0, index - 1)); }
     else if (event.key.toLowerCase() === "r") setSeconds(0);
+    else if (compact && event.key.toLowerCase() === "c") toggleCollapsed();
   }
   const over = seconds >= LIVE_TARGET_SECONDS;
-  return <div className="live" role="dialog" aria-modal="true" aria-label={`Live mode, ${title}`} tabIndex={-1} ref={dialogRef} onKeyDown={onKeyDown}>
+  return <div className={`live ${compact ? "is-compact" : ""} ${collapsed ? "is-collapsed" : ""}`} role="dialog" aria-modal="true" aria-label={`Live mode, ${title}`} tabIndex={-1} ref={dialogRef} onKeyDown={onKeyDown}>
     <header className="live-head">
       <span>{title}</span>
       <span className="live-count">{index + 1} of {cards.length}</span>
       <span className={`live-timer ${over ? "is-over" : ""}`} aria-live="off" title={`Aim for under ${LIVE_TARGET_SECONDS} seconds. R resets.`}>{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</span>
-      <button className="btn-quiet" onClick={onClose}>Exit</button>
+      {compact && <button className="btn-quiet" aria-pressed={collapsed} title="Shortcut: C" onClick={toggleCollapsed}>{collapsed ? "Expand" : "Collapse"}</button>}
+      <button className="btn-quiet" onClick={onClose}>{compact ? "Close" : "Exit"}</button>
     </header>
     <div className="live-card">
       <p className="live-kind">{KIND_LABEL[card.kind]}</p>
       <h2>{card.question}</h2>
-      <CardFields card={card} stories={stories} large />
+      {collapsed ? card.cues.length > 0 && <p className="live-strip-cues">{card.cues.join("  ·  ")}</p> : <CardFields card={card} stories={stories} large={!compact} />}
     </div>
-    <footer className="live-foot">
+    {!collapsed && <footer className="live-foot">
       <button className="btn-quiet" disabled={index === 0} onClick={() => onIndex(index - 1)}>Previous</button>
       {reminder && <p className="live-reminder">{reminder}</p>}
       <button className="btn-primary" disabled={index === cards.length - 1} onClick={() => onIndex(index + 1)}>Next</button>
-    </footer>
+    </footer>}
   </div>;
+}
+
+/** Body of the compact always-on-top live window (`?live=1`). */
+export function LiveWindow({ jobId, roundId }: { jobId: string; roundId: string }) {
+  const [state, setState] = useState<{ cards: InterviewCard[]; stories: Record<string, string>; reminder: string | null; title: string } | null>(null);
+  const [error, setError] = useState("");
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    void (async () => {
+      const [overview, jobs] = await Promise.all([window.sensei.interviews.getOverview(jobId), window.sensei.jobs.list()]);
+      const round = overview?.rounds.find((candidate) => candidate.id === roundId);
+      if (!round) { setError("This interview round could not be found."); return; }
+      const job = jobs.find((candidate) => candidate.id === jobId);
+      const [prep, bank, stories] = await Promise.all([readText(round.artifactPaths.prep), readText(round.artifactPaths.questionBank), readText("profile/story_bank.md")]);
+      const reminders = listItems(markdownSections(prep).find((section) => /before you start/i.test(section.title))?.body ?? "");
+      setState({ cards: parseInterviewCards(bank), stories: storyTitles(stories), reminder: reminders[0] ?? null, title: `${job?.company ?? overview?.company ?? jobId}: ${round.label}` });
+    })().catch(() => setError("Unable to load this round."));
+  }, [jobId, roundId]);
+  useEffect(() => { document.title = state ? `Live: ${state.title}` : "Sensei Live"; }, [state]);
+  useEffect(() => { document.documentElement.dataset.theme = window.localStorage.getItem("sensei-theme-v2") === "dark" ? "dark" : "light"; }, []);
+  if (error) return <p className="iv-empty live-window-message">{error}</p>;
+  if (!state) return <p className="iv-empty live-window-message">Loading…</p>;
+  if (!state.cards.length) return <p className="iv-empty live-window-message">This round has no question bank yet.</p>;
+  return <LiveMode compact cards={state.cards} index={index} stories={state.stories} reminder={state.reminder} title={state.title} onIndex={setIndex} onClose={() => window.close()} />;
 }

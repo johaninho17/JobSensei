@@ -271,20 +271,21 @@
 
 /* Board: one column per status; drag or use the card's status menu. */
 .jobs-home.is-board { max-width: none; }
-.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(160px, 1fr); gap: var(--space-3); overflow-x: auto; padding-bottom: var(--space-3); }
-.board-col { display: flex; flex-direction: column; gap: var(--space-2); min-height: 320px; padding: var(--space-2); border: 1px solid transparent; border-radius: var(--radius-m); background: var(--sunken); }
+.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(200px, 1fr); gap: var(--space-3); overflow-x: auto; padding-bottom: var(--space-3); }
+.board-col { display: flex; flex-direction: column; gap: var(--space-2); min-height: 200px; align-self: start; padding: var(--space-2); border: 1px solid transparent; border-radius: var(--radius-m); background: var(--sunken); }
 .board-col.is-over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--sunken)); }
 .board-col h2 { display: flex; align-items: center; justify-content: space-between; margin: 0; padding: var(--space-1) var(--space-1) var(--space-2); font: 600 var(--fs-13) var(--font-ui); }
 .board-col h2 > span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; }
 .board-col ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.board-card { display: grid; gap: 6px; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--raised); cursor: grab; }
+.board-card { display: grid; gap: 4px; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--raised); cursor: grab; }
 .board-card:active { cursor: grabbing; }
 .board-card.is-busy { opacity: .6; }
 .board-card-open { display: grid; padding: 0; border: 0; color: var(--ink); background: none; font: inherit; text-align: left; cursor: pointer; }
 .board-card-open strong { font-weight: 650; }
 .board-card-open span { color: var(--muted); font-size: var(--fs-13); }
 .board-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--fs-13); }
-.board-card-move select { width: 100%; min-height: 28px; border: 1px solid var(--line); border-radius: var(--radius-s); color: var(--muted); background: var(--canvas); font: var(--fs-12) var(--font-ui); }
+.board-card-move { margin-left: auto; }
+.board-card-move select { max-width: 110px; min-height: 26px; border: 1px solid var(--line); border-radius: var(--radius-s); color: var(--muted); background: var(--canvas); font: var(--fs-12) var(--font-ui); }
 .board-empty { margin: var(--space-4) 0; color: var(--muted); font-size: var(--fs-13); text-align: center; }
 .interview-rows li.is-closed { opacity: .6; }
 
@@ -303,3 +304,31 @@
 .app-check-docs li.is-ready span { color: var(--leaf); }
 .app-check-details > summary, .app-check .application-fit-details > summary, .app-check .application-issues > summary { padding: var(--space-2) 0; color: var(--ink); font-weight: 600; cursor: pointer; }
 .app-check-details { border-top: 1px solid var(--line); }
+
+/* ⋯ job actions button (cards, list rows, board cards). */
+.job-more { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-s); color: var(--muted); background: none; font: 700 var(--fs-18)/1 var(--font-ui); cursor: pointer; }
+.job-more:hover, .job-more[aria-expanded="true"] { border-color: var(--line); color: var(--ink); background: var(--hover); }
+.jobs-table td:last-child { white-space: nowrap; text-align: right; }
+.job-card-badges { display: inline-flex; align-items: center; gap: var(--space-1); }
+
+/* Compact live window: small, always on top, collapses to a strip (question and cues). */
+.live.is-compact .live-head, .live.is-compact .live-foot { gap: var(--space-2); padding: var(--space-2) var(--space-3); font-size: var(--fs-13); }
+.live.is-compact .live-head .btn-quiet, .live.is-compact .live-foot .btn-quiet, .live.is-compact .live-foot .btn-primary { min-height: 30px; padding: 0 var(--space-2); }
+.live.is-compact .live-timer { min-width: 52px; font-size: var(--fs-15); }
+.live.is-compact .live-card { padding: var(--space-3) var(--space-4); }
+.live.is-compact .live-card h2 { margin-bottom: var(--space-3); font-size: var(--fs-22); }
+.live.is-compact .live-kind { display: none; }
+.live.is-compact .icard-fields > div { grid-template-columns: 1fr; gap: 2px; }
+.live.is-compact .live-reminder { font-size: var(--fs-12); }
+.live.is-collapsed { grid-template-rows: auto minmax(0, 1fr); }
+.live.is-collapsed .live-card { overflow: hidden; padding-top: var(--space-2); }
+.live.is-collapsed .live-card h2 { margin: 0; font-size: var(--fs-18); }
+.live-strip-cues { margin: 4px 0 0; color: var(--muted); font-size: var(--fs-13); }
+.live-window-message { padding: var(--space-4); }
+.live.is-compact .live-head > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live.is-compact .live-count { white-space: nowrap; }
+.board-col h2 > span:first-child { color: var(--ink); }
+.board-more { align-self: center; font-size: var(--fs-13); }
+.board-card { position: relative; }
+.board-card .job-more { position: absolute; top: 4px; right: 4px; }
+.board-card-open { padding-right: 26px; }

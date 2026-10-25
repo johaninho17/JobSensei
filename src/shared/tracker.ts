@@ -2,15 +2,23 @@ import type { JobTracker, TrackerStatus } from "./schemas";
 
 export const TRACKER_LABELS: Record<TrackerStatus, string> = { saved: "Saved", applied: "Applied", interviewing: "Interviewing", offer: "Offer", rejected: "Rejected", withdrawn: "Withdrawn" };
 
-/** The status shown for a job: the user's tracker status, or "saved" before they set one. */
-export function effectiveStatus(tracker: Pick<JobTracker, "status"> | null): TrackerStatus {
-  return tracker?.status ?? "saved";
+type TrackedJob = { tracker: Pick<JobTracker, "status" | "appliedAt"> | null; hasApplicationMaterials: boolean; interviewRoundLabel: string | null; createdAt: string };
+
+/**
+ * The status shown for a job. A status the user set always wins. Otherwise it is derived:
+ * interview prep exists -> interviewing; application drafts exist (the job was sent through Sensei) -> applied; else saved.
+ */
+export function effectiveStatus(job: Pick<TrackedJob, "tracker" | "hasApplicationMaterials" | "interviewRoundLabel">): TrackerStatus {
+  if (job.tracker) return job.tracker.status;
+  if (job.interviewRoundLabel) return "interviewing";
+  return job.hasApplicationMaterials ? "applied" : "saved";
 }
 
-/** True when a job has interview prep but the user has not marked it as interviewing or later. */
-export function suggestsInterviewing(tracker: Pick<JobTracker, "status"> | null, hasInterviewRound: boolean): boolean {
-  const status = effectiveStatus(tracker);
-  return hasInterviewRound && (status === "saved" || status === "applied");
+/** The applied date: the user's date, else the day the job was added when its status counts as applied or later. */
+export function effectiveAppliedAt(job: TrackedJob): string | null {
+  if (job.tracker?.appliedAt) return job.tracker.appliedAt;
+  const status = effectiveStatus(job);
+  return status === "saved" || job.tracker ? null : job.createdAt.slice(0, 10);
 }
 
 /** Days until the follow-up date (negative when overdue), or null. Dates are local calendar days. */

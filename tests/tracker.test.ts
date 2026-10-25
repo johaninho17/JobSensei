@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { updateJobTracker } from "../electron/tracker";
 import { listJobFolders } from "../electron/job-folders";
-import { effectiveStatus, followUpDays, suggestsInterviewing } from "../src/shared/tracker";
+import { effectiveAppliedAt, effectiveStatus, followUpDays } from "../src/shared/tracker";
 
 async function workspace(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "sensei-tracker-"));
@@ -39,13 +39,16 @@ describe("job tracker", () => {
     await expect(updateJobTracker(root, "missing-job", { status: "applied" })).rejects.toThrow(/No job folder/);
   });
 
-  it("derives status, follow-up timing, and the interviewing suggestion", () => {
-    expect(effectiveStatus(null)).toBe("saved");
+  it("derives status from the pipeline until the user sets one", () => {
+    const base = { tracker: null, hasApplicationMaterials: false, interviewRoundLabel: null, createdAt: "2026-10-20T09:00:00Z" };
+    expect(effectiveStatus(base)).toBe("saved");
+    expect(effectiveAppliedAt(base)).toBeNull();
+    expect(effectiveStatus({ ...base, hasApplicationMaterials: true })).toBe("applied");
+    expect(effectiveAppliedAt({ ...base, hasApplicationMaterials: true })).toBe("2026-10-20");
+    expect(effectiveStatus({ ...base, hasApplicationMaterials: true, interviewRoundLabel: "Recruiter screen" })).toBe("interviewing");
+    expect(effectiveStatus({ ...base, hasApplicationMaterials: true, tracker: { status: "rejected", appliedAt: null } })).toBe("rejected");
     expect(followUpDays({ nextFollowUpAt: "2026-10-24" }, new Date(2026, 9, 25))).toBe(-1);
     expect(followUpDays({ nextFollowUpAt: "2026-10-27" }, new Date(2026, 9, 25))).toBe(2);
     expect(followUpDays(null)).toBeNull();
-    expect(suggestsInterviewing(null, true)).toBe(true);
-    expect(suggestsInterviewing({ status: "interviewing" }, true)).toBe(false);
-    expect(suggestsInterviewing({ status: "applied" }, false)).toBe(false);
   });
 });

@@ -213,7 +213,6 @@ describe("design system (Phase 3)", () => {
     const app = await readFile(join(process.cwd(), "src/renderer/App.tsx"), "utf8");
     expect(app).toContain('className={`tracker-select is-${trackerStatus}`}');
     expect(app).toMatch(/function JobsBoard[\s\S]*onDrop[\s\S]*board-card-move/);
-    expect(app).toContain("suggestsInterviewing(job.tracker");
   });
 
   it("keeps the terminal panel dark in both themes", async () => {

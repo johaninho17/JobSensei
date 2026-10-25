@@ -1124,7 +1124,9 @@ export interface SenseiApi {
     listRounds(jobId: string): Promise<InterviewRound[]>;
     setCurrentRound(jobId: string, roundId: string): Promise<InterviewOverview | null>;
     refreshDashboard(jobId: string): Promise<InterviewOverview | null>;
-    openWorkspaceWindow(jobId: string, roundId: string): Promise<void>;
+    /** `live` opens the compact always-on-top live window instead of the full interview window. */
+    openWorkspaceWindow(jobId: string, roundId: string, live?: boolean): Promise<void>;
+    setLiveCollapsed(collapsed: boolean): Promise<void>;
   };
   search: {
     query(input: SearchQuery): Promise<SearchResponse>;

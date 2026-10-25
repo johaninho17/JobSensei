@@ -54,7 +54,8 @@ const api: SenseiApi = {
     listRounds: (jobId) => ipcRenderer.invoke("interviews:list-rounds", jobId),
     setCurrentRound: (jobId, roundId) => ipcRenderer.invoke("interviews:set-current-round", { jobId, roundId }),
     refreshDashboard: (jobId) => ipcRenderer.invoke("interviews:refresh-dashboard", jobId),
-    openWorkspaceWindow: (jobId, roundId) => ipcRenderer.invoke("interviews:open-workspace-window", { jobId, roundId }),
+    openWorkspaceWindow: (jobId, roundId, live) => ipcRenderer.invoke("interviews:open-workspace-window", { jobId, roundId, live: live === true }),
+    setLiveCollapsed: (collapsed) => ipcRenderer.invoke("interviews:set-live-collapsed", collapsed === true),
   },
   search: {
     query: (input) => ipcRenderer.invoke("search:query", input),
