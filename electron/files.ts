@@ -1,12 +1,17 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
-import { shell } from "electron";
 import mammoth from "mammoth";
 import type { FilePreview, FileTreeNode, MarkdownSaveInput } from "../src/shared/schemas";
 import { filePreviewSchema, markdownSaveInputSchema } from "../src/shared/schemas";
 import { writeTextAtomic } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
+
+/** Loaded only when needed: pipeline commands import this module in plain-runtime mode, where "electron" is unavailable. */
+function electronShell(): typeof import("electron").shell {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return (require("electron") as typeof import("electron")).shell;
+}
 
 const MAX_PREVIEW_BYTES = 4 * 1024 * 1024;
 const MAX_BINARY_PREVIEW_BYTES = 16 * 1024 * 1024;
@@ -136,7 +141,7 @@ export async function saveMarkdownFile(workspacePath: string, input: MarkdownSav
   return previewFile(workspaceRoot, safeRelativePath);
 }
 
-export async function deleteWorkspacePath(workspacePath: string, relativePath: string, trashItem: (path: string) => Promise<void> = (path) => shell.trashItem(path)): Promise<void> {
+export async function deleteWorkspacePath(workspacePath: string, relativePath: string, trashItem: (path: string) => Promise<void> = (path) => electronShell().trashItem(path)): Promise<void> {
   if (!relativePath || relativePath.startsWith(".") || relativePath.includes("\\")) throw new Error("Use a workspace-relative file or folder path.");
   const pathParts = relativePath.split("/");
   if (pathParts.length === 1 && protectedRoots.has(pathParts[0])) throw new Error("Workspace root folders cannot be deleted.");
@@ -151,7 +156,7 @@ export async function revealWorkspacePath(workspacePath: string, relativePath: s
   const path = assertInsideWorkspace(workspacePath, resolve(workspacePath, relativePath));
   const info = await stat(path).catch(() => null);
   if (!info) throw new Error("The selected file or folder no longer exists.");
-  shell.showItemInFolder(path);
+  electronShell().showItemInFolder(path);
 }
 
 function mimeForImage(path: string): string {

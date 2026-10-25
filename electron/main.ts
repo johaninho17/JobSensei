@@ -4,6 +4,7 @@ import { updateJobTracker } from "./tracker";
 import { latestRun } from "./run-status";
 import { stagePastedJobDescription } from "./jd-fetch";
 import { readJobQueue, saveJobQueue } from "./job-queue";
+import { prepareAgyHome, writeSenseiLauncher } from "./agy-home";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import type { Settings } from "../src/shared/schemas";
@@ -13,7 +14,7 @@ import { deleteWorkspacePath, getBaseResume, listFileTree, listResumePaths, prev
 import { listJobArtifacts, listJobFolders, listJobTree } from "./job-folders";
 import { assertInsideWorkspace, indexContext, summarizeWorkspace } from "./workspace";
 import { initializeWorkspace, syncWorkspaceAgentFiles, type AgentSyncReport } from "./workspace-init";
-import { TerminalSession } from "./terminal";
+import { TerminalSession, appRoot as terminalAppRoot } from "./terminal";
 import { buildContextManifest, contextSources, readActiveContextManifest } from "./context";
 import { exportMarkdownPdf } from "./pdf-export";
 import { getInterviewOverview, listInterviewRounds, refreshInterviewDashboard, setCurrentInterviewRound } from "./interviews";
@@ -321,6 +322,11 @@ ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
   const cwd = input?.cwd && input.cwd !== "." ? resolve(workspace, input.cwd) : workspace;
   logAgentSync(await syncWorkspaceAgentFiles(workspace).catch((error) => { console.error("Agy skill sync failed:", error); return null; }));
   const manifest = await buildContextManifest(workspace, {}, await settingsStore.get());
+  // Agy runs with an app-owned home whose rules keep its file tools inside the workspace.
+  const agyHome = await prepareAgyHome(app.getPath("userData"), workspace)
+    .then(async (home) => { await writeSenseiLauncher(home, { appRoot: terminalAppRoot(), packaged: app.isPackaged, runtimePath: process.execPath }); return home; })
+    .catch((error) => { console.error("Agy home setup failed:", error); return null; });
+  terminal.setAgyHome(agyHome);
   return terminal.start(cwd, workspace, manifest);
 });
 ipcMain.handle("terminal:set-context", async (_event, input) => {

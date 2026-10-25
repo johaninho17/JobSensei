@@ -17,14 +17,14 @@ Do not activate because a pasted JD contains the word `interview`. Never run fro
 
 ## One-Pass Flow
 
-Commands use `npm --prefix "$JOBSENSEI_APP_ROOT" run …`.
+Commands use `sensei <command> <args>` (on your PATH).
 
 1. If `data/profile/story_bank.md` does not exist, run `.agents/workflows/jobsensei-story-bank.md` first (once per candidate), then continue.
-2. Run `interview:context -- <job-id> <stage>` exactly once.
+2. Run `sensei interview:context <job-id> <stage>` exactly once.
 3. Read `jobs/<job-id>/interviews/.sensei/interview_context.json` once, in a single full read. It holds the JD's required items and responsibilities, the candidate's gaps, citable evidence, the story bank, the candidate's career story and interview voice, logistics from the candidate profile (`data/profile/candidate.json`), matched role memory, everything earlier rounds already used, and the question limits. Do not read context files, other jobs, or transcripts separately.
 4. If `interviews/company_research.md` does not exist and internet access is available, write it following `references/research.md`. Otherwise reuse it.
 5. In one file-writing turn, write `interviews/<round-id>/prep.md` and `interviews/<round-id>/question_bank.md` following this skill and the round's stage reference.
-6. Run `interview:check -- <job-id> <round-id>` once. It validates the files and registers the round in `interview.json` (the app builds the dashboard from the files; never write `dashboardBrief`). Report its status, duration, and at most five issues, then stop. Do not repair in a loop; a warning is a finished run.
+6. Run `sensei interview:check <job-id> <round-id>` once. It validates the files and registers the round in `interview.json` (the app builds the dashboard from the files; never write `dashboardBrief`). Report its status, duration, and at most five issues, then stop. Do not repair in a loop; a warning is a finished run.
 
 ## Framing: honest and strong
 

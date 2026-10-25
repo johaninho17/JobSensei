@@ -1,0 +1,12 @@
+// Build step: records which pipeline commands exist (from package.json scripts) in dist-electron,
+// because the installed app's package.json has no scripts. Read by writeSenseiLauncher (electron/agy-home.ts).
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+const scripts = JSON.parse(readFileSync("package.json", "utf8")).scripts ?? {};
+const pipeline = {};
+for (const [name, command] of Object.entries(scripts)) {
+  const match = /\bnode (dist-electron\/electron\/[\w.-]+\.js)\s*$/.exec(command);
+  if (match) pipeline[name] = match[1];
+}
+mkdirSync("dist-electron", { recursive: true });
+writeFileSync("dist-electron/pipeline-scripts.json", `${JSON.stringify(pipeline, null, 2)}\n`);
+console.log(`pipeline commands: ${Object.keys(pipeline).join(", ")}`);

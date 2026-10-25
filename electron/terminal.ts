@@ -56,7 +56,7 @@ export function resolveAgyExecutable(): string | null {
 }
 
 /** Repository root holding package.json (compiled: dist-electron/electron → ../..; source: electron → ..). */
-function appRoot(): string {
+export function appRoot(): string {
   for (const candidate of [resolve(__dirname, "..", ".."), resolve(__dirname, "..")]) {
     try {
       if (statSync(join(candidate, "package.json")).isFile()) return candidate;
@@ -75,6 +75,10 @@ export class TerminalSession {
   private pendingInput: string[] = [];
   private onDataCallback: ((data: string) => void) | null = null;
   private onExitCallback: ((code: number) => void) | null = null;
+  /** App-owned Agy home (see agy-home.ts); null runs Agy with the user's own home. */
+  private agyHome: string | null = null;
+
+  setAgyHome(home: string | null): void { this.agyHome = home; }
 
   start(cwd: string, workspacePath: string, manifest: ContextManifest | null = null): { cwd: string; agyStarted: boolean } {
     this.stop();
@@ -92,8 +96,9 @@ export class TerminalSession {
     const shell = windows ? process.env.ComSpec || "powershell.exe" : process.env.SHELL || "/bin/zsh";
     const agyPath = resolveAgyExecutable();
     const executable = agyPath ?? shell;
-    const args = agyPath ? [] : (windows ? [] : ["-l"]);
-    this.process = ptyModule.spawn(executable, args, { name: "xterm-256color", cols: 100, rows: 28, cwd: this.cwd, env: this.environment() });
+    // --sandbox keeps Agy's shell commands from writing outside the workspace (macOS/Linux; untested on Windows).
+    const args = agyPath ? (windows ? [] : ["--sandbox"]) : (windows ? [] : ["-l"]);
+    this.process = ptyModule.spawn(executable, args, { name: "xterm-256color", cols: 100, rows: 28, cwd: this.cwd, env: this.environment(Boolean(agyPath)) });
     this.process.onData((data) => this.onDataCallback?.(data));
     const ptyProcess = this.process;
     ptyProcess.onExit(({ exitCode }) => { if (this.process === ptyProcess) this.process = null; this.onExitCallback?.(exitCode); });
@@ -116,7 +121,7 @@ export class TerminalSession {
   stop(): void { this.process?.kill(); this.process = null; this.pendingInput = []; }
   onData(callback: (data: string) => void): void { this.onDataCallback = callback; }
   onExit(callback: (code: number) => void): void { this.onExitCallback = callback; }
-  private environment(): NodeJS.ProcessEnv {
+  private environment(agy = false): NodeJS.ProcessEnv {
     const home = process.env.HOME || process.env.USERPROFILE || "";
     const userLocal = home ? join(home, ".local", "bin") : "";
     const agyExecutable = resolveAgyExecutable();
@@ -125,9 +130,15 @@ export class TerminalSession {
     const extraPaths = [agyDir, userLocal, "/opt/homebrew/bin", "/usr/local/bin"].filter((p) => p && !currentPath.includes(p));
     const augmentedPath = extraPaths.length > 0 ? `${extraPaths.join(delimiter)}${delimiter}${currentPath}` : currentPath;
 
+    const ownHome = agy && this.agyHome
+      ? { HOME: this.agyHome, ...(process.platform === "win32" ? { USERPROFILE: this.agyHome } : {}), npm_config_cache: join(this.workspacePath, ".sensei", "npm-cache") }
+      : {};
+    // The app-owned home's bin folder holds the `sensei` command (agy-home.ts).
+    const pathWithLauncher = agy && this.agyHome ? `${join(this.agyHome, "bin")}${delimiter}${augmentedPath}` : augmentedPath;
     return {
       ...process.env,
-      PATH: augmentedPath,
+      ...ownHome,
+      PATH: pathWithLauncher,
       TERM: "xterm-256color",
       SENSEI_WORKSPACE: this.workspacePath,
       // Where the app's npm scripts live, so Agy can run them from the workspace without searching.

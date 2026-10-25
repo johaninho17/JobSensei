@@ -88,7 +88,9 @@ Get the installer for your system from the GitHub release. JobSensei is not yet 
    Unblock-File -Path "$env:USERPROFILE\Downloads\JobSensei*.exe"
    ```
 
-Packaged builds keep the workspace in your Documents folder (`Documents/JobSensei`). Maintainers: see `docs/release-signing.md` to sign and notarize releases so these steps go away.
+Packaged builds keep the workspace in your Documents folder (`Documents/JobSensei`).
+
+**What Agy can touch:** JobSensei runs Agy with its own settings folder (inside the app's settings), so your own Agy setup is never changed. Agy's file tools may read and write only inside your workspace, and its shell commands can't write anywhere else. The first time you open the Agy panel, sign in once. Maintainers: see `docs/release-signing.md` to sign and notarize releases so these steps go away.
 
 ### From source
 

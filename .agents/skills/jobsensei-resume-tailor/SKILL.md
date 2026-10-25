@@ -55,4 +55,4 @@ Requirements:
 - The voice pass may simplify jargon, slogans, abstract language, and model-like phrasing. It must not change facts, scope, ownership, timeline, tools, metrics, outcomes, or evidence mappings.
 - Use secondary-resume `contextText` only to locate relevant older history that selected structured evidence or LinkedIn corroborates. A secondary resume cannot independently support a public bullet, score, metric, or ownership claim and cannot override canonical protected fields.
 
-Never place candidate identity, contact details, titles, dates, locations, education, or section structure in the bundle. After one explicit revision, run `npm run application:finalize -- <job-id> --review` once and stop.
+Never place candidate identity, contact details, titles, dates, locations, education, or section structure in the bundle. After one explicit revision, run `sensei application:finalize <job-id> --review` once and stop.

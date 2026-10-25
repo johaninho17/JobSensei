@@ -52,7 +52,7 @@ Create only:
 
 Update `interviews/interview.json` only to register the requested round and these artifact paths. Do not modify existing resume, cover letter, evaluation, question bank, prep, mock, or debrief files.
 
-Never write `dashboardBrief`. After writing the files, run `npm --prefix "$JOBSENSEI_APP_ROOT" run interview:check -- <job-id> <round-id>` once; it validates the labs and registers them, and the app builds the dashboard from the files.
+Never write `dashboardBrief`. After writing the files, run `sensei interview:check <job-id> <round-id>` once; it validates the labs and registers them, and the app builds the dashboard from the files.
 
 `challenge.json` records schema version, job ID, round ID, assessment mode, known timebox, allowed tools, confirmed constraints, source basis, whether the real prompt was supplied, artifact paths, and unresolved unknowns.
 

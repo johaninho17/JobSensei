@@ -27,4 +27,4 @@ Write the letter exactly as `.sensei/application_context.json.coverLetterBrief` 
 
 For another explicitly requested application response, create only that requested public file and update the hidden evidence map when it contains candidate facts.
 
-Perform one writing pass, run `npm run application:finalize -- <job-id> --review` once, and stop.
+Perform one writing pass, run `sensei application:finalize <job-id> --review` once, and stop.

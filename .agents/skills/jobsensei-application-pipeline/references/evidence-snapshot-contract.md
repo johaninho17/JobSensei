@@ -6,7 +6,7 @@ An accepted-job workflow must freeze its allowed factual sources before matching
 
 1. Reread `data/.sensei/active-context.json`; do not rely on a manifest remembered earlier in the conversation.
 2. Confirm its workspace, configured base resume, selected paths, and hashes.
-3. Run `npm run context:snapshot -- <canonical-job-id>` from the JobSensei project root.
+3. Run `sensei context:snapshot <canonical-job-id>`.
 4. Read `data/jobs/<job-id>/.sensei/application_context.json` and record its `snapshotId` and `manifestHash`. The full `evidence_snapshot.json` remains the deterministic verification archive and is not the drafting payload.
 5. Stop if creation fails, the base resume is missing, or the manifest belongs to another workspace.
 
