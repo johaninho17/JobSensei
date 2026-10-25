@@ -57,6 +57,9 @@ const api: SenseiApi = {
     openWorkspaceWindow: (jobId, roundId, live) => ipcRenderer.invoke("interviews:open-workspace-window", { jobId, roundId, live: live === true }),
     setLiveCollapsed: (collapsed) => ipcRenderer.invoke("interviews:set-live-collapsed", collapsed === true),
   },
+  runs: {
+    latest: () => ipcRenderer.invoke("runs:latest"),
+  },
   search: {
     query: (input) => ipcRenderer.invoke("search:query", input),
   },

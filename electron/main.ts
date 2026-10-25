@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, session } from "electron";
 import { watch, type FSWatcher } from "node:fs";
 import { updateJobTracker } from "./tracker";
+import { latestRun } from "./run-status";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { copyFile, mkdir, readFile, stat } from "node:fs/promises";
 import type { Settings } from "../src/shared/schemas";
@@ -278,6 +279,7 @@ ipcMain.handle("jobs:preview-artifact", async (_event, jobId: string, relativePa
   return previewFile(requireWorkspace(), relativePath);
 });
 ipcMain.handle("jobs:get-application-status", async (_event, jobId: string) => getJobApplicationStatus(requireWorkspace(), jobId));
+ipcMain.handle("runs:latest", async () => latestRun(requireWorkspace()));
 ipcMain.handle("jobs:update-tracker", async (_event, jobId: unknown, update: unknown) => updateJobTracker(requireWorkspace(), String(jobId), update));
 ipcMain.handle("jobs:validate-application", async (_event, jobId: string) => validateJobApplication(requireWorkspace(), jobId, false));
 

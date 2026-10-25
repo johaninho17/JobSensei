@@ -1070,6 +1070,20 @@ export const clarifyingAnswersReportSchema = z.object({
 });
 export type ClarifyingAnswersReport = z.infer<typeof clarifyingAnswersReportSchema>;
 
+/** The latest pipeline run, shown above the terminal. Read from files the commands already write. */
+export type RunStatus = {
+  kind: "fetch" | "application" | "interview";
+  jobId: string | null;
+  roundId: string | null;
+  label: string;
+  at: string;
+  durationSeconds: number | null;
+  state: "running" | "passed" | "warnings" | "failed";
+  fitScore: number | null;
+  gate: string | null;
+  issues: Array<{ severity: "error" | "warning"; code: string; message: string }>;
+};
+
 export interface SenseiApi {
   app: {
     copyText(text: string): Promise<void>;
@@ -1127,6 +1141,9 @@ export interface SenseiApi {
     /** `live` opens the compact always-on-top live window instead of the full interview window. */
     openWorkspaceWindow(jobId: string, roundId: string, live?: boolean): Promise<void>;
     setLiveCollapsed(collapsed: boolean): Promise<void>;
+  };
+  runs: {
+    latest(): Promise<RunStatus | null>;
   };
   search: {
     query(input: SearchQuery): Promise<SearchResponse>;

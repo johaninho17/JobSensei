@@ -14,11 +14,13 @@ export function effectiveStatus(job: Pick<TrackedJob, "tracker" | "hasApplicatio
   return job.hasApplicationMaterials ? "applied" : "saved";
 }
 
-/** The applied date: the user's date, else the day the job was added when its status counts as applied or later. */
+/** The applied date: the user's date, else the local day the job was added when its status counts as applied or later. */
 export function effectiveAppliedAt(job: TrackedJob): string | null {
   if (job.tracker?.appliedAt) return job.tracker.appliedAt;
   const status = effectiveStatus(job);
-  return status === "saved" || job.tracker ? null : job.createdAt.slice(0, 10);
+  if (status === "saved" || job.tracker) return null;
+  const added = new Date(job.createdAt);
+  return `${added.getFullYear()}-${String(added.getMonth() + 1).padStart(2, "0")}-${String(added.getDate()).padStart(2, "0")}`;
 }
 
 /** Days until the follow-up date (negative when overdue), or null. Dates are local calendar days. */

@@ -40,7 +40,7 @@ describe("job tracker", () => {
   });
 
   it("derives status from the pipeline until the user sets one", () => {
-    const base = { tracker: null, hasApplicationMaterials: false, interviewRoundLabel: null, createdAt: "2026-10-20T09:00:00Z" };
+    const base = { tracker: null, hasApplicationMaterials: false, interviewRoundLabel: null, createdAt: "2026-10-20T12:00:00" };
     expect(effectiveStatus(base)).toBe("saved");
     expect(effectiveAppliedAt(base)).toBeNull();
     expect(effectiveStatus({ ...base, hasApplicationMaterials: true })).toBe("applied");
