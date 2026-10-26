@@ -10,7 +10,7 @@ const api: SenseiApi = {
   workspace: {
     getSummary: () => ipcRenderer.invoke("workspace:get-summary"),
     rescan: () => ipcRenderer.invoke("workspace:rescan"),
-    onChanged: (callback) => { const listener = () => callback(); ipcRenderer.on("workspace:changed", listener); return () => ipcRenderer.removeListener("workspace:changed", listener); },
+    onChanged: (callback) => { const listener = (_event: Electron.IpcRendererEvent, paths?: string[]) => callback(paths ?? []); ipcRenderer.on("workspace:changed", listener); return () => ipcRenderer.removeListener("workspace:changed", listener); },
   },
   profile: {
     get: () => ipcRenderer.invoke("profile:get"),

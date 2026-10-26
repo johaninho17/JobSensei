@@ -28,6 +28,7 @@ import {
   validateApplicationArtifact,
   validateCoverLetterAuditJson,
   validateResumeAuditJson,
+  type ClaimFailure,
   ClaimValidationError,
 } from "./application-artifacts";
 import { contextManifestHash } from "./context-manifest-hash";
@@ -722,27 +723,27 @@ function validateEvidenceMap(loaded: LoadedApplication, issues: ValidationIssue[
   if (loaded.evidence.resume.publicArtifact !== loaded.resumeName) {
     issues.push(issue("EVIDENCE_MAP_MISMATCH", ".sensei/application_evidence.json", "resume.publicArtifact", "The evidence map identifies another resume.", "Stop and leave the drafts pending review.", "error"));
   }
-  collectError(issues, "RESUME_GROUNDING_INVALID", ".sensei/application_evidence.json", () => validateResumeAuditJson(
+  collectClaimIssues(issues, "RESUME_GROUNDING_INVALID", (claimFailures) => validateResumeAuditJson(
     resumeAuditFromEvidence(loaded.evidence!),
     {
       publicMarkdown: loaded.resumeMarkdown!,
       publicArtifactName: loaded.resumeName!,
       snapshot: loaded.snapshot!,
-      currentManifestHash: loaded.manifestHash ?? undefined,
       applicationRunId: loaded.run!.runId,
       leanEvidenceMap: true,
+      claimFailures,
     },
-  ), "warning");
-  collectError(issues, "COVER_GROUNDING_INVALID", ".sensei/application_evidence.json", () => validateCoverLetterAuditJson(
+  ));
+  collectClaimIssues(issues, "COVER_GROUNDING_INVALID", (claimFailures) => validateCoverLetterAuditJson(
     coverAuditFromEvidence(loaded.evidence!),
     {
       publicMarkdown: loaded.coverMarkdown!,
       publicArtifactName: "cover_letter.md",
       snapshot: loaded.snapshot!,
-      currentManifestHash: loaded.manifestHash ?? undefined,
       applicationRunId: loaded.run!.runId,
+      claimFailures,
     },
-  ), "warning");
+  ));
 }
 
 function resumeAuditFromEvidence(evidence: ApplicationEvidence) {
@@ -822,6 +823,24 @@ async function readJsonState<T>(path: string, schema: { parse(value: unknown): T
     return { exists: true, value: schema.parse(JSON.parse(raw)) };
   } catch {
     return { exists: true, value: null };
+  }
+}
+
+const MAX_CLAIM_ISSUES = 10;
+
+/**
+ * Grounding warnings name every failing line with the rows it cited. A stale manifest is
+ * MANIFEST_STALE's job, so it is not repeated here.
+ */
+function collectClaimIssues(issues: ValidationIssue[], code: string, run: (claimFailures: ClaimFailure[]) => unknown): void {
+  const claimFailures: ClaimFailure[] = [];
+  collectError(issues, code, ".sensei/application_evidence.json", () => run(claimFailures), "warning");
+  const hint = "Cite the evidence row whose text contains the claim's terms, or reword the line to what the row says.";
+  for (const failure of claimFailures.slice(0, MAX_CLAIM_ISSUES)) {
+    issues.push(issue(code, ".sensei/application_evidence.json", null, failure.message, hint, "warning", failure.explanation));
+  }
+  if (claimFailures.length > MAX_CLAIM_ISSUES) {
+    issues.push(issue(code, ".sensei/application_evidence.json", null, `${claimFailures.length - MAX_CLAIM_ISSUES} more lines have the same kind of grounding problem.`, hint, "warning"));
   }
 }
 

@@ -11,9 +11,9 @@ import type { Settings } from "../src/shared/schemas";
 import { markdownSaveInputSchema, pdfExportRequestSchema } from "../src/shared/schemas";
 import { SettingsStore } from "./settings";
 import { deleteWorkspacePath, getBaseResume, listFileTree, listResumePaths, previewFile, revealWorkspacePath, saveMarkdownFile } from "./files";
-import { listJobArtifacts, listJobFolders, listJobTree } from "./job-folders";
+import { invalidateJobCache, listJobArtifacts, listJobFolders, listJobTree } from "./job-folders";
 import { assertInsideWorkspace, indexContext, summarizeWorkspace } from "./workspace";
-import { initializeWorkspace, syncWorkspaceAgentFiles, type AgentSyncReport } from "./workspace-init";
+import { capWorkspaceNpmCache, initializeWorkspace, syncWorkspaceAgentFiles, type AgentSyncReport } from "./workspace-init";
 import { TerminalSession, appRoot as terminalAppRoot } from "./terminal";
 import { buildContextManifest, contextSources, readActiveContextManifest } from "./context";
 import { exportMarkdownPdf } from "./pdf-export";
@@ -38,6 +38,7 @@ let workspacePath: string;
 let settingsStore: SettingsStore;
 let workspaceWatcher: FSWatcher | undefined;
 let workspaceWatchTimer: ReturnType<typeof setTimeout> | undefined;
+const workspaceChangedPaths = new Set<string>();
 const terminal = new TerminalSession();
 
 function createWindow(): void {
@@ -128,10 +129,13 @@ function startWorkspaceWatcher(path: string): void {
     workspaceWatcher = watch(path, { recursive: true }, (_eventType, filename) => {
       const changedPath = filename?.toString().replaceAll("\\", "/") ?? "";
       if (!changedPath || changedPath.startsWith(".sensei/") || changedPath.includes("/.sensei/") || changedPath.includes(".tmp-") || changedPath === "context/index.json") return;
+      invalidateJobCache(path, changedPath);
+      workspaceChangedPaths.add(changedPath);
       if (workspaceWatchTimer) clearTimeout(workspaceWatchTimer);
       workspaceWatchTimer = setTimeout(() => {
         invalidateSearchIndex(path);
-        mainWindow?.webContents.send("workspace:changed");
+        mainWindow?.webContents.send("workspace:changed", [...workspaceChangedPaths]);
+        workspaceChangedPaths.clear();
       }, 350);
     });
     workspaceWatcher.on("error", (error) => console.error(`Sensei workspace watcher: ${error.message}`));
@@ -346,6 +350,7 @@ ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
   if (input?.cwd && input.cwd !== ".") assertInsideWorkspace(workspace, resolve(workspace, input.cwd));
   const cwd = input?.cwd && input.cwd !== "." ? resolve(workspace, input.cwd) : workspace;
   logAgentSync(await syncWorkspaceAgentFiles(workspace).catch((error) => { console.error("Agy skill sync failed:", error); return null; }));
+  if (await capWorkspaceNpmCache(workspace).catch(() => false)) console.info("Agy npm cache passed its size limit and was cleared.");
   const manifest = await buildContextManifest(workspace, {}, await settingsStore.get());
   // Agy runs with an app-owned home whose rules keep its file tools inside the workspace.
   const agyHome = await prepareAgyHome(app.getPath("userData"), workspace)

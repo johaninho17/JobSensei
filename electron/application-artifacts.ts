@@ -62,6 +62,28 @@ export interface MachineAuditValidationOptions {
   requireAuditSchemaVersion?: 2;
   applicationRunId?: string;
   leanEvidenceMap?: boolean;
+  /** When set, line-level claim failures are collected here instead of stopping at the first one. */
+  claimFailures?: ClaimFailure[];
+}
+
+export interface ClaimFailure {
+  message: string;
+  explanation: NonNullable<ValidationIssueExplanation>;
+}
+
+type ClaimLine = { publicText: string; claimType: string; evidenceIds: string[] };
+
+/** Runs one line's checks; with a collector, records the failure with its cited rows and moves on. */
+function checkLine(options: MachineAuditValidationOptions, line: ClaimLine, check: () => void): void {
+  if (!options.claimFailures) return check();
+  try {
+    check();
+  } catch (error) {
+    options.claimFailures.push({
+      message: error instanceof Error ? error.message : String(error),
+      explanation: error instanceof ClaimValidationError ? error.explanation : claimExplanation(line.publicText, line.claimType, line.evidenceIds, options.snapshot),
+    });
+  }
 }
 
 const INTERNAL_SECTION = /(?:^|\n)\s*(?:#{1,6}\s*)?(?:provenance|tailoring audit|timeline audit|excluded(?:[_\s-]+or[_\s-]+uncertain)? claims?|source hashes?|evidence ids?|generated\s*-\s*awaiting review)\b/i;
@@ -183,12 +205,18 @@ export function validateResumeAuditJson(input: unknown, options: MachineAuditVal
   validateMachineAudit(audit, options);
   const publicBullets = experienceBullets(options.publicMarkdown).map(normalizeResumeText);
   const publicSkills = skillSectionLines(options.publicMarkdown).map(normalizeResumeText);
-  if (audit.claimMappings.some((mapping) => mapping.claimType !== "candidate" && mapping.claimType !== "baseline")) {
-    throw new Error("Every resume claim mapping must be classified as candidate evidence or as unchanged base-resume text.");
+  for (const mapping of audit.claimMappings) {
+    // Uncited lines (non-factual) get their own message in validateClaimMapping.
+    if (mapping.claimType === "candidate" || mapping.claimType === "baseline" || mapping.claimType === "non-factual") continue;
+    checkLine(options, mapping, () => {
+      throw new Error("Every resume claim mapping must be classified as candidate evidence or as unchanged base-resume text.");
+    });
   }
   const mappedClaims = new Set(audit.claimMappings.map((mapping) => normalizeResumeText(mapping.publicText)));
   for (const claim of [...publicBullets, ...publicSkills]) {
-    if (!mappedClaims.has(claim)) throw new Error(`Every public experience bullet and skills line must have an exact JSON evidence mapping: ${claim}`);
+    checkLine(options, { publicText: claim, claimType: "unmapped", evidenceIds: [] }, () => {
+      if (!mappedClaims.has(claim)) throw new Error(`Every public experience bullet and skills line must have an exact JSON evidence mapping: ${claim}`);
+    });
   }
   validateResumeEmployerAttribution(audit, options);
   if (!options.leanEvidenceMap) {
@@ -243,7 +271,9 @@ export function validateCoverLetterAuditJson(input: unknown, options: MachineAud
   validateMachineAudit(audit, options);
   const mappedClaims = new Set(audit.claimMappings.map((mapping) => normalizeResumeText(mapping.publicText)));
   for (const sentence of coverLetterBodyParagraphs(options.publicMarkdown).flatMap(splitSentences).map(normalizeResumeText)) {
-    if (!mappedClaims.has(sentence)) throw new Error(`Every cover-letter body sentence must be classified in the JSON audit: ${sentence}`);
+    checkLine(options, { publicText: sentence, claimType: "unmapped", evidenceIds: [] }, () => {
+      if (!mappedClaims.has(sentence)) throw new Error(`Every cover-letter body sentence must be classified in the JSON audit: ${sentence}`);
+    });
   }
   const timelines = new Set(audit.careerArc.map((stage) => stage.timeline));
   if (!timelines.has("prior") || (!timelines.has("transition") && !timelines.has("current"))) {
@@ -257,7 +287,7 @@ export function validateCoverLetterAuditJson(input: unknown, options: MachineAud
     if (stage.evidenceIds.some((id) => usedArcEvidence.has(id))) throw new Error("Each cover-letter career stage must use distinct evidence.");
     stage.evidenceIds.forEach((id) => usedArcEvidence.add(id));
     validateMappedEvidence(stage.evidenceIds, [], options.snapshot, "candidate");
-    const matchingClaim = audit.claimMappings.find((mapping) => mapping.claimType === "candidate" && mapping.timeline === stage.timeline && stage.evidenceIds.some((id) => mapping.evidenceIds.includes(id)));
+    const matchingClaim = audit.claimMappings.find((mapping) => (mapping.claimType === "candidate" || mapping.claimType === "framed") && mapping.timeline === stage.timeline && stage.evidenceIds.some((id) => mapping.evidenceIds.includes(id)));
     if (!matchingClaim) throw new Error("Every career-arc stage must map to a public candidate sentence with the same timeline.");
     const normalizedClaim = normalizeResumeText(matchingClaim.publicText);
     if (usedArcClaims.has(normalizedClaim)) throw new Error("Each cover-letter career stage must map to a distinct public sentence.");
@@ -294,40 +324,57 @@ function validateMachineAudit(
   if (audit.manifestHash !== options.snapshot.manifestHash) throw new Error("The JSON audit manifest hash does not match its evidence snapshot.");
   if (options.currentManifestHash && audit.manifestHash !== options.currentManifestHash) throw new Error("The active context manifest changed after evidence collection.");
   if (audit.baseResumePath !== options.snapshot.baseResumePath) throw new Error("The JSON audit does not identify the configured canonical base resume.");
-  enforceDenylist(options.publicMarkdown, options.snapshot);
+  checkLine(options, { publicText: options.publicArtifactName, claimType: "denylist", evidenceIds: [] }, () => enforceDenylist(options.publicMarkdown, options.snapshot));
   for (const mapping of audit.claimMappings) {
-    if (!normalizeResumeText(options.publicMarkdown).includes(normalizeResumeText(mapping.publicText))) {
-      throw new Error("A JSON claim mapping does not match text in the public artifact.");
+    checkLine(options, mapping, () => validateClaimMapping(mapping, audit.artifactType, options));
+  }
+}
+
+function validateClaimMapping(mapping: ResumeAuditJson["claimMappings"][number], artifactType: string, options: MachineAuditValidationOptions): void {
+  if (!normalizeResumeText(options.publicMarkdown).includes(normalizeResumeText(mapping.publicText))) {
+    throw new Error("A JSON claim mapping does not match text in the public artifact.");
+  }
+  if (mapping.claimType === "baseline") {
+    validateBaselineClaim(mapping, artifactType, options.snapshot);
+    return;
+  }
+  const isSkillsLine = /^languages\s*:/i.test(stripMarkdown(mapping.publicText).replace(/\s+:/, ":"))
+    || skillSectionLines(options.publicMarkdown).some((line) => normalizeResumeText(line) === normalizeResumeText(mapping.publicText));
+  if (artifactType === "resume" && isSkillsLine) {
+    if (mapping.evidenceIds.length) validateMappedEvidence(mapping.evidenceIds, mapping.sourcePaths, options.snapshot, "candidate", mapping.publicText);
+    validateSkillTerms(mapping.publicText, mapping.evidenceIds, options.snapshot);
+    return;
+  }
+  if (mapping.claimType === "non-factual") {
+    if (artifactType === "resume") throw new Error("This line differs from the base resume but cites no evidence row.");
+    if (mapping.evidenceIds.length || mapping.sourcePaths.length) throw new Error("Non-factual text cannot cite career evidence.");
+    if (!/^(?:I|My|Throughout|Over|As|What|Having|With|In|Thank|Looking|This|That)\b/i.test(stripMarkdown(mapping.publicText))) {
+      throw new Error("Only a clearly personal application, motivation, or closing sentence may be classified as non-factual.");
     }
-    if (mapping.claimType === "baseline") {
-      validateBaselineClaim(mapping, audit.artifactType, options.snapshot);
-      continue;
+    return;
+  }
+  // Letters written before the framed type existed recorded their story sentences as candidate claims.
+  const claimType = mapping.claimType === "framed" || (artifactType === "cover-letter" && mapping.claimType === "candidate") ? "framed" : mapping.claimType;
+  const evidenceType = claimType === "employer" ? "employer" : "candidate";
+  if (mapping.evidenceIds.length === 0 || mapping.sourcePaths.length === 0) throw new Error("Every factual claim needs evidence IDs and source paths.");
+  validateMappedEvidence(mapping.evidenceIds, mapping.sourcePaths, options.snapshot, evidenceType, mapping.publicText);
+  if (artifactType === "cover-letter") {
+    if (claimType === "employer" && candidateSignal(mapping.publicText, options.snapshot)) {
+      throw new ClaimValidationError("A sentence about the candidate cannot be classified as an employer claim.", claimExplanation(mapping.publicText, claimType, mapping.evidenceIds, options.snapshot));
     }
-    if (mapping.claimType === "non-factual") {
-      if (mapping.evidenceIds.length || mapping.sourcePaths.length) throw new Error("Non-factual text cannot cite career evidence.");
-      if (!/^(?:I|My|Throughout|Over|As|What|Having|With|In|Thank|Looking|This|That)\b/i.test(stripMarkdown(mapping.publicText))) {
-        throw new Error("Only a clearly personal application, motivation, or closing sentence may be classified as non-factual.");
-      }
-      continue;
-    }
-    if (mapping.evidenceIds.length === 0 || mapping.sourcePaths.length === 0) throw new Error("Every factual claim needs evidence IDs and source paths.");
-    validateMappedEvidence(mapping.evidenceIds, mapping.sourcePaths, options.snapshot, mapping.claimType, mapping.publicText);
-    if (audit.artifactType === "cover-letter") {
-      if (mapping.claimType === "employer" && candidateSignal(mapping.publicText, options.snapshot)) {
-        throw new ClaimValidationError("A sentence about the candidate cannot be classified as an employer claim.", claimExplanation(mapping.publicText, mapping.claimType, mapping.evidenceIds, options.snapshot));
-      }
-      if (mapping.claimType === "candidate" && !candidateSignal(mapping.publicText, options.snapshot)) {
-        throw new Error("A candidate claim must identify the candidate or a documented career stage.");
-      }
-    }
-    validateSemanticSupport(mapping.publicText, mapping.evidenceIds, options.snapshot);
-    if (mapping.claimType === "candidate") {
-      validateMappedMetrics(mapping.publicText, mapping.evidenceIds, options.snapshot);
-      validateOwnership(mapping.publicText, mapping.evidenceIds, options.snapshot);
-      if (mapping.timeline === "current") validateCurrentEvidence(mapping.evidenceIds, options.snapshot, mapping.publicText);
-      if (audit.artifactType === "cover-letter" && usesContinuingTense(mapping.publicText)) validateCurrentEvidence(mapping.evidenceIds, options.snapshot, mapping.publicText);
+    if (claimType === "framed" && !candidateSignal(mapping.publicText, options.snapshot)) {
+      throw new Error("A candidate claim must identify the candidate or a documented career stage.");
     }
   }
+  if (claimType === "employer") {
+    validateSemanticSupport(mapping.publicText, mapping.evidenceIds, options.snapshot);
+    return;
+  }
+  validateNamedTermSupport(mapping.publicText, mapping.evidenceIds, options.snapshot, claimType);
+  validateMappedMetrics(mapping.publicText, mapping.evidenceIds, options.snapshot);
+  validateOwnership(mapping.publicText, mapping.evidenceIds, options.snapshot);
+  if (mapping.timeline === "current") validateCurrentEvidence(mapping.evidenceIds, options.snapshot, mapping.publicText);
+  if (artifactType === "cover-letter" && usesContinuingTense(mapping.publicText)) validateCurrentEvidence(mapping.evidenceIds, options.snapshot, mapping.publicText);
 }
 
 function validateMappedEvidence(evidenceIds: string[], sourcePaths: string[], snapshot: EvidenceSnapshot, claimType: "candidate" | "employer", publicText = ""): void {
@@ -384,30 +431,32 @@ function validateResumeEmployerAttribution(audit: ResumeAuditJson, options: Mach
   for (const employer of employers) {
     const bullets = new Set(employerBullets(options.publicMarkdown, employer).map(normalizeResumeText));
     for (const mapping of audit.claimMappings.filter((candidate) => bullets.has(normalizeResumeText(candidate.publicText)))) {
-      if (mapping.claimType === "baseline") {
-        const original = options.snapshot.canonicalResume?.employers.find((candidate) => normalizedEmployer(candidate.name) === normalizedEmployer(employer));
-        if (!original?.originalBullets.some((bullet) => normalizeResumeText(bullet) === normalizeResumeText(mapping.publicText))) {
-          throw new Error(`An unchanged base-resume bullet under ${employer} must come from that employer's base-resume bullets.`);
+      checkLine(options, mapping, () => {
+        if (mapping.claimType === "baseline") {
+          const original = options.snapshot.canonicalResume?.employers.find((candidate) => normalizedEmployer(candidate.name) === normalizedEmployer(employer));
+          if (!original?.originalBullets.some((bullet) => normalizeResumeText(bullet) === normalizeResumeText(mapping.publicText))) {
+            throw new Error(`An unchanged base-resume bullet under ${employer} must come from that employer's base-resume bullets.`);
+          }
+          return;
         }
-        continue;
-      }
-      const evidenceEmployers = new Set(mapping.evidenceIds.flatMap((id) => {
-        const evidenceEmployer = options.snapshot.evidenceRows.find((row) => row.evidenceId === id)?.employer;
-        return evidenceEmployer ? [evidenceEmployer] : [];
-      }));
-      const conflicting = [...evidenceEmployers].filter((evidenceEmployer) => normalizedEmployer(evidenceEmployer) !== normalizedEmployer(employer));
-      if (conflicting.length) {
-        throw new ClaimValidationError(
-          `A ${employer} bullet cites evidence assigned to ${conflicting.join(", ")}.`,
-          claimExplanation(mapping.publicText, "candidate", mapping.evidenceIds, options.snapshot),
-        );
-      }
-      if (evidenceEmployers.size === 0) {
-        throw new ClaimValidationError(
-          `A ${employer} bullet needs evidence assigned to that employer rather than career-wide or unscoped evidence.`,
-          claimExplanation(mapping.publicText, "candidate", mapping.evidenceIds, options.snapshot),
-        );
-      }
+        const evidenceEmployers = new Set(mapping.evidenceIds.flatMap((id) => {
+          const evidenceEmployer = options.snapshot.evidenceRows.find((row) => row.evidenceId === id)?.employer;
+          return evidenceEmployer ? [evidenceEmployer] : [];
+        }));
+        const conflicting = [...evidenceEmployers].filter((evidenceEmployer) => normalizedEmployer(evidenceEmployer) !== normalizedEmployer(employer));
+        if (conflicting.length) {
+          throw new ClaimValidationError(
+            `A ${employer} bullet cites evidence assigned to ${conflicting.join(", ")}.`,
+            claimExplanation(mapping.publicText, "candidate", mapping.evidenceIds, options.snapshot),
+          );
+        }
+        if (evidenceEmployers.size === 0) {
+          throw new ClaimValidationError(
+            `A ${employer} bullet needs evidence assigned to that employer rather than career-wide or unscoped evidence.`,
+            claimExplanation(mapping.publicText, "candidate", mapping.evidenceIds, options.snapshot),
+          );
+        }
+      });
     }
   }
 }
@@ -447,6 +496,118 @@ function validateCurrentEmployerRecency(audit: ResumeAuditJson, options: Machine
   }
 }
 
+// Descriptor words that carry no fact on their own ("Technical Documentation", "Data Pipelines").
+const GENERIC_TERM_WORDS = new Set([
+  "and", "of", "the", "for", "with", "to", "in", "on", "&", "advanced", "analysis", "application", "architecture", "best", "client",
+  "collaboration", "communication", "cross-functional", "customer", "delivery", "design", "development", "documentation", "engineering",
+  "framework", "implementation", "integration", "management", "modern", "operation", "planning", "platform", "practice", "process",
+  "solution", "stakeholder", "strategy", "support", "system", "team", "technical", "technology", "tool", "workflow",
+  // Activity words: the fact is the thing worked on ("SQL Queries", "Bug Verification"), not the activity.
+  "automation", "configuration", "container", "containerization", "debugging", "deployment", "diagnostic", "escalation", "investigation", "modeling",
+  "monitoring", "multi", "optimization", "query", "reporting", "reproduction", "resolution", "review", "scripting", "testing",
+  "troubleshooting", "verification",
+]);
+
+function termTokens(value: string): string[] {
+  return normalizeResumeText(value).split(/[^a-z0-9+#.-]+/)
+    .map((token) => token.replace(/^[.-]+|[.-]+$/g, ""))
+    .filter(Boolean)
+    .map((token) => /(?:ss|sh|ch|x)es$/.test(token) ? token.slice(0, -2) : token.length > 3 && /[^su]s$/.test(token) && !/(?:ysis|asis|esis|osis|axis)$/.test(token) ? token.slice(0, -1) : token)
+    .map((token) => token === "restful" ? "rest" : token);
+}
+
+/** What a line may name: its cited rows, the base resume (ledger T5), the candidate's employers, and the target company. */
+function groundingVocabulary(evidenceIds: string[], snapshot: EvidenceSnapshot): { text: string; tokens: Set<string> } {
+  const rows = evidenceIds.flatMap((id) => snapshot.evidenceRows.filter((row) => row.evidenceId === id && row.evidenceId !== `job:${snapshot.jobId}:original-jd`));
+  const jd = snapshot.evidenceRows.find((row) => row.evidenceId === `job:${snapshot.jobId}:original-jd`)?.claim ?? "";
+  const company = /\*\*Company:\*\*\s*([^\n]+)/i.exec(jd)?.[1] ?? /^#\s+.+?\s+-\s+([^\n]+)/m.exec(jd)?.[1] ?? "";
+  const text = [
+    ...rows.map((row) => `${row.claim} ${row.scope} ${row.project} ${row.employer ?? ""}`),
+    ...(snapshot.canonicalResume?.originalSkillsLines ?? []),
+    ...(snapshot.canonicalResume?.employers.flatMap((employer) => [employer.name, ...employer.originalBullets]) ?? []),
+    company,
+  ].join(" \n ");
+  const expanded = text.replace(/[-/]/g, " ");
+  return { text: ` ${normalizeResumeText(text)} `, tokens: new Set([...termTokens(text), ...termTokens(expanded)]) };
+}
+
+function termSupported(term: string, vocabulary: { text: string; tokens: Set<string> }): boolean {
+  const normalized = normalizeResumeText(term);
+  if (normalized && vocabulary.text.includes(normalized)) return true;
+  const words = termTokens(term.replace(/[-/]/g, " ")).filter((token) => !GENERIC_TERM_WORDS.has(token));
+  return words.every((word) => vocabulary.tokens.has(word));
+}
+
+/** Each skill as its spellings: "Google Agent Development Kit (ADK)" is supported by either form. */
+function skillTerms(line: string): string[][] {
+  const body = stripMarkdown(line).replace(/^[^:]{1,60}:\s*/, "")
+    .replace(/([^,;|(]+?)\s*\(([A-Z][A-Za-z0-9.+#-]*)\)/g, "$1 \u0000 $2")
+    .replace(/\(([^)]*)\)/g, ", $1");
+  return body
+    .split(/\s*[,;|]\s*/)
+    .map((term) => term.split("\u0000").map((form) => form.replace(/^(?:and|&)\s+/i, "").replace(/[.\s]+$/, "").trim()).filter((form) => form.length > 1))
+    .filter((forms) => forms.length > 0);
+}
+
+/**
+ * Tool-shaped words (acronyms, CamelCase, letters with digits) anywhere, plus plain capitalized
+ * words the job description uses: borrowing the posting's names is the invention risk, while
+ * ordinary title case ("Customer Success") is not.
+ */
+function namedTerms(publicText: string, jobDescription: string): string[] {
+  const posting = ` ${normalizeResumeText(jobDescription).replace(/[^a-z0-9+#.]+/g, " ")} `;
+  const terms = new Set<string>();
+  for (const sentence of stripMarkdown(publicText).split(/(?<=[.!?:;—])\s+/)) {
+    sentence.split(/\s+/).slice(1).forEach((raw) => {
+      for (const part of raw.split(/[-/]/)) {
+        const word = part.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9+#]+$/g, "");
+        if (word.length < 2 || /^I'/.test(word)) continue;
+        const toolShaped = /^(?=[A-Z0-9]*[A-Z])[A-Z0-9]{2,}s?$/.test(word) || /[a-z][A-Z]/.test(word) || (/\d/.test(word) && /[A-Za-z]/.test(word));
+        const postingName = /^[A-Z][a-z]/.test(word) && posting.includes(` ${word.toLowerCase()} `);
+        if (toolShaped || postingName) terms.add(word);
+      }
+    });
+  }
+  return [...terms];
+}
+
+/**
+ * A skills line sums up the whole career, so each term must appear in an eligible row routed
+ * to this job (or the base resume), not only in the rows the line happens to cite.
+ */
+function validateSkillTerms(publicText: string, evidenceIds: string[], snapshot: EvidenceSnapshot): void {
+  const routed = snapshot.applicationRouting?.selectedEvidenceIds;
+  const eligibleIds = snapshot.evidenceRows
+    .filter((row) => row.eligibility === "eligible" && (!routed || routed.includes(row.evidenceId)))
+    .map((row) => row.evidenceId);
+  const vocabulary = groundingVocabulary([...new Set([...evidenceIds, ...eligibleIds])], snapshot);
+  const missing = skillTerms(publicText).filter((forms) => !forms.some((form) => termSupported(form, vocabulary))).map((forms) => forms.join(" / "));
+  if (missing.length) {
+    throw new ClaimValidationError(`Skills not found in any eligible evidence row or the base resume: ${missing.join(", ")}.`, claimExplanation(publicText, "skills", evidenceIds, snapshot));
+  }
+}
+
+/**
+ * Framed wording may reword its rows (ledger T4) but may not name a tool, product, or
+ * organization they lack. Metrics and ownership have their own checks.
+ */
+function validateNamedTermSupport(publicText: string, evidenceIds: string[], snapshot: EvidenceSnapshot, claimType: string): void {
+  const vocabulary = groundingVocabulary(evidenceIds, snapshot);
+  const jobDescription = snapshot.evidenceRows.find((row) => row.evidenceId === `job:${snapshot.jobId}:original-jd`)?.claim ?? "";
+  const missing = namedTerms(publicText, jobDescription).filter((term) => !termSupported(term, vocabulary));
+  if (missing.length) {
+    throw new ClaimValidationError(`Names terms the cited rows don't mention: ${missing.join(", ")}.`, claimExplanation(publicText, claimType, evidenceIds, snapshot));
+  }
+  const stemmed = (value: string) => new Set([...meaningfulTokens(value)].flatMap((token) => termTokens(token)));
+  const lineTokens = stemmed(publicText);
+  const rowTokens = stemmed(evidenceIds.map((id) => snapshot.evidenceRows.find((row) => row.evidenceId === id)?.claim ?? "").join(" "));
+  const shared = [...lineTokens].filter((token) => rowTokens.has(token)).length;
+  const required = claimType === "framed" ? 1 : Math.min(2, lineTokens.size);
+  if (shared < required) {
+    throw new ClaimValidationError("The cited rows share no wording with this line; cite the row it describes.", claimExplanation(publicText, claimType, evidenceIds, snapshot));
+  }
+}
+
 function validateSemanticSupport(publicText: string, evidenceIds: string[], snapshot: EvidenceSnapshot): void {
   const evidenceText = evidenceIds.map((id) => {
     const row = snapshot.evidenceRows.find((candidate) => candidate.evidenceId === id);
@@ -463,7 +624,7 @@ function validateSemanticSupport(publicText: string, evidenceIds: string[], snap
 
 function claimExplanation(publicText: string, claimType: string, evidenceIds: string[], snapshot: EvidenceSnapshot): NonNullable<ValidationIssueExplanation> {
   return {
-    sentence: publicText,
+    sentence: publicText || null,
     claimType,
     evidenceIds,
     sources: evidenceIds.flatMap((evidenceId) => {

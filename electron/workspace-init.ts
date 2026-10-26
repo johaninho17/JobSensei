@@ -181,5 +181,40 @@ export async function syncWorkspaceAgentFiles(workspacePath: string, options: { 
     await replace(source.agentsMd, join(workspacePath, "AGENTS.md"), "AGENTS.md");
   }
 
+  await pruneAgentBackups(agentsRoot);
   return report;
+}
+
+export const KEPT_AGENT_BACKUPS = 5;
+
+/** Keeps the newest backup sets; stamps are ISO times, so name order is time order. */
+export async function pruneAgentBackups(agentsRoot: string, keep = KEPT_AGENT_BACKUPS): Promise<string[]> {
+  const root = join(agentsRoot, ".backups");
+  const sets = (await readdir(root, { withFileTypes: true }).catch(() => []))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  const old = sets.slice(0, Math.max(0, sets.length - keep));
+  await Promise.all(old.map((name) => rm(join(root, name), { recursive: true, force: true })));
+  return old;
+}
+
+export const NPM_CACHE_LIMIT_BYTES = 200 * 1024 * 1024;
+
+async function directorySize(path: string): Promise<number> {
+  const entries = await readdir(path, { withFileTypes: true }).catch(() => []);
+  const sizes = await Promise.all(entries.map((entry) => {
+    const child = join(path, entry.name);
+    if (entry.isDirectory()) return directorySize(child);
+    return entry.isFile() ? stat(child).then((info) => info.size, () => 0) : 0;
+  }));
+  return sizes.reduce((total, size) => total + size, 0);
+}
+
+/** Agy's npm cache (.sensei/npm-cache) is only a cache: past the limit it is cleared and npm refills it on demand. */
+export async function capWorkspaceNpmCache(workspacePath: string, limitBytes = NPM_CACHE_LIMIT_BYTES): Promise<boolean> {
+  const cache = join(workspacePath, ".sensei", "npm-cache");
+  if (await directorySize(cache) <= limitBytes) return false;
+  await rm(cache, { recursive: true, force: true });
+  return true;
 }

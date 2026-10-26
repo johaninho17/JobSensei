@@ -150,8 +150,12 @@ function materializeBundle(
     };
   };
   const coverItems = bundle.coverLetter.bodyParagraphs.flatMap((paragraph) => paragraph.sentences);
-  const coverClaims = coverItems.map((item) => claim(item));
-  const arcClaims = coverClaims.filter((mapping) => mapping.claimType === "candidate" && mapping.evidenceIds.length);
+  // Letter sentences retell real work in the candidate voice: framed, never a new fact (ledger T4).
+  const coverClaims = coverItems.map((item) => {
+    const mapping = claim(item);
+    return mapping.claimType === "candidate" ? { ...mapping, claimType: "framed" as const } : mapping;
+  });
+  const arcClaims = coverClaims.filter((mapping) => mapping.claimType === "framed" && mapping.evidenceIds.length);
   const careerArc = arcClaims.filter((mapping, index, all) =>
     index === 0 || mapping.evidenceIds.some((id) => !all.slice(0, index).some((prior) => prior.evidenceIds.includes(id))))
     .slice(0, 3)

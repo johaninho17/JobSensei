@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { initializeWorkspace, syncWorkspaceAgentFiles } from "../electron/workspace-init";
+import { capWorkspaceNpmCache, initializeWorkspace, pruneAgentBackups, syncWorkspaceAgentFiles } from "../electron/workspace-init";
 
 const temps: string[] = [];
 async function temp(prefix: string): Promise<string> {
@@ -77,5 +77,26 @@ describe("workspace Agy runtime sync", () => {
     expect(skills).not.toContain("jobsensei-ui-ux");
     const repoSkill = await readFile(join(__dirname, "..", ".agents", "skills", "jobsensei-application-pipeline", "SKILL.md"), "utf8");
     expect(await readFile(join(workspace, ".agents", "skills", "jobsensei-application-pipeline", "SKILL.md"), "utf8")).toBe(repoSkill);
+  });
+});
+
+describe("workspace housekeeping", () => {
+  it("keeps only the newest five backup sets", async () => {
+    const agents = await temp("sensei-backups-");
+    const stamps = Array.from({ length: 8 }, (_, index) => `2026-10-0${index + 1}T00-00-00-000Z`);
+    for (const stamp of stamps) await mkdir(join(agents, ".backups", stamp, "skills"), { recursive: true });
+    expect(await pruneAgentBackups(agents)).toEqual(stamps.slice(0, 3));
+    expect((await readdir(join(agents, ".backups"))).sort()).toEqual(stamps.slice(3));
+  });
+
+  it("clears the npm cache only when it passes its size limit", async () => {
+    const workspace = await temp("sensei-npm-cache-");
+    const cache = join(workspace, ".sensei", "npm-cache", "_cacache");
+    await mkdir(cache, { recursive: true });
+    await writeFile(join(cache, "entry"), "x".repeat(2048));
+    expect(await capWorkspaceNpmCache(workspace, 4096)).toBe(false);
+    expect(await readdir(cache)).toEqual(["entry"]);
+    expect(await capWorkspaceNpmCache(workspace, 1024)).toBe(true);
+    expect(await readdir(join(workspace, ".sensei")).then((names) => names.includes("npm-cache"))).toBe(false);
   });
 });

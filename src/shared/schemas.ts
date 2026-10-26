@@ -774,7 +774,7 @@ const careerArcTimelineSchema = z.preprocess(
 
 export const auditClaimMappingSchema = z.object({
   publicText: z.string().min(1),
-  claimType: z.enum(["candidate", "employer", "non-factual", "baseline"]),
+  claimType: z.enum(["candidate", "framed", "employer", "non-factual", "baseline"]),
   evidenceIds: z.array(z.string().min(1)).default([]),
   sourcePaths: z.array(z.string().min(1)).default([]),
   timeline: claimTimelineSchema,
@@ -1108,7 +1108,8 @@ export interface SenseiApi {
   workspace: {
     getSummary(): Promise<WorkspaceSummary>;
     rescan(): Promise<WorkspaceSummary>;
-    onChanged(callback: () => void): () => void;
+    /** Called with the workspace-relative paths that changed (empty when unknown). */
+    onChanged(callback: (paths: string[]) => void): () => void;
   };
   profile: {
     get(): Promise<CandidateProfile | null>;

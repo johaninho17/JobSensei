@@ -133,7 +133,7 @@ Write `.sensei/application_bundle.json` only. Put exact evidence IDs beside each
 }
 ```
 
-Every editable skills line, rewritten bullet, and factual cover-letter sentence needs one or more exact routed evidence IDs. Unchanged baseline bullets are written as `{ "baseline": N }` and need no evidence IDs; never retype them or borrow an unrelated ID. Personal motivation or a closing may use an empty list. Use at least two evidence-backed cover-letter sentences with distinct evidence so the career arc can be derived. Do not include protected resume fields in the bundle.
+Every editable skills line, rewritten bullet, and factual cover-letter sentence needs one or more exact routed evidence IDs: cite the row whose text contains the line's terms. Wording may be reframed, but every tool, product, or organization a line names must appear in its cited rows (skills terms: in any eligible row or the base resume). Unchanged baseline bullets are written as `{ "baseline": N }` and need no evidence IDs; never retype them or borrow an unrelated ID. Personal motivation or a closing may use an empty list. Use at least two evidence-backed cover-letter sentences with distinct evidence so the career arc can be derived. Do not include protected resume fields in the bundle.
 
 ## Time Budget
 

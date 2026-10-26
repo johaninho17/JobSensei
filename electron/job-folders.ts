@@ -161,52 +161,84 @@ async function readCurrentInterviewLabel(jobPath: string): Promise<string | null
   return current ? stringValue(current.label, current.stage) : stringValue(interview.round, interview.stage);
 }
 
+// Per-job caches so a refresh rereads only the jobs that changed (159 jobs took ~250 ms per full scan).
+// Summaries are keyed by the mtimes of everything they read; .sensei writes never reach the
+// watcher, so they cannot rely on invalidation. Trees exclude .sensei, so the watcher clears them.
+const SUMMARY_INPUTS = [
+  "", ".sensei", "interviews", ".sensei/job.json", "job.json", ".sensei/status.json", "status.json", "evaluation.md",
+  "original_jd.md", "original_jd.txt", ".sensei/application_run.json", ".sensei/evidence_snapshot.json", ".sensei/tracker.json",
+  "interviews/interview.json",
+];
+const summaryCache = new Map<string, { key: string; summary: JobFolderSummary }>();
+const treeCache = new Map<string, { key: string; node: FileTreeNode | null }>();
+
+async function summaryKey(jobPath: string): Promise<string> {
+  const times = await Promise.all(SUMMARY_INPUTS.map((input) => stat(join(jobPath, input)).then((info) => info.mtimeMs, () => 0)));
+  return times.join(":");
+}
+
+/** Called by the workspace watcher with a workspace-relative path; clears that job's cached tree. */
+export function invalidateJobCache(workspacePath: string, changedPath: string): void {
+  const match = /^jobs\/([^/]+)/.exec(changedPath.replaceAll("\\", "/"));
+  if (!match) return;
+  const path = join(workspacePath, "jobs", match[1]);
+  summaryCache.delete(path);
+  treeCache.delete(path);
+}
+
 export async function listJobFolders(workspacePath: string): Promise<JobFolderSummary[]> {
   const root = assertInsideWorkspace(workspacePath, join(workspacePath, "jobs"));
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
-  const result: JobFolderSummary[] = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+  const summaries = await Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
     const path = join(root, entry.name);
-    const files = await readdir(path, { withFileTypes: true });
-    const info = await stat(path);
-    const metadata = await readFile(join(path, ".sensei", "job.json"), "utf8")
-      .catch(() => readFile(join(path, "job.json"), "utf8"))
-      .then((raw) => JSON.parse(raw) as JsonRecord)
-      .catch(() => ({} as JsonRecord));
-    const status = await readJson(join(path, ".sensei", "status.json"));
-    const legacyStatus = Object.keys(status).length ? status : await readJson(join(path, "status.json"));
-    const metadataFallback = await legacyJobMetadata(path);
-    const title = stringValue(metadata.title, metadata.role, legacyStatus.title, legacyStatus.role, metadataFallback.title);
-    const company = stringValue(metadata.company, legacyStatus.company, metadataFallback.company);
-    const hasResume = files.some((file) => file.isFile() && /_Resume\.md$/i.test(file.name));
-    const hasCoverLetter = files.some((file) => file.isFile() && file.name.toLowerCase() === "cover_letter.md");
-    const hasApplicationMaterials = hasResume || hasCoverLetter;
-    const applicationStage = stringValue(legacyStatus.status, legacyStatus.stage, legacyStatus.pipelineStage, metadata.status)
-      ?? (hasApplicationMaterials ? "application_ready" : null);
-    const evaluation = await readFile(join(path, "evaluation.md"), "utf8").catch(() => "");
-    const [rating, interviewRoundLabel] = await Promise.all([readRating(path, legacyStatus), readCurrentInterviewLabel(path)]);
-    const insights = evaluationInsights(evaluation);
-    const createdAt = await creationDate(path, files, metadata.createdAt, info.birthtime.toISOString());
-    result.push({
-      id: entry.name,
-      relativePath: `jobs/${entry.name}`,
-      name: entry.name,
-      title,
-      company,
-      createdAt,
-      modifiedAt: info.mtime.toISOString(),
-      artifactCount: files.filter((file) => file.isFile()).length,
-      applicationStage,
-      rating,
-      ...insights,
-      location: stringValue(metadata.location, legacyStatus.location),
-      interviewRoundLabel,
-      hasApplicationMaterials,
-      tracker: await readJobTracker(path),
-    });
-  }
-  return result.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.name.localeCompare(b.name));
+    const key = await summaryKey(path);
+    const cached = summaryCache.get(path);
+    if (cached?.key === key) return cached.summary;
+    const summary = await readJobSummary(path, entry.name);
+    summaryCache.set(path, { key, summary });
+    return summary;
+  }));
+  return summaries.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.name.localeCompare(b.name));
+}
+
+async function readJobSummary(path: string, name: string): Promise<JobFolderSummary> {
+  const files = await readdir(path, { withFileTypes: true });
+  const info = await stat(path);
+  const metadata = await readFile(join(path, ".sensei", "job.json"), "utf8")
+    .catch(() => readFile(join(path, "job.json"), "utf8"))
+    .then((raw) => JSON.parse(raw) as JsonRecord)
+    .catch(() => ({} as JsonRecord));
+  const status = await readJson(join(path, ".sensei", "status.json"));
+  const legacyStatus = Object.keys(status).length ? status : await readJson(join(path, "status.json"));
+  const metadataFallback = await legacyJobMetadata(path);
+  const title = stringValue(metadata.title, metadata.role, legacyStatus.title, legacyStatus.role, metadataFallback.title);
+  const company = stringValue(metadata.company, legacyStatus.company, metadataFallback.company);
+  const hasResume = files.some((file) => file.isFile() && /_Resume\.md$/i.test(file.name));
+  const hasCoverLetter = files.some((file) => file.isFile() && file.name.toLowerCase() === "cover_letter.md");
+  const hasApplicationMaterials = hasResume || hasCoverLetter;
+  const applicationStage = stringValue(legacyStatus.status, legacyStatus.stage, legacyStatus.pipelineStage, metadata.status)
+    ?? (hasApplicationMaterials ? "application_ready" : null);
+  const evaluation = await readFile(join(path, "evaluation.md"), "utf8").catch(() => "");
+  const [rating, interviewRoundLabel] = await Promise.all([readRating(path, legacyStatus), readCurrentInterviewLabel(path)]);
+  const insights = evaluationInsights(evaluation);
+  const createdAt = await creationDate(path, files, metadata.createdAt, info.birthtime.toISOString());
+  return {
+    id: name,
+    relativePath: `jobs/${name}`,
+    name: name,
+    title,
+    company,
+    createdAt,
+    modifiedAt: info.mtime.toISOString(),
+    artifactCount: files.filter((file) => file.isFile()).length,
+    applicationStage,
+    rating,
+    ...insights,
+    location: stringValue(metadata.location, legacyStatus.location),
+    interviewRoundLabel,
+    hasApplicationMaterials,
+    tracker: await readJobTracker(path),
+  };
 }
 
 export async function listJobArtifacts(workspacePath: string, jobId: string): Promise<ArtifactFile[]> {
@@ -259,8 +291,19 @@ export async function listJobTree(workspacePath: string): Promise<FileTreeNode[]
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   const nodes: FileTreeNode[] = [];
   const summaries = new Map((await listJobFolders(workspacePath)).map((job) => [job.id, job]));
-  for (const entry of entries.filter((item) => item.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
-    const node = await treeNode(workspacePath, join(root, entry.name), `jobs/${entry.name}`);
+  const jobs = entries.filter((item) => item.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
+  const treeNodes = await Promise.all(jobs.map(async (entry) => {
+    const path = join(root, entry.name);
+    // The folder mtime guards against missed watcher events (entries added or removed).
+    const key = String(await stat(path).then((info) => info.mtimeMs, () => 0));
+    const cached = treeCache.get(path);
+    if (cached?.key === key) return cached.node;
+    const node = await treeNode(workspacePath, path, `jobs/${entry.name}`);
+    treeCache.set(path, { key, node });
+    return node;
+  }));
+  for (const [index, entry] of jobs.entries()) {
+    const node = treeNodes[index];
     if (node) {
       const summary = summaries.get(entry.name);
       nodes.push({

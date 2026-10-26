@@ -320,7 +320,7 @@ function WorkspaceApp() {
     setPanelWidth(side, width + direction * (side === "left" ? 20 : -20));
   }
 
-  async function refresh(silent = false) {
+  async function refresh(silent = false, changedPaths: string[] = []) {
     if (!silent) { setLoading(true); setError(null); }
     try {
       const summary = await window.sensei.workspace.getSummary();
@@ -335,9 +335,11 @@ function WorkspaceApp() {
         setCandidateProfile(nextProfile);
         const defaultCareerPaths = selectionInitialized ? selectedCareerPaths : [...filePaths(nextTree).filter((path) => path.startsWith("context/structured/") && path !== "context/structured/README.md"), ...[nextSettings.baseResumePath, ...nextSettings.secondaryResumePaths, nextSettings.linkedinProfilePath].filter((path): path is string => Boolean(path))];
         if (!selectionInitialized) { setSelectedCareerPaths(defaultCareerPaths); setSelectionInitialized(true); }
-        if (nextBase) {
+        // A change inside job folders the context does not use cannot change the manifest.
+        const jobFilesOnly = changedPaths.length > 0 && changedPaths.every((path) => path.startsWith("jobs/") && !selectedJobFiles.includes(path));
+        if (nextBase && !(jobFilesOnly && selectionInitialized)) {
           setContextManifest(await window.sensei.context.getManifest({ careerPaths: defaultCareerPaths, structuredPaths: defaultCareerPaths.filter((path) => path.startsWith("context/structured/")), broadPaths: defaultCareerPaths.filter((path) => path.startsWith("context/broad/")), jobPaths: selectionInitialized ? selectedJobFiles : [], jobIds: [] }));
-        } else {
+        } else if (!nextBase) {
           setContextManifest(null);
         }
       }
@@ -347,7 +349,7 @@ function WorkspaceApp() {
 
   useEffect(() => { void refresh(); }, []);
   useEffect(() => {
-    return window.sensei.workspace.onChanged(() => { void refresh(true); });
+    return window.sensei.workspace.onChanged((paths) => { void refresh(true, paths); });
   }, [selectionInitialized, selectedCareerPaths, selectedJobFiles]);
 
   useEffect(() => {
