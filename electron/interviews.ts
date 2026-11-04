@@ -132,11 +132,11 @@ function questionItems(markdown: string, sourcePath: string, limit: number): Raw
     }
     const coreTakeawayMatch = block.map((line) => /^\s*[-*]\s+\*\*Core Takeaway:\*\*\s*(.+)/i.exec(line)).find(Boolean);
     const cardField = (name: RegExp) => block.map((line) => /^\s*[-*]\s+\*\*([^*]+?):?\*\*:?\s*(.+)/.exec(line)).find((match) => match && name.test(match[1]))?.[2];
-    const cues = cardField(/^cues$/i);
+    const cues = cardField(/^say$|^cues$/i);
     const landOn = cardField(/^land on$/i);
-    const realExample = cardField(/^real example$|^closest real experience$/i);
+    const realExample = cardField(/^proof$|^real example$|^closest real experience$/i);
     const cardSummary = cues
-      ? plainMarkdown([cues, realExample && !/^none\b/i.test(realExample) ? `Example: ${realExample}` : null, landOn ? `Land on: ${landOn}` : null].filter(Boolean).join(" · "))
+      ? plainMarkdown([cues, realExample && !/^none\b/i.test(realExample) ? `Proof: ${realExample}` : null, landOn ? `Land on: ${landOn}` : null].filter(Boolean).join(" · "))
       : null;
     const takeaway = coreTakeawayMatch?.[1] ? plainMarkdown(coreTakeawayMatch[1]) : cardSummary;
     const answer = takeaway

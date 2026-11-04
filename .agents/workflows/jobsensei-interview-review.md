@@ -17,7 +17,9 @@ Turn the candidate's recorded interviews (Granola, Otter, or notes saved under `
    3. **Proposed interview stories** for `data/context/structured/interview-stories.md`: one row per real work story the candidate told, using the structured context table (Evidence ID `context:interview-stories:<slug>`, Year, Project, Explicit claim, Scope note with the candidate's own qualifiers, Source locator with interview date and company, Confidence, Public use). Mark stories the candidate explicitly limited ("not production", "not the sole owner") exactly as limited. Never upgrade a hedged story.
    4. **Logistics draft** for Settings → Interview Prep (location, work authorization, compensation, notice period, work arrangement), quoting what the candidate said, and flagging inconsistencies for the user to resolve.
 3. Wait for the user's confirmation of each part. Save only confirmed parts: role memory under `data/debrief/interview-memory/`, voice to `data/profile/interview_voice.md` (merge the tracker, keep earlier dates), confirmed story rows to `data/context/structured/interview-stories.md`. Logistics are entered by the user in Settings.
-4. When re-run on newer recordings, update the delivery tracker statuses with dated evidence, add new question patterns, and propose only new stories.
+4. When re-run on newer recordings, update the delivery tracker statuses with dated evidence and add new question patterns. Stories are **added or upgraded, never removed**: a new story is a new row; an existing row may gain a source locator, a sharper claim, or the candidate's own qualifier, shown to the user as before → after. Never delete a row or a qualifier.
+5. Keep the `## Imported recordings` list at the top of `context/structured/interview-stories.md` current: each file once, with its date. Skip files already listed.
+6. Answers written by an AI interview assistant (they read as polished, complete answers, often with metrics, rather than speech) are not the candidate's words. Take only the interviewer's questions and the process from them; a story from such a file needs the candidate to confirm they said or did it.
 
 ## Command Firewall
 

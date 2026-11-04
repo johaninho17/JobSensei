@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { boundaryDenyRules, prepareAgyHome } from "../electron/agy-home";
+import { agentPathsAbove, boundaryDenyRules, linkKeychains, prepareAgyHome } from "../electron/agy-home";
 
 async function tree() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "sensei-agyhome-")));
@@ -28,6 +28,91 @@ describe("app-owned Agy home", () => {
     }
   });
 
+  it("lets Agy read, never write, .agents and AGENTS.md in each folder up to the project root", async () => {
+    const { root } = await tree();
+    // A workspace nested two levels inside a git checkout, like data/ inside the repo.
+    const project = join(root, "home", "repo");
+    const workspace = join(project, "nest", "data");
+    await mkdir(join(project, ".git"), { recursive: true });
+    await mkdir(join(workspace, "jobs"), { recursive: true });
+    for (const folder of [project, join(project, "nest")]) {
+      await mkdir(join(folder, ".agents", "skills"), { recursive: true });
+      await writeFile(join(folder, "AGENTS.md"), "rules");
+      await writeFile(join(folder, "secret.txt"), "private");
+    }
+    await mkdir(join(root, "home", ".agents"), { recursive: true }); // above the project root: stays denied
+    const readable = agentPathsAbove(workspace);
+    expect(readable.sort()).toEqual([join(project, ".agents"), join(project, "AGENTS.md"), join(project, "nest", ".agents"), join(project, "nest", "AGENTS.md")].sort());
+    const rules = boundaryDenyRules(workspace, [], readable);
+    for (const path of readable) {
+      expect(rules).not.toContain(`read_file(${path})`);
+      expect(rules).toContain(`write_file(${path})`);
+    }
+    for (const outside of ["home/repo/secret.txt", "home/repo/.git", "home/repo/nest/secret.txt", "home/.agents", "home/Photos"]) {
+      expect(rules).toContain(`read_file(${join(root, outside)})`);
+      expect(rules).toContain(`write_file(${join(root, outside)})`);
+    }
+    // Those reads are allowed up front, so proceed-in-sandbox mode does not stop to ask.
+    const userData = join(root, "userdata");
+    await prepareAgyHome(userData, workspace);
+    const settings = JSON.parse(await readFile(join(userData, "agy-home", ".gemini", "antigravity-cli", "settings.json"), "utf8"));
+    expect(settings.permissions.allow.sort()).toEqual(readable.map((path) => `read_file(${path})`).sort());
+    // Outside any git project the workspace is the project root: nothing above it is opened.
+    expect(agentPathsAbove(join(root, "home", "workspace"))).toEqual([]);
+  });
+
+  it("opens the sensei launcher, runtime and compiled scripts for reading, and leaves system folders open", async () => {
+    const { root, workspace } = await tree();
+    const { launcherReadPaths } = await import("../electron/agy-home");
+    const appRoot = join(root, "app");
+    const runtime = join(appRoot, "node_modules", "electron", "dist", "Electron.app", "Contents", "MacOS", "Electron");
+    await mkdir(dirname(runtime), { recursive: true });
+    await mkdir(join(appRoot, "node_modules", "zod"), { recursive: true });
+    await mkdir(join(appRoot, "dist-electron"), { recursive: true });
+    await mkdir(join(appRoot, "src"), { recursive: true });
+    await writeFile(join(appRoot, "package.json"), "{}");
+    const home = join(root, "userdata", "agy-home");
+    await mkdir(join(home, "bin"), { recursive: true });
+    await mkdir(join(home, ".gemini"), { recursive: true });
+    const readable = launcherReadPaths(home, { appRoot, runtimePath: runtime });
+    expect(readable).toContain(join(appRoot, "node_modules", "electron", "dist", "Electron.app"));
+    const rules = boundaryDenyRules(workspace, [], readable);
+    for (const path of [join(home, "bin"), join(appRoot, "dist-electron"), join(appRoot, "node_modules"), join(appRoot, "package.json")]) {
+      expect(rules).not.toContain(`read_file(${path})`);
+      expect(rules).toContain(`write_file(${path})`);
+    }
+    // Nothing inside node_modules is denied (the bundle path is nested in it), and folders above stay rule-free,
+    // because any deny on a parent also stops the sandbox reading below it.
+    expect(rules.filter((rule) => rule.includes(join(appRoot, "node_modules") + "/"))).toEqual([]);
+    for (const above of [appRoot, join(root, "userdata"), home]) expect(rules.filter((rule) => rule.endsWith(`(${above})`))).toEqual([]);
+    for (const outside of [join(appRoot, "src"), join(home, ".gemini")]) expect(rules).toContain(`read_file(${outside})`);
+    if (process.platform !== "win32") for (const system of ["/bin", "/usr", "/System", "/Library", "/private/var"]) expect(rules.some((rule) => rule.endsWith(`(${system})`))).toBe(false);
+    // The sandbox reads them only when they are also allowed.
+    await prepareAgyHome(join(root, "userdata"), workspace, [], { appRoot, runtimePath: runtime });
+    const settings = JSON.parse(await readFile(join(home, ".gemini", "antigravity-cli", "settings.json"), "utf8"));
+    for (const path of readable) expect(settings.permissions.allow).toContain(`read_file(${path})`);
+  });
+
+  it("links the keychains once on macOS and denies them to Agy's file tools", async () => {
+    const { root, workspace } = await tree();
+    const home = join(root, "agy-home");
+    const userHome = join(root, "user");
+    expect(await linkKeychains(home, userHome, "win32")).toBeNull();
+    const link = await linkKeychains(home, userHome, "darwin");
+    expect(link).toBe(join(home, "Library", "Keychains"));
+    expect((await lstat(link!)).isSymbolicLink()).toBe(true);
+    expect(await readlink(link!)).toBe(join(userHome, "Library", "Keychains"));
+    await linkKeychains(home, userHome, "darwin"); // an existing correct link is left alone
+    expect(await readlink(link!)).toBe(join(userHome, "Library", "Keychains"));
+    if (process.platform === "darwin") {
+      const userData = join(root, "userdata");
+      await prepareAgyHome(userData, workspace);
+      const settings = JSON.parse(await readFile(join(userData, "agy-home", ".gemini", "antigravity-cli", "settings.json"), "utf8"));
+      expect(settings.permissions.deny).toContain(`read_file(${join(userData, "agy-home", "Library", "Keychains")})`);
+      expect(settings.permissions.deny).toContain(`write_file(${join(userData, "agy-home", "Library", "Keychains")})`);
+    }
+  });
+
   it("writes its own settings, keeps the user's choices, and replaces only its old rules", async () => {
     const { root, workspace } = await tree();
     const userData = join(root, "userdata");
@@ -36,7 +121,7 @@ describe("app-owned Agy home", () => {
     expect(home).toBe(join(userData, "agy-home"));
     const first = JSON.parse(await readFile(settingsPath, "utf8"));
     expect(first).toMatchObject({ toolPermission: "always-proceed", trustedWorkspaces: [workspace] });
-    expect(first.permissions.deny).toContain("command(python3 -c)");
+    for (const detour of ["command(python3 -c)", "command(npm)", "command(curl)", "command(find)"]) expect(first.permissions.deny).toContain(detour);
     // The user adds a model and their own rules; the workspace moves.
     first.model = "Gemini Flash";
     first.permissions.allow.push("command(git status)");
@@ -68,15 +153,22 @@ describe("sensei launcher", () => {
     }
   });
 
-  it("runs compiled scripts with the app's own runtime in the installed app", async () => {
+  it("runs compiled scripts with the app's own runtime, and npm only when a checkout has no compiled file", async () => {
     const { writeSenseiLauncher } = await import("../electron/agy-home");
     if (process.platform === "win32") return;
     const home = await realpath(await mkdtemp(join(tmpdir(), "sensei-launcher-")));
     const bin = await writeSenseiLauncher(home, { appRoot: process.cwd(), packaged: true, runtimePath: "/Applications/JobSensei.app/Contents/MacOS/JobSensei" });
     const script = await readFile(join(bin, "sensei"), "utf8");
     expect(script).toContain(`jd:fetch) shift; ELECTRON_RUN_AS_NODE=1 exec "/Applications/JobSensei.app/Contents/MacOS/JobSensei" "${join(process.cwd(), "dist-electron/electron/jd-fetch.js")}" "$@" ;;`);
-    const dev = await readFile(join(await writeSenseiLauncher(home, { appRoot: process.cwd(), packaged: false, runtimePath: "" }), "sensei"), "utf8");
-    expect(dev).toContain(`jd:fetch) shift; exec npm --prefix "${process.cwd()}" run -s jd:fetch -- "$@" ;;`);
+    // A source checkout: a compiled file runs directly; a missing one falls back to npm (which compiles first).
+    const checkout = join(home, "checkout");
+    await mkdir(join(checkout, "dist-electron", "electron"), { recursive: true });
+    await writeFile(join(checkout, "package.json"), JSON.stringify({ scripts: { "jd:fetch": "tsc -p x && node dist-electron/electron/jd-fetch.js", "context:snapshot": "node dist-electron/electron/evidence-snapshot.js" } }));
+    await writeFile(join(checkout, "dist-electron", "electron", "jd-fetch.js"), "");
+    const dev = await readFile(join(await writeSenseiLauncher(home, { appRoot: checkout, packaged: false, runtimePath: "/dev/Electron" }), "sensei"), "utf8");
+    expect(dev).toContain(`jd:fetch) shift; ELECTRON_RUN_AS_NODE=1 exec "/dev/Electron" "${join(checkout, "dist-electron/electron/jd-fetch.js")}" "$@" ;;`);
+    expect(dev).toContain(`context:snapshot) shift; exec npm --prefix "${checkout}" run -s context:snapshot -- "$@" ;;`);
+    await rm(home, { recursive: true, force: true });
   });
 });
 

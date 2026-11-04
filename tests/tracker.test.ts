@@ -67,3 +67,15 @@ describe("job tracker", () => {
     expect(staleApplications(jobs, now).map((entry) => entry.id)).toEqual(["old"]);
   });
 });
+
+describe("closed jobs that reached interviews", () => {
+  it("counts prepared rounds, a current round, or a tracker that was ever Interviewing or Offer", async () => {
+    const { reachedInterview } = await import("../src/shared/tracker");
+    const base = { interviewRoundLabel: null, interviewRoundCount: 0, tracker: { status: "rejected" as const, history: [{ status: "applied" as const }, { status: "rejected" as const }] } };
+    expect(reachedInterview(base)).toBe(false);
+    expect(reachedInterview({ ...base, interviewRoundCount: 1 })).toBe(true);
+    expect(reachedInterview({ ...base, interviewRoundLabel: "Recruiter screen" })).toBe(true);
+    expect(reachedInterview({ ...base, tracker: { status: "rejected", history: [{ status: "interviewing" }, { status: "rejected" }] } })).toBe(true);
+    expect(reachedInterview({ ...base, tracker: null })).toBe(false);
+  });
+});

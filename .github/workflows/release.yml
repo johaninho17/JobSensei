@@ -97,3 +97,9 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           npx electron-builder --publish always
+
+      # Opens the packaged app on this OS with an empty workspace and fails if the window doesn't render.
+      # The release stays a draft until this passes on both platforms.
+      - name: Smoke-test the packaged app
+        shell: bash
+        run: node scripts/smoke-packaged.mjs

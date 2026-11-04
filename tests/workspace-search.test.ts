@@ -212,7 +212,10 @@ describe("design system (Phase 3)", () => {
   it("lets the user track status from the job page and the board", async () => {
     const app = await readFile(join(process.cwd(), "src/renderer/App.tsx"), "utf8");
     expect(app).toContain('className={`tracker-select is-${trackerStatus}`}');
-    expect(app).toContain('className="status-strip"');
+    // Status subtabs (Active by default) replaced the status strip; Closed splits jobs that reached interviews.
+    expect(app).toMatch(/const JOB_TABS[\s\S]*id: "active"[\s\S]*id: "closed"/);
+    expect(app).toContain('label="Jobs by status"');
+    expect(app).toContain("Reached interviews");
     expect(app).toMatch(/function JobMenu[\s\S]*TRACKER_STATUSES\.map[\s\S]*role="menuitemradio"[\s\S]*handlers\.onSetStatus\(status\)/);
     expect(app).toContain('return stored === "list" ? "list" : "cards";');
   });

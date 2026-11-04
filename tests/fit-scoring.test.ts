@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bestEvidenceForRequirement, calculateFitScore, extractRequiredItems, gateStatusFor, normalizeEvidenceClassifications, normalizeEvaluationScore, parseMustHaves, scoreEvaluation, verifyMustHaves, type FitRequirement } from "../electron/fit-scoring";
+import { assignCategoryWeights, bestEvidenceForRequirement, calculateFitScore, extractRequiredItems, gateStatusFor, normalizeEvidenceClassifications, normalizeEvaluationScore, parseMustHaves, scoreEvaluation, verifyMustHaves, type FitRequirement } from "../electron/fit-scoring";
 import type { EvidenceSnapshot } from "../src/shared/schemas";
 
 const sampleRequirements: FitRequirement[] = [
@@ -22,7 +22,7 @@ const sampleRequirements: FitRequirement[] = [
 describe("fit scoring", () => {
   it("rates a transferable sample match as credible rather than near-direct", () => {
     const result = calculateFitScore(sampleRequirements);
-    expect(result.score).toBe(4.2);
+    expect(result.score).toBe(4);
     expect(result.score).toBeLessThanOrEqual(4.2);
     expect(result.confidence).toBe("medium");
     expect(result.materialTransferableCoreCount).toBeGreaterThan(1);
@@ -39,23 +39,49 @@ describe("fit scoring", () => {
   it("parses the required evaluation table and applies deterministic arithmetic", () => {
     const rows = sampleRequirements.map((row) => `| ${row.requirement} | ${row.category} | ${row.weight}% | ${row.material ? "yes" : "no"} | ${row.classification} | ${row.evidence} |`).join("\n");
     const markdown = `# Evaluation\n\n### Requirement Scoring\n| Requirement | Category | Weight | Material | Classification | Evidence |\n| --- | --- | ---: | --- | --- | --- |\n${rows}\n\n## Direct Matches\n`;
-    expect(scoreEvaluation(markdown)?.score).toBe(4.2);
+    expect(scoreEvaluation(markdown)?.score).toBe(4);
+  });
+
+  it("sets weights from categories, so a wrong model weight cannot fail the run", () => {
+    // Two technical rows with weights that add to 40% (the run that failed), and wrong weights elsewhere.
+    const rows = [
+      "| Primary role | core | 10% | yes | direct | context:a |",
+      "| Platform admin | technical | 25% | yes | direct | context:b |",
+      "| Scripting | technical | 15% | yes | strong_transferable | context:c |",
+      "| Scope | scope | 1% | yes | direct | context:d |",
+      "| Outcomes | outcomes | 1% | no | direct | context:e |",
+      "| Domain | domain | 1% | no | adjacent_transferable | context:f |",
+      "| Learning | learning | 1% | no | direct | context:g |",
+    ].join("\n");
+    const markdown = `# Evaluation\n\n### Requirement Scoring\n| Requirement | Category | Weight | Material | Classification | Evidence |\n| --- | --- | ---: | --- | --- | --- |\n${rows}\n`;
+    const weighted = assignCategoryWeights(markdown);
+    expect(weighted).toContain("| Primary role | core | 40% |");
+    expect(weighted).toContain("| Platform admin | technical | 12.5% |");
+    expect(weighted).toContain("| Scripting | technical | 12.5% |");
+    expect(() => scoreEvaluation(weighted)).not.toThrow();
+    const threeCore = assignCategoryWeights(markdown.replace("| Platform admin |", "| Second core | core | 1% | yes | direct | context:x |\n| Third core | core | 1% | yes | direct | context:y |\n| Platform admin |"));
+    expect(threeCore).toMatch(/\| Primary role \| core \| 13\.33% \|[\s\S]*\| Third core \| core \| 13\.34% \|/);
+    // A posting with nothing for a category: the other categories share its weight. Core is still required.
+    const noLearning = assignCategoryWeights(markdown.replace("| Learning | learning | 1% | no | direct | context:g |\n", ""));
+    expect(noLearning).toContain("| Primary role | core | 42.11% |");
+    expect(() => scoreEvaluation(noLearning)).not.toThrow();
+    expect(() => scoreEvaluation(assignCategoryWeights(markdown.replace("| Primary role | core |", "| Primary role | scope |")))).toThrow(/no `core` row/);
   });
 
   it("rejects category-level arithmetic that does not preserve fixed weights", () => {
-    expect(() => calculateFitScore(sampleRequirements.filter((row) => row.requirement !== "Startup learning and adaptability"))).toThrow(/learning requirements must total 5%/i);
+    expect(() => calculateFitScore(sampleRequirements.filter((row) => row.requirement !== "Startup learning and adaptability"))).toThrow(/must total/i);
   });
 
   it("makes deterministic arithmetic authoritative over a model-written score", () => {
     const rows = sampleRequirements.map((row) => `| ${row.requirement} | ${row.category} | ${row.weight}% | ${row.material ? "yes" : "no"} | ${row.classification} | ${row.evidence} |`).join("\n");
     const markdown = `# Evaluation\n\n- **Weighted Fit Score:** 4.90 / 5\n- **Fit Confidence:** high\n\n### Requirement Scoring\n| Requirement | Category | Weight | Material | Classification | Evidence |\n| --- | --- | ---: | --- | --- | --- |\n${rows}\n\n## Direct Matches\n`;
     const normalized = normalizeEvaluationScore(markdown);
-    expect(normalized).toContain("**Weighted Fit Score:** 4.20 / 5");
+    expect(normalized).toContain("**Weighted Fit Score:** 3.88 / 5");
     expect(normalized).toContain("**Fit Confidence:** medium");
     expect(normalized).not.toContain("4.90 / 5");
     expect(normalized).toContain("**Gate Status:** accepted");
     expect(normalized).toContain("### Category Summary");
-    expect(normalized).toContain("**Canonical fit score:** 4.20 / 5");
+    expect(normalized).toContain("**Canonical fit score:** 3.88 / 5");
   });
 
   it("replaces stale category summaries and explains a post-screening score below the gate", () => {
@@ -118,14 +144,14 @@ describe("fit scoring", () => {
     const markdown = `# Evaluation\n\n- **Weighted Fit Score**: 4.7 / 5.0\n- **Fit Confidence**: high\n\n### Requirement Scoring\n| Requirement | Category | Weight | Material | Classification | Evidence |\n| --- | --- | ---: | --- | --- | --- |\n${rows}\n`;
     const normalized = normalizeEvaluationScore(markdown);
     expect(normalized.match(/Weighted Fit Score/g)).toHaveLength(1);
-    expect(normalized).toContain("**Weighted Fit Score:** 4.20 / 5");
+    expect(normalized).toContain("**Weighted Fit Score:** 3.88 / 5");
     expect(normalized).toContain("**Fit Confidence:** medium");
   });
 
   it("accepts the evidence-prefixed IDs emitted by newer evaluations", () => {
     const rows = sampleRequirements.map((row) => `| ${row.requirement} | ${row.category} | ${row.weight}% | ${row.material ? "yes" : "no"} | ${row.classification} | evidence:context:${row.evidence.replaceAll(/[^a-z0-9]+/gi, ":")} |`).join("\n");
     const prefixed = `# Evaluation\n\n### Requirement Scoring\n| Requirement | Category | Weight | Material | Classification | Evidence |\n| --- | --- | ---: | --- | --- | --- |\n${rows}\n`;
-    expect(scoreEvaluation(prefixed)?.score).toBe(4.2);
+    expect(scoreEvaluation(prefixed)?.score).toBe(4);
   });
 
   it("caps model-written direct matches at the routed evidence ceiling", () => {
@@ -342,7 +368,7 @@ describe("must-have requirements", () => {
 
   it("scores old evaluations without a must-have table exactly as before", () => {
     const result = scoreEvaluation(`# Evaluation\n\n### Requirement Scoring\n| Requirement | Category | Weight | Material | Classification | Evidence |\n| --- | --- | ---: | --- | --- | --- |\n${scoring}\n`);
-    expect(result?.score).toBe(4.2);
+    expect(result?.score).toBe(4);
     expect(result?.learnablePenalty ?? 0).toBe(0);
   });
 
@@ -352,13 +378,13 @@ describe("must-have requirements", () => {
       "| Kubernetes experience | learnable | | |",
       "| Customer-facing experience | met | context:a:c | |",
     ]))!;
-    expect(two.score).toBe(3.9);
-    expect(two.gateScore).toBe(4.2);
+    expect(two.score).toBe(3.7);
+    expect(two.gateScore).toBe(4);
     expect(gateStatusFor(two)).toBe("accepted");
 
     const five = scoreEvaluation(evaluation(Array.from({ length: 5 }, (_, index) => `| Tool ${index + 1} | learnable | | |`)))!;
     expect(five.learnablePenalty).toBe(0.45);
-    expect(five.score).toBe(3.75);
+    expect(five.score).toBe(3.55);
   });
 
   it("never turns a learnable gap into a NO; only a blocker needs manual review", () => {
@@ -370,8 +396,8 @@ describe("must-have requirements", () => {
 
   it("always lists unmet must-haves as gaps in the normalized evaluation", () => {
     const normalized = normalizeEvaluationScore(evaluation(["| Proficiency in a JVM language | learnable | | Coursework only |"]));
-    expect(normalized).toContain("**Weighted Fit Score:** 4.05 / 5");
-    expect(normalized).toContain("Fit before must-have gaps:** 4.20 / 5");
+    expect(normalized).toContain("**Weighted Fit Score:** 3.73 / 5");
+    expect(normalized).toContain("Fit before must-have gaps:** 3.88 / 5");
     expect(normalized).toContain("**Proficiency in a JVM language** (must-have, learnable)");
     expect(normalized).toContain("**Gate Status:** accepted");
   });

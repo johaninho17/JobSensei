@@ -38,16 +38,19 @@ Light is the default theme. Dark is neutral graphite with green accents, not dar
 │ Settings         │                                                  │           │
 └──────────────────┴──────────────────────────────────────────────────┴───────────┘
 ```
-- Pages: Jobs (job queue box, status strip that filters by status, then Cards by default or List), Interviews (every job with prep, current round and progress), Career context (resumes, sources, job files Agy reads).
-- Job page: company, title (serif h1), stage, fit, location, then tabs Overview, Application, Interview, Files. Overview leads with the next-step card, then Fit, Tracking (dates, notes, history), Documents, and Interviews. The Application tab states the check result in words; pipeline diagnostics sit under "Pipeline details".
-- Interview tab: round stepper, round header with live mode, question cards (filter, search, keyboard), and a side column with key points, delivery reminders, a readiness checklist, prep notes, and files. Live mode shows one card at a time with a timer, in the main window or a pop-out window.
-- Content is left-aligned with a max width of about 1180px. Sections are separated by space and headings; cards only for things you open.
+- Pages: Jobs (add-jobs box with the waiting/running queue under it, a one-line setup banner, status subtabs Active · Interviewing · Applied · Saved · Closed · All with Active as the default; Closed splits "Reached interviews" from a collapsed "No interview"; one toolbar row: search, filter toggles, sort, Cards/List, ⋯ menu), Interviews (subtabs Active · Past · Learnings), Career context (subtabs Sources · Resumes · Job files · Story bank · Interview voice).
+- Job page: company, title (serif h1), stage, fit, location, then tabs Overview, Application, Interview, Files. The header carries Job posting · Export PDFs · Check. Overview has a one-line next step (hidden for closed jobs), "What happened?" for closed jobs that reached interviews, one line for checks to review, then flat Role, Fit, Tracking, and Interviews sections. Files has subtabs Application · Interview · Other. The Application tab has subtabs Resume · Cover letter · Questions · Evaluation · Checks (documents shown in place, Export PDF in the subtab row); Checks states the result in words, with pipeline diagnostics under "Pipeline details".
+- Interview tab: round stepper, round title, then subtabs Prep · Questions · Research · Files with the round actions (live mode) at the right. Questions has a sticky rail to jump to any question (grouped Questions, Gaps, Ask them) beside the cards (search, keyboard). Prep is flat sections: 3 things to get across, before you start, the stage's sections, readiness. Live mode shows one card at a time with a timer, in the main window or a pop-out window.
+- Content is left-aligned with a max width of about 1180px; reading columns (prep, research, documents) stay near 760–820px.
+- **Flat sections, few boxes.** A section is a heading plus a 1px rule (`iv-section`, `overview-panel`). Bordered boxes only for things you click (job cards, question cards), the next-step callout, and warnings.
+- **Readable generated text:** prep and research render with `markdownHtml(…, { readable: true })`: tables, a small "source" link instead of URLs, IDs in a hover marker (ⓘ), and met/learnable/gap badges.
+- **Subtabs** (`SubTabs.tsx`) split a long page into views instead of stacking boxes: one component everywhere, underlined, arrow keys move between tabs, actions sit at the right of the row.
 
 ## Components
 - Buttons: `btn-primary` (one per area), `btn-quiet`, `btn-link`. Labels say what happens ("Send to Agy", "Start live mode").
 - `segmented`: filters and view switches, with counts.
 - `tracker-pill` / `tracker-select` (Saved muted, Applied accent, Interviewing leaf, Offer solid accent, Rejected risk, Withdrawn dashed), `status-pill` for pipeline state, `fit-badge`, `next-badge` (brass only when a follow-up is due): never color alone; the text carries the meaning.
-- Interview card (`icard`): question in serif, kind badge, cues as chips, "Land on" with a leaf rule, "Careful" in risk color.
+- Interview card (`icard`): question in the UI font (15px, semibold), kind badge for non-questions, Say points as a short list, Proof in plain words (story and evidence IDs only in the tooltip), "Land on" with a leaf rule, "They may ask next" muted, "Careful" in risk color.
 
 ## Accessibility
 Native buttons and inputs; visible focus (`--focus`); `aria-current` for navigation, `aria-pressed` for toggles, `aria-expanded` for cards; menus and dialogs close on Escape and return focus; keyboard paths for the interview view (↑ ↓, Enter, /, L; live mode ← → R Esc); `prefers-reduced-motion` honored.

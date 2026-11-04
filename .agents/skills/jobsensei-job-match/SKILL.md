@@ -31,7 +31,7 @@ Classify requirements as:
 
 Use deterministic credit of `1.00` for direct, `0.80` for strong transferable, `0.65` for adjacent transferable, `0.25` for unclear, and `0.00` for gap. Multiple strong-transferable core requirements may reach `4.2` when no material core uncertainty or gap exists; adjacent, unclear, and gap core requirements retain progressively lower evidence-sensitive caps.
 
-Update or create only `evaluation.md`. Include the exact `### Requirement Scoring` table from `$jobsensei-application-pipeline`, with category weights totaling 40/25/15/10/5/5 and deterministic classification multipliers. Include the weighted score, gate status, direct matches, transferable evidence, important gaps, relevant employers/projects, and a concise tailoring recommendation. Do not create `job_match.md`, a provenance document, an audit, a README, or a checklist.
+Update or create only `evaluation.md`. Include the `### Requirement Scoring` table exactly as `$jobsensei-application-pipeline` defines it (one row per `req:N`; the app sets weights and credit). Include the weighted score, gate status, direct matches, transferable evidence, important gaps, relevant employers/projects, and a concise tailoring recommendation. Do not create `job_match.md`, a provenance document, an audit, a README, or a checklist.
 
 Treat the requirement table as the score authority. The finalizer normalizes the visible score and confidence from its deterministic arithmetic. Never inflate the narrative total or confidence above the table result.
 

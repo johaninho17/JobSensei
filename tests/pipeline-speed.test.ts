@@ -90,6 +90,8 @@ describe("jd:fetch", () => {
 
   it("strips scripts and tags from plain pages", () => {
     expect(htmlToText("<script>evil()</script><p>Hello <b>world</b></p>")).toBe("Hello **world**");
+    // Lever-style escaped line breaks in the text become real ones, not a literal "\n".
+    expect(htmlToText("<p>First part.</p>\\n<p>Pay: $120,000 a year</p>")).toBe("First part.\n\nPay: $120,000 a year");
     expect(suggestJobId("Northstar Labs LLC", "Data Analyst II")).toBe("northstar-labs-data-analyst-ii");
   });
 
@@ -102,10 +104,32 @@ describe("jd:fetch", () => {
     expect(await readFile(join(workspace, "jobs", "acme-solutions-engineer", "original_jd.md"), "utf8")).toContain("# Solutions Engineer");
   });
 
+  it("reads Oracle Cloud career-site postings through their public job API", async () => {
+    const workspace = await temp();
+    const requested: string[] = [];
+    const fetcher = (async (input: string) => {
+      requested.push(String(input));
+      return new Response(JSON.stringify({ items: [{
+        Title: "Support Analyst III",
+        PrimaryLocation: "Remote, United States",
+        ExternalDescriptionStr: "<div><p>Help customers connect their data.</p><ul>" + "<li>Fix sync issues across integrations and explain the cause.</li>".repeat(10) + "</ul></div>",
+        ExternalResponsibilitiesStr: "",
+        ExternalQualificationsStr: "<p>3+ years supporting SaaS customers.</p>",
+      }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as unknown as typeof fetch;
+    const fetched = await fetchJobDescription(workspace, "https://northstar.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/job/123456?location=Remote", fetcher);
+    expect(requested[0]).toContain("https://northstar.fa.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails?");
+    expect(decodeURIComponent(requested[0]!)).toContain('finder=ById;Id="123456",siteNumber=CX_1001');
+    expect(fetched).toMatchObject({ title: "Support Analyst III", location: "Remote, United States", company: null });
+    expect(fetched.markdown).toContain("# Support Analyst III");
+    expect(fetched.markdown).toContain("Fix sync issues across integrations");
+    expect(fetched.markdown).toContain("3+ years supporting SaaS customers.");
+  });
+
   it("refuses JavaScript-only pages so the user is asked to paste the JD", async () => {
     const workspace = await temp();
     const fetcher = (async () => new Response("<html><body><div id='root'></div></body></html>", { status: 200 })) as unknown as typeof fetch;
-    await expect(fetchJobDescription(workspace, "https://jobs.example.com/2", fetcher)).rejects.toThrow(/paste the JD/);
+    await expect(fetchJobDescription(workspace, "https://jobs.example.com/2", fetcher)).rejects.toThrow(/Stop here: ask the user to paste the job description/);
   });
 });
 

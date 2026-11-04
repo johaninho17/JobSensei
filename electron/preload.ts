@@ -50,7 +50,9 @@ const api: SenseiApi = {
     getApplicationStatus: (jobId) => ipcRenderer.invoke("jobs:get-application-status", jobId),
     validateApplication: (jobId) => ipcRenderer.invoke("jobs:validate-application", jobId),
     updateTracker: (jobId, update) => ipcRenderer.invoke("jobs:update-tracker", jobId, update),
-    stagePastedJd: (text) => ipcRenderer.invoke("jobs:stage-pasted-jd", text),
+    stagePastedJd: (text, id) => ipcRenderer.invoke("jobs:stage-pasted-jd", text, id),
+    stageLink: (url, id) => ipcRenderer.invoke("jobs:stage-link", url, id),
+    setStagedCompany: (id, company) => ipcRenderer.invoke("jobs:set-staged-company", id, company),
     exportCsv: (csv) => ipcRenderer.invoke("jobs:export-csv", csv),
   },
   interviews: {
@@ -60,6 +62,14 @@ const api: SenseiApi = {
     refreshDashboard: (jobId) => ipcRenderer.invoke("interviews:refresh-dashboard", jobId),
     openWorkspaceWindow: (jobId, roundId, live) => ipcRenderer.invoke("interviews:open-workspace-window", { jobId, roundId, live: live === true }),
     setLiveCollapsed: (collapsed) => ipcRenderer.invoke("interviews:set-live-collapsed", collapsed === true),
+  },
+  questions: {
+    get: (jobId) => ipcRenderer.invoke("questions:get", jobId),
+    auto: (jobId) => ipcRenderer.invoke("questions:auto", jobId),
+    ask: (jobId, text) => ipcRenderer.invoke("questions:ask", jobId, text),
+    retry: (jobId) => ipcRenderer.invoke("questions:retry", jobId),
+    answerAnyway: (jobId, questionId) => ipcRenderer.invoke("questions:answer-anyway", jobId, questionId),
+    onUpdated: (callback) => { const listener = (_event: Electron.IpcRendererEvent, jobId: string, state: Parameters<Parameters<SenseiApi["questions"]["onUpdated"]>[0]>[1]) => callback(jobId, state); ipcRenderer.on("questions:updated", listener); return () => ipcRenderer.removeListener("questions:updated", listener); },
   },
   runs: {
     latest: () => ipcRenderer.invoke("runs:latest"),

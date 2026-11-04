@@ -24,7 +24,7 @@ Use the family whose responsibilities match the JD best; mix two only when the J
 
 ## `question_bank.md` primary content (6–8)
 
-Practical scenarios and live-design prompts as question cards. Use **Your approach** for every scenario; add **Real example** only when a true story fits. Include 1–2 likely follow-up probes per scenario under `## Likely follow-ups`.
+Practical scenarios and live-design prompts as question cards. Use **Your approach** for every scenario; add **Proof** only when a true story fits, and a **Likely follow-up** on the scenarios an interviewer will push on.
 
 `## Questions to ask`: 4–5 peer questions (how the team works day to day, common customer or project problems, tools they use, what good looks like in this exercise).
 

@@ -15,7 +15,7 @@ Some recruiters also ask one or two light judgment scenarios (prioritizing sever
 ## `question_bank.md` primary archetypes (6–8)
 
 1. Walk me through your background / what you focus on today.
-2. Why are you looking to leave now, and what are you looking for next? (Cues come from `careerStory`, never generic ambition lines.)
+2. Why are you looking to leave now, and what are you looking for next? (Say points come from `careerStory`, never generic ambition lines.)
 3. How familiar are you with us, and why this company? (Answer from `## Learn before the interview`.)
 4. Why this kind of role (e.g. customer-facing vs. pure engineering, post-sales vs. pre-sales)?
 5. Working with customers, partners, or cross-functional teams.
@@ -28,10 +28,10 @@ Some recruiters also ask one or two light judgment scenarios (prioritizing sever
 ## `prep.md` sections
 
 1. `## Before you start` and `## Learn before the interview` (pipeline-owned).
-2. `## 45-second career story`: 3–4 cues: where you started, the turn you chose, what you do now, why this role is next.
-3. `## Why this company, why now`: 2–3 cues.
+2. `## 45-second career story`: 3–4 Say-style points: where you started, the turn you chose, what you do now, why this role is next.
+3. `## Why this company, why now`: 2–3 points.
 4. `## Logistics`: a table filled only from `logistics`.
-5. `## Checklist`: 4–5 cues confirming required skills, each with a story or evidence ID.
+5. `## Checklist`: 4–5 points confirming required skills, each with a story or evidence ID in trailing parentheses.
 
 ## Not in this round
 

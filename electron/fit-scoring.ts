@@ -1,4 +1,5 @@
-import { FIT_CLASSIFICATION_CREDIT } from "../src/shared/fit-credit";
+import { splitApplicationForm, stripInvisible } from "./posting-clean";
+import { FIT_CLASSIFICATION_CREDIT, FIT_GATE } from "../src/shared/fit-credit";
 export const FIT_CATEGORIES = ["core", "technical", "scope", "outcomes", "domain", "learning"] as const;
 export type FitCategory = typeof FIT_CATEGORIES[number];
 
@@ -21,7 +22,7 @@ export type MustHaveRequirement = { requirement: string; status: MustHaveStatus;
 /** Each learnable must-have lowers the visible score by this much, up to the cap. */
 export const LEARNABLE_MUST_HAVE_PENALTY = 0.15;
 export const LEARNABLE_MUST_HAVE_PENALTY_CAP = 0.45;
-export const FIT_GATE = 3.5;
+export { FIT_GATE };
 
 export type FitScoreResult = {
   score: number;
@@ -62,6 +63,16 @@ const EXPECTED_CATEGORY_WEIGHTS: Record<FitCategory, number> = {
   learning: 5,
 };
 
+/**
+ * Each category's share of 100: the fixed weights, rescaled over the categories that have rows (a
+ * posting may list nothing for domain or learning). Core is always required.
+ */
+export function categoryTargets(present: Iterable<FitCategory>): Record<FitCategory, number> {
+  const have = new Set(present);
+  const total = FIT_CATEGORIES.filter((category) => have.has(category)).reduce((sum, category) => sum + EXPECTED_CATEGORY_WEIGHTS[category], 0);
+  return Object.fromEntries(FIT_CATEGORIES.map((category) => [category, have.has(category) && total ? EXPECTED_CATEGORY_WEIGHTS[category] * 100 / total : 0])) as Record<FitCategory, number>;
+}
+
 export function calculateFitScore(requirements: FitRequirement[]): FitScoreResult {
   if (!requirements.length) throw new Error("Requirement scoring needs at least one material JD requirement.");
   const categoryWeights = Object.fromEntries(FIT_CATEGORIES.map((category) => [category, 0])) as Record<FitCategory, number>;
@@ -71,9 +82,11 @@ export function calculateFitScore(requirements: FitRequirement[]): FitScoreResul
     if (!Number.isFinite(row.weight) || row.weight <= 0) throw new Error(`Requirement weights must be positive: ${row.requirement}.`);
     categoryWeights[row.category] += row.weight;
   }
+  if (categoryWeights.core === 0) throw new Error("The evaluation has no `core` row; rate at least one core responsibility.");
+  const targets = categoryTargets(FIT_CATEGORIES.filter((category) => categoryWeights[category] > 0));
   for (const category of FIT_CATEGORIES) {
-    if (Math.abs(categoryWeights[category] - EXPECTED_CATEGORY_WEIGHTS[category]) > 0.01) {
-      throw new Error(`${category} requirements must total ${EXPECTED_CATEGORY_WEIGHTS[category]}%, received ${categoryWeights[category]}%.`);
+    if (Math.abs(categoryWeights[category] - targets[category]) > 0.05) {
+      throw new Error(`${category} requirements must total ${Math.round(targets[category] * 100) / 100}%, received ${categoryWeights[category]}%.`);
     }
   }
 
@@ -86,14 +99,15 @@ export function calculateFitScore(requirements: FitRequirement[]): FitScoreResul
   const directWeight = requirements.filter((row) => row.classification === "direct").reduce((sum, row) => sum + row.weight, 0);
   const coreRows = requirements.filter((row) => row.category === "core");
   const directCoreWeight = coreRows.filter((row) => row.classification === "direct").reduce((sum, row) => sum + row.weight, 0);
-  const directCorePercent = directCoreWeight / EXPECTED_CATEGORY_WEIGHTS.core * 100;
+  const directCorePercent = directCoreWeight / targets.core * 100;
   const materialTransferableCoreCount = coreRows.filter((row) => row.material && row.classification !== "direct").length;
   const materialCore = coreRows.filter((row) => row.material);
-  const roleDefiningCore = materialCore.filter((row) => row.weight >= 15);
+  // Core caps scale with how much of the core is missing, so splitting core into many rows can't dodge them.
+  const coreShare = (classification: FitClassification) => materialCore.filter((row) => row.classification === classification).reduce((sum, row) => sum + row.weight, 0) / targets.core;
   let score = rawScore;
   if (directCorePercent < 80) score = Math.min(score, 4.4);
-  if (roleDefiningCore.some((row) => row.classification === "gap")) score = Math.min(score, 3.4);
-  else if (roleDefiningCore.some((row) => row.classification === "unclear")) score = Math.min(score, 3.8);
+  if (coreShare("gap") >= 0.25) score = Math.min(score, 3.4);
+  else if (coreShare("unclear") + coreShare("gap") >= 0.25) score = Math.min(score, 3.8);
   else if (materialCore.some((row) => row.classification === "adjacent_transferable")) score = Math.min(score, 4.2);
   else if (materialCore.filter((row) => row.classification === "strong_transferable").length > 1) score = Math.min(score, 4.3);
   const uncertainWeight = requirements
@@ -195,7 +209,7 @@ export function gateStatusFor(result: FitScoreResult): string {
 }
 
 export function scoreEvaluation(markdown: string): FitScoreResult | null {
-  const requirements = parseFitRequirements(markdown);
+  const requirements = parseFitRequirements(completeFallbackTable(markdown));
   return requirements ? applyMustHaves(calculateFitScore(requirements), parseMustHaves(markdown)) : null;
 }
 
@@ -467,16 +481,36 @@ export function normalizeEvidenceClassifications(markdown: string, snapshot: Evi
 }
 
 /** Headings are matched by meaning, not exact text, across ATS formats (Workday, Greenhouse, Lever, Ashby, bank postings). */
-const REQUIRED_HEADING = /\b(?:required|requirements?|minimum|basic qualifications|qualifications|what you(?:'|’)?ll need|what you need|what you(?:'|’)?ll bring|what you bring|what we(?:'|’)?re looking for|must[- ]haves?|you have|you(?:'|’)?ll have|who you are|about you|ideal candidate|(?:great|good) fit|a fit if|skills and experience)\b/i;
-const NOT_REQUIRED_HEADING = /\b(?:preferred|nice|bonus|plus(?:es)?|desired|desirable|optional|extra credit|benefits|perks|compensation|salary|about us|about the company)\b/i;
+export const REQUIRED_HEADING = /\b(?:required|requirements?|minimum|basic qualifications|qualifications|what you(?:'|’)?ll need|what you need|what you(?:'|’)?ll bring|what you bring|what we(?:'|’)?re looking for|must[- ]haves?|you have|you(?:'|’)?ll have|who you are|about you|ideal candidates?|(?:great|good) fit|a fit if|skills and experience|looking for someone|someone who (?:has|is)|you should apply if|candidates? (?:will )?have|your (?:background|experience|skills)|experience (?:and|&) skills)\b/i;
+export const NOT_REQUIRED_HEADING = /\b(?:preferred|nice|bonus|plus(?:es)?|desired|desirable|optional|extra credit|benefits|perks|compensation|salary|about us|about the company|required fields?)\b/i;
+/**
+ * The posting itself, without the application form a fetched page often ends with, and with headings that were
+ * glued together on copy ("Who You AreQualifications") split back into words.
+ */
+export function postingBody(jobDescription: string): string {
+  const body = splitApplicationForm(stripInvisible(jobDescription.replaceAll("\r\n", "\n"))).posting;
+  return body.split("\n").map((line) => /^\s*(?:#|\*\*)/.test(line) ? line.replace(/([a-z\u2019'])([A-Z][a-z])/g, "$1 $2") : line).join("\n");
+}
 /** A line that reads like a section heading: markdown heading, bold line, "Label:", or a short line without a full stop. */
-function isHeadingLike(line: string): boolean {
+export function isHeadingLike(line: string): boolean {
   const trimmed = line.trim();
   if (/^\s*(?:[-*•▪◦]|\d+[.)])\s+/.test(line) || trimmed.length > 80) return false;
   return /^#/.test(trimmed) || /^\*\*[^*]+\*\*:?$/.test(trimmed) || /:$/.test(trimmed) || (trimmed.length <= 60 && !/[.!?]$/.test(trimmed));
 }
-function isRequiredHeading(text: string): boolean {
+export function isRequiredHeading(text: string): boolean {
   return REQUIRED_HEADING.test(text) && !NOT_REQUIRED_HEADING.test(text);
+}
+export const OTHER_SECTION = /\b(?:about|benefits|what we offer|(?:the )?role offers|we offer|perks|equal opportunity|compensation|salary|pay range|our (?:team|company|culture|mission)|why (?:join|you(?:'|’)?ll love)|how to apply|applications?|keywords)\b/i;
+export const sectionHeadingText = (line: string) => line.replace(/^#+\s*/, "").replace(/[*_]/g, "").replace(/:\s*$/, "").trim();
+/**
+ * In a list copied without bullet markers, the line that ends it: a marked heading (#, bold, or a
+ * trailing colon) or a short line naming another section.
+ */
+function isSectionBreak(line: string): boolean {
+  const trimmed = line.trim();
+  if (/^#/.test(trimmed) || /^\*\*[^*]+\*\*:?$/.test(trimmed) || /:$/.test(trimmed)) return true;
+  const text = sectionHeadingText(line);
+  return isHeadingLike(line) && (REQUIRED_HEADING.test(text) || NOT_REQUIRED_HEADING.test(text) || RESPONSIBILITY_HEADING.test(text) || OTHER_SECTION.test(text));
 }
 const MAX_REQUIRED_ITEMS = 12;
 /** Personality items are folded into observable work rows, never rated as must-haves. */
@@ -491,28 +525,103 @@ const LOGISTICS_REQUIREMENT = /\b(?:authori[sz]ed|authori[sz]ation|visa|sponsors
 export function extractRequiredItems(jobDescription: string): string[] {
   const heading = (line: string) => line.replace(/^#+\s*/, "").replace(/[*_]/g, "").replace(/:\s*$/, "").trim();
   const bullet = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
-  const lines = jobDescription.replaceAll("\r\n", "\n").split("\n");
+  const lines = postingBody(jobDescription).split("\n");
   const items: string[] = [];
   let inside = false;
+  let plain = false;
   for (const line of lines) {
     if (!line.trim()) continue;
     const item = bullet.exec(line)?.[1]?.replace(/[*_]/g, "").trim();
     if (inside && item) {
-      if (!SOFT_REQUIREMENT.test(item)) items.push(item);
+      // Plain lines before a bulleted list were an intro, not items.
+      if (plain) { items.length = 0; plain = false; }
+      if (!isSoftItem(item)) items.push(item);
+      continue;
+    }
+    // A list without bullet markers: each line is an item until the next section.
+    if (inside && (plain || !items.length) && !isSectionBreak(line)) {
+      plain = true;
+      const text = line.replace(/[*_]/g, "").trim();
+      if (!isSoftItem(text)) items.push(text);
       continue;
     }
     if (inside && isHeadingLike(line)) {
       // A sub-heading like "Basic Qualifications" under "Qualifications" continues the section.
-      if (!items.length && isRequiredHeading(heading(line))) continue;
+      if ((!items.length || plain) && isRequiredHeading(heading(line))) { items.length = 0; plain = false; continue; }
+      // "What we're looking for" written as paragraphs describes the role, not requirements: keep looking.
+      if (plain && isProse(items)) { items.length = 0; plain = false; inside = isRequiredHeading(heading(line)); continue; }
       break;
     }
     if (inside && items.length) break;
     if (!inside && isHeadingLike(line) && isRequiredHeading(heading(line))) inside = true;
   }
-  return items.slice(0, MAX_REQUIRED_ITEMS);
+  if (plain && isProse(items)) items.length = 0;
+  const extra = skillSectionItems(lines).filter((item) => !items.includes(item));
+  return [...items, ...extra]
+    .flatMap(splitSkillList)
+    .filter((item) => !isSoftItem(item))
+    // "…is preferred", "…advantageous" lines inside a requirements list are nice-to-haves, not must-haves.
+    .filter((item) => !PREFERRED_ITEM.test(item) && !NOT_A_REQUIREMENT.test(item) && !BENEFIT_ITEM.test(item))
+    .slice(0, MAX_REQUIRED_ITEMS);
 }
 
-const RESPONSIBILITY_HEADING = /\b(?:responsibilit(?:y|ies)|what you(?:'|’)?ll do|what you will do|what you(?:'|’)?ll be doing|the role|in this role|your role|your impact|day[- ]to[- ]day|duties|what you(?:'|’)?ll work on)\b/i;
+/** A line about the company or the role in the third person ("Acme is looking to hire…", "This role is…", "We…"). */
+const ROLE_TALK = /^(?:we\b|we(?:'|’)re\b|our\b|(?:this|the) (?:role|position|job|team|company)\b|[A-Z][\w&.'’-]*(?: [A-Z][\w&.'’-]*){0,3} (?:is|are) (?:looking|hiring|seeking)\b)/i;
+/**
+ * A plain-line "list" under a requirements-style heading that is really the role overview: most lines talk about the
+ * company or role ("Acme is looking to hire…", "This role is…") instead of the candidate. Labeled lines
+ * ("Skills Required: …") and semicolon lists are items, never overview.
+ */
+export function isProse(lines: string[]): boolean {
+  const about = lines.filter((line) => !/^[^.:;]{2,40}:/.test(line) && !line.includes(";") && ROLE_TALK.test(line)).length;
+  return lines.length > 0 && about * 2 > lines.length;
+}
+
+/** Personality items are dropped only when short; a long technical item that mentions teamwork is kept. */
+function isSoftItem(item: string): boolean {
+  return SOFT_REQUIREMENT.test(item) && item.split(/\s+/).length <= 15;
+}
+
+/** Facts about the job (where, hours, pay), not something the candidate must have. */
+const NOT_A_REQUIREMENT = /^(?:job\s+)?location\s*:|^(?:full|part)[- ]time\b|\bsalary\b|\bper (?:year|hour|annum)\b|^pay(?: range)?\s*:/i;
+/** Benefits that lost their heading and ended up at the end of a qualifications list. */
+const BENEFIT_ITEM = /^(?:training(?: &| and) development|work from home|remote work|health(?:care)? insurance|dental|vision|401\(?k\)?|pto|paid time off|paid (?:parental )?leave|equity|stock options?|wellness|learning budget|career growth)\b/i;
+const REQUIREMENT_SHAPED = /^(?:\d+\s*[-–]?\s*\d*\+?\s*years?|(?:programming |hands-on |working |professional )?experience|familiarity|exposure|proficiency|knowledge|(?:basic |solid |strong )?understanding|ability|degree|bachelor|master|fluency)\b/i;
+
+/**
+ * "…requires experience with the following: A; B; C" packs several required skills into one long
+ * line; each becomes its own item.
+ */
+function splitSkillList(item: string): string[] {
+  if (item.length < 200 || !item.includes(";")) return [item];
+  return item.replace(/^[\s\S]*?\bfollowing\s*:\s*/i, "").split(/;\s*/).map((part) => part.trim()).filter((part) => part.split(/\s+/).length >= 4);
+}
+
+/**
+ * Required skills grouped under headings the main parse doesn't know ("Deployment & Integration",
+ * "Operational & Professional Skills"): a section counts when its heading names skills (not soft
+ * skills) or most of its bullets read like requirements ("Experience…", "Familiarity…").
+ */
+function skillSectionItems(lines: string[]): string[] {
+  const bullet = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
+  const sections: Array<{ heading: string; items: string[] }> = [];
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const item = bullet.exec(line)?.[1]?.replace(/[*_]/g, "").trim();
+    if (item) sections.at(-1)?.items.push(item);
+    else if (isHeadingLike(line)) sections.push({ heading: sectionHeadingText(line), items: [] });
+  }
+  return sections.flatMap(({ heading, items }) => {
+    if (!items.length || isRequiredHeading(heading) || RESPONSIBILITY_HEADING.test(heading) || NOT_REQUIRED_HEADING.test(heading) || OTHER_SECTION.test(heading) || /\bsoft\s+skills\b/i.test(heading)) return [];
+    const namesSkills = /\bskills\b/i.test(heading);
+    const shaped = items.filter((item) => REQUIREMENT_SHAPED.test(item)).length / items.length >= 0.6 && items.length >= 2;
+    return namesSkills || shaped ? items : [];
+  });
+}
+
+const PREFERRED_ITEM = /\b(?:is|are) (?:preferred|a plus|desired|advantageous)\b|\b(?:advantageous|nice to have|a plus|bonus points?)\b/i;
+
+export const RESPONSIBILITY_HEADING = /\b(?:responsibilit(?:y|ies)|what you(?:'|’)?ll do|what you will do|what you(?:'|’)?ll be doing|the role|in this role|your role|your impact|day[- ]to[- ]day|duties|what you(?:'|’)?ll work on)\b/i;
 
 /**
  * The posting's responsibilities: bullets under its "What you'll do" heading. Plain sub-headings
@@ -523,18 +632,33 @@ export function extractResponsibilityItems(jobDescription: string): string[] {
   const bullet = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
   const items: string[] = [];
   let inside = false;
-  for (const line of jobDescription.replaceAll("\r\n", "\n").split("\n")) {
+  let plain = false;
+  for (const line of postingBody(jobDescription).split("\n")) {
     if (!line.trim()) continue;
     const item = bullet.exec(line)?.[1]?.replace(/[*_]/g, "").trim();
     if (inside && item) {
+      if (plain) { items.length = 0; plain = false; }
       items.push(item);
       continue;
     }
+    if (inside && (plain || !items.length) && !isSectionBreak(line)) {
+      plain = true;
+      items.push(line.replace(/[*_]/g, "").trim());
+      continue;
+    }
+    // A plain list ends at the next section line ("What the role offers:", "Applications:").
+    if (inside && plain && items.length && isSectionBreak(line) && !RESPONSIBILITY_HEADING.test(heading(line).replace(/\boffers?\b.*/i, "") || "")) break;
+    if (inside && plain && items.length && OTHER_SECTION.test(heading(line))) break;
     if (inside && (/^#/.test(line.trim()) || (isHeadingLike(line) && (isRequiredHeading(heading(line)) || NOT_REQUIRED_HEADING.test(heading(line)))))) {
-      if (/^#/.test(line.trim()) && RESPONSIBILITY_HEADING.test(heading(line)) && !items.length) continue;
+      if (RESPONSIBILITY_HEADING.test(heading(line)) && (!items.length || plain)) { items.length = 0; plain = false; continue; }
       break;
     }
     if (!inside && isHeadingLike(line) && RESPONSIBILITY_HEADING.test(heading(line))) inside = true;
+  }
+  if (!items.length) {
+    // Some postings give duties as one paragraph ("Duties: Build… Review…"): each sentence is a duty.
+    const paragraph = /^(?:duties|responsibilities|key responsibilities|what you(?:'|’)?ll do)\s*:\s*(.{40,})$/im.exec(postingBody(jobDescription))?.[1] ?? "";
+    items.push(...paragraph.split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter((sentence) => sentence.split(/\s+/).length >= 4).slice(0, 6));
   }
   return items.slice(0, MAX_REQUIRED_ITEMS);
 }
@@ -631,14 +755,164 @@ export function verifyMustHaves(markdown: string, requiredItems: string[], snaps
   return { markdown: updated, adjustments };
 }
 
-export function normalizeEvaluationScore(markdown: string, snapshot?: EvidenceSnapshot, requiredItems: string[] = []): string {
-  const checked = verifyMustHaves(markdown, requiredItems, snapshot).markdown;
-  const bounded = snapshot ? normalizeEvidenceClassifications(checked, snapshot) : { markdown: checked, adjustments: [] };
-  const result = scoreEvaluation(bounded.markdown);
-  if (!result) return bounded.markdown;
+/**
+ * The app owns the weights: each row of the Requirement Scoring table gets its category's fixed
+ * weight, shared evenly when a category has several rows. The model only picks categories.
+ */
+/**
+ * When the posting had no requirement sections, the model writes its own rows in the short form
+ * (Requirement | Category | Classification | Evidence | Blocker). This adds the Weight and Material columns
+ * and the app's weights, so those evaluations are scored like any other. Tables that already have weights,
+ * or that aren't in the short form, come back unchanged.
+ */
+export function completeFallbackTable(markdown: string): string {
+  const section = /(###\s+Requirement Scoring\s*\n)([\s\S]*?)(?=\n#{1,3}\s+|$)/i.exec(markdown);
+  if (!section) return markdown;
+  const tableLines = section[2]!.split("\n").filter((line) => /^\s*\|.*\|\s*$/.test(line));
+  if (tableLines.length < 3) return markdown;
+  const cells = (line: string) => line.trim().slice(1, -1).split("|").map((value) => value.trim());
+  const headers = cells(tableLines[0]!).map(normalizedHeader);
+  if (headers.includes("weight") || !["requirement", "category", "classification"].every((name) => headers.includes(name))) return markdown;
+  const at = (row: string[], name: string) => headers.indexOf(name) >= 0 ? row[headers.indexOf(name)] ?? "" : "";
+  const rows = tableLines.slice(2).map(cells).filter((row) => at(row, "requirement")).map((row) => `| ${tableText(at(row, "requirement"))} | ${at(row, "category")} | 0% | yes | ${at(row, "classification")} | ${tableText(at(row, "evidence"))} | ${at(row, "blocker")} |`);
+  const table = ["| Requirement | Category | Weight | Material | Classification | Evidence | Blocker |", "| --- | --- | ---: | --- | --- | --- | --- |", ...rows].join("\n");
+  return assignCategoryWeights(markdown.replace(section[0], `${section[1]}${table}\n`));
+}
+
+export function assignCategoryWeights(markdown: string): string {
+  const section = /(###\s+Requirement Scoring\s*\n)([\s\S]*?)(?=\n#{1,3}\s+|$)/i.exec(markdown);
+  if (!section) return markdown;
+  const lines = section[2]!.split("\n");
+  const tableLines = lines.filter((line) => /^\s*\|.*\|\s*$/.test(line));
+  if (tableLines.length < 3) return markdown;
+  const cells = (line: string) => line.trim().slice(1, -1).split("|").map((value) => value.trim());
+  const headers = cells(tableLines[0]!).map(normalizedHeader);
+  const categoryIndex = headers.indexOf("category");
+  const weightIndex = headers.indexOf("weight");
+  if (categoryIndex < 0 || weightIndex < 0) return markdown;
+  const isRow = (line: string) => /^\s*\|.*\|\s*$/.test(line) && line !== tableLines[0] && !/^\s*\|\s*:?-+/.test(line);
+  const categoryOf = (line: string) => cells(line)[categoryIndex]!.replaceAll("`", "").toLowerCase().replaceAll(" ", "_") as FitCategory;
+  const counts = new Map<FitCategory, number>();
+  for (const line of lines.filter(isRow)) counts.set(categoryOf(line), (counts.get(categoryOf(line)) ?? 0) + 1);
+  const targets = categoryTargets([...counts.keys()].filter((category) => FIT_CATEGORIES.includes(category)));
+  const seen = new Map<FitCategory, number>();
+  const rewritten = lines.map((line) => {
+    if (!isRow(line)) return line;
+    const category = categoryOf(line);
+    if (!FIT_CATEGORIES.includes(category)) return line;
+    // Two-decimal shares; the category's last row takes the remainder so the total stays exact.
+    const count = counts.get(category)!;
+    const index = (seen.get(category) ?? 0) + 1;
+    seen.set(category, index);
+    const even = Math.round(targets[category] / count * 100) / 100;
+    const share = index < count ? even : Math.round((targets[category] - even * (count - 1)) * 100) / 100;
+    const values = cells(line);
+    values[weightIndex] = `${share}%`;
+    return `| ${values.join(" | ")} |`;
+  });
+  return markdown.replace(section[0], `${section[1]}${rewritten.join("\n")}`);
+}
+
+export type JobRequirement = { id: string; text: string; kind: "required" | "responsibility" };
+const MAX_RESPONSIBILITY_ROWS = 6;
+
+/**
+ * What the evaluation rates: the posting's required items, then its main responsibilities (those not
+ * already covered by a required item), each with a stable `req:N` ID. Empty when the posting has
+ * neither section; the evaluation then falls back to six capability rows.
+ */
+export function jobRequirements(jobDescription: string): JobRequirement[] {
+  const required = extractRequiredItems(jobDescription);
+  const responsibilities = extractResponsibilityItems(jobDescription)
+    .filter((item) => !required.some((requirement) => tokenCoverage(requirement, item) >= 0.6))
+    .slice(0, MAX_RESPONSIBILITY_ROWS);
+  return [
+    ...required.map((text) => ({ kind: "required" as const, text })),
+    ...responsibilities.map((text) => ({ kind: "responsibility" as const, text })),
+  ].map((item, index) => ({ id: `req:${index + 1}`, ...item }));
+}
+
+const REQUIREMENT_ID = /\breq:(\d+)\b/i;
+type RatedRequirement = { category: string; classification: string; evidence: string; blocker: boolean };
+
+/** The model's rows of the Requirement Scoring table, keyed by `req:N`. */
+function ratedRequirements(markdown: string): Map<number, RatedRequirement> {
+  const rated = new Map<number, RatedRequirement>();
+  const section = /###\s+Requirement Scoring\s*\n([\s\S]*?)(?=\n#{1,3}\s+|$)/i.exec(markdown)?.[1];
+  if (!section) return rated;
+  const lines = section.split("\n").filter((line) => /^\s*\|.*\|\s*$/.test(line));
+  if (lines.length < 3) return rated;
+  const cells = (line: string) => line.trim().slice(1, -1).split("|").map((value) => value.trim().replaceAll("`", ""));
+  const headers = cells(lines[0]!).map(normalizedHeader);
+  const at = (row: string[], name: string) => headers.indexOf(name) >= 0 ? row[headers.indexOf(name)] ?? "" : "";
+  for (const line of lines.slice(2)) {
+    const row = cells(line);
+    const id = Number(REQUIREMENT_ID.exec(at(row, "requirement"))?.[1]);
+    if (!id || rated.has(id)) continue;
+    rated.set(id, {
+      category: at(row, "category").toLowerCase().replaceAll(" ", "_"),
+      classification: at(row, "classification").toLowerCase().replaceAll(" ", "_"),
+      evidence: at(row, "evidence"),
+      blocker: /^(?:yes|true|blocker)$/i.test(at(row, "blocker")),
+    });
+  }
+  return rated;
+}
+
+const tableText = (value: string) => value.replace(/\|/g, "/").replace(/\s+/g, " ").trim();
+
+/**
+ * Rewrites the Requirement Scoring table with one row per posting requirement, in the posting's own
+ * words (so the evidence check compares evidence to the posting, not to the model's label). A
+ * requirement the model skipped is a gap; rows it invented are dropped. Weights are filled in later.
+ */
+function writeRequirementTable(markdown: string, requirements: JobRequirement[]): string {
+  const rated = ratedRequirements(markdown);
+  const rows = requirements.map((requirement) => {
+    const row = rated.get(Number(requirement.id.slice(4)));
+    const category = row && FIT_CATEGORIES.includes(row.category as FitCategory) ? row.category : requirement.kind === "required" ? "technical" : "core";
+    const classification = row && FIT_CLASSIFICATIONS.includes(row.classification as FitClassification) ? row.classification : "gap";
+    const blocker = requirement.kind === "required" && row?.blocker ? "yes" : "";
+    return `| ${requirement.id} ${tableText(requirement.text)} | ${category} | 0% | yes | ${classification} | ${tableText(row?.evidence ?? "")} | ${blocker} |`;
+  });
+  const table = ["| Requirement | Category | Weight | Material | Classification | Evidence | Blocker |", "| --- | --- | ---: | --- | --- | --- | --- |", ...rows].join("\n");
+  const section = /###\s+Requirement Scoring\s*\n[\s\S]*?(?=\n#{1,3}\s+|$)/i;
+  return section.test(markdown)
+    ? markdown.replace(section, `### Requirement Scoring\n${table}\n`)
+    : markdown.replace(/^(#{1,2}\s+[^\n]+\n)/, `$1\n### Requirement Scoring\n${table}\n`);
+}
+
+/**
+ * The Must-Have table follows from the required rows (after the evidence check): blocker when the
+ * model flagged it, met when rated direct or strong transferable, otherwise learnable. `verifyMustHaves`
+ * then checks every "met" against its evidence, as before.
+ */
+function writeMustHaveTable(markdown: string, requirements: JobRequirement[]): string {
+  const required = requirements.filter((requirement) => requirement.kind === "required");
+  if (!required.length) return markdown;
+  const rated = ratedRequirements(markdown);
+  const rows = required.map((requirement, index) => {
+    const row = rated.get(Number(requirement.id.slice(4)));
+    const status = row?.blocker ? "blocker" : row && (row.classification === "direct" || row.classification === "strong_transferable") ? "met" : "learnable";
+    return `| must:${index + 1} ${tableText(requirement.text)} | ${status} | ${tableText(row?.evidence ?? "")} | |`;
+  });
+  const table = ["### Must-Have Requirements", "| Requirement | Status | Evidence | Note |", "| --- | --- | --- | --- |", ...rows].join("\n");
+  const section = /###\s+Must-Have Requirements\s*\n[\s\S]*?(?=\n#{1,3}\s+|$)/i;
+  if (section.test(markdown)) return markdown.replace(section, `${table}\n`);
+  return markdown.replace(/(###\s+Requirement Scoring\s*\n[\s\S]*?)(?=\n#{1,3}\s+|$)/i, `$1\n\n${table}\n`);
+}
+
+export function normalizeEvaluationScore(markdown: string, snapshot?: EvidenceSnapshot, requiredItems: string[] = [], requirements: JobRequirement[] = []): string {
+  const rated = requirements.length ? writeRequirementTable(markdown, requirements) : completeFallbackTable(markdown);
+  const weighted = assignCategoryWeights(rated);
+  const bounded = snapshot ? normalizeEvidenceClassifications(weighted, snapshot) : { markdown: weighted, adjustments: [] };
+  const withMustHaves = requirements.length ? writeMustHaveTable(bounded.markdown, requirements) : bounded.markdown;
+  const checked = verifyMustHaves(withMustHaves, requiredItems, snapshot).markdown;
+  const result = scoreEvaluation(checked);
+  if (!result) return checked;
   const scoreLine = `- **Weighted Fit Score:** ${result.score.toFixed(2)} / 5`;
   const scorePattern = /^.*Weighted Fit Score\*{0,2}\s*:\*{0,2}\s*\d(?:\.\d+)?\s*\/\s*5(?:\.0)?.*$/im;
-  let normalized = bounded.markdown
+  let normalized = checked
     .replace(/##\s+Executive Summary\s*\n[\s\S]*?(?=\n#{1,3}\s+|$)/gi, "")
     .replace(/###\s+(?:Category Summary Arithmetic|Category Arithmetic|Category Breakdown|Scoring Breakdown)\s*\n[\s\S]*?(?=\n#{1,3}\s+|$)/gi, "")
     .replace(/\s*\(\d(?:\.\d+)?\s*\/\s*5(?:\.0)?\)/g, "")
@@ -665,9 +939,10 @@ export function normalizeEvaluationScore(markdown: string, snapshot?: EvidenceSn
     domain: "Domain",
     learning: "Learning and adaptability",
   };
+  const summaryTargets = categoryTargets(new Set(result.requirements.map((row) => row.category)));
   const categorySummary = [
     "### Category Summary",
-    ...FIT_CATEGORIES.map((category) => `- **${categoryLabels[category]}:** ${result.categoryCredits[category].toFixed(1)} / ${EXPECTED_CATEGORY_WEIGHTS[category]}`),
+    ...FIT_CATEGORIES.filter((category) => summaryTargets[category] > 0).map((category) => `- **${categoryLabels[category]}:** ${result.categoryCredits[category].toFixed(1)} / ${Math.round(summaryTargets[category] * 10) / 10}`),
     `- **Weighted total:** ${(result.rawScore * 20).toFixed(1)} / 100`,
     `- **Canonical fit score:** ${result.score.toFixed(2)} / 5`,
     ...(result.learnablePenalty ? [`- **Fit before must-have gaps:** ${(result.scoreBeforeMustHaves ?? result.score).toFixed(2)} / 5 (learnable must-haves: −${result.learnablePenalty.toFixed(2)})`] : []),

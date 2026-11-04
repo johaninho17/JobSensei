@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { postingRecordFor } from "./posting-record";
 import { basename, join, resolve } from "node:path";
 import {
   applicationContextSchema,
@@ -23,12 +24,14 @@ import {
   composeCanonicalResume,
   summaryIsEditable,
 } from "./canonical-resume";
+import { pruneUnsupportedSkills } from "./application-artifacts";
 import { contextManifestHash } from "./context-manifest-hash";
 import { mergeEvaluationAudit } from "./evaluation-audit";
-import { extractRequiredItems, gateStatusFor, normalizeEvaluationScore, scoreEvaluation } from "./fit-scoring";
+import { gateStatusFor, normalizeEvaluationScore, scoreEvaluation } from "./fit-scoring";
 import { validateJobApplication } from "./application-validation";
 import { writeJsonAtomic, writeTextAtomic } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
+import { companyArgument, recordJobCompany } from "./job-company";
 import { readCandidateProfile } from "./candidate-profile";
 
 class ApplicationInputError extends Error {
@@ -88,17 +91,42 @@ export function expandBundleBaselines(
     return { text: reference.text, evidenceIds: [...reference.evidenceIds] };
   });
   const drafted = bundle.resume.employers;
-  const employers = canonical.employers.map((employer) => {
+  const warnings: string[] = [];
+  const baselineOf = (name: string) => baselinesFor(name).map((bullet) => ({ text: bullet.text, evidenceIds: [...bullet.evidenceIds] }));
+  const rowEmployer = new Map((context?.schemaVersion === 2 ? context.evidenceRows ?? [] : []).map((row) => [row.evidenceId, row.employer ?? ""]));
+  const employers = canonical.employers.map((employer, index) => {
     const match = drafted.find((candidate) => key(candidate.name) === key(employer.name));
-    return match
-      ? { name: match.name, bullets: expand(employer.name, match.bullets) }
-      : { name: employer.name, bullets: baselinesFor(employer.name).map((bullet) => ({ text: bullet.text, evidenceIds: [...bullet.evidenceIds] })) };
+    if (!match) return { name: employer.name, bullets: baselineOf(employer.name) };
+    const bullets = expand(employer.name, match.bullets);
+    // Earlier roles stay exactly as in the base resume unless every changed bullet cites that employer's evidence.
+    if (index > 0) {
+      const original = new Set(baselineOf(employer.name).map((bullet) => key(bullet.text)));
+      const unbacked = bullets.filter((bullet) => !original.has(key(bullet.text))
+        && !bullet.evidenceIds.some((id) => key(rowEmployer.get(id) ?? "") === key(employer.name)));
+      if (unbacked.length) {
+        warnings.push(`Kept ${employer.name} as in the base resume: ${unbacked.length} changed bullet(s) cited no ${employer.name} evidence.`);
+        return { name: employer.name, bullets: baselineOf(employer.name) };
+      }
+    }
+    return { name: match.name, bullets };
   });
   // Employers that don't match the base resume pass through so validation can report them.
   for (const extra of drafted.filter((candidate) => !canonical.employers.some((employer) => key(employer.name) === key(candidate.name)))) {
     employers.push({ name: extra.name, bullets: expand(extra.name, extra.bullets) });
   }
-  return { ...bundle, resume: { ...(bundle.resume.summary ? { summary: bundle.resume.summary } : {}), skillsLines: bundle.resume.skillsLines, employers } };
+  return { ...bundle, warnings: [...bundle.warnings, ...warnings], resume: { ...(bundle.resume.summary ? { summary: bundle.resume.summary } : {}), skillsLines: bundle.resume.skillsLines, employers } };
+}
+
+/** Removes skills no evidence supports (see `pruneUnsupportedSkills`) and records what went. */
+export function pruneBundleSkills(bundle: ExpandedApplicationBundle, snapshot: EvidenceSnapshot): ExpandedApplicationBundle {
+  const removed: string[] = [];
+  const skillsLines = bundle.resume.skillsLines.flatMap((line) => {
+    const pruned = pruneUnsupportedSkills(line.text, line.evidenceIds, snapshot);
+    removed.push(...pruned.removed);
+    return pruned.text ? [{ ...line, text: pruned.text }] : [];
+  });
+  if (!removed.length) return bundle;
+  return { ...bundle, warnings: [...bundle.warnings, `Removed skills no evidence supports: ${removed.join(", ")}.`], resume: { ...bundle.resume, skillsLines } };
 }
 
 function materializeBundle(
@@ -250,7 +278,7 @@ async function readableRun(path: string): Promise<ApplicationRun | null> {
   }
 }
 
-async function finalizeApplicationUnchecked(workspacePath: string, jobId: string, persistRunState = true): Promise<ApplicationValidationReport> {
+async function finalizeApplicationUnchecked(workspacePath: string, jobId: string, persistRunState = true, options: { company?: string | null } = {}): Promise<ApplicationValidationReport> {
   if (!/^[a-z0-9][a-z0-9-]*$/i.test(jobId)) throw new Error("The canonical job ID is invalid.");
   const workspace = resolve(workspacePath);
   const jobPath = assertInsideWorkspace(workspace, join(workspace, "jobs", jobId));
@@ -276,8 +304,13 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
       throw new Error("The job-scoped application context does not match the pinned snapshot.");
     }
   }
-  const jobCompany = applicationContext?.schemaVersion === 2 ? applicationContext.job.company : null;
-  const expandedBundle = bundle ? expandBundleBaselines(bundle, snapshot.canonicalResume, applicationContext) : null;
+  const jobCompany = options.company
+    ? await recordJobCompany(workspace, jobId, options.company)
+    : applicationContext?.schemaVersion === 2 ? applicationContext.job.company : null;
+  if (bundle && !jobCompany) {
+    throw new Error(`The job has no company name, so the resume can't be named. Rerun: sensei application:finalize ${jobId} --company "<employer name from the JD>"`);
+  }
+  const expandedBundle = bundle ? pruneBundleSkills(expandBundleBaselines(bundle, snapshot.canonicalResume, applicationContext), snapshot) : null;
   const summaryEditable = summaryIsEditable(snapshot.canonicalResume, candidateProfile);
   const generated = expandedBundle
     ? materializeBundle(expandedBundle, snapshot, candidateProfile?.identity.artifactPrefix ?? "Candidate", jobCompany, summaryEditable)
@@ -325,7 +358,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
   const jobDescription = await readFile(join(jobPath, "original_jd.md"), "utf8")
     .catch(() => readFile(join(jobPath, "original_jd.txt"), "utf8"))
     .catch(() => "");
-  const normalizedEvaluation = normalizeEvaluationScore(evaluationMarkdown, snapshot, extractRequiredItems(jobDescription));
+  const normalizedEvaluation = normalizeEvaluationScore(evaluationMarkdown, snapshot, postingRecordFor(jobDescription).requiredItems, postingRecordFor(jobDescription).requirements);
   // The rating gate decides whether application documents exist. Grounding and
   // content checks annotate the persisted drafts for review; they do not suppress them.
   await Promise.all([
@@ -356,9 +389,9 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
   return finalReport;
 }
 
-export async function finalizeApplication(workspacePath: string, jobId: string, persistRunState = true): Promise<ApplicationValidationReport> {
+export async function finalizeApplication(workspacePath: string, jobId: string, persistRunState = true, options: { company?: string | null } = {}): Promise<ApplicationValidationReport> {
   try {
-    return await finalizeApplicationUnchecked(workspacePath, jobId, persistRunState);
+    return await finalizeApplicationUnchecked(workspacePath, jobId, persistRunState, options);
   } catch (error: unknown) {
     if (!(error instanceof ApplicationInputError)) throw error;
     const workspace = resolve(workspacePath);
@@ -371,6 +404,7 @@ export async function finalizeApplication(workspacePath: string, jobId: string, 
       runId: run?.runId ?? null,
       snapshotId: run?.snapshotId ?? null,
       manifestHash: run?.manifestHash ?? null,
+      stretch: null,
       fitScore: null,
       fitConfidence: null,
       gateStatus: null,
@@ -413,10 +447,10 @@ if (require.main === module) {
   const jobId = process.argv[2];
   const reviewOnly = process.argv.includes("--review");
   if (!jobId) {
-    process.stderr.write("Usage: npm run application:finalize -- <canonical-job-id>\n");
+    process.stderr.write("Usage: npm run application:finalize -- <canonical-job-id> [--company \"<name>\"]\n");
     process.exitCode = 1;
   } else {
-    finalizeApplication(defaultWorkspace(), jobId, !reviewOnly)
+    finalizeApplication(defaultWorkspace(), jobId, !reviewOnly, { company: companyArgument(process.argv) })
       .then(async (report) => {
         const durationSeconds = await recordRunDuration(defaultWorkspace(), jobId).catch(() => null);
         process.stdout.write(`${JSON.stringify({ ...report, durationSeconds }, null, 2)}\n`);

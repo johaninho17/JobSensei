@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { postingRecordFor, writePostingRecord } from "./posting-record";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { extname } from "node:path";
@@ -20,15 +21,17 @@ import {
 } from "../src/shared/schemas";
 import { profileBaseResume } from "./resume-footprint";
 import { loadCanonicalResumeBaseline, summaryIsEditable } from "./canonical-resume";
-import { bestEvidenceForRequirement, extractRequiredItems } from "./fit-scoring";
+import { FIT_GATE, bestEvidenceForRequirement } from "./fit-scoring";
 import { contextManifestHash } from "./context-manifest-hash";
 import { assertInsideWorkspace } from "./workspace";
+import { companyArgument, recordJobCompany } from "./job-company";
 import { parseJobDescriptionMetadata, resolveJobDescriptionPath } from "./job-description";
 import { readCandidateProfile } from "./candidate-profile";
 import { buildContextManifest, readActiveContextManifest } from "./context";
 import { deriveVoicePresets } from "../src/shared/voice-presets";
 import { readBulletBank } from "./bullet-bank";
-import { readFetchedJobDescription } from "./jd-fetch";
+import { FETCHED_FORM_PATH, readFetchedJobDescription } from "./jd-fetch";
+import { APPLICATION_FORM_FILE } from "./posting-clean";
 
 const MANIFEST_PATH = ".sensei/active-context.json";
 const DENYLIST_PATH = "context/denylist.md";
@@ -702,7 +705,7 @@ export function serializeCompactApplicationContext(input: ApplicationContext): s
   return baseJson.replace(`"${marker}"`, formattedRows);
 }
 
-export async function createEvidenceSnapshot(workspacePath: string, jobId: string): Promise<EvidenceSnapshot> {
+export async function createEvidenceSnapshot(workspacePath: string, jobId: string, options: { company?: string | null } = {}): Promise<EvidenceSnapshot> {
   if (!/^[a-z0-9][a-z0-9-]*$/i.test(jobId)) throw new Error("The canonical job ID is invalid.");
   const workspace = resolve(workspacePath);
   let manifest = await readActiveContextManifest(workspace);
@@ -802,10 +805,11 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
     ...row,
     employer: row.evidenceId.startsWith("job:") || noEmployerPaths.has(row.sourcePath) ? null : inferEmployer(row, canonicalEmployers, candidateProfile, currentEmployerStartYear),
   })).sort((a, b) => a.evidenceId.localeCompare(b.evidenceId));
-  // The best eligible row for each of the posting's must-haves is always routed, so the run can cite it.
+  // The best eligible row for each of the posting's requirements is always routed, so the run can cite
+  // the closest real evidence even for a gap.
   const citableRows = normalizedRows.filter((row) => row.eligibility === "eligible" && !row.evidenceId.startsWith("job:"));
-  const mustHaveEvidenceIds = extractRequiredItems(jobDescriptionText)
-    .map((requirement) => bestEvidenceForRequirement(requirement, citableRows))
+  const mustHaveEvidenceIds = postingRecordFor(jobDescriptionText).requirements
+    .map((requirement) => bestEvidenceForRequirement(requirement.text, citableRows))
     .filter((id): id is string => Boolean(id));
   const applicationRouting = buildApplicationRouting(normalizedRows, jobDescriptionText, mustHaveEvidenceIds, canonicalEmployers);
   const snapshotCore = {
@@ -863,6 +867,10 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       }
     }
   }
+  if (options.company) {
+    // The JD had no "Company:" line; the run named the employer (`--company`).
+    canonicalJob = { ...(canonicalJob ?? {}), company: await recordJobCompany(workspace, jobId, options.company) };
+  }
   if (snapshot.canonicalResume && snapshot.applicationRouting) {
     const bulletBank = await readBulletBank(workspace).catch(() => null);
     const bankBulletsByText = new Map<string, string[]>();
@@ -912,9 +920,9 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
     for (const row of routedRows) {
       if (requiredEvidenceIds.has(row.evidenceId)) addLean(row);
     }
-    // The best row for each must-have always reaches the run, so it can be cited instead of a weaker one.
-    for (const requirement of extractRequiredItems(jobDescriptionText)) {
-      const id = bestEvidenceForRequirement(requirement, routedRows);
+    // The best row for each posting requirement always reaches the run, so it can be cited instead of a weaker one.
+    for (const requirement of postingRecordFor(jobDescriptionText).requirements) {
+      const id = bestEvidenceForRequirement(requirement.text, routedRows);
       const row = id ? routedRows.find((candidate) => candidate.evidenceId === id) : undefined;
       if (row) addLean(row);
     }
@@ -969,7 +977,8 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
         editableSkillCategories,
       },
       footprint: snapshot.baseResumeFootprint,
-      mustHaves: extractRequiredItems(jobDescriptionText).map((requirement, index) => ({ id: `must:${index + 1}`, requirement })),
+      requirements: postingRecordFor(jobDescriptionText).requirements,
+      fitGate: FIT_GATE,
       evidenceRows: leanRows.map((row) => {
         const route = routeById.get(row.evidenceId);
         return {
@@ -1068,6 +1077,10 @@ export async function stageFetchedJobDescription(workspacePath: string, jobId: s
   if (!fetched) throw new Error("No fetched job description is staged. Run `npm run jd:fetch -- <url>` first, or write original_jd.md.");
   await mkdir(jobPath, { recursive: true });
   await writeTextAtomic(jdPath, fetched.markdown);
+  await writePostingRecord(jobPath, postingRecordFor(fetched.markdown));
+  // The form split off the posting stays with the job for the Questions tab; it is never part of the posting.
+  const form = await readFile(join(workspace, FETCHED_FORM_PATH), "utf8").catch(() => null);
+  if (form) await writeTextAtomic(join(jobPath, APPLICATION_FORM_FILE), form);
   return fetched.fetchedAt;
 }
 
@@ -1083,11 +1096,11 @@ if (require.main === module) {
   const jobId = process.argv[2];
   const fromFetched = process.argv.includes("--from-fetched");
   if (!jobId) {
-    process.stderr.write("Usage: npm run context:snapshot -- <canonical-job-id> [--from-fetched]\n");
+    process.stderr.write("Usage: npm run context:snapshot -- <canonical-job-id> [--from-fetched] [--company \"<name>\"]\n");
     process.exitCode = 1;
   } else {
     (fromFetched ? stageFetchedJobDescription(defaultWorkspace(), jobId) : Promise.resolve(null))
-      .then(async (fetchedAt) => ({ snapshot: await createEvidenceSnapshot(defaultWorkspace(), jobId), fetchedAt }))
+      .then(async (fetchedAt) => ({ snapshot: await createEvidenceSnapshot(defaultWorkspace(), jobId, { company: companyArgument(process.argv) }), fetchedAt }))
       .then(async ({ snapshot, fetchedAt }) => {
         const statePath = join(defaultWorkspace(), "jobs", jobId, ".sensei");
         const run = applicationRunSchema.parse(JSON.parse(await readFile(join(statePath, "application_run.json"), "utf8")));

@@ -50,7 +50,8 @@ The finalizer then:
 
 - restores protected identity, contact details, employers, titles, dates, locations, education, and structure from the base-resume baseline;
 - derives the hidden draft and evidence map without another AI pass;
-- calculates the authoritative score and diagnostics;
+- calculates the authoritative score: Agy rates each of the posting's own requirements against your evidence, and the app sets the weights, checks each rating against the cited evidence and the posting's wording, and derives the must-haves (met / to learn / blocker). A role you match only through transferable experience lands around 3.5; the gate is 3.2;
+- removes skills no evidence supports, keeps earlier roles exactly as in your base resume unless a change cites that employer, and measures the **stretch**: how much of the resume was tailored and how far each changed line reaches past its evidence (shown beside the fit score, never part of it);
 - writes the reviewable Markdown resume, cover letter, and evaluation;
 - stops after one attempt, even when review warnings exist.
 
@@ -97,7 +98,7 @@ The detailed rules live in `.agents/skills/jobsensei-interview-pipeline/SKILL.md
 
 - **Four rounds, prepared one at a time:** recruiter screen, hiring manager, practical evaluation (named for the role: role-play for sales, product case for PM, customer scenario for solutions roles, and so on), and final panel. Rounds never repeat a question, story, or reverse question.
 - **Questions you could actually be asked:** every question and exercise is a generic version of the job's own work, answerable by a strong candidate from another company. Product knowledge you'd want goes in a short "Learn before the interview" list instead.
-- **Short cues, not scripts:** each card has why they ask, a real example from your story bank (or your approach), a few cue words, and a 3–6 word "land on" point to finish on.
+- **Talking points, not scripts:** each card has why they ask, 3–5 short "Say" points that name real things, a "Proof" from your story bank (or your approach for hypotheticals), a likely follow-up on the questions most likely to get one, and a 3–6 word "land on" point to finish on.
 - **Your gaps, handled:** each round includes 1–3 questions about requirements you don't fully meet, answered as closest real experience plus a ramp plan.
 - **Your logistics, your words:** location, authorization, compensation, and notice come from Settings → Interview Prep and are never guessed.
 - **Checked:** `interview:check` flags invented logistics, unknown evidence, reused stories, scripted answers, banned phrases, local paths, and company-specific practice labs.

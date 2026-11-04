@@ -1,10 +1,13 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, session, shell } from "electron";
+import { textContextMenu } from "./context-menu";
 import { watch, type FSWatcher } from "node:fs";
 import { updateJobTracker } from "./tracker";
 import { latestRun } from "./run-status";
-import { stagePastedJobDescription } from "./jd-fetch";
+import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription } from "./jd-fetch";
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { prepareAgyHome, writeSenseiLauncher } from "./agy-home";
+import { QuestionAgent, headlessAgy } from "./question-agent";
+import { parsePastedQuestions } from "./application-questions";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import type { Settings } from "../src/shared/schemas";
@@ -14,7 +17,7 @@ import { deleteWorkspacePath, getBaseResume, listFileTree, listResumePaths, prev
 import { invalidateJobCache, listJobArtifacts, listJobFolders, listJobTree } from "./job-folders";
 import { assertInsideWorkspace, indexContext, summarizeWorkspace } from "./workspace";
 import { capWorkspaceNpmCache, initializeWorkspace, syncWorkspaceAgentFiles, type AgentSyncReport } from "./workspace-init";
-import { TerminalSession, appRoot as terminalAppRoot } from "./terminal";
+import { TerminalSession, appRoot as terminalAppRoot, resolveAgyExecutable } from "./terminal";
 import { buildContextManifest, contextSources, readActiveContextManifest } from "./context";
 import { exportMarkdownPdf } from "./pdf-export";
 import { getInterviewOverview, listInterviewRounds, refreshInterviewDashboard, setCurrentInterviewRound } from "./interviews";
@@ -58,8 +61,35 @@ function createWindow(): void {
     if (!url.startsWith("http://127.0.0.1:5173") && !url.startsWith("file://")) event.preventDefault();
   });
   mainWindow.on("closed", () => { terminal.stop(); mainWindow = undefined; });
+  if (process.env.SENSEI_SMOKE_OUT) runSmokeCheck(mainWindow, process.env.SENSEI_SMOKE_OUT);
   if (process.env.VITE_DEV_SERVER_URL) void mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   else void mainWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"));
+}
+
+/**
+ * Release smoke test (SENSEI_SMOKE_OUT=<file>): once the packaged app's window loads, checks that the interface
+ * rendered and the preload bridge works, writes the result to the file, and quits with 0 (ok) or 1. The release
+ * workflow runs it on each platform before the draft is published.
+ */
+function runSmokeCheck(window: BrowserWindow, outPath: string): void {
+  const finish = (result: { ok: boolean; detail: string }) => {
+    void writeFile(outPath, `${JSON.stringify({ ...result, platform: process.platform, version: app.getVersion() })}\n`).finally(() => app.exit(result.ok ? 0 : 1));
+  };
+  const timer = setTimeout(() => finish({ ok: false, detail: "The window did not finish loading within 60 seconds." }), 60_000);
+  window.webContents.on("render-process-gone", (_event, details) => { clearTimeout(timer); finish({ ok: false, detail: `Renderer exited: ${details.reason}` }); });
+  window.webContents.on("did-fail-load", (_event, code, description) => { clearTimeout(timer); finish({ ok: false, detail: `Load failed (${code}): ${description}` }); });
+  window.webContents.once("did-finish-load", () => {
+    setTimeout(() => {
+      void window.webContents.executeJavaScript(`(async () => {
+        const root = document.getElementById("root");
+        const workspace = await window.sensei.workspace.getSummary().then((value) => value.status).catch((error) => "error: " + error.message);
+        return { rendered: Boolean(root && root.childElementCount > 0 && document.body.innerText.trim().length > 20), workspace, text: document.body.innerText.slice(0, 120) };
+      })()`).then((check: { rendered: boolean; workspace: string; text: string }) => {
+        clearTimeout(timer);
+        finish({ ok: check.rendered && !String(check.workspace).startsWith("error"), detail: JSON.stringify(check) });
+      }, (error: unknown) => { clearTimeout(timer); finish({ ok: false, detail: String(error) }); });
+    }, 4000);
+  });
 }
 
 async function openInterviewWorkspaceWindow(jobId: string, roundId: string): Promise<void> {
@@ -290,7 +320,9 @@ ipcMain.handle("jobs:preview-artifact", async (_event, jobId: string, relativePa
 ipcMain.handle("jobs:get-application-status", async (_event, jobId: string) => getJobApplicationStatus(requireWorkspace(), jobId));
 ipcMain.handle("queue:get", async () => readJobQueue(requireWorkspace()));
 ipcMain.handle("queue:save", async (_event, queue: unknown) => saveJobQueue(requireWorkspace(), queue));
-ipcMain.handle("jobs:stage-pasted-jd", async (_event, text: unknown) => stagePastedJobDescription(requireWorkspace(), text));
+ipcMain.handle("jobs:stage-pasted-jd", async (_event, text: unknown, id: unknown) => stagePastedJobDescription(requireWorkspace(), text, String(id)));
+ipcMain.handle("jobs:set-staged-company", async (_event, id: unknown, company: unknown) => setStagedCompany(requireWorkspace(), String(id), String(company ?? "")));
+ipcMain.handle("jobs:stage-link", async (_event, url: unknown, id: unknown) => stageLinkJobDescription(requireWorkspace(), String(url), String(id)));
 // Writes only to the file the user picks in the save dialog.
 ipcMain.handle("jobs:export-csv", async (_event, csv: unknown) => {
   if (typeof csv !== "string" || !csv.startsWith("\uFEFF") || csv.length > 10_000_000) throw new Error("The export is invalid.");
@@ -326,6 +358,39 @@ ipcMain.handle("app:open-release", async (_event, url: unknown) => {
   if (typeof url === "string" && repository && url.startsWith(`https://github.com/${repository}/releases/`)) await shell.openExternal(url);
 });
 ipcMain.handle("runs:latest", async () => latestRun(requireWorkspace()));
+
+// Written application questions: answered by a separate headless Agy in the background (never the terminal Agy).
+let questionAgyHome: string | null = null;
+const questionAgent = new QuestionAgent({
+  workspace: requireWorkspace,
+  runner: async () => {
+    const agyPath = resolveAgyExecutable();
+    if (!agyPath) throw new Error("Agy isn't installed, so questions can't be answered.");
+    const workspace = requireWorkspace();
+    // The same app-owned Agy home (and sign-in) as the terminal; prepared here when the terminal hasn't started yet.
+    questionAgyHome ??= await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath });
+    return headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace });
+  },
+  onUpdate: (jobId, state) => mainWindow?.webContents.send("questions:updated", jobId, state),
+});
+const questionJobId = (value: unknown) => { const jobId = String(value ?? ""); if (!/^[a-z0-9][a-z0-9._-]*$/i.test(jobId)) throw new Error("Invalid job."); return jobId; };
+ipcMain.handle("questions:get", async (_event, jobId: unknown) => { const id = questionJobId(jobId); return { state: await questionAgent.get(id), running: questionAgent.isRunning(id) }; });
+ipcMain.handle("questions:auto", async (_event, jobId: unknown) => { void questionAgent.auto(questionJobId(jobId)); });
+ipcMain.handle("questions:ask", async (_event, jobId: unknown, text: unknown) => {
+  if (typeof text !== "string" || text.length > 20_000) throw new Error("Paste the questions as text.");
+  if (!parsePastedQuestions(text).length) throw new Error("Paste at least one question.");
+  void questionAgent.ask(questionJobId(jobId), text).catch(() => undefined);
+});
+ipcMain.handle("questions:answer-anyway", async (_event, jobId: unknown, questionId: unknown) => {
+  if (typeof questionId !== "string" || !/^q:\d+$/.test(questionId)) throw new Error("Invalid question.");
+  void questionAgent.answerAnyway(questionJobId(jobId), questionId);
+});
+ipcMain.handle("questions:retry", async (_event, jobId: unknown) => {
+  const id = questionJobId(jobId);
+  const state = await questionAgent.get(id);
+  if (!state || state.source === "posting") { void questionAgent.auto(id, true); return; }
+  void questionAgent.ask(id, state.questions.map((question) => question.label).join("\n\n"));
+});
 ipcMain.handle("jobs:update-tracker", async (_event, jobId: unknown, update: unknown) => updateJobTracker(requireWorkspace(), String(jobId), update));
 ipcMain.handle("jobs:validate-application", async (_event, jobId: string) => validateJobApplication(requireWorkspace(), jobId, false));
 
@@ -353,10 +418,11 @@ ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
   if (await capWorkspaceNpmCache(workspace).catch(() => false)) console.info("Agy npm cache passed its size limit and was cleared.");
   const manifest = await buildContextManifest(workspace, {}, await settingsStore.get());
   // Agy runs with an app-owned home whose rules keep its file tools inside the workspace.
-  const agyHome = await prepareAgyHome(app.getPath("userData"), workspace)
+  const agyHome = await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath })
     .then(async (home) => { await writeSenseiLauncher(home, { appRoot: terminalAppRoot(), packaged: app.isPackaged, runtimePath: process.execPath }); return home; })
     .catch((error) => { console.error("Agy home setup failed:", error); return null; });
   terminal.setAgyHome(agyHome);
+  questionAgyHome = agyHome ?? questionAgyHome;
   return terminal.start(cwd, workspace, manifest);
 });
 ipcMain.handle("terminal:set-context", async (_event, input) => {
@@ -413,7 +479,7 @@ app.whenReady().then(async () => {
   }
 
   const scriptPolicy = process.env.VITE_DEV_SERVER_URL ? "'self' 'unsafe-inline'" : "'self'";
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": [`default-src 'self'; style-src 'self' 'unsafe-inline'; script-src ${scriptPolicy}; img-src 'self' data:; object-src 'self' data:; frame-src 'self' data:; connect-src 'self' http://127.0.0.1:5173 ws://127.0.0.1:5173`] } }));
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": [`default-src 'self'; style-src 'self' 'unsafe-inline'; script-src ${scriptPolicy}; worker-src 'self' blob:; img-src 'self' data:; object-src 'self' data:; frame-src 'self' data:; connect-src 'self' http://127.0.0.1:5173 ws://127.0.0.1:5173`] } }));
   terminal.onData((data) => mainWindow?.webContents.send("terminal:data", data));
   terminal.onExit((code) => mainWindow?.webContents.send("terminal:exit", code));
   createWindow();
@@ -421,6 +487,13 @@ app.whenReady().then(async () => {
 }).catch((error) => {
   console.error("Sensei fatal whenReady error:", error);
   createWindow();
+});
+
+app.on("web-contents-created", (_event, contents) => {
+  contents.on("context-menu", (_menuEvent, params) => {
+    const items = textContextMenu(params);
+    if (items.length) Menu.buildFromTemplate(items).popup();
+  });
 });
 
 app.on("before-quit", () => { workspaceWatcher?.close(); if (workspaceWatchTimer) clearTimeout(workspaceWatchTimer); terminal.stop(); });

@@ -2,16 +2,17 @@
 // Content comes from the round's files (prep.md, question_bank.md, research) and profile/story_bank.md.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { InterviewOverview, InterviewRound, JobFolderSummary } from "../shared/schemas";
-import { listItems, markdownSections, parseInterviewCards, storyTitles, type CardKind, type InterviewCard } from "./interview-cards";
+import { listItems, markdownSections, parseInterviewCards, splitIds, storyTitles, type CardKind, type InterviewCard } from "./interview-cards";
 import { markdownHtml } from "./markdown";
+import { SubTabPanel, SubTabs } from "./SubTabs";
 
-type Filter = CardKind | "all";
-const FILTERS: Array<{ id: Filter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "question", label: "Questions" },
-  { id: "gap", label: "Gaps" },
-  { id: "followup", label: "Follow-ups" },
-  { id: "ask", label: "Ask them" },
+type RoundView = "prep" | "questions" | "research" | "files";
+/** Question rail groups, in the order the bank lists them. */
+const RAIL_GROUPS: Array<{ kind: CardKind; label: string }> = [
+  { kind: "question", label: "Questions" },
+  { kind: "gap", label: "Gaps" },
+  { kind: "followup", label: "Follow-ups" },
+  { kind: "ask", label: "Ask them" },
 ];
 const STATUS_LABEL: Record<InterviewRound["status"], string> = { planned: "Not prepared", prep_ready: "Prep ready", completed: "Done", debriefed: "Debriefed" };
 const LIVE_TARGET_SECONDS = 90;
@@ -34,9 +35,9 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
   const rounds = overview?.rounds ?? [];
   const [roundId, setRoundId] = useState(initialRoundId ?? overview?.currentRoundId ?? rounds[rounds.length - 1]?.id ?? "");
   const round = rounds.find((candidate) => candidate.id === roundId) ?? rounds.find((candidate) => candidate.id === overview?.currentRoundId) ?? rounds[rounds.length - 1] ?? null;
-  const [files, setFiles] = useState<{ prep: string; bank: string; stories: Record<string, string> }>({ prep: "", bank: "", stories: {} });
+  const [files, setFiles] = useState<{ prep: string; bank: string; research: string; stories: Record<string, string> }>({ prep: "", bank: "", research: "", stories: {} });
   const [filesLoading, setFilesLoading] = useState(false);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [view, setView] = useState<RoundView>("questions");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [liveIndex, setLiveIndex] = useState<number | null>(null);
@@ -48,28 +49,36 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
     let cancelled = false;
     setFilesLoading(true);
     setOpen(new Set());
-    void Promise.all([readText(round?.artifactPaths.prep ?? null), readText(round?.artifactPaths.questionBank ?? null), readText("profile/story_bank.md")])
-      .then(([prep, bank, stories]) => { if (!cancelled) setFiles({ prep, bank, stories: storyTitles(stories) }); })
+    void Promise.all([readText(round?.artifactPaths.prep ?? null), readText(round?.artifactPaths.questionBank ?? null), readText(round?.artifactPaths.research ?? null), readText("profile/story_bank.md")])
+      .then(([prep, bank, research, stories]) => { if (!cancelled) setFiles({ prep, bank, research, stories: storyTitles(stories) }); })
       .finally(() => { if (!cancelled) setFilesLoading(false); });
     return () => { cancelled = true; };
-  }, [round?.id, round?.artifactPaths.prep, round?.artifactPaths.questionBank]);
+  }, [round?.id, round?.artifactPaths.prep, round?.artifactPaths.questionBank, round?.artifactPaths.research]);
 
   const cards = useMemo(() => parseInterviewCards(files.bank), [files.bank]);
   const prepSections = useMemo(() => markdownSections(files.prep), [files.prep]);
   const keyPoints = listItems(prepSections.find((section) => /things to get across/i.test(section.title))?.body ?? "");
   const reminders = listItems(prepSections.find((section) => /before you start/i.test(section.title))?.body ?? "");
   const otherPrep = prepSections.filter((section) => !/things to get across|before you start/i.test(section.title));
-  const counts = useMemo(() => Object.fromEntries(FILTERS.map((item) => [item.id, item.id === "all" ? cards.length : cards.filter((card) => card.kind === item.id).length])) as Record<Filter, number>, [cards]);
+  const researchSections = useMemo(() => markdownSections(files.research), [files.research]);
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return cards.filter((card) => (filter === "all" || card.kind === filter)
-      && (!needle || [card.question, card.why, card.example, card.landOn, card.gap, card.closest, ...card.cues].join(" ").toLowerCase().includes(needle)));
-  }, [cards, filter, query]);
+    return cards.filter((card) => !needle || [card.question, card.why, card.example, card.followUp, card.landOn, card.gap, card.closest, ...card.cues].join(" ").toLowerCase().includes(needle));
+  }, [cards, query]);
   const liveCards = visible.length ? visible : cards;
 
   function selectRound(nextId: string) {
     setRoundId(nextId);
     onRoundChange?.(nextId);
+  }
+  function jumpTo(id: string) {
+    setQuery("");
+    setOpen((current) => new Set(current).add(id));
+    window.requestAnimationFrame(() => {
+      const target = document.getElementById(`icard-${id}`);
+      target?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      target?.querySelector<HTMLButtonElement>(".icard-toggle")?.focus({ preventScroll: true });
+    });
   }
   function toggle(id: string) {
     setOpen((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -104,8 +113,10 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
     </section>;
   }
   const meta = [round.interviewer, round.format, round.scheduledDate].filter(Boolean);
-  const artifacts: Array<[string, string | null]> = [["Prep notes", round.artifactPaths.prep], ["Question bank", round.artifactPaths.questionBank], ["Company research", round.artifactPaths.research], ["Challenge brief", round.artifactPaths.challengeBrief], ["Practice labs", round.artifactPaths.practiceLabs], ["Debrief", round.artifactPaths.debriefAnalysis]];
+  const artifacts: Array<[string, string | null]> = [["Prep notes", round.artifactPaths.prep], ["Question bank", round.artifactPaths.questionBank], ["Company research", round.artifactPaths.research], ["Job description", `jobs/${job.id}/original_jd.md`], ["Challenge brief", round.artifactPaths.challengeBrief], ["Practice labs", round.artifactPaths.practiceLabs], ["Debrief", round.artifactPaths.debriefAnalysis]];
+  const roundFiles = artifacts.filter((entry): entry is [string, string] => Boolean(entry[1]));
   const checklist: Array<[string, boolean]> = [["Question bank written", Boolean(round.artifactPaths.questionBank)], ["Prep notes written", Boolean(round.artifactPaths.prep)], ["Company research", Boolean(round.artifactPaths.research)], ["Key points chosen", keyPoints.length > 0], ["Debrief after the call", Boolean(round.artifactPaths.debriefAnalysis) || round.status === "debriefed"]];
+  const numbers = new Map(cards.map((card, index) => [card.id, index + 1]));
 
   return <section className={`iv ${standalone ? "is-standalone" : ""}`}>
     <ol className="iv-stepper" aria-label="Interview rounds">
@@ -119,44 +130,74 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
     </ol>
 
     <header className="iv-head">
-      <div>
-        <h2>{round.label}</h2>
-        <p>{meta.length ? meta.join(", ") : STATUS_LABEL[round.status]}</p>
-      </div>
-      <div className="iv-head-actions">
+      <h2>{round.label}</h2>
+      <p>{meta.length ? meta.join(", ") : STATUS_LABEL[round.status]}</p>
+    </header>
+
+    <SubTabs<RoundView>
+      idPrefix="iv"
+      label="Round sections"
+      value={view}
+      onChange={setView}
+      tabs={[
+        { id: "prep", label: "Prep", disabled: !files.prep },
+        { id: "questions", label: "Questions", count: cards.length || null },
+        { id: "research", label: "Research", disabled: !files.research },
+        { id: "files", label: "Files", count: roundFiles.length },
+      ]}
+      actions={<>
         {onInsertPrompt && <button className="btn-quiet" onClick={() => onInsertPrompt(`Refresh ${company} ${job.title ?? ""} ${round.label} interview prep with current research ${jobRef}`.replace(/\s+/g, " "), "Update research")}>Update research</button>}
         {!standalone && <button className="btn-quiet" onClick={() => void window.sensei.interviews.openWorkspaceWindow(job.id, round.id)}>Open in window</button>}
         <button className="btn-quiet" title="A small window that stays on top of your video call" onClick={() => void window.sensei.interviews.openWorkspaceWindow(job.id, round.id, true)}>Live window</button>
         <button className="btn-primary" disabled={!liveCards.length} onClick={() => setLiveIndex(0)} title="Shortcut: L">Start live mode</button>
-      </div>
-    </header>
+      </>}
+    />
 
-    <div className="iv-layout">
-      <div className="iv-main">
-        <div className="iv-toolbar">
-          <div className="segmented" role="group" aria-label="Show cards">
-            {FILTERS.filter((item) => item.id === "all" || counts[item.id] > 0).map((item) => <button key={item.id} aria-pressed={filter === item.id} onClick={() => setFilter(item.id)}>{item.label}<span>{counts[item.id]}</span></button>)}
+    <SubTabPanel idPrefix="iv" value={view}>
+      {view === "prep" && <div className="iv-prep">
+        {keyPoints.length > 0 && <section className="iv-section">
+          <h3>3 things to get across</h3>
+          <ol className="iv-keystrip">{keyPoints.map((point) => { const { text, ids } = splitIds(point); return <li key={point} title={ids.join(", ") || undefined}>{text.replace(/[*_`]/g, "")}</li>; })}</ol>
+        </section>}
+        {reminders.length > 0 && <section className="iv-section"><h3>Before you start</h3><ul className="iv-reminders">{reminders.map((item) => <li key={item}>{item.replace(/[*_`]/g, "")}</li>)}</ul></section>}
+        {otherPrep.map((section) => <section key={section.title} className="iv-section"><h3>{section.title}</h3><div className="iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(section.body, [], { readable: true }) }} /></section>)}
+        <section className="iv-section"><h3>Ready for this round</h3><ul className="iv-checklist">{checklist.map(([label, done]) => <li key={label} className={done ? "is-done" : ""}><span aria-hidden="true">{done ? "✓" : "○"}</span>{label}<span className="sr-only">{done ? " (done)" : " (not yet)"}</span></li>)}</ul></section>
+      </div>}
+
+      {view === "questions" && (filesLoading ? <p className="iv-empty">Reading the question bank…</p>
+        : !cards.length ? <div className="iv-empty-state"><h3>No question bank for this round</h3><p>{round.artifactPaths.questionBank ? "The question bank has no question headings this view can read." : "Ask Agy to prepare this round to get questions, talking points, and what to land on."}</p>{round.artifactPaths.questionBank && <button className="btn-quiet" onClick={() => onOpenFile(round.artifactPaths.questionBank!)}>Open question bank</button>}</div>
+        : <div className="iv-qlayout">
+          <nav className="iv-rail" aria-label="Jump to a question">
+            {RAIL_GROUPS.map((group) => {
+              const items = cards.filter((card) => card.kind === group.kind);
+              return items.length ? <div key={group.kind} className="iv-rail-group">
+                <p>{group.label}</p>
+                <ol>{items.map((card) => <li key={card.id}><button className={open.has(card.id) ? "is-open" : ""} onClick={() => jumpTo(card.id)} title={card.question}><span className="iv-rail-num">{numbers.get(card.id)}</span><span className="iv-rail-q">{card.question}</span></button></li>)}</ol>
+              </div> : null;
+            })}
+          </nav>
+          <div className="iv-main">
+            <div className="iv-toolbar">
+              <label className="iv-search"><span className="sr-only">Search this round</span><input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search this round  /" /></label>
+              <button className="btn-link" onClick={() => setOpen(open.size ? new Set() : new Set(visible.map((card) => card.id)))}>{open.size ? "Collapse all" : "Expand all"}</button>
+            </div>
+            <ol className="icard-list" ref={listRef} onKeyDown={onListKeyDown} aria-label="Interview questions">
+              {visible.map((card) => <InterviewCardItem key={card.id} card={card} number={numbers.get(card.id) ?? 0} open={open.has(card.id)} stories={files.stories} onToggle={() => toggle(card.id)} onLive={() => setLiveIndex(liveCards.indexOf(card))} />)}
+              {!visible.length && <li className="iv-empty">Nothing matches “{query}”.</li>}
+            </ol>
+            <p className="iv-hint">↑ ↓ to move between questions, Enter to open one, / to search, L for live mode.</p>
           </div>
-          <label className="iv-search"><span className="sr-only">Search this round</span><input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search this round  /" /></label>
-          <button className="btn-link" onClick={() => setOpen(open.size ? new Set() : new Set(visible.map((card) => card.id)))}>{open.size ? "Collapse all" : "Expand all"}</button>
-        </div>
-        {filesLoading ? <p className="iv-empty">Reading the question bank…</p>
-          : !cards.length ? <div className="iv-empty-state"><h3>No question bank for this round</h3><p>{round.artifactPaths.questionBank ? "The question bank has no question headings this view can read." : "Ask Agy to prepare this round to get questions, cues, and what to land on."}</p>{round.artifactPaths.questionBank && <button className="btn-quiet" onClick={() => onOpenFile(round.artifactPaths.questionBank!)}>Open question bank</button>}</div>
-          : <ol className="icard-list" ref={listRef} onKeyDown={onListKeyDown} aria-label="Interview questions">
-            {visible.map((card, index) => <InterviewCardItem key={card.id} card={card} index={index} open={open.has(card.id)} stories={files.stories} onToggle={() => toggle(card.id)} onLive={() => setLiveIndex(liveCards.indexOf(card))} />)}
-            {!visible.length && <li className="iv-empty">Nothing matches “{query}”.</li>}
-          </ol>}
-        <p className="iv-hint">↑ ↓ to move between questions, Enter to open one, / to search, L for live mode.</p>
-      </div>
+        </div>)}
 
-      <aside className="iv-side" aria-label="Round preparation">
-        {keyPoints.length > 0 && <section className="iv-panel is-key"><h3>3 things to get across</h3><ol>{keyPoints.map((point) => <li key={point}>{point}</li>)}</ol></section>}
-        {reminders.length > 0 && <section className="iv-panel"><h3>Before you start</h3><ul>{reminders.map((item) => <li key={item}>{item}</li>)}</ul></section>}
-        <section className="iv-panel"><h3>Ready for this round</h3><ul className="iv-checklist">{checklist.map(([label, done]) => <li key={label} className={done ? "is-done" : ""}><span aria-hidden="true">{done ? "✓" : "○"}</span>{label}<span className="sr-only">{done ? " (done)" : " (not yet)"}</span></li>)}</ul></section>
-        {otherPrep.length > 0 && <section className="iv-panel"><h3>Prep notes</h3>{otherPrep.map((section) => <details key={section.title} className="iv-details"><summary>{section.title}</summary><div className="iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(section.body) }} /></details>)}</section>}
-        <section className="iv-panel"><h3>Files</h3><ul className="iv-files">{artifacts.filter(([, path]) => path).map(([label, path]) => <li key={label}><button className="btn-link" onClick={() => onOpenFile(path!)}>{label}</button></li>)}</ul></section>
-      </aside>
-    </div>
+      {view === "research" && <div className="iv-research">
+        {researchSections.length > 1 && <nav className="iv-research-index" aria-label="Research sections"><ol>{researchSections.map((section, index) => <li key={section.title}><a href={`#iv-research-${index}`} onClick={(event) => { event.preventDefault(); document.getElementById(`iv-research-${index}`)?.scrollIntoView({ block: "start" }); }}>{section.title}</a></li>)}</ol></nav>}
+        <div className="iv-research-body">{researchSections.map((section, index) => <section key={section.title} id={`iv-research-${index}`} className="iv-section"><h3>{section.title}</h3><div className="iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(section.body, [], { readable: true }) }} /></section>)}</div>
+      </div>}
+
+      {view === "files" && <ul className="iv-filerows" aria-label="Files for this round">
+        {roundFiles.map(([label, path]) => <li key={label}><span><strong>{label}</strong><small>{path.split("/").slice(-2).join("/")}</small></span><button className="btn-quiet" onClick={() => onOpenFile(path)}>Open</button></li>)}
+      </ul>}
+    </SubTabPanel>
 
     {liveIndex !== null && liveCards[liveIndex] && <LiveMode cards={liveCards} index={liveIndex} stories={files.stories} reminder={reminders[0] ?? null} title={`${company}: ${round.label}`} onIndex={setLiveIndex} onClose={() => setLiveIndex(null)} />}
   </section>;
@@ -164,33 +205,38 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
 
 const KIND_LABEL: Record<CardKind, string> = { question: "Question", gap: "Gap", followup: "Follow-up", ask: "Ask them" };
 
-function storyLabel(value: string, stories: Record<string, string>): string {
-  const id = /^(S\d{1,2})\b/.exec(value)?.[1];
-  return id && stories[id] && !value.includes(stories[id]!) ? `${value} (${stories[id]})` : value;
+/** Proof or closest experience in plain words; the story title and IDs go in the tooltip. */
+function ProofText({ value, stories }: { value: string; stories: Record<string, string> }) {
+  const { text, ids } = splitIds(value);
+  const titles = ids.map((id) => stories[id] ? `${id} · ${stories[id]}` : id);
+  const shown = text || ids.map((id) => stories[id]).filter(Boolean).join(", ") || value;
+  return <span title={titles.join("\n") || undefined}>{shown}</span>;
 }
 
 function CardFields({ card, stories, large = false }: { card: InterviewCard; stories: Record<string, string>; large?: boolean }) {
+  const [followQuestion, followCue] = (card.followUp ?? "").split(/\s*→\s*/);
   return <dl className={`icard-fields ${large ? "is-large" : ""}`}>
     {card.why && <div><dt>Why they ask</dt><dd>{card.why}</dd></div>}
     {card.gap && <div><dt>Requirement</dt><dd>{card.gap}</dd></div>}
-    {card.example && <div><dt>Real example</dt><dd>{storyLabel(card.example, stories)}</dd></div>}
-    {card.closest && <div><dt>Closest real experience</dt><dd>{storyLabel(card.closest, stories)}</dd></div>}
-    {card.cues.length > 0 && <div><dt>Cues</dt><dd><ul className="cue-list">{card.cues.map((cue) => <li key={cue}>{cue}</li>)}</ul></dd></div>}
+    {card.cues.length > 0 && <div><dt>Say</dt><dd><ul className="say-list">{card.cues.map((cue) => <li key={cue}>{cue}</li>)}</ul></dd></div>}
     {card.approach.length > 0 && <div><dt>Your approach</dt><dd><ol className="step-list">{card.approach.map((step) => <li key={step}>{step}</li>)}</ol></dd></div>}
+    {card.example && <div><dt>Proof</dt><dd><ProofText value={card.example} stories={stories} /></dd></div>}
+    {card.closest && <div><dt>Closest real experience</dt><dd><ProofText value={card.closest} stories={stories} /></dd></div>}
     {card.ramp && <div><dt>Ramp plan</dt><dd>{card.ramp}</dd></div>}
     {card.landOn && <div className="is-land"><dt>Land on</dt><dd>{card.landOn}</dd></div>}
+    {card.followUp && <div className="is-follow"><dt>They may ask next</dt><dd>{followQuestion}{followCue && <span className="icard-follow-cue"> → {followCue}</span>}</dd></div>}
     {card.careful && <div className="is-careful"><dt>Careful</dt><dd>{card.careful}</dd></div>}
-    {card.notes && !large && <div><dt>Notes</dt><dd className="iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(card.notes) }} /></div>}
+    {card.notes && !large && <div><dt>Notes</dt><dd className="iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(card.notes, [], { readable: true }) }} /></div>}
   </dl>;
 }
 
-function InterviewCardItem({ card, index, open, stories, onToggle, onLive }: { card: InterviewCard; index: number; open: boolean; stories: Record<string, string>; onToggle: () => void; onLive: () => void }) {
-  const hasDetail = Boolean(card.why || card.example || card.cues.length || card.approach.length || card.landOn || card.gap || card.notes);
-  return <li className={`icard is-${card.kind} ${open ? "is-open" : ""}`}>
+function InterviewCardItem({ card, number, open, stories, onToggle, onLive }: { card: InterviewCard; number: number; open: boolean; stories: Record<string, string>; onToggle: () => void; onLive: () => void }) {
+  const hasDetail = Boolean(card.why || card.example || card.cues.length || card.approach.length || card.landOn || card.gap || card.notes || card.followUp);
+  return <li className={`icard is-${card.kind} ${open ? "is-open" : ""}`} id={`icard-${card.id}`}>
     <button className="icard-toggle" aria-expanded={hasDetail ? open : undefined} onClick={hasDetail ? onToggle : undefined}>
-      <span className="icard-num">{index + 1}</span>
+      <span className="icard-num">{number}</span>
       <span className="icard-q">{card.question}</span>
-      <span className="icard-kind">{KIND_LABEL[card.kind]}</span>
+      {card.kind !== "question" && <span className="icard-kind">{KIND_LABEL[card.kind]}</span>}
     </button>
     {!open && card.cues.length > 0 && <p className="icard-peek">{card.cues.join("  ·  ")}</p>}
     {open && <div className="icard-body"><CardFields card={card} stories={stories} /><button className="btn-link" onClick={onLive}>Practice in live mode</button></div>}

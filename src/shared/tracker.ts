@@ -32,6 +32,14 @@ export function followUpDays(tracker: Pick<JobTracker, "nextFollowUpAt"> | null,
   return Math.round((due - base) / 86_400_000);
 }
 
+/** True when the job got as far as interviews: recorded interviews, prepared rounds, or the tracker was ever Interviewing or Offer. */
+export function reachedInterview(job: { interviewRoundLabel: string | null; interviewRoundCount?: number; tracker: { status: TrackerStatus; history?: Array<{ status?: TrackerStatus | null }>; interviews?: unknown[] } | null }): boolean {
+  if ((job.tracker?.interviews?.length ?? 0) > 0) return true;
+  if (job.interviewRoundLabel || (job.interviewRoundCount ?? 0) > 0) return true;
+  const statuses = [job.tracker?.status, ...(job.tracker?.history ?? []).map((event) => event.status)];
+  return statuses.some((status) => status === "interviewing" || status === "offer");
+}
+
 export const STALE_DAYS = 30;
 
 /** Applied jobs (set or derived) whose applied date and last tracker change are both older than STALE_DAYS. */

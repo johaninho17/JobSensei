@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readJobQueue, saveJobQueue } from "../electron/job-queue";
-import { advanceQueue, agyReadiness, classifyAgyScreen } from "../src/shared/job-queue";
+import { advanceQueue, agyReadiness, classifyAgyScreen, newQueueItem, promptForItem } from "../src/shared/job-queue";
 import type { JobQueue, RunStatus } from "../src/shared/schemas";
 
-const item = (id: string, status: JobQueue["items"][number]["status"] = "queued", sentAt: string | null = null) => ({ id, url: `https://jobs.example.com/${id}`, addedAt: "2026-10-25T10:00:00Z", status, sentAt, finishedAt: null, jobId: null });
+const item = (id: string, status: JobQueue["items"][number]["status"] = "queued", sentAt: string | null = null) => ({ id, kind: "link" as const, url: `https://jobs.example.com/${id}`, label: null, note: null, manual: false, addedAt: "2026-10-25T10:00:00Z", status, sentAt, finishedAt: null, jobId: null });
 const run = (at: string, state: RunStatus["state"]): RunStatus => ({ kind: "application", jobId: "northstar-analyst", roundId: null, label: "Northstar Labs", at, durationSeconds: 60, state, fitScore: 4, gate: null, issues: [] });
 
 describe("job queue", () => {
@@ -64,8 +64,42 @@ describe("job queue", () => {
     expect(classifyAgyScreen("> ? for shortcutsGemini 4 Argon · medium")).toBe("ready");
     expect(classifyAgyScreen("┃ Verbosity is now medium by default ┃ esc to dismiss")).toBe("unknown");
     expect(classifyAgyScreen("Gemini 4 Argon · medium ⣯ Generating... ⚠ Individual quota reached. Please upgrade your subscription to increase your limits.")).toBe("blocked");
+    // A sandbox-bypass approval waits for the user even with the status line drawn below it.
+    expect(classifyAgyScreen("Confirm the command is safe to run outside of the sandbox with full network and disk access. Gemini 4 Argon · medium")).toBe("blocked");
+    expect(classifyAgyScreen("Reason: outside workspace Allow access to this file? > 1. Yes, allow access esc to cancelGemini 4 Argon · medium")).toBe("blocked");
     // The main process remembers "ready" even though the recent output no longer contains the status line.
     expect(agyReadiness({ running: true, agy: true, startedAt: now - 60_000, lastOutputAt: now - 20_000, recentOutput: "(Google AI Pro)", screen: "ready" }, now)).toBe(true);
     expect(agyReadiness({ running: true, agy: true, startedAt: now - 60_000, lastOutputAt: now - 20_000, recentOutput: "(Google AI Pro)", screen: "blocked" }, now)).toBe(false);
+  });
+});
+
+describe("pasted jobs in the queue", () => {
+  const now = new Date("2026-10-26T10:00:00Z");
+  const paste = (label: string, manual = true) => newQueueItem({ kind: "paste", label }, now, manual);
+
+  it("never sends a second paste while the first is running", () => {
+    const first = paste("Northstar Labs, Support Engineer");
+    const second = paste("Northstar Labs, Solution Analyst");
+    const start = advanceQueue({ autoRun: true, items: [first, second] }, null, now.getTime());
+    expect(start.send?.id).toBe(first.id);
+    expect(promptForItem(start.send!)).toContain(`paste ID ${first.id}`);
+    const later = advanceQueue(start.queue, run("2026-10-26T10:01:00Z", "running"), now.getTime() + 90_000);
+    expect(later.send).toBeNull();
+    expect(later.queue.items[1]!.status).toBe("queued");
+  });
+
+  it("runs chat items while automatic running is paused, but not other queued links", () => {
+    const fromChat = paste("Northstar Labs, Support Engineer");
+    const paused = advanceQueue({ autoRun: false, items: [item("job-aaaa"), fromChat] }, null, now.getTime());
+    expect(paused.send?.id).toBe(fromChat.id);
+    expect(paused.queue.items[0]!.status).toBe("queued");
+  });
+
+  it("gives pastes IDs that jd:fetch --staged accepts and sends links as before", () => {
+    expect(paste("x").id).toMatch(/^paste-[a-z0-9-]{4,40}$/);
+    const link = newQueueItem({ kind: "link", url: "https://jobs.example.com/1" }, now);
+    expect(promptForItem(link)).toBe("Evaluate this job and draft the application: https://jobs.example.com/1");
+    const noted = newQueueItem({ kind: "paste", label: null, note: "focus on\nthe API work" }, now, true);
+    expect(promptForItem(noted)).toBe(`Evaluate the job description I pasted (paste ID ${noted.id}) and draft the application. Note: focus on the API work`);
   });
 });

@@ -37,6 +37,14 @@ const QUOTED_SCRIPT = /[“"]([^”"\n]{120,})[”"]/;
 const MAX_LAND_ON_WORDS = 8;
 /** Words that turn a "land on" target into a slogan instead of something the candidate would say. */
 const SLOGAN_WORDS = /\b(?:bridge|full[- ]lifecycle|high[- ]reliability|seamless(?:ly)?|robust|world[- ]class|best[- ]in[- ]class|cutting[- ]edge|holistic|transformative|synerg\w*|leverag\w*|cleanly|paradigm|game[- ]chang\w*)\b/i;
+/** Extra slogan endings seen in generated landings ("fully aligned with role requirements"). */
+const SLOGAN_PHRASES = /\b(?:aligned with|role requirements|value[- ]add|perfect fit)\b/i;
+const MAX_SAY_WORDS = 10;
+/** Words that carry no fact on their own: a Say point made only of these names nothing the candidate did. */
+const ABSTRACT_WORDS = new Set("a an and the of to for in on with as at by from into it its my our your their i we you they is are be being clear clearly strong strongly good great effective effectively communication communicate communicating technical technically bridge bridging alignment aligned aligning grounded keeping keep ownership owning own collaboration collaborative cross-functional stakeholder stakeholders value impact impactful solutions solution focus focused passion passionate driven results-driven experience experienced expertise skills skill approach mindset quality excellence deep depth both sides internal external requirements needs customer-centric problem-solving problem solving".split(" "));
+/** Praise words that make a key point sound like a cover letter instead of a fact. */
+const PREP_PRAISE = /\b(?:proven track record|solid (?:background|foundation)|extensive experience|deep expertise|seasoned)\b/i;
+const MAX_KEY_POINT_WORDS = 20;
 const RESEARCH_SECTIONS: Array<[RegExp, string]> = [[/role decoded/i, "The role decoded"], [/requirement match/i, "Requirement match"], [/words to know/i, "Words to know"]];
 
 function section(markdown: string, heading: RegExp): string | null {
@@ -139,18 +147,40 @@ export async function checkInterviewRound(workspacePath: string, jobId: string, 
     const priorBank = await readText(workspace, `${interviewsRoot}/${prior.roundId}/question_bank.md`);
     for (const id of questionBankUsage(priorBank).storyIds) priorStoryIds.set(id, prior.roundId);
   }
+  let followUps = 0;
   for (const card of [...primary, ...gapCards]) {
-    const example = field(card.body, /^real example$|^closest real experience$/i);
+    // Proof (card v3) or the older "Real example"; gap cards use "Closest real experience".
+    const example = field(card.body, /^proof$|^real example$|^closest real experience$/i);
     const approach = field(card.body, /approach/i);
+    const say = field(card.body, /^say$|^cues$/i);
     const landOn = field(card.body, /^land on$/i);
     const label = card.heading.slice(0, 70);
-    if (example === null && approach === null) {
-      add("error", "CARD_UNANCHORED", "question_bank.md", `"${label}" needs a **Real example:** (story or evidence ID, or "none") or **Your approach:**.`);
+    const isGap = /^Gap\b/i.test(card.heading);
+    if (!isGap && say === null && approach === null && example === null) {
+      add("error", "CARD_UNANCHORED", "question_bank.md", `"${label}" needs **Say:** points or **Your approach:**.`);
+    } else if (isGap && example === null) {
+      add("error", "CARD_UNANCHORED", "question_bank.md", `"${label}" needs a **Closest real experience:** with a story or evidence ID.`);
     }
     const ids = [...(example ?? "").matchAll(EVIDENCE_ID_PATTERN)].map((match) => match[0]);
     const cardStories = [...(example ?? "").matchAll(STORY_ID_PATTERN)].map((match) => match[0]);
     if (example && !/^none\b/i.test(example) && !ids.length && !cardStories.length) {
-      add("error", "CARD_NO_EVIDENCE", "question_bank.md", `"${label}" cites a real example without a story or evidence ID.`);
+      add("error", "CARD_NO_EVIDENCE", "question_bank.md", `"${label}" cites proof without a story or evidence ID.`);
+    }
+    if (field(card.body, /^likely follow-up$/i)) followUps += 1;
+    // Say points (card v3 only; older Cues lines are left as they were written).
+    const sayLine = field(card.body, /^say$/i);
+    if (sayLine !== null) {
+      const points = sayLine.split(/\s+·\s+|;/).map((point) => point.trim()).filter(Boolean);
+      const words = (point: string) => point.toLowerCase().replace(/[^a-z0-9$%+.\s-]/g, " ").split(/\s+/).filter(Boolean);
+      const abstract = points.filter((point) => words(point).every((word) => ABSTRACT_WORDS.has(word)));
+      if (points.length < 3 || points.length > 5) {
+        add("warning", "SAY_POINT_COUNT", "question_bank.md", `"${label}": **Say:** has ${points.length} point(s); use 3–5.`);
+      }
+      const long = points.find((point) => words(point).length > MAX_SAY_WORDS);
+      if (long) add("warning", "SAY_POINT_TOO_LONG", "question_bank.md", `"${label}": "${long.slice(0, 60)}" is over ${MAX_SAY_WORDS} words; a point is a memory trigger, not a sentence.`);
+      if (abstract.length >= 2 || (points.length && abstract.length === points.length)) {
+        add("warning", "SAY_TOO_VAGUE", "question_bank.md", `"${label}": ${abstract.map((point) => `"${point}"`).join(", ")} name nothing concrete; name the tool, team, step, or result.`);
+      }
     }
     for (const id of ids) if (!knownEvidence.has(id)) add("error", "UNKNOWN_EVIDENCE_ID", "question_bank.md", `"${label}" cites ${id}, which is not in the job's evidence or the story bank.`);
     for (const id of cardStories) {
@@ -160,9 +190,22 @@ export async function checkInterviewRound(workspacePath: string, jobId: string, 
     if (!landOn) add("warning", "LAND_ON_MISSING", "question_bank.md", `"${label}" has no **Land on:** target.`);
     else if (landOn.split(/\s+/).filter(Boolean).length > MAX_LAND_ON_WORDS || /[“”"]/.test(landOn)) {
       add("warning", "LAND_ON_TOO_LONG", "question_bank.md", `"${label}": **Land on:** is a 3–${MAX_LAND_ON_WORDS} word target, not a sentence to recite.`);
-    } else if (SLOGAN_WORDS.test(landOn)) {
+    } else if (SLOGAN_WORDS.test(landOn) || SLOGAN_PHRASES.test(landOn)) {
       add("warning", "LAND_ON_SLOGAN", "question_bank.md", `"${label}": **Land on:** "${landOn}" reads like a slogan; use words the candidate would say out loud.`);
     }
+  }
+
+  if (primary.length && followUps > Math.ceil(primary.length / 2)) {
+    add("warning", "FOLLOWUP_EVERYWHERE", "question_bank.md", `${followUps} of ${primary.length} cards have a **Likely follow-up:**; keep it to the questions most likely to get one.`);
+  }
+
+  // Key points: one short line each, IDs only in trailing parentheses, no praise words.
+  for (const item of (section(prep, /things to get across/i) ?? "").split("\n").map((line) => /^\s*(?:[-*]|\d+[.)])\s+(.+)$/.exec(line)?.[1] ?? "").filter(Boolean)) {
+    const text = item.replace(/\s*\(([^()]*)\)\s*\.?$/, "");
+    const label = text.replace(/[*_`]/g, "").slice(0, 60);
+    if (text.replace(/[*_`]/g, "").split(/\s+/).filter(Boolean).length > MAX_KEY_POINT_WORDS) add("warning", "PREP_POINT_TOO_LONG", "prep.md", `"${label}…" is over ${MAX_KEY_POINT_WORDS} words; one plain line per point.`);
+    if (new RegExp(EVIDENCE_ID_PATTERN.source, "i").test(text) || new RegExp(STORY_ID_PATTERN.source).test(text)) add("warning", "PREP_RAW_ID", "prep.md", `"${label}…" has an ID in the text; put story and evidence IDs in trailing parentheses only.`);
+    if (PREP_PRAISE.test(text)) add("warning", "PREP_PRAISE", "prep.md", `"${label}…" uses praise words; state the fact instead.`);
   }
 
   // Facts the candidate must supply themselves.

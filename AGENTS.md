@@ -2,6 +2,8 @@
 
 JobSensei is a local-first career workspace. Candidate identity, chronology, preferences, source paths, and truth boundaries come from `data/profile/candidate.json` and the active context manifest. Never assume a particular person, employer, school, location, or filename.
 
+**Paths:** your terminal starts in the workspace, which is the `data/` folder. A path written `data/<path>` in these instructions is `<path>` from where you are (`data/profile/story_bank.md` → `profile/story_bank.md`). Never look for a `data/` folder inside the workspace.
+
 ## Core rules
 
 - Never invent candidate experience, tools, dates, metrics, ownership, credentials, projects, or outcomes. Frame real work confidently, but every claim must be defensible in an interview.

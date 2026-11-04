@@ -1,8 +1,9 @@
 import { mkdir, readFile, readdir } from "node:fs/promises";
+import { postingRecordFor } from "./posting-record";
 import { basename, join, resolve } from "node:path";
 import { candidateProfileSchema, type CandidateProfile, type EvidenceSnapshot, type InterviewLogistics } from "../src/shared/schemas";
 import { BANNED_PHRASES, narrativeStoryLines } from "./evidence-snapshot";
-import { bestEvidenceForRequirement, extractRequiredItems, extractResponsibilityItems, parseMustHaves } from "./fit-scoring";
+import { bestEvidenceForRequirement, parseMustHaves } from "./fit-scoring";
 import { writeJsonAtomic } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
 
@@ -108,7 +109,7 @@ function sectionBody(markdown: string, heading: RegExp): string {
 /** Questions, story IDs, and reverse questions a round already used (for no-overlap across rounds). */
 export function questionBankUsage(markdown: string): QuestionBankUsage {
   const questions = [...markdown.matchAll(/^###\s+(?:Question|Gap|Follow-up)\s*\d*\s*[:.]\s*(.+)$/gim)].map((match) => match[1]!.trim());
-  const storyIds = [...new Set([...markdown.matchAll(/\*\*Real example:?\*\*:?\s*(.+)$/gim)]
+  const storyIds = [...new Set([...markdown.matchAll(/\*\*(?:Proof|Real example):?\*\*:?\s*(.+)$/gim)]
     .flatMap((match) => [...match[1]!.matchAll(STORY_ID_PATTERN)].map((id) => id[0])))];
   const reverseQuestions = sectionBody(markdown, /questions to ask/i).split("\n")
     .map((line) => /^\s*(?:[-*]|\d+[.)])\s+(.+)$/.exec(line)?.[1]?.replace(/[*_"“”]/g, "").trim() ?? "")
@@ -204,8 +205,8 @@ export async function buildInterviewContext(workspacePath: string, jobId: string
     job: {
       company: job.company ?? null,
       title: title || null,
-      requiredItems: extractRequiredItems(jobDescription),
-      responsibilities: extractResponsibilityItems(jobDescription),
+      requiredItems: postingRecordFor(jobDescription).requiredItems,
+      responsibilities: postingRecordFor(jobDescription).responsibilities,
     },
     gaps,
     evidenceRows,

@@ -3,13 +3,38 @@ import type { JobQueue, JobQueueItem, RunStatus } from "./schemas";
 /** Minutes a sent link may run without a finished application before it needs attention. */
 export const QUEUE_TIMEOUT_MINUTES = 12;
 
-/** The one line Agy gets after the app stages a pasted JD (`jd:fetch -- --staged` prints it). */
-export function pastedJdPrompt(note = ""): string {
-  return `Evaluate the job description I pasted and draft the application${note ? ` (${note.replace(/[\r\n]+/g, " ").slice(0, 200)})` : ""}`;
+/** The one line Agy gets for a pasted JD; Agy loads it with `sensei jd:fetch --staged <paste-id>`. */
+export function pastedJdPrompt(pasteId: string, label: string | null = null, note: string | null = null): string {
+  const oneLine = (value: string, max: number) => value.replace(/[\r\n]+/g, " ").slice(0, max);
+  const what = label ? `: ${oneLine(label, 120)}` : "";
+  return `Evaluate the job description I pasted (paste ID ${pasteId}${what}) and draft the application${note ? `. Note: ${oneLine(note, 200)}` : ""}`;
 }
 
 export function queuePrompt(url: string): string {
   return `Evaluate this job and draft the application: ${url}`;
+}
+
+/** What Agy is sent for a queue item. */
+export function promptForItem(item: JobQueueItem): string {
+  return item.kind === "paste" ? pastedJdPrompt(item.id, item.label, item.note) : queuePrompt(item.url ?? "");
+}
+
+/** A new queue item; paste IDs start with "paste-" so `jd:fetch --staged` accepts them. */
+export function newQueueItem(input: { kind: "link"; url: string } | { kind: "paste"; label: string | null; note?: string | null }, now: Date, manual = false, random = Math.random): JobQueueItem {
+  const suffix = `${now.getTime().toString(36)}-${random().toString(36).slice(2, 6)}`;
+  return {
+    id: input.kind === "paste" ? `paste-${suffix}` : `job-${suffix}`,
+    kind: input.kind,
+    url: input.kind === "link" ? input.url : null,
+    label: input.kind === "paste" ? input.label : null,
+    note: input.kind === "paste" ? input.note?.trim().slice(0, 200) || null : null,
+    manual,
+    addedAt: now.toISOString(),
+    status: "queued",
+    sentAt: null,
+    finishedAt: null,
+    jobId: null,
+  };
 }
 
 /**
@@ -29,14 +54,15 @@ export function advanceQueue(queue: JobQueue, latest: RunStatus | null, now: num
   }
   const busy = items.some((item) => item.status === "running") || latest?.state === "running";
   const blocked = items.some((item) => item.status === "needs_attention");
-  // Links wait (and keep queueing) until Agy is running, signed in, and idle.
-  const next = queue.autoRun && agyReady && !busy && !blocked ? items.find((item) => item.status === "queued") ?? null : null;
+  // Items wait (and keep queueing) until Agy is running, signed in, and idle; one runs at a time.
+  // Items sent from the chat run even while automatic running is paused.
+  const next = agyReady && !busy && !blocked ? items.find((item) => item.status === "queued" && (queue.autoRun || item.manual)) ?? null : null;
   if (next) Object.assign(next, { status: "running", sentAt: new Date(now).toISOString() });
   return { queue: { ...queue, items }, send: next };
 }
 
 /** Screens where Agy cannot take a prompt: sign-in, folder trust, or a used-up quota. */
-const BLOCKING = /select login method|waiting for authentication|authorization code|authentication (?:failed|timed out)|do you trust the contents|use a google cloud project|quota reached|upgrade your subscription/gi;
+const BLOCKING = /select login method|waiting for authentication|authorization code|authentication (?:failed|timed out)|do you trust the contents|use a google cloud project|quota reached|upgrade your subscription|safe to run outside of the sandbox|do you want to proceed\?|allow access to this file\?/gi;
 /** Agy's status line (model and effort), drawn once it is signed in and at its prompt. */
 const READY_LINE = /(?:gemini|claude|gpt)[^\n·]{0,40}·\s*(?:low|medium|high|xhigh|max)\b/gi;
 /** Agy redraws while it works, so this long without output means it is idle. */
@@ -58,7 +84,8 @@ export function plainTerminalText(output: string): string {
  * sign-in or trust screen ("ready"), a sign-in or trust screen ("blocked"), or neither ("unknown").
  */
 export function classifyAgyScreen(plainTail: string): "ready" | "blocked" | "unknown" {
-  if (/do you trust the contents/i.test(plainTail.slice(-700))) return "blocked";
+  // These screens keep the status line drawn below them, so a recent one wins over it.
+  if (/do you trust the contents|safe to run outside of the sandbox|do you want to proceed\?|allow access to this file\?/i.test(plainTail.slice(-700))) return "blocked";
   const ready = lastIndex(READY_LINE, plainTail);
   const blocked = lastIndex(BLOCKING, plainTail);
   if (ready < 0 && blocked < 0) return "unknown";

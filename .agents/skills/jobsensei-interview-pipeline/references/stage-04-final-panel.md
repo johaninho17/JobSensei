@@ -22,7 +22,7 @@ Fit with the company's direction, accountability and learning from mistakes, wor
 ## `prep.md` sections
 
 1. `## Before you start` and `## Learn before the interview` (pipeline-owned).
-2. `## Where I'm heading`: 2–3 cues tying the candidate's real direction to the company's public direction.
+2. `## Where I'm heading`: 2–3 points tying the candidate's real direction to the company's public direction.
 3. `## My stories for this round`: story IDs not used in Rounds 01–03.
 
 ## Not in this round

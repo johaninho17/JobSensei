@@ -1,6 +1,8 @@
 import { readFile, readdir, stat } from "node:fs/promises";
+import { postingRecordFor } from "./posting-record";
 import { basename, join, resolve } from "node:path";
 import {
+  type StretchScore,
   applicationContextSchema,
   applicationEvidenceSchema,
   applicationRunSchema,
@@ -37,6 +39,7 @@ import { assertInsideWorkspace } from "./workspace";
 import { normalizeEvidenceClassifications, scoreEvaluation } from "./fit-scoring";
 import { canonicalCoverLetterDrifts, canonicalResumeDrifts } from "./canonical-resume";
 import { readCandidateProfile } from "./candidate-profile";
+import { scoreStretch } from "./stretch-score";
 
 interface LoadedApplication {
   jobPath: string;
@@ -290,7 +293,7 @@ export async function validateJobApplication(workspacePath: string, jobId: strin
   const issues: ValidationIssue[] = [];
   validateRunIntegrity(loaded, issues);
   validateVisibleArtifacts(loaded, issues);
-  validateEvidenceMap(loaded, issues);
+  const stretch = validateEvidenceMap(loaded, issues);
   const ats = await inspectExportedResumePdf(loaded, issues);
 
   const hasErrors = issues.some((candidate) => candidate.severity === "error");
@@ -301,6 +304,7 @@ export async function validateJobApplication(workspacePath: string, jobId: strin
     snapshotId: loaded.snapshot?.snapshotId ?? null,
     manifestHash: loaded.manifestHash,
     ats,
+    stretch,
     keywordClasses: keywordClasses(loaded),
     issues,
   });
@@ -448,6 +452,28 @@ export function jobDescriptionEchoes(letter: string, jobDescription: string, ign
   return found;
 }
 
+const GENERIC_REQUIREMENT_WORDS = new Set(["experience", "demonstrated", "ability", "strong", "using", "within", "including", "support", "work", "working", "proven", "skills", "knowledge", "years", "excellent", "track", "record", "related", "field", "equivalent", "high", "quality", "with", "that", "this", "from", "their", "your", "will"]);
+
+/**
+ * Letter sentences that restate one of the posting's required items (written to tick a box rather
+ * than tell the candidate's work): at least four distinctive words and 35% of the requirement's wording.
+ */
+export function restatedRequirements(letterBody: string, requiredItems: string[]): Array<{ sentence: string; requirement: string }> {
+  const words = (text: string) => new Set(text.toLowerCase().replace(/[^a-z0-9\s-]+/g, " ").split(/[\s-]+/)
+    .filter((word) => word.length >= 4 && !GENERIC_REQUIREMENT_WORDS.has(word)));
+  const sentences = letterBody.split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter(Boolean);
+  const found: Array<{ sentence: string; requirement: string }> = [];
+  for (const requirement of requiredItems) {
+    const wanted = words(requirement);
+    if (wanted.size < 4) continue;
+    for (const sentence of sentences) {
+      const shared = [...words(sentence)].filter((word) => wanted.has(word)).length;
+      if (shared >= 4 && shared / wanted.size >= 0.35 && !found.some((item) => item.sentence === sentence)) found.push({ sentence, requirement });
+    }
+  }
+  return found;
+}
+
 /**
  * Opening sentences of 15+ words with no first-person reference. These are the
  * "lecture the employer about their own business" sentences the brief forbids.
@@ -506,14 +532,8 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
       if (!scoring) {
         issues.push(issue("FIT_SCORING_UNVERIFIED", "evaluation.md", "Requirement Scoring", "The evaluation has no machine-checkable requirement scoring table.", "Future runs should include the required per-requirement classification table; keep this existing evaluation readable.", "warning"));
       } else {
-        const declared = /Weighted Fit Score\*{0,2}\s*:\*{0,2}\s*(\d(?:\.\d+)?)\s*\/\s*5(?:\.0)?/i.exec(loaded.evaluationMarkdown)?.[1];
-        if (!declared || Math.abs(Number(declared) - scoring.score) > 0.05) {
-          issues.push(issue("FIT_SCORE_MISMATCH", "evaluation.md", "Weighted Fit Score", `The declared score does not match the requirement-level arithmetic (${scoring.score.toFixed(2)} / 5).`, "Use the deterministic requirement score and its applicable core-work cap.", "warning"));
-        }
-        const confidence = /Fit Confidence\*{0,2}\s*:\*{0,2}\s*([^\n]+)/i.exec(loaded.evaluationMarkdown)?.[1]?.replace(/[\u0060*]/g, "").trim().toLowerCase();
-        if (confidence && confidence !== scoring.confidence) {
-          issues.push(issue("FIT_CONFIDENCE_MISMATCH", "evaluation.md", "Fit Confidence", `The declared confidence is ${confidence}; requirement coverage supports ${scoring.confidence}.`, "Derive confidence from direct weighted coverage instead of application enthusiasm.", "warning"));
-        }
+        // The finalizer writes the score and confidence lines from this arithmetic and the app shows the
+        // computed score, so a different number in an older file (e.g. after recalibration) is not flagged.
         for (const adjustment of bounded.adjustments.slice(0, 5)) {
           issues.push(issue(
             adjustment.evidenceChanged ? "FIT_EVIDENCE_REMAPPED" : "FIT_CLASSIFICATION_INFLATED",
@@ -682,6 +702,17 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
         "warning",
       ));
     }
+    const restated = restatedRequirements(loaded.coverMarkdown.replace(/^[\s\S]*?\n(?:dear|to whom)[^\n]*\n/i, ""), postingRecordFor(loaded.jobDescriptionText ?? "").requiredItems);
+    if (restated.length) {
+      issues.push(issue(
+        "COVER_LETTER_RESTATES_REQUIREMENT",
+        "cover_letter.md",
+        "bodyParagraphs",
+        `A letter sentence restates a requirement instead of telling your work: “${restated[0]!.sentence}”.`,
+        "Replace it with a real example from your evidence, or cut it; the resume and interview cover the checklist.",
+        "warning",
+      ));
+    }
     const employerSentences = openingSentencesNotAboutCandidate(firstParagraph);
     if (employerSentences.length) {
       issues.push(issue(
@@ -706,12 +737,13 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
   }
 }
 
-function validateEvidenceMap(loaded: LoadedApplication, issues: ValidationIssue[]): void {
+/** Validates the claim map; returns the stretch score for the drafts it covers (null when it can't be read). */
+function validateEvidenceMap(loaded: LoadedApplication, issues: ValidationIssue[]): StretchScore | null {
   if (loaded.evidenceUnreadable || !loaded.evidence) {
     issues.push(issue("EVIDENCE_MAP_INCOMPLETE", ".sensei/application_evidence.json", null, "The compact evidence map is missing or malformed.", "The drafts remain reviewable, but their claim grounding is not fully machine-verified.", "warning"));
-    return;
+    return null;
   }
-  if (!loaded.run || !loaded.snapshot || !loaded.resumeName || !loaded.resumeMarkdown || !loaded.coverMarkdown) return;
+  if (!loaded.run || !loaded.snapshot || !loaded.resumeName || !loaded.resumeMarkdown || !loaded.coverMarkdown) return null;
   for (const [field, expected, actual] of [
     ["applicationRunId", loaded.run.runId, loaded.evidence.applicationRunId],
     ["evidenceSnapshotId", loaded.snapshot.snapshotId, loaded.evidence.evidenceSnapshotId],
@@ -723,7 +755,7 @@ function validateEvidenceMap(loaded: LoadedApplication, issues: ValidationIssue[
   if (loaded.evidence.resume.publicArtifact !== loaded.resumeName) {
     issues.push(issue("EVIDENCE_MAP_MISMATCH", ".sensei/application_evidence.json", "resume.publicArtifact", "The evidence map identifies another resume.", "Stop and leave the drafts pending review.", "error"));
   }
-  collectClaimIssues(issues, "RESUME_GROUNDING_INVALID", (claimFailures) => validateResumeAuditJson(
+  const resumeFailures = collectClaimIssues(issues, "RESUME_GROUNDING_INVALID", (claimFailures) => validateResumeAuditJson(
     resumeAuditFromEvidence(loaded.evidence!),
     {
       publicMarkdown: loaded.resumeMarkdown!,
@@ -734,7 +766,7 @@ function validateEvidenceMap(loaded: LoadedApplication, issues: ValidationIssue[
       claimFailures,
     },
   ));
-  collectClaimIssues(issues, "COVER_GROUNDING_INVALID", (claimFailures) => validateCoverLetterAuditJson(
+  const coverFailures = collectClaimIssues(issues, "COVER_GROUNDING_INVALID", (claimFailures) => validateCoverLetterAuditJson(
     coverAuditFromEvidence(loaded.evidence!),
     {
       publicMarkdown: loaded.coverMarkdown!,
@@ -744,6 +776,24 @@ function validateEvidenceMap(loaded: LoadedApplication, issues: ValidationIssue[
       claimFailures,
     },
   ));
+  const snapshot = loaded.snapshot;
+  return scoreStretch({
+    lines: [
+      ...loaded.evidence.resume.claimMappings.map((mapping) => ({ text: mapping.publicText, claimType: mapping.claimType, evidenceIds: mapping.evidenceIds, artifact: "resume" as const })),
+      ...loaded.evidence.coverLetter.claimMappings.map((mapping) => ({ text: mapping.publicText, claimType: mapping.claimType, evidenceIds: mapping.evidenceIds, artifact: "cover-letter" as const })),
+    ],
+    baselineLines: [
+      ...(snapshot.canonicalResume?.employers.flatMap((employer) => employer.originalBullets) ?? []),
+      ...(snapshot.canonicalResume?.originalSkillsLines ?? []),
+    ],
+    rowText: new Map(snapshot.evidenceRows.map((row) => [row.evidenceId, `${row.claim} ${row.scope}`])),
+    // Only failures that mean the line says more than its evidence; evidence-rule failures (corroboration,
+    // routing, currency) are reported as warnings but are not inflation.
+    unsupported: [...resumeFailures, ...coverFailures]
+      .filter((failure) => INFLATION_FAILURE.test(failure.message))
+      .map((failure) => ({ text: failure.explanation.sentence ?? "", reason: failure.message }))
+      .filter((line) => line.text),
+  });
 }
 
 function resumeAuditFromEvidence(evidence: ApplicationEvidence) {
@@ -827,12 +877,14 @@ async function readJsonState<T>(path: string, schema: { parse(value: unknown): T
 }
 
 const MAX_CLAIM_ISSUES = 10;
+/** Grounding failures that mean a line claims more than its evidence (used by the stretch score). */
+const INFLATION_FAILURE = /names terms|skills not found|upgrades ownership|public metric|share no wording|denylist|deny:/i;
 
 /**
  * Grounding warnings name every failing line with the rows it cited. A stale manifest is
  * MANIFEST_STALE's job, so it is not repeated here.
  */
-function collectClaimIssues(issues: ValidationIssue[], code: string, run: (claimFailures: ClaimFailure[]) => unknown): void {
+function collectClaimIssues(issues: ValidationIssue[], code: string, run: (claimFailures: ClaimFailure[]) => unknown): ClaimFailure[] {
   const claimFailures: ClaimFailure[] = [];
   collectError(issues, code, ".sensei/application_evidence.json", () => run(claimFailures), "warning");
   const hint = "Cite the evidence row whose text contains the claim's terms, or reword the line to what the row says.";
@@ -842,6 +894,7 @@ function collectClaimIssues(issues: ValidationIssue[], code: string, run: (claim
   if (claimFailures.length > MAX_CLAIM_ISSUES) {
     issues.push(issue(code, ".sensei/application_evidence.json", null, `${claimFailures.length - MAX_CLAIM_ISSUES} more lines have the same kind of grounding problem.`, hint, "warning"));
   }
+  return claimFailures;
 }
 
 function collectError(

@@ -571,16 +571,41 @@ function namedTerms(publicText: string, jobDescription: string): string[] {
   return [...terms];
 }
 
+/** Everything a skills line may name: eligible rows routed to this job, its cited rows, and the base resume. */
+function skillsVocabulary(evidenceIds: string[], snapshot: EvidenceSnapshot): { text: string; tokens: Set<string> } {
+  const routed = snapshot.applicationRouting?.selectedEvidenceIds;
+  const eligibleIds = snapshot.evidenceRows
+    .filter((row) => row.eligibility === "eligible" && (!routed || routed.includes(row.evidenceId)))
+    .map((row) => row.evidenceId);
+  return groundingVocabulary([...new Set([...evidenceIds, ...eligibleIds])], snapshot);
+}
+
+/**
+ * Drops each skills term no evidence supports (the same check as `validateSkillTerms`), keeping the
+ * label and the order. Returns the line ("" when nothing supported is left) and what was removed.
+ */
+export function pruneUnsupportedSkills(line: string, evidenceIds: string[], snapshot: EvidenceSnapshot): { text: string; removed: string[] } {
+  const vocabulary = skillsVocabulary(evidenceIds, snapshot);
+  const label = /^\s*(?:\*\*[^*]+:\*\*|\*\*[^*]+\*\*:|[^:*]{1,60}:)\s*/.exec(line)?.[0] ?? "";
+  const body = line.slice(label.length).trim();
+  const period = body.endsWith(".");
+  const segments = body.replace(/\.$/, "").split(/,\s*(?![^()]*\))/).map((segment) => segment.trim()).filter(Boolean);
+  const removed: string[] = [];
+  const kept = segments.filter((segment) => {
+    const supported = skillTerms(`x: ${segment}`).every((forms) => forms.some((form) => termSupported(form, vocabulary)));
+    if (!supported) removed.push(segment);
+    return supported;
+  });
+  if (!removed.length) return { text: line, removed };
+  return { text: kept.length ? `${label}${kept.join(", ")}${period ? "." : ""}` : "", removed };
+}
+
 /**
  * A skills line sums up the whole career, so each term must appear in an eligible row routed
  * to this job (or the base resume), not only in the rows the line happens to cite.
  */
 function validateSkillTerms(publicText: string, evidenceIds: string[], snapshot: EvidenceSnapshot): void {
-  const routed = snapshot.applicationRouting?.selectedEvidenceIds;
-  const eligibleIds = snapshot.evidenceRows
-    .filter((row) => row.eligibility === "eligible" && (!routed || routed.includes(row.evidenceId)))
-    .map((row) => row.evidenceId);
-  const vocabulary = groundingVocabulary([...new Set([...evidenceIds, ...eligibleIds])], snapshot);
+  const vocabulary = skillsVocabulary(evidenceIds, snapshot);
   const missing = skillTerms(publicText).filter((forms) => !forms.some((form) => termSupported(form, vocabulary))).map((forms) => forms.join(" / "));
   if (missing.length) {
     throw new ClaimValidationError(`Skills not found in any eligible evidence row or the base resume: ${missing.join(", ")}.`, claimExplanation(publicText, "skills", evidenceIds, snapshot));
@@ -591,7 +616,8 @@ function validateSkillTerms(publicText: string, evidenceIds: string[], snapshot:
  * Framed wording may reword its rows (ledger T4) but may not name a tool, product, or
  * organization they lack. Metrics and ownership have their own checks.
  */
-function validateNamedTermSupport(publicText: string, evidenceIds: string[], snapshot: EvidenceSnapshot, claimType: string): void {
+/** Throws when a line names terms its cited rows don't mention (also used for application answers). */
+export function validateNamedTermSupport(publicText: string, evidenceIds: string[], snapshot: EvidenceSnapshot, claimType: string): void {
   const vocabulary = groundingVocabulary(evidenceIds, snapshot);
   const jobDescription = snapshot.evidenceRows.find((row) => row.evidenceId === `job:${snapshot.jobId}:original-jd`)?.claim ?? "";
   const missing = namedTerms(publicText, jobDescription).filter((term) => !termSupported(term, vocabulary));

@@ -11,20 +11,19 @@ Use this skill automatically for a pasted JD or direct job-posting URL. The cand
 
 For a normal run, read only this skill, the supplied JD, and the job's `.sensei/application_context.json` (once, the whole file). Do not read anything else.
 
-**Commands:** your terminal starts in the workspace. Run every pipeline command exactly as `sensei <command> <args>` (the app puts `sensei` on your PATH). Never `cd`, `pwd`, or `ls` to find the app. Do not open source code, schemas, validators, other skills, raw context, the full snapshot, the base resume, or any existing job. Do not use subagents, scratch scripts, directory exploration, broad search, or prior application artifacts.
+**Commands:** your terminal starts in the workspace. Run every pipeline command exactly as `sensei <command> <args>` (the app puts `sensei` on your PATH). Never `cd`, `pwd`, or `ls` to find the app. Do not open source code, schemas, validators, other skills, raw context, the full snapshot, the base resume, or any existing job. Do not use subagents, scratch scripts, directory exploration, broad search, or prior application artifacts. Never edit `.sensei/` files other than the bundle, and never rename generated files: if a command fails, report its message and stop.
 
-For a URL: run the `jd:fetch` script exactly once with the URL. It prints the clean JD plus the company, title, and a suggested job ID, and stages it for the snapshot. Never use curl, inline scripts (`node -e`, `python -c`), or a second fetch. If the command says it couldn't read the page, ask the user to paste the JD and stop.
+For a URL: run the `jd:fetch` script exactly once with the URL. It prints the clean JD (the app has already removed the application form and page buttons) plus the company, title, and a suggested job ID, and stages it for the snapshot. Never use curl, inline scripts (`node -e`, `python -c`), or a second fetch, except one rerun with `BypassSandbox` when the command says there is no network. If it prints "Stop here", tell the user the page couldn't be read, ask them to paste the job description in the app, and end the run. Never look for the posting another way (other URLs, APIs, web search).
 
-For a JD pasted in the app ("Evaluate the job description I pasted…"): the app already saved it. Run `sensei jd:fetch --staged` once; it prints the JD, company, title, and suggested job ID exactly like a URL fetch. Then follow the URL path.
+For a JD pasted in the app ("Evaluate the job description I pasted (paste ID <id>…)"): the app saved it under that ID. Run `sensei jd:fetch --staged <id>` once with that exact ID; it prints the JD, company, title, and suggested job ID exactly like a URL fetch. Then follow the URL path. The app sends one job at a time, so finish this one before anything else.
 
 ## One-Pass Flow
 
-1. Get the JD: for a URL, run `sensei jd:fetch "<url>"`; for a JD pasted in the app, run `sensei jd:fetch --staged`; for text pasted any other way, use it as given. Screen it once.
-2. Score exactly six distinct capabilities: `core` 40%, `technical` 25%, `scope` 15%, `outcomes` 10%, `domain` 5%, and `learning` 5%. Use `direct` 1.00, `strong_transferable` 0.80, `adjacent_transferable` 0.65, `unclear` 0.25, and `gap` 0. Do not score personality, logistics, or ordinary learnable tools as standalone requirements; required items go in the Must-Have table below. A learnable must-have never stops a screen; only a blocker does. Below `3.5/5` (before must-have penalties), report the screen and stop.
-3. Use the `suggestedJobId` from `jd:fetch` (or derive lowercase kebab-case `<company>-<role-title>` for pasted text). Never run `ls` or create folders, `pdfs/`, or metadata files yourself.
+1. Get the JD: for a URL, run `sensei jd:fetch "<url>"`; for a JD pasted in the app, run `sensei jd:fetch --staged <paste-id>`. If the user pastes a JD straight into this terminal, ask them to paste it in the app's Add jobs box instead and stop (the app cleans it and asks for a missing company). Screen it once.
+2. Screen once: stop only for a blocker you can see in the posting (legal, credential, clearance, location) or a role far outside the candidate's field. The app scores the fit from the Evaluation Table and reports it against `fitGate` in the context.
+3. Use the `suggestedJobId` from `jd:fetch`. Never run `ls` or create folders, `pdfs/`, or metadata files yourself.
 4. Run the snapshot exactly once, then read `jobs/<job-id>/.sensei/application_context.json` once in a single full read:
-   - URL or JD pasted in the app: `sensei context:snapshot <job-id> --from-fetched` (it creates the job folder and `original_jd.md` from the staged posting).
-   - Text pasted outside the app: first write `jobs/<job-id>/original_jd.md`, then `sensei context:snapshot <job-id>`.
+   `sensei context:snapshot <job-id> --from-fetched` (it creates the job folder and `original_jd.md` from the staged posting). If `jd:fetch` printed `"company": null`, add `--company "<employer>"` only when the JD names the hiring employer itself, and start the job ID with that name in kebab-case. A business unit, team, division, brand line, or recruiting agency is never the company; if the JD names no employer, ask the user for the company and stop.
 5. In one file-writing turn, create only `.sensei/application_bundle.json` (contract below). Keep it short; the finalizer fills in everything unchanged:
    - Leave out earlier employers entirely. They are kept exactly as in the base resume.
    - For the current employer, write the 3–4 reworked bullets as text, and keep each remaining bullet as `{ "baseline": N }` (N = its position in `baselineBullets`, starting at 1), in the order you want.
@@ -50,39 +49,23 @@ For an explicit regeneration, the saved JD is the only job-specific input. Exist
 
 ## Evaluation Table
 
-Put this table in `evaluationMarkdown`; the finalizer calculates the authoritative total:
+Put this table in `evaluationMarkdown`. Rate every item in the context's `requirements` list (the posting's own required items and main responsibilities), one row each, in order, starting the Requirement cell with its ID. The app writes the posting's wording, the weights, the Must-Have table, and the score; a skipped item counts as a gap.
 
 ```markdown
 ### Requirement Scoring
-| Requirement | Category | Weight | Material | Classification | Evidence |
-| --- | --- | ---: | --- | --- | --- |
-| Primary role capability | core | 40% | yes | strong_transferable | context:exact:id |
-| Required technical capability | technical | 25% | yes | direct | context:exact:id |
-| Expected ownership and scope | scope | 15% | yes | adjacent_transferable | context:exact:id |
-| Expected delivery outcome | outcomes | 10% | yes | strong_transferable | context:exact:id |
-| Specialized product knowledge | domain | 5% | no | unclear | context:exact:id |
-| Learnable ramp-up requirement | learning | 5% | no | strong_transferable | context:exact:id |
+| Requirement | Category | Classification | Evidence | Blocker |
+| --- | --- | --- | --- | --- |
+| req:1 | technical | direct | context:exact:id | |
+| req:2 | core | adjacent_transferable | context:exact:id | |
+| req:3 | scope | gap | | |
 ```
 
-Then rate every item in the context's `mustHaves` list, one row each, in order, starting the Requirement cell with its ID. If `mustHaves` is empty, list the posting's hard requirements yourself.
+- **Category:** `core` (the central work), `technical` (skills, methods, systems), `scope` (ownership, seniority, stakeholders), `outcomes`, `domain` (industry or employer platform), or `learning`.
+- **Classification**, judged against the candidate's evidence rows, never the title or the posting: `direct` (same action, method, scope, and ownership), `strong_transferable` (substantially the same work with a different tool or setting), `adjacent_transferable` (a real foundation, clearly less), `unclear`, `gap`. The app checks each rating against the cited row and the posting's wording.
+- **Evidence:** the row that shows it. Never present foundation or coursework as production experience.
+- **Blocker:** `yes` only for a legal, credential, clearance, or location requirement the candidate cannot meet.
 
-```markdown
-### Must-Have Requirements
-| Requirement | Status | Evidence | Note |
-| --- | --- | --- | --- |
-| must:1 Proficiency in Java or Kotlin | learnable | context:exact:id | Foundation in related languages; no production use |
-| must:2 Fluency in SQL | met | context:exact:id | |
-```
-
-The finalizer checks this table: an item you skip counts as learnable, and `met` needs an evidence ID whose claim actually shows the requirement (otherwise it becomes learnable). Don't add rows the posting doesn't require.
-
-- `met`: the cited evidence row shows it.
-- `learnable`: no production evidence, but it can be learned on the job (languages, frameworks, tools, methods). Cite foundation evidence (coursework, a related language) when it exists. Each learnable must-have lowers the visible score slightly; it never turns a YES into a NO.
-- `blocker`: only legal, credential, clearance, or location requirements the candidate cannot meet.
-
-Never hide a must-have inside a broader category row. Never present foundation or coursework as production experience.
-
-Functional equivalence may earn transferable credit even when tools differ. Direct credit still requires matching action, method, scope, and ownership. Exact tools, production scope, specialized domains, metrics, and outcomes stay strict.
+If `requirements` is empty, use the same five columns and write six rows of your own, one per category, with a short label in the Requirement cell instead of an ID (the app adds the weights and the score), plus a `### Must-Have Requirements` table (`| Requirement | Status | Evidence | Note |`, status `met` / `learnable` / `blocker`) for the posting's hard requirements.
 
 ## Single Bundle Contract
 
@@ -137,4 +120,4 @@ Every editable skills line, rewritten bullet, and factual cover-letter sentence 
 
 ## Time Budget
 
-Use at most 5 operations: `jd:fetch` (URL or `--staged`; write `original_jd.md` only for text pasted outside the app), the snapshot, one context read, one bundle write, and the finalize. Never list directories, read files for context, or create scaffolding. Target: under 60 seconds end to end. A warning is a completed run, not permission to investigate or repair.
+Use at most 5 operations: `jd:fetch` (URL or `--staged <paste-id>`), the snapshot, one context read, one bundle write, and the finalize. Never list directories, read files for context, or create scaffolding. Target: under 60 seconds end to end. A warning is a completed run, not permission to investigate or repair.

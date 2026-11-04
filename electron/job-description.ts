@@ -24,14 +24,25 @@ function headingTitle(markdown: string): string | null {
   return heading && !/^(?:original\s+)?job\s+description$|evaluation/i.test(heading) ? heading : null;
 }
 
-/** Parses labeled metadata. `headingFallback` (job postings only) takes the title from the first `#` heading. */
+/**
+ * A pasted posting usually starts with the role name on its own line ("Customer Solutions Engineer"), with no `#`
+ * heading. That line is the title when it is short, has no label, and is not a sentence.
+ */
+export function firstLineTitle(markdown: string): string | null {
+  const line = markdown.replace(/\r\n?/g, "\n").split("\n").map((value) => value.replace(/^#+\s*/, "").replace(/\*\*/g, "").trim()).find(Boolean);
+  if (!line || line.length > 90 || line.length < 3) return null;
+  if (/[.!?]$/.test(line) || /^[^:]{1,30}:\s/.test(line) || /^(?:original\s+)?job\s+description$|^(?:about|overview|summary|description|apply|job details?)\b/i.test(line)) return null;
+  return line;
+}
+
+/** Parses labeled metadata. `headingFallback` (job postings only) takes the title from the first `#` heading, else a title-like first line. */
 export function parseJobDescriptionMetadata(markdown: string, options: { headingFallback?: boolean } = { headingFallback: true }): JobDescriptionMetadata {
   return {
     company: labeledValue(markdown, ["Company", "Employer"]),
-    title: labeledValue(markdown, ["Job Title", "Role", "Position"]) ?? (options.headingFallback ? headingTitle(markdown) : null),
+    title: labeledValue(markdown, ["Job Title", "Role", "Position"]) ?? (options.headingFallback ? headingTitle(markdown) ?? (/^#\s/m.test(markdown) ? null : firstLineTitle(markdown)) : null),
     location: labeledValue(markdown, ["Location"]),
     jobId: labeledValue(markdown, ["Job ID", "Requisition ID"]),
-    url: labeledValue(markdown, ["Source URL", "Job URL", "URL"]),
+    url: [labeledValue(markdown, ["Source URL", "Job URL", "URL"]), labeledValue(markdown, ["Source"])].find((value) => value && /^https?:\/\//i.test(value)) ?? null,
   };
 }
 

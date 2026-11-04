@@ -56,3 +56,24 @@ describe("interview cards", () => {
     expect(storyTitles("## S1 · Partner launch\n## S2: Data migration")).toEqual({ S1: "Partner launch", S2: "Data migration" });
   });
 });
+
+describe("question card v3", () => {
+  it("reads Say, Proof, and Likely follow-up into the card fields", async () => {
+    const { splitIds } = await import("../src/renderer/interview-cards");
+    const [card] = parseInterviewCards([
+      "## Primary for this round",
+      "### Question 1: Tell me about a hard import?",
+      "- **Why they ask:** ownership",
+      "- **Say:** bad date column · wrote the fix guide · customer back in two days",
+      "- **Proof:** fixed a stalled customer import (S1)",
+      "- **Likely follow-up:** How did you find it? → diffed two exports",
+      "- **Land on:** found it, fixed it",
+    ].join("\n"));
+    expect(card).toMatchObject({ cues: ["bad date column", "wrote the fix guide", "customer back in two days"], example: "fixed a stalled customer import (S1)", followUp: "How did you find it? → diffed two exports" });
+    expect(splitIds(card!.example!)).toEqual({ text: "fixed a stalled customer import", ids: ["S1"] });
+    expect(splitIds("Imports fixed with `context:work:imports` for real customers (S1, S2)")).toEqual({ text: "Imports fixed with for real customers", ids: ["S1", "S2", "context:work:imports"] });
+    expect(splitIds("S3 · Android coursework app")).toEqual({ text: "Android coursework app", ids: ["S3"] });
+    expect(splitIds("Two weeks (remote first)")).toEqual({ text: "Two weeks (remote first)", ids: [] });
+    expect(splitIds("context:work:imports · central bug triage for imports")).toEqual({ text: "central bug triage for imports", ids: ["context:work:imports"] });
+  });
+});

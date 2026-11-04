@@ -1,5 +1,6 @@
 // Parses interview round Markdown (question_bank.md, prep.md, story_bank.md) into structured cards for the interview view.
-// Reads both the current card format (pipeline SKILL "Question card") and older free-form banks.
+// Reads the current card format (pipeline SKILL "Question card": Say / Proof / Likely follow-up), the older
+// Cues / Real example cards, and free-form banks. Say maps onto `cues` and Proof onto `example`.
 
 export type CardKind = "question" | "gap" | "followup" | "ask";
 
@@ -8,8 +9,12 @@ export type InterviewCard = {
   kind: CardKind;
   question: string;
   why: string | null;
+  /** Proof (or the older "Real example"). */
   example: string | null;
+  /** Say points (or the older "Cues"). */
   cues: string[];
+  /** The one question they will probably ask next, with its cue after "→". */
+  followUp: string | null;
   approach: string[];
   landOn: string | null;
   careful: string | null;
@@ -74,7 +79,7 @@ export function listItems(markdown: string): string[] {
 }
 
 function emptyCard(id: string, kind: CardKind, question: string): InterviewCard {
-  return { id, kind, question, why: null, example: null, cues: [], approach: [], landOn: null, careful: null, gap: null, closest: null, ramp: null, notes: null };
+  return { id, kind, question, why: null, example: null, cues: [], followUp: null, approach: [], landOn: null, careful: null, gap: null, closest: null, ramp: null, notes: null };
 }
 
 export function parseInterviewCards(markdown: string): InterviewCard[] {
@@ -108,8 +113,9 @@ export function parseInterviewCards(markdown: string): InterviewCard[] {
           const value = field[2]!.trim();
           lastField = label;
           if (/^why they ask$|^what it tests$|^why$/.test(label)) card.why = plain(value);
-          else if (/^real example$|^example$|^story$/.test(label)) card.example = isNone(value) ? null : plain(value);
-          else if (/^cues?$/.test(label)) card.cues = splitCues(value);
+          else if (/^proof$|^real example$|^example$|^story$/.test(label)) card.example = isNone(value) ? null : plain(value);
+          else if (/^say$|^cues?$/.test(label)) card.cues = splitCues(value);
+          else if (/^likely follow-up$|^follow-up$/.test(label)) card.followUp = plain(value);
           else if (/^your approach$|^approach$/.test(label)) card.approach = splitSteps(value);
           else if (/^land on$/.test(label)) card.landOn = plain(value);
           else if (/^careful$|^watch out$/.test(label)) card.careful = plain(value);
@@ -135,4 +141,24 @@ export function storyTitles(markdown: string): Record<string, string> {
   const titles: Record<string, string> = {};
   for (const match of markdown.matchAll(/^##\s+(S\d{1,2})\b\s*[·:—–-]?\s*(.*)$/gm)) titles[match[1]!] = plain(match[2] ?? "");
   return titles;
+}
+
+/** Story and evidence IDs pulled out of display text, so the view shows plain words (IDs go in a tooltip). */
+export function splitIds(value: string): { text: string; ids: string[] } {
+  const ids: string[] = [];
+  const text = value
+    .replace(/\s*\(([^()]*)\)\s*\.?$/, (whole, inner: string) => {
+      const found = inner.split(/[,;\s]+/).filter((part) => /^S\d{1,2}$|^[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9.+-]*){2,}$/i.test(part));
+      if (!found.length) return whole;
+      ids.push(...found);
+      return "";
+    })
+    .replace(/`?\b[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9.+-]*){2,}\b`?/gi, (id) => { ids.push(id.replace(/`/g, "")); return ""; })
+    .replace(/^(S\d{1,2})\s*·\s*/, (_whole, id: string) => { ids.push(id); return ""; })
+    .replace(/\(\s*[,;]*\s*\)/g, "")
+    .replace(/^[\s·,;:-]+|[\s·,;:-]+$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,;:])/g, "$1")
+    .trim();
+  return { text, ids: [...new Set(ids)] };
 }

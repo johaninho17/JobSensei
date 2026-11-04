@@ -274,6 +274,60 @@ describe("interview content v2 rules", () => {
   });
 });
 
+describe("question card v3 (Say / Proof)", () => {
+  const v3 = (n: number, say: string, extra: string[] = []) => [
+    `### Question ${n}: Tell me about question ${n}?`,
+    "- **Why they ask:** checks ownership",
+    `- **Say:** ${say}`,
+    `- **Proof:** fixed a stalled customer import (${n % 2 ? "S1" : "S2"})`,
+    ...extra,
+    "- **Land on:** found it, fixed it, documented it",
+    "",
+  ].join("\n");
+  const concrete = "import failed on a bad date column · wrote the fix guide · customer back in two days";
+
+  it("accepts concrete Say points with a cited Proof and follow-ups on a few cards", async () => {
+    const { root, write } = await workspace();
+    await write(`jobs/${JOB}/interviews/01-recruiter-screen/prep.md`, "## 3 things to get across\n- Fixed failing imports for real customers (S1)\n## Before you start\n- Answer first, then context\n");
+    const cards = Array.from({ length: 6 }, (_, i) => v3(i + 1, concrete, i === 0 ? ["- **Likely follow-up:** How did you find the column? → diffed two exports"] : []));
+    await write(`jobs/${JOB}/interviews/01-recruiter-screen/question_bank.md`, bank(cards));
+    const report = await checkInterviewRound(root, JOB, "01-recruiter-screen");
+    const codes = report.issues.map((item) => item.code);
+    expect(report.issues.filter((item) => item.severity === "error")).toEqual([]);
+    for (const code of ["SAY_TOO_VAGUE", "SAY_POINT_COUNT", "SAY_POINT_TOO_LONG", "FOLLOWUP_EVERYWHERE", "PREP_POINT_TOO_LONG", "PREP_RAW_ID", "PREP_PRAISE"]) expect(codes).not.toContain(code);
+  });
+
+  it("warns on vague or long Say points, follow-ups on every card, and wordy key points with IDs", async () => {
+    const { root, write } = await workspace();
+    await write(`jobs/${JOB}/interviews/01-recruiter-screen/prep.md`, [
+      "## 3 things to get across",
+      "- Proven track record supporting customers through every kind of import failure and reporting request across many different teams and regions every week (S1)",
+      "- Customer imports fixed using context:work:imports and S1 as the main example",
+      "## Before you start",
+    ].join("\n"));
+    const follow = ["- **Likely follow-up:** What next? → more detail"];
+    await write(`jobs/${JOB}/interviews/01-recruiter-screen/question_bank.md`, bank([
+      v3(1, "clear communication · technical bridge · keeping requirements grounded", follow),
+      v3(2, "only two · points here", follow),
+      v3(3, `${concrete} · I walked the customer through every single step of the import again`, follow),
+      ...Array.from({ length: 3 }, (_, i) => v3(i + 4, concrete, follow)),
+    ]));
+    const codes = (await checkInterviewRound(root, JOB, "01-recruiter-screen")).issues.map((item) => item.code);
+    expect(codes).toEqual(expect.arrayContaining(["SAY_TOO_VAGUE", "SAY_POINT_COUNT", "SAY_POINT_TOO_LONG", "FOLLOWUP_EVERYWHERE", "PREP_POINT_TOO_LONG", "PREP_RAW_ID", "PREP_PRAISE"]));
+  });
+
+  it("flags slogan landings like 'fully aligned with role requirements' and still requires an ID on Proof", async () => {
+    const { root, write } = await workspace();
+    await write(`jobs/${JOB}/interviews/01-recruiter-screen/prep.md`, "## 3 things to get across\n- Imports fixed (S1)\n");
+    const slogan = v3(1, concrete).replace("found it, fixed it, documented it", "fully aligned with role requirements");
+    const uncited = v3(2, concrete).replace(/\(S2\)/, "");
+    await write(`jobs/${JOB}/interviews/01-recruiter-screen/question_bank.md`, bank([slogan, uncited, ...Array.from({ length: 4 }, (_, i) => v3(i + 3, concrete))]));
+    const codes = (await checkInterviewRound(root, JOB, "01-recruiter-screen")).issues.map((item) => item.code);
+    expect(codes).toEqual(expect.arrayContaining(["LAND_ON_SLOGAN", "CARD_NO_EVIDENCE"]));
+    expect(questionBankUsage(bank([v3(1, concrete), v3(2, concrete)])).storyIds).toEqual(["S1", "S2"]);
+  });
+});
+
 describe("interview parsing and shared rules", () => {
   it("parses the story bank, voice, and question-bank usage formats the skills define", () => {
     expect(parseStoryBank(STORY_BANK)[0]).toMatchObject({ id: "S1", evidenceIds: ["context:work:imports"], themes: ["ownership", "hard customer"] });
@@ -296,6 +350,12 @@ describe("interview parsing and shared rules", () => {
     expect(skill).toContain("**Land on:**");
     expect(skill).toMatch(/never write `dashboardBrief`/i);
     expect(skill).toContain("## 3 things to get across");
+    // Card v3: Say / Proof, follow-ups only where likely, no follow-ups section.
+    expect(skill).toContain("**Say:**");
+    expect(skill).toContain("**Proof:**");
+    expect(skill).toMatch(/Likely follow-up\*\*: only on the cards/);
+    expect(skill).not.toContain("**Real example:**");
+    expect(skill).not.toContain("## Likely follow-ups");
     expect(await read(".agents/skills/jobsensei-interview-pipeline/references/research.md")).toContain("## Requirement match");
     const practical = await read(".agents/skills/jobsensei-interview-pipeline/references/stage-03-practical.md");
     expect(practical).not.toMatch(/telemetry pipelines|token cost|distributed tracing/i);
@@ -304,5 +364,11 @@ describe("interview parsing and shared rules", () => {
       expect(await read(`.agents/skills/jobsensei-interview-pipeline/references/${stage}.md`)).not.toContain("Glanceable Talking Cues");
     }
     expect(await read("AGENTS.md")).not.toContain("Interview Rules & Quality Standards");
+    // Agy's terminal starts inside the workspace (data/), so the interview flow names workspace-relative paths.
+    expect(await read("AGENTS.md")).toMatch(/`data\/profile\/story_bank\.md` → `profile\/story_bank\.md`/);
+    for (const file of [".agents/skills/jobsensei-interview-pipeline/SKILL.md", ".agents/workflows/jobsensei-story-bank.md", ".agents/skills/jobsensei-interview-coach/SKILL.md"]) {
+      expect(await read(file), file).not.toMatch(/`data\//);
+    }
+    expect(skill).toContain("`profile/story_bank.md`");
   });
 });

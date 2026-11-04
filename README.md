@@ -139,7 +139,7 @@ Normal onboarding creates a separate private `data/` workspace.
 
 ## Application Workflow
 
-Paste a job description or direct posting URL into the Agy panel. The `jobsensei-application-pipeline` skill:
+Paste a job description or a posting link into the Agy chat or the Jobs page's "Add jobs" box. Each one joins the job queue, and Agy works on one job at a time. The `jobsensei-application-pipeline` skill:
 
 1. Screens the role against the selected career evidence.
 2. Creates a job workspace only when the configured rating gate passes.

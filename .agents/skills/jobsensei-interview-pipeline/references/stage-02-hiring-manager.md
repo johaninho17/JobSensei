@@ -5,7 +5,7 @@ Card format, framing, gap questions, and limits are owned by the pipeline `SKILL
 
 ## What the manager is checking
 
-How the candidate actually operates: ownership, judgment under ambiguity, handling pushback, balancing urgent and long-term work, and working across teams. Managers often ask "give me a real case if you have one, otherwise walk me through your approach." Every card therefore offers a **Real example** (story ID) and **Your approach**.
+How the candidate actually operates: ownership, judgment under ambiguity, handling pushback, balancing urgent and long-term work, and working across teams. Managers often ask "give me a real case if you have one, otherwise walk me through your approach." Every card therefore offers a **Proof** (story ID) and **Your approach**.
 
 ## `question_bank.md` primary archetypes (8–10)
 
@@ -25,7 +25,7 @@ How the candidate actually operates: ownership, judgment under ambiguity, handli
 ## `prep.md` sections
 
 1. `## Before you start` and `## Learn before the interview` (pipeline-owned).
-2. `## How I work`: 3–4 cues of operating principles drawn from the candidate's real stories, each with a story ID.
+2. `## How I work`: 3–4 points of operating principles drawn from the candidate's real stories, each with a story ID.
 3. `## My stories for this round`: the story IDs chosen for this round (none used in Round 01), each with one cue and its framing limit.
 4. `## First 30-60-90 days`: realistic, short, learning-first for any gap areas.
 

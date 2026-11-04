@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { jobHealthSchema } from "./job-record";
 
 export const schemaVersion = 1;
 
@@ -230,6 +231,26 @@ export const trackerStatusSchema = z.enum(TRACKER_STATUSES);
 export type TrackerStatus = z.infer<typeof trackerStatusSchema>;
 const trackerDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.");
 export const trackerEventSchema = z.object({ at: z.string(), status: trackerStatusSchema });
+/** Interview rounds, in order. "other" covers anything that is not one of the four standard rounds. */
+export const INTERVIEW_ROUNDS = ["recruiter", "hiring_manager", "practical", "final", "other"] as const;
+export type InterviewRoundKind = (typeof INTERVIEW_ROUNDS)[number];
+/** One real interview (prep alone never counts). Entered by the user, or from a recording or debrief. */
+export const interviewEventSchema = z.object({
+  round: z.enum(INTERVIEW_ROUNDS),
+  date: trackerDateSchema.nullable().default(null),
+  note: z.string().max(500).default(""),
+  source: z.enum(["user", "recording", "debrief"]).default("user"),
+});
+export type InterviewEvent = z.infer<typeof interviewEventSchema>;
+export const OUTCOME_RESULTS = ["rejected", "withdrew", "no_reply", "offer", "accepted", "declined"] as const;
+/** How the application ended: the furthest stage, the result, and why (the user's words). */
+export const jobOutcomeSchema = z.object({
+  stageReached: z.enum(["applied", ...INTERVIEW_ROUNDS, "offer"]).nullable().default(null),
+  result: z.enum(OUTCOME_RESULTS).nullable().default(null),
+  reason: z.string().max(500).default(""),
+  date: trackerDateSchema.nullable().default(null),
+});
+export type JobOutcome = z.infer<typeof jobOutcomeSchema>;
 export const jobTrackerSchema = z.object({
   schemaVersion: z.literal(1).default(1),
   status: trackerStatusSchema.default("saved"),
@@ -237,6 +258,8 @@ export const jobTrackerSchema = z.object({
   nextFollowUpAt: trackerDateSchema.nullable().default(null),
   notes: z.string().max(5000).default(""),
   history: z.array(trackerEventSchema).max(200).default([]),
+  interviews: z.array(interviewEventSchema).max(30).default([]),
+  outcome: jobOutcomeSchema.nullable().default(null),
   updatedAt: z.string().nullable().default(null),
 });
 export type JobTracker = z.infer<typeof jobTrackerSchema>;
@@ -245,8 +268,47 @@ export const jobTrackerUpdateSchema = z.object({
   appliedAt: trackerDateSchema.nullable().optional(),
   nextFollowUpAt: trackerDateSchema.nullable().optional(),
   notes: z.string().max(5000).optional(),
+  interviews: z.array(interviewEventSchema).max(30).optional(),
+  outcome: jobOutcomeSchema.nullable().optional(),
 }).strict();
 export type JobTrackerUpdate = z.infer<typeof jobTrackerUpdateSchema>;
+
+/** How far the drafts reach past the evidence (see electron/stretch-score.ts). Shown beside fit, never part of it. */
+export const stretchScoreSchema = z.object({
+  level: z.enum(["low", "medium", "high"]),
+  tailoredPercent: z.number().min(0).max(100),
+  average: z.number().min(0).max(3),
+  counts: z.object({ asEvidence: z.number().int(), reworded: z.number().int(), framed: z.number().int(), unsupported: z.number().int() }),
+  top: z.array(z.object({
+    text: z.string(),
+    artifact: z.enum(["resume", "cover-letter"]),
+    level: z.number().int().min(0).max(3),
+    reason: z.string(),
+    evidenceIds: z.array(z.string()),
+  })),
+});
+export type StretchScore = z.infer<typeof stretchScoreSchema>;
+
+/** What a job is, for the Overview (electron/role-facts.ts). */
+export const roleFactsSchema = z.object({
+  summary: z.array(z.string()).default([]),
+  responsibilities: z.array(z.string()).default([]),
+  requiredCount: z.number().int().nonnegative().default(0),
+  experience: z.string().nullable().default(null),
+  workArrangement: z.string().nullable().default(null),
+  workMode: z.enum(["remote", "hybrid", "onsite"]).nullable().default(null),
+  pay: z.string().nullable().default(null),
+  payRange: z.object({ min: z.number().nullable(), max: z.number().nullable(), currency: z.string().nullable(), period: z.enum(["year", "month", "hour"]).nullable() }).nullable().default(null),
+  travel: z.string().nullable().default(null),
+  seniority: z.string().nullable().default(null),
+  workAuthorization: z.string().nullable().default(null),
+  tools: z.array(z.string()).default([]),
+  company: z.string().nullable().default(null),
+  process: z.array(z.string()).default([]),
+  source: z.string().nullable().default(null),
+  missing: z.array(z.string()).default([]),
+});
+export type RoleFactsSummary = z.infer<typeof roleFactsSchema>;
 
 export const jobFolderSummarySchema = z.object({
   id: z.string(),
@@ -263,11 +325,23 @@ export const jobFolderSummarySchema = z.object({
   ratingConfidence: z.string().nullable().default(null),
   ratingHighlights: z.array(z.string()).default([]),
   ratingGaps: z.array(z.string()).default([]),
+  /** The posting's required items as rated: met, learnable, or blocker. */
+  mustHaves: z.array(z.object({ requirement: z.string(), status: z.enum(["met", "learnable", "blocker"]) })).default([]),
+  /** Posting requirements rated as a gap or unclear, in the posting's words. */
+  requirementGaps: z.array(z.string()).default([]),
+  stretch: stretchScoreSchema.nullable().default(null),
   location: z.string().nullable().default(null),
   interviewRoundLabel: z.string().nullable().default(null),
+  /** Interview round folders under interviews/ (prepared rounds, old and new formats). */
+  interviewRoundCount: z.number().int().nonnegative().default(0),
+  role: roleFactsSchema.nullable().default(null),
   hasApplicationMaterials: z.boolean().default(false),
   /** Null until the user sets a status; the UI then shows "Saved". */
   tracker: jobTrackerSchema.nullable().default(null),
+  /** How complete each area of the job is (from the job record). */
+  health: jobHealthSchema.nullable().default(null),
+  /** Posting tools in rows the evidence didn't cover (from the job record). */
+  gapTerms: z.array(z.string()).default([]),
 });
 export type JobFolderSummary = z.infer<typeof jobFolderSummarySchema>;
 
@@ -742,8 +816,12 @@ const applicationContextV2Schema = z.object({
     editableSkillCategories: z.array(z.string()),
   }),
   footprint: resumeFootprintSchema,
-  /** The posting's required items; the evaluation rates each one (must:N) in the Must-Have table. */
+  /** Older contexts: the posting's required items, rated in a Must-Have table. */
   mustHaves: z.array(z.object({ id: z.string().min(1), requirement: z.string().min(1) })).optional(),
+  /** The posting's required items and main responsibilities; the evaluation rates each one (req:N). */
+  requirements: z.array(z.object({ id: z.string().min(1), text: z.string().min(1), kind: z.enum(["required", "responsibility"]) })).optional(),
+  /** The fit score below which the app reports the job as under the gate. */
+  fitGate: z.number().optional(),
   evidenceRows: z.array(compactEvidenceRowSchema),
   denylistRules: z.array(z.object({
     ruleId: z.string().min(1),
@@ -962,6 +1040,7 @@ export const validationIssueSchema = z.object({
 export type ValidationIssue = z.infer<typeof validationIssueSchema>;
 export type ValidationIssueExplanation = z.infer<typeof validationIssueSchema>["explanation"];
 
+
 export const applicationValidationReportSchema = z.object({
   status: z.enum(["passed", "failed", "not_ready"]),
   jobId: z.string().min(1),
@@ -982,6 +1061,7 @@ export const applicationValidationReportSchema = z.object({
     classification: z.enum(["supported", "transferable", "unsupported"]),
     evidenceIds: z.array(z.string()),
   })).default([]),
+  stretch: stretchScoreSchema.nullable().default(null),
   issues: z.array(validationIssueSchema),
 });
 export type ApplicationValidationReport = z.infer<typeof applicationValidationReportSchema>;
@@ -1073,13 +1153,21 @@ export type ClarifyingAnswersReport = z.infer<typeof clarifyingAnswersReportSche
 /** Job links waiting to be sent to Agy one at a time: `.sensei/job_queue.json` in the workspace. */
 export const jobQueueItemSchema = z.object({
   id: z.string().regex(/^[a-z0-9-]{6,40}$/),
-  url: z.string().url().max(400).refine((value) => /^https?:\/\//i.test(value), "Use an http(s) link."),
+  /** A link Agy fetches, or a JD pasted in the app and saved under the item's ID (`.sensei/staged-jds/<id>.md`). */
+  kind: z.enum(["link", "paste"]).default("link"),
+  url: z.string().url().max(400).refine((value) => /^https?:\/\//i.test(value), "Use an http(s) link.").nullable().default(null),
+  /** What the queue shows before a job folder exists, e.g. "Northstar Labs, Support Analyst". */
+  label: z.string().max(200).nullable().default(null),
+  /** What the user typed with a paste ("focus on the API work"); passed to Agy in the prompt. */
+  note: z.string().max(200).nullable().default(null),
+  /** Sent from the chat: runs when Agy is free even while automatic running is paused. */
+  manual: z.boolean().default(false),
   addedAt: z.string(),
   status: z.enum(["queued", "running", "done", "needs_attention"]),
   sentAt: z.string().nullable().default(null),
   finishedAt: z.string().nullable().default(null),
   jobId: z.string().nullable().default(null),
-});
+}).refine((item) => item.kind === "paste" || item.url !== null, "A link item needs its link.");
 export type JobQueueItem = z.infer<typeof jobQueueItemSchema>;
 export const jobQueueSchema = z.object({ autoRun: z.boolean().default(true), items: z.array(jobQueueItemSchema).max(50).default([]) });
 export type JobQueue = z.infer<typeof jobQueueSchema>;
@@ -1096,6 +1184,41 @@ export type RunStatus = {
   fitScore: number | null;
   gate: string | null;
   issues: Array<{ severity: "error" | "warning"; code: string; message: string }>;
+};
+
+/** A written question from an application form or a paste (electron/application-questions.ts). */
+export type ApplicationQuestion = {
+  id: string;
+  label: string;
+  /** Word limit from the question ("[150 words max]", "1000 characters" ≈ 166 words, "2-3 sentences" ≈ 75); null when none is given. */
+  wordLimit: number | null;
+  /** Sentence limit from the question ("In 2-3 sentences" → 3); null when none is given. */
+  sentenceLimit?: number | null;
+  /** The question asks for the candidate's own words ("Please write this one yourself"): notes only, never a draft. */
+  writeYourself: boolean;
+  required: boolean;
+  /** Plainly logistics ("How did you hear about us?"): skipped without asking Agy. */
+  logistics?: boolean;
+  /** The user pressed "Answer anyway": Agy must answer it, not skip it. */
+  force?: boolean;
+};
+/** What Agy decided for a question: answer it, skip it (with a reason), or give notes only (write-yourself). */
+export type QuestionDecision = "answer" | "skip" | "notes";
+/** How a question is answered: a real example, why this company, how the candidate would go about it, or other. */
+export type QuestionKind = "experience" | "motivation" | "approach" | "other";
+export type QuestionAnswer = { id: string; text: string | null; notes: string[]; evidenceIds: string[]; storyIds: string[]; words: number; issues: string[]; decision?: QuestionDecision; kind?: QuestionKind; reason?: string | null };
+/** A job's application questions and their background answers (`jobs/<id>/.sensei/application_questions.json`). */
+export type QuestionsState = {
+  source: "posting" | "pasted";
+  sourceUrl: string | null;
+  status: "reading" | "answering" | "done" | "failed" | "none";
+  questions: ApplicationQuestion[];
+  answers: QuestionAnswer[];
+  message: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationSeconds: number | null;
+  conversationId: string | null;
 };
 
 export interface SenseiApi {
@@ -1153,7 +1276,12 @@ export interface SenseiApi {
     /** Saves a pasted JD where `jd:fetch` stages links; Agy then gets one short prompt. */
     /** Saves CSV text to a file the user picks; returns its path, or null when cancelled. */
     exportCsv(csv: string): Promise<string | null>;
-    stagePastedJd(text: string): Promise<{ company: string | null; title: string | null; suggestedJobId: string | null }>;
+    /** Saves a pasted JD under its queue item ID (`paste-…`). */
+    stagePastedJd(text: string, id: string): Promise<{ company: string | null; title: string | null; suggestedJobId: string | null }>;
+    /** Fetches a posting in the app and saves it under a paste ID; throws a plain message when the page can't be read. */
+    stageLink(url: string, id: string): Promise<{ company: string | null; title: string | null; suggestedJobId: string | null }>;
+    /** The company the user named for a saved paste that names none. */
+    setStagedCompany(id: string, company: string): Promise<{ company: string | null; title: string | null; suggestedJobId: string | null }>;
   };
   interviews: {
     getOverview(jobId: string): Promise<InterviewOverview | null>;
@@ -1166,6 +1294,16 @@ export interface SenseiApi {
   };
   runs: {
     latest(): Promise<RunStatus | null>;
+  };
+  /** Scenario questions answered by a background Agy (electron/question-agent.ts). */
+  questions: {
+    get(jobId: string): Promise<{ state: QuestionsState | null; running: boolean }>;
+    auto(jobId: string): Promise<void>;
+    ask(jobId: string, text: string): Promise<void>;
+    retry(jobId: string): Promise<void>;
+    /** Answers a question Agy (or the logistics filter) skipped. */
+    answerAnyway(jobId: string, questionId: string): Promise<void>;
+    onUpdated(callback: (jobId: string, state: QuestionsState) => void): () => void;
   };
   queue: {
     get(): Promise<JobQueue>;

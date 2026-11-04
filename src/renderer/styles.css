@@ -340,7 +340,7 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
 .panel-resizer.is-left { background: transparent}
 .panel-resizer.is-left::after { background: transparent}
 .panel-resizer.is-left:hover::after, .panel-resizer.is-left:focus-visible::after { background: var(--accent); color: var(--on-accent)}
-.viewer-panel { container-type: inline-size; width: 100%; box-sizing: border-box; padding: 32px clamp(28px, 4vw, 64px) 70px; background: var(--canvas)}
+.viewer-panel { container-type: inline-size; width: 100%; box-sizing: border-box; padding: 24px clamp(20px, 3vw, 40px) 56px; background: var(--canvas)}
 .viewer-header { padding-bottom: 20px; border-color: var(--line)}
 .viewer-header h1 { color: var(--ink); font-size: var(--fs-28)}
 .viewer-close { width: 34px; height: 34px; font-size: var(--fs-22)}
@@ -386,7 +386,7 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
 .job-pdf-export .export-message { max-width: 210px}
 .pdf-text-size { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font: var(--fs-12) var(--font-ui)}
 .pdf-text-size select { min-width: 92px; padding: 6px 24px 6px 8px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--ink); background: var(--raised); font: var(--fs-12) var(--font-ui)}
-.workspace-tabs { position: sticky; top: -32px; z-index: 14; display: flex; gap: var(--space-5); margin-bottom: var(--space-5); padding: 0; border-bottom: 1px solid var(--line); background: var(--canvas)}
+.workspace-tabs { position: sticky; top: calc(-1 * var(--space-5)); z-index: 14; display: flex; gap: var(--space-5); margin-bottom: var(--space-5); padding: 0; border-bottom: 1px solid var(--line); background: var(--canvas)}
 .workspace-tabs button { min-height: 44px; margin-bottom: -1px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); background: transparent; cursor: pointer; font-size: var(--fs-15); font-weight: 600}
 .workspace-tabs button.is-active { color: var(--ink); border-bottom-color: var(--ink); background: none}
 .workspace-tabs button span { margin-left: 7px; color: var(--muted); font-size: var(--fs-12)}
@@ -561,7 +561,6 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
   .jobs-toolbar { top: -26px; grid-template-columns: minmax(0, 1fr)}
   .workspace-search { grid-column: auto}
   .workspace-tabs { overflow-x: auto}
-  .workspace-tabs button { flex: 1 0 max-content}
 }
 
 @media (max-width: 900px) {

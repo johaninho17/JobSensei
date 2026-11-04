@@ -1,11 +1,15 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { evidenceSnapshotSchema, type ArtifactFile, type FileTreeNode, type JobFolderSummary } from "../src/shared/schemas";
+import { evidenceSnapshotSchema, stretchScoreSchema, type ArtifactFile, type FileTreeNode, type JobFolderSummary } from "../src/shared/schemas";
 import { previewFile } from "./files";
 import { assertInsideWorkspace } from "./workspace";
-import { normalizeEvidenceClassifications, scoreEvaluation } from "./fit-scoring";
+import { normalizeEvidenceClassifications, parseFitRequirements, parseMustHaves, scoreEvaluation } from "./fit-scoring";
 import { parseJobDescriptionMetadata } from "./job-description";
 import { readJobTracker } from "./tracker";
+import { readPostingRecord } from "./posting-record";
+import { buildJobRecord, saveJobRecord } from "./job-record";
+import { effectiveStatus } from "../src/shared/tracker";
+import { roleFacts } from "./role-facts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -60,7 +64,10 @@ async function legacyJobMetadata(jobPath: string): Promise<{ company: string | n
   const next = lines[lines.indexOf(first) + 1];
   const parsed = parseCompanyAndTitle(first);
   if (parsed.title) return parsed;
-  return { company: first, title: next && !/^location:/i.test(next) ? next : null };
+  // "Company" then "Title" on the next line, but only when the next line is a short title, not the opening paragraph.
+  const titleLike = (value: string | undefined) => Boolean(value && value.length <= 90 && !/[.!?]$/.test(value) && !/^[^:]{1,30}:/.test(value));
+  if (titleLike(next)) return { company: first, title: next! };
+  return { company: null, title: titleLike(first) ? first : null };
 }
 
 function normalizedDate(value: unknown): string | null {
@@ -110,12 +117,16 @@ function sectionBullets(markdown: string, headingPattern: RegExp, limit = 4): st
   return result;
 }
 
-function evaluationInsights(markdown: string): Pick<JobFolderSummary, "ratingDecision" | "ratingConfidence" | "ratingHighlights" | "ratingGaps"> {
+function evaluationInsights(markdown: string): Pick<JobFolderSummary, "ratingDecision" | "ratingConfidence" | "ratingHighlights" | "ratingGaps" | "mustHaves" | "requirementGaps"> {
   const decision = markdown.match(/(?:gate status|screening status|recommendation)\s*[:|]\s*\*{0,2}`?([^\n*`|]+)/i)?.[1]?.trim() ?? null;
   const confidence = markdown.match(/(?:fit confidence|confidence)\s*[:|]\s*\*{0,2}`?([^\n*`|]+)/i)?.[1]?.trim() ?? null;
   const ratingHighlights = sectionBullets(markdown, /direct matches?|strengths?|transferable evidence/i);
   const ratingGaps = sectionBullets(markdown, /gaps?|risks?|hard blockers?/i);
-  return { ratingDecision: decision, ratingConfidence: confidence, ratingHighlights, ratingGaps };
+  const mustHaves = parseMustHaves(markdown).map((row) => ({ requirement: row.requirement.replace(/^must:\d+\s*/i, ""), status: row.status }));
+  const requirementGaps = (parseFitRequirements(markdown) ?? [])
+    .filter((row) => row.classification === "gap" || row.classification === "unclear")
+    .map((row) => row.requirement.replace(/^req:\d+\s*/i, ""));
+  return { ratingDecision: decision, ratingConfidence: confidence, ratingHighlights, ratingGaps, mustHaves, requirementGaps };
 }
 
 export async function readRating(jobPath: string, status: JsonRecord): Promise<number | null> {
@@ -153,6 +164,20 @@ export async function readRating(jobPath: string, status: JsonRecord): Promise<n
   return null;
 }
 
+async function readRoleFacts(jobPath: string) {
+  const posting = await readFile(join(jobPath, "original_jd.md"), "utf8").catch(() => readFile(join(jobPath, "original_jd.txt"), "utf8")).catch(() => "");
+  if (!posting.trim()) return null;
+  // Saves .sensei/posting.json when it is missing or older than the posting or the parser (one-time for old jobs).
+  await readPostingRecord(jobPath);
+  const research = await readFile(join(jobPath, "interviews", "company_research.md"), "utf8").catch(() => "");
+  return roleFacts(posting, research);
+}
+
+async function countInterviewRounds(jobPath: string): Promise<number> {
+  const entries = await readdir(join(jobPath, "interviews"), { withFileTypes: true }).catch(() => []);
+  return entries.filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).length;
+}
+
 async function readCurrentInterviewLabel(jobPath: string): Promise<string | null> {
   const interview = await readJson(join(jobPath, "interviews", "interview.json"));
   const rounds = Array.isArray(interview.rounds) ? interview.rounds.filter((round): round is JsonRecord => Boolean(round && typeof round === "object" && !Array.isArray(round))) : [];
@@ -167,7 +192,7 @@ async function readCurrentInterviewLabel(jobPath: string): Promise<string | null
 const SUMMARY_INPUTS = [
   "", ".sensei", "interviews", ".sensei/job.json", "job.json", ".sensei/status.json", "status.json", "evaluation.md",
   "original_jd.md", "original_jd.txt", ".sensei/application_run.json", ".sensei/evidence_snapshot.json", ".sensei/tracker.json",
-  "interviews/interview.json",
+  "interviews/interview.json", ".sensei/validation_report.json", "interviews/company_research.md",
 ];
 const summaryCache = new Map<string, { key: string; summary: JobFolderSummary }>();
 const treeCache = new Map<string, { key: string; node: FileTreeNode | null }>();
@@ -195,7 +220,8 @@ export async function listJobFolders(workspacePath: string): Promise<JobFolderSu
     const cached = summaryCache.get(path);
     if (cached?.key === key) return cached.summary;
     const summary = await readJobSummary(path, entry.name);
-    summaryCache.set(path, { key, summary });
+    // Reading a job may save its posting and job records in .sensei; key the cache after those writes.
+    summaryCache.set(path, { key: await summaryKey(path), summary });
     return summary;
   }));
   return summaries.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.name.localeCompare(b.name));
@@ -222,6 +248,23 @@ async function readJobSummary(path: string, name: string): Promise<JobFolderSumm
   const [rating, interviewRoundLabel] = await Promise.all([readRating(path, legacyStatus), readCurrentInterviewLabel(path)]);
   const insights = evaluationInsights(evaluation);
   const createdAt = await creationDate(path, files, metadata.createdAt, info.birthtime.toISOString());
+  const tracker = await readJobTracker(path);
+  const interviewRoundCount = await countInterviewRounds(path);
+  const posting = await readPostingRecord(path);
+  const pdfs = await readdir(join(path, "pdfs")).then((names) => names.filter((file) => /\.pdf$/i.test(file)).length, () => 0);
+  const record = buildJobRecord({
+    jobId: name,
+    posting,
+    evaluation,
+    rating,
+    decision: insights.ratingDecision,
+    confidence: insights.ratingConfidence,
+    documents: { evaluation: Boolean(evaluation.trim()), resume: hasResume, coverLetter: hasCoverLetter, answers: files.some((file) => file.isFile() && file.name === "application_answers.md"), pdfs },
+    preparedRounds: interviewRoundCount,
+    tracker,
+    status: effectiveStatus({ tracker, hasApplicationMaterials, interviewRoundLabel }),
+  });
+  await saveJobRecord(path, record).catch(() => undefined);
   return {
     id: name,
     relativePath: `jobs/${name}`,
@@ -236,8 +279,13 @@ async function readJobSummary(path: string, name: string): Promise<JobFolderSumm
     ...insights,
     location: stringValue(metadata.location, legacyStatus.location),
     interviewRoundLabel,
+    interviewRoundCount,
+    role: await readRoleFacts(path),
     hasApplicationMaterials,
-    tracker: await readJobTracker(path),
+    tracker,
+    health: record.health,
+    gapTerms: record.gapTerms,
+    stretch: await readJson(join(path, ".sensei", "validation_report.json")).then((report) => stretchScoreSchema.nullable().catch(null).parse(report.stretch ?? null)),
   };
 }
 

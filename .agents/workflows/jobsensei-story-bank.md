@@ -2,11 +2,11 @@
 
 ## Description
 
-Build or refresh the candidate's personal story bank at `data/profile/story_bank.md`: 6–8 true work stories that every interview round picks from. Run once before the first interview prep, or when the user asks to refresh it.
+Build or refresh the candidate's personal story bank at `profile/story_bank.md` (workspace-relative; your terminal starts in the workspace): 6–8 true work stories that every interview round picks from. Run once before the first interview prep, or when the user asks to refresh it.
 
 ## Steps
 
-1. Read `data/profile/candidate.json`, the selected structured context (including `context/structured/interview-stories.md` when it exists), and `data/profile/interview_voice.md` if present. Do not read job folders or transcripts.
+1. Read `profile/candidate.json`, the selected structured context (including `context/structured/interview-stories.md` when it exists), and `profile/interview_voice.md` if present. Do not read job folders or transcripts.
 2. Choose 6–8 stories from different experiences that together cover these themes: ownership, a hard customer or stakeholder, ambiguity, fast learning, a mistake and recovery, working across teams, technical or functional depth, and bridging a skill gap. Each story covers 2–3 themes; no theme should rest on a single story.
 3. Write each story exactly in this format (the app parses it):
 
@@ -24,4 +24,4 @@ Build or refresh the candidate's personal story bank at `data/profile/story_bank
 
 ## Command Firewall
 
-No scripts or commands. Read files and write `data/profile/story_bank.md` only.
+No scripts or commands. Read files and write `profile/story_bank.md` only.
