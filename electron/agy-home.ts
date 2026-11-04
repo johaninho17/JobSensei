@@ -93,7 +93,7 @@ export function boundaryDenyRules(workspacePath: string, extraPaths: string[] = 
  * (from a source checkout) the compiled scripts and their dependencies.
  */
 export function launcherReadPaths(home: string, launcher: { appRoot: string; runtimePath: string }): string[] {
-  const bundle = /^(.*?\.app)(?:\/|$)/.exec(launcher.runtimePath)?.[1] ?? dirname(launcher.runtimePath);
+  const bundle = /^(.*?\.app)(?:[\\/]|$)/.exec(launcher.runtimePath)?.[1] ?? dirname(launcher.runtimePath);
   // Node reads the nearest package.json to load a compiled script.
   return [join(home, "bin"), bundle, join(launcher.appRoot, "dist-electron"), join(launcher.appRoot, "node_modules"), join(launcher.appRoot, "package.json")];
 }

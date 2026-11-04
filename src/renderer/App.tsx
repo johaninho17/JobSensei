@@ -1040,6 +1040,10 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
   const [exported, setExported] = useState("");
   const [closing, setClosing] = useState(false);
   const [healthOpen, setHealthOpen] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [anchor, setAnchor] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(storedFavoriteJobIds);
   const [sort, setSort] = useState<"added" | "company" | "role" | "follow-up" | "fit">(() => {
     const stored = window.localStorage.getItem("sensei-jobs-sort");
@@ -1094,10 +1098,42 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
     try { for (const job of closed) await onUpdateTracker(job.id, { status: "rejected" }, { quiet: true }); } finally { setClosing(false); }
     onToast(`Marked ${closed.length} application${closed.length === 1 ? "" : "s"} as rejected`, () => void (async () => { for (const job of closed) await onUpdateTracker(job.id, { status: "applied" }, { quiet: true }); })());
   }
+  // Multi-select: click toggles, Shift-click selects the range from the last click, Escape leaves select mode.
+  const visibleIds = visibleJobs.map((job) => job.id);
+  useEffect(() => { setSelected((current) => { const next = new Set([...current].filter((id) => visibleIds.includes(id))); return next.size === current.size ? current : next; }); }, [visibleIds.join("|")]);
+  useEffect(() => {
+    if (!selecting) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !document.querySelector("[aria-modal='true']")) { setSelecting(false); setSelected(new Set()); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selecting]);
+  function toggleSelected(jobId: string, event?: { shiftKey?: boolean }) {
+    setSelecting(true);
+    setSelected((current) => {
+      const next = new Set(current);
+      if (event?.shiftKey && anchor && visibleIds.includes(anchor)) {
+        const [from, to] = [visibleIds.indexOf(anchor), visibleIds.indexOf(jobId)].sort((a, b) => a - b);
+        for (const id of visibleIds.slice(from, to + 1)) next.add(id);
+      } else if (next.has(jobId)) next.delete(jobId);
+      else next.add(jobId);
+      return next;
+    });
+    setAnchor(jobId);
+  }
+  function exitSelect() { setSelecting(false); setSelected(new Set()); setAnchor(null); }
+  async function setSelectedStatus(status: TrackerStatus) {
+    const chosen = jobs.filter((job) => selected.has(job.id) && effectiveStatus(job) !== status);
+    if (!chosen.length) return;
+    const before = chosen.map((job) => ({ id: job.id, status: effectiveStatus(job) }));
+    setBulkBusy(true);
+    try { for (const job of chosen) await onUpdateTracker(job.id, { status }, { quiet: true }); } finally { setBulkBusy(false); }
+    onToast(`Marked ${plural(chosen.length, "job")} as ${TRACKER_LABELS[status].toLowerCase()}`, () => void (async () => { for (const item of before) await onUpdateTracker(item.id, { status: item.status }, { quiet: true }); })());
+    exitSelect();
+  }
   const menuHandlers = (job: JobFolderSummary): JobMenuHandlers => ({ onOpen: () => onOpenJob(job.id), onOpenEvaluation: () => onOpenEvaluation(job.id), onOpenInterview: job.interviewRoundLabel ? () => onOpenJobView(job.id, "interview") : null, onMoveToTrash: () => onMoveToTrash(job.id), onSetStatus: (status) => void onUpdateTracker(job.id, { status }) });
   const filterLabels: Record<JobsFilter, string> = { all: "All", active: "Active", interviewing: "Interviewing", "follow-up": "Follow-up due", review: "Needs review", favorites: "Favorites" };
-  const renderJobs = (list: JobFolderSummary[]) => view === "cards" ? <div className="job-card-grid">{list.map((job) => <JobCard key={job.id} job={job} favorite={favorites.has(job.id)} onToggleFavorite={() => toggleFavorite(job.id)} handlers={menuHandlers(job)} />)}</div>
-      : <div className="jobs-table-wrap"><table className="jobs-table"><thead><tr><th scope="col">Role</th><th scope="col">Fit</th><th scope="col">Status</th><th scope="col">Interview</th><th scope="col">Next</th><th scope="col" className="col-added">Added</th><th scope="col"><span className="sr-only">Favorite and actions</span></th></tr></thead><tbody>{list.map((job) => <tr key={job.id} tabIndex={0} onClick={() => onOpenJob(job.id)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onOpenJob(job.id); } }}><td className="jobs-role"><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></td><td><FitBadge rating={job.rating} /></td><td><TrackerPill status={effectiveStatus(job)} /></td><td>{job.interviewRoundLabel ? <button className="btn-link" onClick={(event) => { event.stopPropagation(); onOpenJobView(job.id, "interview"); }}>{job.interviewRoundLabel}</button> : <span className="muted">None</span>}</td><td><NextBadge job={job} /></td><td className="tabular muted col-added">{formatJobDate(job.createdAt)}</td><td><button className={`job-favorite ${favorites.has(job.id) ? "is-favorite" : ""}`} aria-pressed={favorites.has(job.id)} aria-label={`Favorite ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => { event.stopPropagation(); toggleFavorite(job.id); }}>{favorites.has(job.id) ? "★" : "☆"}</button><JobMenuButton job={job} handlers={menuHandlers(job)} /></td></tr>)}</tbody></table></div>;
+  const renderJobs = (list: JobFolderSummary[]) => view === "cards" ? <div className="job-card-grid">{list.map((job) => <JobCard key={job.id} job={job} favorite={favorites.has(job.id)} onToggleFavorite={() => toggleFavorite(job.id)} handlers={menuHandlers(job)} selecting={selecting} selected={selected.has(job.id)} onSelect={(event) => toggleSelected(job.id, event as { shiftKey?: boolean })} />)}</div>
+      : <div className="jobs-table-wrap"><table className="jobs-table"><thead><tr>{selecting && <th scope="col"><span className="sr-only">Selected</span></th>}<th scope="col">Role</th><th scope="col">Fit</th><th scope="col">Status</th><th scope="col">Interview</th><th scope="col">Next</th><th scope="col" className="col-added">Added</th><th scope="col"><span className="sr-only">Favorite and actions</span></th></tr></thead><tbody>{list.map((job) => <tr key={job.id} tabIndex={0} className={selected.has(job.id) ? "is-selected" : undefined} aria-selected={selecting ? selected.has(job.id) : undefined} onClick={(event) => { if (selecting || event.metaKey || event.ctrlKey) toggleSelected(job.id, event); else onOpenJob(job.id); }} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); if (selecting) toggleSelected(job.id, event); else onOpenJob(job.id); } }}>{selecting && <td><input type="checkbox" className="job-select" checked={selected.has(job.id)} aria-label={`Select ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => toggleSelected(job.id, { shiftKey: (event.nativeEvent as globalThis.MouseEvent).shiftKey })} /></td>}<td className="jobs-role"><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></td><td><FitBadge rating={job.rating} /></td><td><TrackerPill status={effectiveStatus(job)} /></td><td>{job.interviewRoundLabel ? <button className="btn-link" onClick={(event) => { event.stopPropagation(); onOpenJobView(job.id, "interview"); }}>{job.interviewRoundLabel}</button> : <span className="muted">None</span>}</td><td><NextBadge job={job} /></td><td className="tabular muted col-added">{formatJobDate(job.createdAt)}</td><td><button className={`job-favorite ${favorites.has(job.id) ? "is-favorite" : ""}`} aria-pressed={favorites.has(job.id)} aria-label={`Favorite ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => { event.stopPropagation(); toggleFavorite(job.id); }}>{favorites.has(job.id) ? "★" : "☆"}</button><JobMenuButton job={job} handlers={menuHandlers(job)} /></td></tr>)}</tbody></table></div>;
   return <section className="jobs-home">
     <header className="page-head"><div><h1>Jobs</h1><p>{visibleJobs.length === jobs.length ? `${jobs.length} job${jobs.length === 1 ? "" : "s"}` : `${visibleJobs.length} of ${jobs.length} jobs shown`}. Open one to see its application and interview prep.</p></div></header>
     <JobQueueBox queue={queue} jobs={jobs} agyReady={agyReady} onOpenAgy={onOpenAgy} onSave={onSaveQueue} onQueueJob={onQueueJob} onOpenJob={onOpenJob} />
@@ -1114,6 +1150,7 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
       <label className="workspace-search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search jobs…" aria-label="Search jobs" /></label>
       {(["follow-up", "review", "favorites"] as JobsFilter[]).filter((value) => filterCounts[value] > 0 || filter === value).map((value) => <button key={value} className="filter-toggle" aria-pressed={filter === value} onClick={() => setFilter(filter === value ? "all" : value)}>{filterLabels[value]}<span>{filterCounts[value]}</span></button>)}
       <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option><option value="follow-up">Follow-up date</option><option value="fit">Best fit</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
+      <button className="filter-toggle" aria-pressed={selecting} title="Select several jobs to change their status at once (or Cmd/Ctrl-click a job)" onClick={() => selecting ? exitSelect() : setSelecting(true)}>{selecting ? "Done" : "Select"}</button>
       <div className="segmented" role="group" aria-label="Layout">{(["cards", "list"] as JobsView[]).map((value) => <button key={value} aria-pressed={view === value} onClick={() => setView(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div>
       <details className="jobs-more">
         <summary aria-label="More job actions">⋯</summary>
@@ -1125,6 +1162,15 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
       </details>
     </div>
     {exported && <p className="export-note" role="status">{exported}</p>}
+    {selecting && <div className="select-bar" role="toolbar" aria-label="Selected jobs">
+      <strong aria-live="polite">{selected.size ? `${plural(selected.size, "job")} selected` : "Click jobs to select them"}</strong>
+      <button className="btn-link" onClick={() => setSelected(new Set(visibleIds))}>Select all {visibleIds.length} shown</button>
+      {selected.size > 0 && <button className="btn-link" onClick={() => setSelected(new Set())}>Clear</button>}
+      <span className="select-bar-actions">
+        <span className="muted">Mark as</span>
+        {TRACKER_STATUSES.map((status) => <button key={status} className="btn-quiet" disabled={!selected.size || bulkBusy} onClick={() => void setSelectedStatus(status)}>{TRACKER_LABELS[status]}</button>)}
+      </span>
+    </div>}
     {healthOpen && <DataHealthPanel jobs={jobs} onOpenJob={onOpenJob} onClose={() => setHealthOpen(false)} />}
     {!visibleJobs.length ? <div className="dashboard-empty"><h2>No jobs match this view</h2><p>Clear the search or pick another tab.</p></div>
       : tab === "closed" ? <>
@@ -1283,11 +1329,13 @@ function JobMenuButton({ job, handlers }: { job: JobFolderSummary; handlers: Job
   </>;
 }
 
-function JobCard({ job, favorite, onToggleFavorite, handlers }: { job: JobFolderSummary; favorite: boolean; onToggleFavorite: () => void; handlers: JobMenuHandlers }) {
+function JobCard({ job, favorite, onToggleFavorite, handlers, selecting = false, selected = false, onSelect }: { job: JobFolderSummary; favorite: boolean; onToggleFavorite: () => void; handlers: JobMenuHandlers; selecting?: boolean; selected?: boolean; onSelect?: (event: MouseEvent | React.KeyboardEvent, force?: boolean) => void }) {
+  // In select mode a click toggles the card; Cmd/Ctrl-click starts selecting from any card.
   const onOpen = handlers.onOpen;
+  const onCardClick = (event: MouseEvent) => { if (selecting || event.metaKey || event.ctrlKey) { event.preventDefault(); onSelect?.(event); } else onOpen(); };
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const initials = (job.company ?? displayJobName(job.name)).split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
-  return <article className="job-card" onClick={onOpen} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setMenu({ x: event.clientX, y: event.clientY }); }}><div className="job-card-heading"><span className="company-mark">{initials || "J"}</span><div><h2>{job.company ?? displayJobName(job.name)}</h2><p>{job.title ?? "Role not recorded"}</p></div><span className="job-card-badges"><FitBadge rating={job.rating} /><JobMenuButton job={job} handlers={handlers} /></span></div><dl><div><dt>Status</dt><dd><TrackerPill status={effectiveStatus(job)} /></dd></div><div><dt>Interview</dt><dd>{job.interviewRoundLabel ?? "Not prepared"}</dd></div><div><dt>Added</dt><dd className="job-card-added"><span>{formatJobDate(job.createdAt)}</span><button className={`job-favorite ${favorite ? "is-favorite" : ""}`} aria-label={`${favorite ? "Remove" : "Add"} ${job.company ?? displayJobName(job.name)} ${favorite ? "from" : "to"} favorites`} aria-pressed={favorite} title={favorite ? "Remove from favorites" : "Add to favorites"} onClick={(event) => { event.stopPropagation(); onToggleFavorite(); }}>{favorite ? "★" : "☆"}</button></dd></div></dl><button onClick={(event) => { event.stopPropagation(); onOpen(); }}>Open job</button>{menu && <JobMenu job={job} at={menu} handlers={handlers} onClose={() => setMenu(null)} />}</article>;
+  return <article className={`job-card${selecting ? " is-selecting" : ""}${selected ? " is-selected" : ""}`} aria-selected={selecting ? selected : undefined} onClick={onCardClick} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setMenu({ x: event.clientX, y: event.clientY }); }}><div className="job-card-heading">{selecting ? <input type="checkbox" className="job-select" checked={selected} aria-label={`Select ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelect?.(event as unknown as MouseEvent)} /> : <span className="company-mark">{initials || "J"}</span>}<div><h2>{job.company ?? displayJobName(job.name)}</h2><p>{job.title ?? "Role not recorded"}</p></div><span className="job-card-badges"><FitBadge rating={job.rating} /><JobMenuButton job={job} handlers={handlers} /></span></div><dl><div><dt>Status</dt><dd><TrackerPill status={effectiveStatus(job)} /></dd></div><div><dt>Interview</dt><dd>{job.interviewRoundLabel ?? "Not prepared"}</dd></div><div><dt>Added</dt><dd className="job-card-added"><span>{formatJobDate(job.createdAt)}</span><button className={`job-favorite ${favorite ? "is-favorite" : ""}`} aria-label={`${favorite ? "Remove" : "Add"} ${job.company ?? displayJobName(job.name)} ${favorite ? "from" : "to"} favorites`} aria-pressed={favorite} title={favorite ? "Remove from favorites" : "Add to favorites"} onClick={(event) => { event.stopPropagation(); onToggleFavorite(); }}>{favorite ? "★" : "☆"}</button></dd></div></dl>{!selecting && <button onClick={(event) => { event.stopPropagation(); onOpen(); }}>Open job</button>}{menu && <JobMenu job={job} at={menu} handlers={handlers} onClose={() => setMenu(null)} />}</article>;
 }
 
 function StatusPill({ value }: { value: string }) {
