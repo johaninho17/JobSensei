@@ -24,6 +24,7 @@ import { getInterviewOverview, listInterviewRounds, refreshInterviewDashboard, s
 import { invalidateSearchIndex, searchWorkspace } from "./search";
 import { getJobApplicationStatus, validateJobApplication } from "./application-validation";
 import { computeReadiness } from "./setup-readiness";
+import { finishUpdate, readPendingUpdate, reviewUpdate, scanRecordings, skipRecordings, startUpdate, undoUpdate } from "./content-refresh";
 import { CONTEXT_EXTENSIONS, importContextFiles, type ContextKind } from "./context-import";
 import { createCandidateProfile, readCandidateProfile, updateCandidateProfileDetails, updateCandidateProfilePreferences, updateCandidateProfileSources } from "./candidate-profile";
 import { compactStyleRules, profileInstructionLines } from "./evidence-snapshot";
@@ -490,6 +491,23 @@ async function readinessNow() {
   return computeReadiness({ workspacePath: workspace, profile, settings, manifest, contextFileCount: summary.contextFileCount, agy: { installed: summary.agyAvailable, signedIn: await agySignInState() } });
 }
 ipcMain.handle("setup:readiness", async () => readinessNow());
+// Interview content refresh (electron/content-refresh.ts): new recordings, the update Agy runs, and its check.
+async function jobNames(): Promise<Record<string, string>> {
+  const jobs = await listJobFolders(requireWorkspace()).catch(() => []);
+  return Object.fromEntries(jobs.map((job) => [job.id, [job.company, job.title].filter(Boolean).join(", ")]));
+}
+ipcMain.handle("content:recordings", async () => {
+  const names = await jobNames();
+  return { recordings: await scanRecordings(requireWorkspace(), Object.keys(names)), pending: await readPendingUpdate(requireWorkspace()) };
+});
+ipcMain.handle("content:start-update", async () => {
+  const names = await jobNames();
+  return (await startUpdate(requireWorkspace(), await scanRecordings(requireWorkspace(), Object.keys(names)), names)).prompt;
+});
+ipcMain.handle("content:review-update", async () => reviewUpdate(requireWorkspace()));
+ipcMain.handle("content:finish-update", async (_event, keepOld: unknown) => finishUpdate(requireWorkspace(), Array.isArray(keepOld) ? keepOld.filter((item): item is string => typeof item === "string") : []));
+ipcMain.handle("content:undo-update", async () => undoUpdate(requireWorkspace()));
+ipcMain.handle("content:skip", async (_event, paths: unknown) => skipRecordings(requireWorkspace(), Array.isArray(paths) ? paths.filter((path): path is string => typeof path === "string") : []));
 // The writing-voice file is the user's own; Setup edits only this one context file (other career sources stay read-only).
 ipcMain.handle("profile:save-voice", async (_event, text: unknown) => {
   if (typeof text !== "string" || text.length > 20_000) throw new Error("The voice profile must be text under 20,000 characters.");

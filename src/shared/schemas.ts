@@ -1222,12 +1222,25 @@ export type QuestionsState = {
   conversationId: string | null;
 };
 
+export type RecordingInfo = { path: string; size: number; state: "new" | "changed" | "imported" | "duplicate" | "skipped"; duplicateOf: string | null; jobId: string | null };
+type ContentItemInfo = { file: string; section: string; key: string; text: string };
+export type ContentReviewInfo = { added: ContentItemInfo[]; upgraded: Array<{ before: ContentItemInfo; after: ContentItemInfo }>; replaced: Array<{ before: ContentItemInfo; after: ContentItemInfo | null; replacement: string; why: string }>; lost: Array<{ before: ContentItemInfo; after: ContentItemInfo | null }>; files: string[]; changeListFound: boolean };
+
 /** Files added to career context from the app: where each went (workspace-relative) and what was skipped and why. */
 export type ContextImportResult = { added: string[]; skipped: Array<{ name: string; reason: string }> };
 
 export interface SenseiApi {
   setup: {
     readiness(): Promise<Readiness>;
+  };
+  /** Interview content refresh: recordings the app has seen, and the update Agy runs on only the new ones. */
+  content: {
+    recordings(): Promise<{ recordings: RecordingInfo[]; pending: { startedAt: string; recordings: Array<{ path: string }> } | null }>;
+    startUpdate(): Promise<string>;
+    reviewUpdate(): Promise<ContentReviewInfo>;
+    finishUpdate(keepOld: string[]): Promise<{ restored: number }>;
+    undoUpdate(): Promise<void>;
+    skip(paths: string[]): Promise<void>;
   };
   app: {
     copyText(text: string): Promise<void>;

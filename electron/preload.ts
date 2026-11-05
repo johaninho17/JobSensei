@@ -10,6 +10,14 @@ const api: SenseiApi = {
   setup: {
     readiness: () => ipcRenderer.invoke("setup:readiness"),
   },
+  content: {
+    recordings: () => ipcRenderer.invoke("content:recordings"),
+    startUpdate: () => ipcRenderer.invoke("content:start-update"),
+    reviewUpdate: () => ipcRenderer.invoke("content:review-update"),
+    finishUpdate: (keepOld) => ipcRenderer.invoke("content:finish-update", keepOld),
+    undoUpdate: () => ipcRenderer.invoke("content:undo-update"),
+    skip: (paths) => ipcRenderer.invoke("content:skip", paths),
+  },
   workspace: {
     getSummary: () => ipcRenderer.invoke("workspace:get-summary"),
     rescan: () => ipcRenderer.invoke("workspace:rescan"),

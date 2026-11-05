@@ -701,3 +701,9 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .setup-field span { color: var(--muted); }
 .setup-field input, .setup-field textarea { padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-s); color: var(--ink); background: var(--canvas); font: inherit; }
 .onboarding-better li .setup-row-editor { grid-column: 1 / -1; }
+
+.recording-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.recording-list li { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto auto; gap: var(--space-3); align-items: center; padding: var(--space-2) 0; border-bottom: 1px solid var(--line); font-size: var(--fs-13); }
+.recording-list li small { display: block; color: var(--muted); }
+.content-review ul { margin: var(--space-1) 0; padding-left: var(--space-4); font-size: var(--fs-13); }
+.content-replaced li { display: grid; gap: 2px; margin-bottom: var(--space-2); }

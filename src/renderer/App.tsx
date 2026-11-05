@@ -10,6 +10,7 @@ import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, follow
 import { FIT_GATE, FIT_CLASSIFICATION_CREDIT } from "../shared/fit-credit";
 import { computeLearnings, STAGE_LABELS } from "../shared/learnings";
 import type { Readiness, ReadinessItem } from "../shared/readiness";
+import type { ContentReviewInfo, RecordingInfo } from "../shared/schemas";
 import type { ApplicationStatus, ApplicationValidationReport, CandidateProfile, ChallengeExercise, ChallengePractice, ContextManifest, FilePreview, FileTreeNode, InterviewOverview, JobFolderSummary, PdfTextSize, SearchResult, Settings, WorkspaceSummary, QuestionsState } from "../shared/schemas";
 // pdfjs-dist ships the browser runtime without declarations for this subpath.
 // @ts-expect-error The Vite browser bundle is intentionally imported directly.
@@ -289,6 +290,10 @@ function WorkspaceApp() {
   }
   useEffect(() => { if (knownContext === null && contextFiles.length) markContextReviewed(); }, [knownContext === null, contextFiles.length]);
   const [storyBankPath, setStoryBankPath] = useState<string | null>(null);
+  // Recordings in debrief/ the app hasn't imported yet (electron/content-refresh.ts), for the Interviews badge.
+  const [newRecordings, setNewRecordings] = useState(0);
+  const loadRecordings = () => window.sensei.content.recordings().then(({ recordings }) => { setNewRecordings(recordings.filter((recording) => recording.state === "new" || recording.state === "changed").length); }).catch(() => undefined);
+  useEffect(() => { if (workspace.status === "ready") void loadRecordings(); }, [workspace.status, tree]);
   // Setup readiness follows the workspace, profile, settings, and files; while a required step is missing it is
   // checked again every 15 seconds (for example, Agy finishing its sign-in in the panel).
   useEffect(() => { if (workspace.status === "ready") void loadReadiness(); }, [workspace, candidateProfile, resumeSettings, tree, settingsModalOpen]);
@@ -778,7 +783,7 @@ function WorkspaceApp() {
       <button className="wordmark" aria-label="Sensei: all jobs" onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span><span>Sensei</span></button>
       <ul className="side-nav">
         <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
-        <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{interviewingJobs.length > 0 && <span className="side-count">{interviewingJobs.length}</span>}</button></li>
+        <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{interviewingJobs.length > 0 && <span className="side-count">{interviewingJobs.length}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>
         <li><button aria-current={activePage === "setup-home" ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />Setup{readiness && <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>}</button></li>
         <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context{newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>
       </ul>
@@ -829,7 +834,7 @@ function WorkspaceApp() {
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
           <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
-          : currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
+          : currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
           : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome
             onOpen={(path) => void selectFile(path)}
@@ -1557,8 +1562,8 @@ function TrackerPanel({ job, onUpdate }: { job: JobFolderSummary; onUpdate: (upd
   </section>;
 }
 
-function InterviewsHome({ jobs, allJobs, onOpen, onOpenFile }: { jobs: JobFolderSummary[]; allJobs: JobFolderSummary[]; onOpen: (jobId: string, roundId?: string) => void; onOpenFile: (path: string) => void }) {
-  const [view, setView] = useState<"active" | "past" | "learnings">("active");
+function InterviewsHome({ jobs, allJobs, newRecordings, onRecordingsChanged, onSendPrompt, onOpen, onOpenFile }: { jobs: JobFolderSummary[]; allJobs: JobFolderSummary[]; newRecordings: number; onRecordingsChanged: () => void; onSendPrompt: (action: Pick<JobAction, "prompt" | "label">) => void; onOpen: (jobId: string, roundId?: string) => void; onOpenFile: (path: string) => void }) {
+  const [view, setView] = useState<"active" | "past" | "learnings" | "content">("active");
   const [overviews, setOverviews] = useState<Record<string, InterviewOverview | null>>({});
   useEffect(() => {
     let cancelled = false;
@@ -1585,17 +1590,18 @@ function InterviewsHome({ jobs, allJobs, onOpen, onOpenFile }: { jobs: JobFolder
   </>;
   return <section className="jobs-home">
     <header className="page-head"><div><h1>Interviews</h1><p>{jobs.length ? `${jobs.length} job${jobs.length === 1 ? "" : "s"} with interview prep. Open one to practice its current round.` : "No interview prep yet. Open a job and prepare its first round when you get the call."}</p></div></header>
-    <SubTabs<"active" | "past" | "learnings">
+    <SubTabs<"active" | "past" | "learnings" | "content">
       idPrefix="ivhome"
       label="Interviews"
       value={view}
       onChange={setView}
-      tabs={[{ id: "active", label: "Active", count: rows.filter((row) => !closed(row.job)).length }, { id: "past", label: "Past", count: rows.filter((row) => closed(row.job)).length }, { id: "learnings", label: "Learnings" }]}
+      tabs={[{ id: "active", label: "Active", count: rows.filter((row) => !closed(row.job)).length }, { id: "past", label: "Past", count: rows.filter((row) => closed(row.job)).length }, { id: "learnings", label: "Learnings" }, { id: "content", label: "Your content", count: newRecordings || null }]}
     />
     <SubTabPanel idPrefix="ivhome" value={view}>
       {view === "active" && renderRows(rows.filter((row) => !closed(row.job)))}
       {view === "past" && renderRows(rows.filter((row) => closed(row.job)))}
       {view === "learnings" && <LearningsView jobs={allJobs} overviews={overviews} onOpenFile={onOpenFile} />}
+      {view === "content" && <YourContent jobs={allJobs} onSendPrompt={onSendPrompt} onChanged={onRecordingsChanged} onOpenFile={onOpenFile} />}
     </SubTabPanel>
   </section>;
 }
@@ -1675,6 +1681,83 @@ function LearningsView({ jobs, overviews, onOpenFile }: { jobs: JobFolderSummary
       <h3>Stories used most in prep</h3>
       <ul className="learn-fixes">{[...storyCounts.entries()].sort((a, b) => b[1] - a[1]).map(([id, count]) => <li key={id}><span>{id}{texts.stories[id] ? ` · ${texts.stories[id]}` : ""}</span><small>{count} card{count === 1 ? "" : "s"}</small></li>)}</ul>
     </section>}
+  </div>;
+}
+
+const RECORDING_STATE: Record<RecordingInfo["state"], string> = { new: "New", changed: "Fuller version", imported: "Imported", duplicate: "Duplicate", skipped: "Skipped" };
+const CONTENT_SOURCES: Array<{ path: string; title: string; what: string }> = [
+  { path: "profile/story_bank.md", title: "Story bank", what: "Your best real examples; each prep round uses different ones." },
+  { path: "profile/interview_voice.md", title: "Interview voice", what: "Your phrases, how you structure answers, and the delivery fixes you're working on." },
+  { path: "debrief/interview-memory", title: "Role memory", what: "Questions asked most in each round, practical formats, and interviewer feedback." },
+  { path: "context/structured/interview-stories.md", title: "Interview stories", what: "Work stories you told in interviews, usable as career evidence once checked in Career context." },
+];
+
+/**
+ * What Agy uses for interview prep, and the recordings that haven't reached it yet. "Update" sends Agy only the new
+ * recordings; afterwards the app compares the content with its backup, puts back anything removed without a better
+ * replacement, and shows what changed.
+ */
+function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobFolderSummary[]; onSendPrompt: (action: Pick<JobAction, "prompt" | "label">) => void; onChanged: () => void; onOpenFile: (path: string) => void }) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof window.sensei.content.recordings>> | null>(null);
+  const [review, setReview] = useState<ContentReviewInfo | null>(null);
+  const [keepOld, setKeepOld] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const load = () => window.sensei.content.recordings().then(setData).catch((caught) => setMessage(messageOf(caught, "Couldn't read your recordings.")));
+  useEffect(() => { void load(); }, []);
+  const jobName = (id: string | null) => { const job = id ? jobs.find((candidate) => candidate.id === id) : null; return job ? `${job.company ?? displayJobName(job.name)}${job.title ? `, ${job.title}` : ""}` : null; };
+  const waiting = (data?.recordings ?? []).filter((recording) => recording.state === "new" || recording.state === "changed");
+  const flagged = (data?.recordings ?? []).filter((recording) => recording.state === "duplicate");
+  async function run(task: () => Promise<void>, failure: string) {
+    setBusy(true); setMessage("");
+    try { await task(); } catch (caught) { setMessage(messageOf(caught, failure)); } finally { setBusy(false); await load(); onChanged(); }
+  }
+  const start = () => run(async () => { const prompt = await window.sensei.content.startUpdate(); onSendPrompt({ prompt, label: "Import new recordings" }); }, "Couldn't start the update.");
+  const check = () => run(async () => { setReview(await window.sensei.content.reviewUpdate()); setKeepOld(new Set()); }, "Couldn't check the update.");
+  const finish = () => run(async () => { const { restored } = await window.sensei.content.finishUpdate([...keepOld]); setReview(null); setMessage(restored ? `Update saved. ${plural(restored, "item")} removed without a better replacement ${restored === 1 ? "was" : "were"} put back.` : "Update saved."); }, "Couldn't finish the update.");
+  const undo = () => run(async () => { await window.sensei.content.undoUpdate(); setReview(null); setMessage("The update was undone; your content is back as it was."); }, "Couldn't undo the update.");
+  const snippet = (text: string) => text.replace(/^#+\s*|^\s*[-*]\s+|^\|\s*/gm, "").replace(/\s+/g, " ").slice(0, 140);
+  return <div className="your-content">
+    <section className="iv-section">
+      <h3>New recordings</h3>
+      <p className="learn-note">Transcripts and notes in your <code>debrief</code> folder that Agy hasn't read yet. An update reads only these, plus the content below, so old recordings are never read again.</p>
+      {data?.pending ? <div className="onboarding-result" role="status">
+        <strong>Update in progress</strong>
+        <p>Agy is importing {plural(data.pending.recordings.length, "recording")} (started {new Date(data.pending.startedAt).toLocaleString()}). Confirm its proposals in the Agy panel; once it has saved, review the changes here.</p>
+        <div className="onboarding-actions"><button className="btn-primary" disabled={busy} onClick={() => void check()}>Review changes</button><button className="btn-quiet" disabled={busy} onClick={() => void undo()}>Undo the update</button></div>
+      </div> : <>
+        {waiting.length ? <ul className="recording-list">{waiting.map((recording) => <li key={recording.path}>
+          <span className="setup-state">{RECORDING_STATE[recording.state]}</span>
+          <span><strong>{recording.path.replace(/^debrief\//, "")}</strong><small>{jobName(recording.jobId) ?? "Job not matched: Agy will ask which job it was"}</small></span>
+          <button className="btn-link" onClick={() => onOpenFile(recording.path)}>Open</button>
+          <button className="btn-link" disabled={busy} onClick={() => void run(() => window.sensei.content.skip([recording.path]), "Couldn't skip it.")}>Skip</button>
+        </li>)}</ul> : <p className="muted">No new recordings. Add transcripts to <code>debrief/&lt;company&gt;/</code> and they'll show up here.</p>}
+        {flagged.length > 0 && <p className="learn-note">{flagged.map((recording) => `${recording.path.replace(/^debrief\//, "")} is an exact copy of ${recording.duplicateOf?.replace(/^debrief\//, "")}`).join("; ")}. Copies are never imported twice; if one is filed under the wrong company, move or delete it.</p>}
+        <div className="onboarding-actions"><button className="btn-primary" disabled={busy || !waiting.length} onClick={() => void start()}>{waiting.length ? `Update from ${plural(waiting.length, "new recording")}` : "Nothing new to update"}</button></div>
+      </>}
+      {message && <p role="status" className="export-note">{message}</p>}
+    </section>
+    {review && <section className="iv-section content-review" aria-label="What the update changed">
+      <h3>What the update changed</h3>
+      {!review.changeListFound && <p className="learn-note">Agy didn't write its change list, so anything removed or shortened will be put back.</p>}
+      <p>{plural(review.added.length, "addition")} · {plural(review.upgraded.length, "upgrade")} · {plural(review.replaced.length, "replacement")}{review.lost.length ? ` · ${plural(review.lost.length, "item")} removed without a replacement (will be put back)` : ""}</p>
+      {review.added.length > 0 && <details><summary>Added</summary><ul>{review.added.slice(0, 30).map((item) => <li key={item.file + item.key}>{snippet(item.text)} <small className="muted">{item.file}</small></li>)}</ul></details>}
+      {review.upgraded.length > 0 && <details><summary>Upgraded</summary><ul>{review.upgraded.map(({ after }) => <li key={after.file + after.key}>{snippet(after.text)} <small className="muted">{after.file}</small></li>)}</ul></details>}
+      {review.replaced.length > 0 && <div><h4>Replaced by something better</h4><ul className="content-replaced">{review.replaced.map((entry) => { const id = `${entry.before.file}#${entry.before.key}`; return <li key={id}>
+        <span><s>{snippet(entry.before.text)}</s> → {snippet(entry.replacement)}{entry.why && <small className="muted"> ({entry.why})</small>}</span>
+        <label><input type="checkbox" checked={keepOld.has(id)} onChange={(event) => setKeepOld((current) => { const next = new Set(current); if (event.target.checked) next.add(id); else next.delete(id); return next; })} /> Keep the old version too</label>
+      </li>; })}</ul></div>}
+      {review.lost.length > 0 && <details open><summary>Removed without a replacement (will be put back)</summary><ul>{review.lost.map(({ before }) => <li key={before.file + before.key}>{snippet(before.text)} <small className="muted">{before.file}</small></li>)}</ul></details>}
+      <div className="onboarding-actions"><button className="btn-primary" disabled={busy} onClick={() => void finish()}>Save the update</button><button className="btn-quiet" disabled={busy} onClick={() => void undo()}>Undo everything</button></div>
+    </section>}
+    <section className="iv-section">
+      <h3>What Agy uses for interview prep</h3>
+      <ul className="recording-list">{CONTENT_SOURCES.map((source) => <li key={source.path}>
+        <span className="setup-state">{source.path.endsWith(".md") ? "File" : "Folder"}</span>
+        <span><strong>{source.title}</strong><small>{source.what}</small></span>
+        {source.path.endsWith(".md") ? <button className="btn-link" onClick={() => onOpenFile(source.path)}>Open</button> : <button className="btn-link" onClick={() => void window.sensei.files.reveal(source.path).catch(() => undefined)}>Show</button>}
+      </li>)}</ul>
+    </section>
   </div>;
 }
 
