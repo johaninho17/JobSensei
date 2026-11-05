@@ -265,6 +265,13 @@ function WorkspaceApp() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+  // A file dropped outside a drop area would make the window open that file in place of the app; ignore it.
+  useEffect(() => {
+    const ignore = (event: DragEvent) => { if (event.dataTransfer?.types.includes("Files")) event.preventDefault(); };
+    window.addEventListener("dragover", ignore);
+    window.addEventListener("drop", ignore);
+    return () => { window.removeEventListener("dragover", ignore); window.removeEventListener("drop", ignore); };
+  }, []);
   // New career files since the user last reviewed Career context (first run: everything counts as seen).
   const [knownContext, setKnownContext] = useState<string[] | null>(() => { try { const raw = window.localStorage.getItem("sensei-known-context"); return raw ? JSON.parse(raw) as string[] : null; } catch { return null; } });
   const contextFiles = filePaths(tree).filter((path) => path.startsWith("context/"));
@@ -585,6 +592,26 @@ function WorkspaceApp() {
     } catch (caught) { setError(messageOf(caught, "Unable to update resume sources.")); }
   }
 
+  /** Files added from the app are copied into context, checked for Agy, and not flagged as "new" (the user just chose them). */
+  async function addContextFiles(kind: "structured" | "broad", paths?: string[]) {
+    setError(null);
+    try {
+      const result = paths ? await window.sensei.context.importPaths(paths, kind) : await window.sensei.context.addFiles(kind);
+      if (!result.added.length && !result.skipped.length) return;
+      const nextCareerPaths = [...new Set([...selectedCareerPaths, ...result.added])];
+      setSelectedCareerPaths(nextCareerPaths);
+      await refresh();
+      await updateContext(nextCareerPaths, selectedJobFiles);
+      const seen = [...new Set([...(knownContext ?? []), ...result.added])];
+      setKnownContext(seen);
+      try { window.localStorage.setItem("sensei-known-context", JSON.stringify(seen)); } catch { /* storage unavailable */ }
+      const copied = result.added.length - result.skipped.filter((item) => item.reason.startsWith("already added")).length;
+      const skipped = result.skipped.filter((item) => !item.reason.startsWith("already added"));
+      showToast([copied ? `Added ${plural(copied, "file")}, checked for Agy` : "", skipped.length ? `Skipped ${skipped.map((item) => `${item.name} (${item.reason})`).join("; ")}` : ""].filter(Boolean).join(". ") || "Those files were already in context");
+      void loadReadiness();
+    } catch (caught) { setError(messageOf(caught, "Unable to add those files.")); }
+  }
+
   async function removeSecondary(path: string) {
     if (!window.confirm(`Remove ${path} from secondary resumes?\n\nThe source file will not be deleted.`)) return;
     setError(null);
@@ -801,7 +828,7 @@ function WorkspaceApp() {
               <button className="btn-quiet" onClick={markContextReviewed}>Mark as reviewed</button>
             </section>}
             resumes={<section className="context-block"><h2>Resumes</h2><ResumeSources settings={resumeSettings} selectedPath={selectedPath} onSelect={selectFile} onChoose={chooseResume} onRemoveSecondary={removeSecondary} /></section>}
-            sources={<section className="context-block"><h2>Career sources</h2><p>Checked files are what Agy reads as facts about you. Structured files are the strongest evidence.</p><div className="context-tree">{tree.length ? tree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedCareerPaths} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No career context folders found.</p>}</div></section>}
+            sources={<section className="context-block"><h2>Career sources</h2><p>Checked files are what Agy reads as facts about you. Structured files are the strongest evidence.</p><ContextAdder onAdd={(kind, paths) => void addContextFiles(kind, paths)} onReveal={() => void window.sensei.files.reveal("context").catch(() => undefined)} /><div className="context-tree">{tree.length ? tree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedCareerPaths} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No career context folders found.</p>}</div></section>}
             jobFiles={<section className="context-block"><h2>Job files in context</h2><p>Add a job's files when you want Agy to use them outside that job, for example an earlier letter that worked well.</p><button className="btn-link" onClick={() => { setSelectedJobFiles([]); void updateContext(selectedCareerPaths, []); }} disabled={!selectedJobFiles.length}>Clear job files ({selectedJobFiles.length})</button><div className="context-tree">{jobTree.length ? jobTree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedJobFiles} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No job folders yet.</p>}</div></section>}
           />
           : <JobsHome jobs={jobs} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} onUpdateTracker={updateTracker} onToast={showToast} statusGroup={jobsStatusGroup} onStatusGroup={setJobsStatusGroup} queue={jobQueue} agyReady={agyReady} onOpenAgy={() => setRightPanelOpen(true)} onSaveQueue={(next) => void saveQueue(next)} onQueueJob={queueJob} setup={<SetupLine readiness={readiness} onOpen={() => showPage("setup-home")} />} />}
@@ -1218,14 +1245,14 @@ function SetupHome({ readiness, onRefresh, onAction, onReveal }: { readiness: Re
   if (!readiness) return <section className="setup-home"><p className="muted">Checking your setup…</p></section>;
   const row = (item: ReadinessItem) => <li key={item.id} className={`setup-row is-${item.state}`}>
     <span className="setup-state">{READINESS_STATE[item.state]}</span>
-    <div className="setup-text"><strong>{item.title}</strong><p>{item.detail}</p><small>{item.improves}</small></div>
+    <div className="setup-text"><strong>{item.title}</strong><p>{item.detail}</p>{item.lines.length > 0 && <ul className="setup-lines">{item.lines.map((line) => <li key={line}>{line}</li>)}</ul>}<small>{item.improves}</small></div>
     <span className="setup-actions">
       {item.state !== "done" && item.action !== "none" && ACTION_LABEL[item.action] && <button className={item.level === "required" ? "btn-primary" : "btn-quiet"} onClick={() => onAction(item.action)}>{ACTION_LABEL[item.action]}</button>}
       {item.path && <button className="btn-link" onClick={() => onReveal(item.path!)}>Show in {navigator.platform.startsWith("Win") ? "Explorer" : "Finder"}</button>}
     </span>
   </li>;
   return <section className="setup-home">
-    <header className="page-head"><div><h1>Setup</h1><p>{readiness.ready ? "JobSensei has what it needs. The recommended steps make drafts and interview prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button></p></div></header>
+    <header className="page-head"><div><h1>Setup</h1><p>{readiness.ready ? "JobSensei has what it needs. The recommended steps make drafts and interview prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button> · <button className="btn-link" onClick={() => onReveal("")}>Open your workspace folder</button></p></div></header>
     <section className="iv-section"><h2>Required</h2><ol className="setup-list">{readiness.items.filter((item) => item.level === "required").map(row)}</ol></section>
     <section className="iv-section"><h2>Recommended</h2><ol className="setup-list">{readiness.items.filter((item) => item.level === "recommended").map(row)}</ol></section>
   </section>;
@@ -1525,6 +1552,36 @@ function LearningsView({ jobs, overviews, onOpenFile }: { jobs: JobFolderSummary
 type ContextView = "sources" | "resumes" | "jobs" | "stories" | "voice";
 
 /** Career context: subtabs for sources, resumes, job files, and the profile's story bank and interview voice. */
+/**
+ * Add career files from the app: pick a kind, then Add files or drop files here. Copies go to context/structured
+ * (work records: projects, results, reviews) or context/broad (notes, old letters, anything else) and are checked for Agy.
+ */
+function ContextAdder({ onAdd, onReveal }: { onAdd: (kind: "structured" | "broad", paths?: string[]) => void; onReveal: () => void }) {
+  const [kind, setKind] = useState<"structured" | "broad">("structured");
+  const [over, setOver] = useState(false);
+  const help = { structured: "Work records: projects, results, performance reviews, a list of what you did at each job. The strongest evidence.", broad: "Notes and other documents: old cover letters, LinkedIn posts, project write-ups. Used for background and voice." } as const;
+  return <div className={`context-add${over ? " is-over" : ""}`}
+    onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); setOver(true); } }}
+    onDragLeave={() => setOver(false)}
+    onDrop={(event) => {
+      event.preventDefault();
+      setOver(false);
+      const paths = [...event.dataTransfer.files].map((file) => window.sensei.files.pathForFile(file)).filter(Boolean);
+      if (paths.length) onAdd(kind, paths);
+    }}>
+    <div className="segmented" role="group" aria-label="Kind of file">
+      <button aria-pressed={kind === "structured"} onClick={() => setKind("structured")}>Work records</button>
+      <button aria-pressed={kind === "broad"} onClick={() => setKind("broad")}>Notes and documents</button>
+    </div>
+    <p>{help[kind]}</p>
+    <div className="context-add-actions">
+      <button className="btn-primary" onClick={() => onAdd(kind)}>Add files</button>
+      <span className="muted">or drop files here (Word, PDF, Markdown, text). Copies are added and checked for Agy; your originals stay where they are.</span>
+      <button className="btn-link" onClick={onReveal}>Show the context folder</button>
+    </div>
+  </div>;
+}
+
 function ContextHome({ notice, sources, resumes, jobFiles, onOpen }: { notice: React.ReactNode; sources: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
   const [view, setView] = useState<ContextView>("sources");
   return <section className="jobs-home context-home">

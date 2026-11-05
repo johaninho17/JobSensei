@@ -15,6 +15,8 @@ export const readinessItemSchema = z.object({
   detail: z.string(),
   /** What this improves, in one line. */
   improves: z.string(),
+  /** Extra lines to show under the detail (the base resume: what the app read from it). */
+  lines: z.array(z.string()).default([]),
   action: z.enum(READINESS_ACTIONS),
   /** The workspace path this item lives at, for "Show in Finder/Explorer". */
   path: z.string().nullable(),

@@ -686,3 +686,10 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .setup-text small { color: var(--muted); }
 .setup-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; justify-content: flex-end; }
 @media (max-width: 760px) { .setup-row { grid-template-columns: minmax(0, 1fr); } .setup-actions { justify-content: flex-start; } }
+
+.context-add { display: grid; gap: var(--space-2); margin: var(--space-3) 0; padding: var(--space-3); border: 1px dashed var(--line-strong); border-radius: var(--radius-m); background: var(--raised); }
+.context-add.is-over { border-color: var(--accent); background: var(--hover); }
+.context-add p { margin: 0; font-size: var(--fs-13); color: var(--muted); }
+.context-add .segmented { justify-self: start; }
+.context-add-actions { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; font-size: var(--fs-13); }
+.setup-lines { margin: var(--space-1) 0; padding-left: var(--space-4); font-size: var(--fs-13); }

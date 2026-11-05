@@ -24,6 +24,7 @@ import { getInterviewOverview, listInterviewRounds, refreshInterviewDashboard, s
 import { invalidateSearchIndex, searchWorkspace } from "./search";
 import { getJobApplicationStatus, validateJobApplication } from "./application-validation";
 import { computeReadiness } from "./setup-readiness";
+import { CONTEXT_EXTENSIONS, importContextFiles, type ContextKind } from "./context-import";
 import { createCandidateProfile, readCandidateProfile, updateCandidateProfileDetails, updateCandidateProfilePreferences, updateCandidateProfileSources } from "./candidate-profile";
 import { compactStyleRules, profileInstructionLines } from "./evidence-snapshot";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
@@ -305,6 +306,18 @@ ipcMain.handle("files:delete", async (_event, relativePath: string) => {
   });
 });
 ipcMain.handle("files:reveal", async (_event, relativePath: string) => revealWorkspacePath(requireWorkspace(), relativePath));
+// Career context files added from the app: a file dialog, or paths of files dropped on the Sources tab.
+const contextKind = (kind: unknown): ContextKind => kind === "structured" ? "structured" : "broad";
+ipcMain.handle("context:add-files", async (_event, kind: unknown) => {
+  if (!mainWindow) throw new Error("The Sensei window is not ready.");
+  const result = await dialog.showOpenDialog(mainWindow, { title: kind === "structured" ? "Add work records" : "Add notes and documents", properties: ["openFile", "multiSelections"], filters: [{ name: "Career files", extensions: CONTEXT_EXTENSIONS.map((extension) => extension.slice(1)) }] });
+  if (result.canceled || !result.filePaths.length) return { added: [], skipped: [] };
+  return importContextFiles(requireWorkspace(), result.filePaths, contextKind(kind));
+});
+ipcMain.handle("context:import-paths", async (_event, paths: unknown, kind: unknown) => {
+  if (!Array.isArray(paths) || paths.length > 50 || paths.some((path) => typeof path !== "string" || !path)) throw new Error("Choose up to 50 files.");
+  return importContextFiles(requireWorkspace(), paths as string[], contextKind(kind));
+});
 ipcMain.handle("files:get-base-resume", async () => getBaseResume(requireWorkspace(), (await settingsStore.get()).baseResumePath));
 ipcMain.handle("files:export-markdown-pdf", async (_event, input) => {
   const request = pdfExportRequestSchema.parse(input);

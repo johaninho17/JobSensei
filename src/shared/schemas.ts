@@ -1222,6 +1222,9 @@ export type QuestionsState = {
   conversationId: string | null;
 };
 
+/** Files added to career context from the app: where each went (workspace-relative) and what was skipped and why. */
+export type ContextImportResult = { added: string[]; skipped: Array<{ name: string; reason: string }> };
+
 export interface SenseiApi {
   setup: {
     readiness(): Promise<Readiness>;
@@ -1266,6 +1269,8 @@ export interface SenseiApi {
     saveMarkdown(input: MarkdownSaveInput): Promise<FilePreview>;
     deletePath(relativePath: string): Promise<void>;
     reveal(relativePath: string): Promise<void>;
+    /** The local path of a file dropped on the window (empty when it has none). */
+    pathForFile(file: File): string;
     getBaseResume(): Promise<string | null>;
     exportMarkdownPdf(relativePath: string, textSize?: PdfTextSize): Promise<ExportedPdf>;
   };
@@ -1318,6 +1323,8 @@ export interface SenseiApi {
   };
   context: {
     getManifest(selection?: ContextSelection): Promise<ContextManifest>;
+    addFiles(kind: "structured" | "broad"): Promise<ContextImportResult>;
+    importPaths(paths: string[], kind: "structured" | "broad"): Promise<ContextImportResult>;
     getActiveManifest(): Promise<ContextManifest | null>;
     getSources(): Promise<string[]>;
     onUpdated(callback: (manifest: ContextManifest) => void): () => void;

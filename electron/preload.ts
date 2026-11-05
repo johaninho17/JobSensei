@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { SenseiApi } from "../src/shared/schemas";
 
 const api: SenseiApi = {
@@ -42,6 +42,7 @@ const api: SenseiApi = {
     saveMarkdown: (input) => ipcRenderer.invoke("files:save-markdown", input),
     deletePath: (relativePath) => ipcRenderer.invoke("files:delete", relativePath),
     reveal: (relativePath) => ipcRenderer.invoke("files:reveal", relativePath),
+    pathForFile: (file) => webUtils.getPathForFile(file),
     getBaseResume: () => ipcRenderer.invoke("files:get-base-resume"),
     exportMarkdownPdf: (relativePath, textSize) => ipcRenderer.invoke("files:export-markdown-pdf", { relativePath, textSize }),
   },
@@ -86,6 +87,8 @@ const api: SenseiApi = {
   },
   context: {
     getManifest: (selection) => ipcRenderer.invoke("context:get-manifest", selection ?? {}),
+    addFiles: (kind) => ipcRenderer.invoke("context:add-files", kind),
+    importPaths: (paths, kind) => ipcRenderer.invoke("context:import-paths", paths, kind),
     getActiveManifest: () => ipcRenderer.invoke("context:get-active-manifest"),
     getSources: () => ipcRenderer.invoke("context:get-sources"),
     onUpdated: (callback) => { const listener = (_event: Electron.IpcRendererEvent, manifest: Parameters<NonNullable<SenseiApi["context"]["onUpdated"]>>[0] extends (value: infer Value) => void ? Value : never) => callback(manifest); ipcRenderer.on("context:updated", listener); return () => ipcRenderer.removeListener("context:updated", listener); },

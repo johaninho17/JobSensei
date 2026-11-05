@@ -15,7 +15,7 @@ export type ReadinessInput = {
   agy: { installed: boolean; signedIn: boolean | null };
 };
 
-type ResumeCheck = { ok: true; employers: number } | { ok: false; message: string };
+type ResumeCheck = { ok: true; employers: number; lines: string[] } | { ok: false; message: string };
 const resumeCache = new Map<string, { key: string; check: ResumeCheck }>();
 
 /** Whether the base resume's structure can be read, cached by path and modification time. */
@@ -34,7 +34,13 @@ export async function checkBaseResume(workspacePath: string, relativePath: strin
   let check: ResumeCheck;
   try {
     const baseline = await loadCanonicalResumeBaseline(workspacePath, relativePath);
-    check = { ok: true, employers: baseline.employers.length };
+    // What the app read, so the user can confirm it before any job runs.
+    const lines = [
+      ...baseline.employers.map((employer) => [employer.name, employer.title, employer.dateRange].filter(Boolean).join(" · ") + ` (${employer.originalBulletCount} bullet${employer.originalBulletCount === 1 ? "" : "s"})`),
+      `Skills: ${baseline.originalSkillsLines.length} line${baseline.originalSkillsLines.length === 1 ? "" : "s"} · Education: ${baseline.educationLines.length} line${baseline.educationLines.length === 1 ? "" : "s"}${baseline.originalSummaryLines?.length ? " · Summary" : ""}`,
+      ...baseline.warnings.filter((warning) => !/^Linked PDF baseline/.test(warning)).slice(0, 3).map((warning) => `Note: ${warning}`),
+    ];
+    check = { ok: true, employers: baseline.employers.length, lines };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     check = extname(relativePath).toLowerCase() === ".pdf"
@@ -52,7 +58,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
   const { profile, settings, manifest } = input;
   const root = resolve(input.workspacePath);
   const items: ReadinessItem[] = [];
-  const add = (item: ReadinessItem) => items.push(item);
+  const add = (item: Omit<ReadinessItem, "lines"> & { lines?: string[] }) => items.push({ lines: [], ...item });
 
   // Required -----------------------------------------------------------------------------------------------
   add({
@@ -69,6 +75,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
     title: "Base resume (Word or Markdown)",
     detail: !resumePath ? `Not chosen yet. ${RESUME_FORMAT_HELP}` : resume?.ok ? `${resumePath.split("/").pop()}: read ${resume.employers} job${resume.employers === 1 ? "" : "s"}, skills, and education.` : (resume as { message: string }).message,
     improves: "Every tailored resume keeps its layout, order, dates, and one-page length.",
+    lines: resume?.ok ? resume.lines : [],
   });
 
   add({
@@ -87,8 +94,8 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
     id: "context", level: "recommended", state: careerPaths.length ? "done" : "missing", action: "context", path: "context",
     title: "Career evidence, checked for Agy",
     detail: careerPaths.length ? `${careerPaths.length} file${careerPaths.length === 1 ? "" : "s"} checked for Agy${input.contextFileCount > careerPaths.length ? ` (${input.contextFileCount - careerPaths.length} more not checked)` : ""}.`
-      : input.contextFileCount ? `${input.contextFileCount} file${input.contextFileCount === 1 ? "" : "s"} in the context folder, none checked for Agy. Check them in Career context.`
-      : "None yet. Add notes about your work (projects, results, performance reviews) to the context folder, then check them in Career context.",
+      : input.contextFileCount ? `${input.contextFileCount} file${input.contextFileCount === 1 ? "" : "s"} in the context folder, none checked for Agy. Tick them in Career context → Sources.`
+      : "None yet. In Career context → Sources, press Add files (or drop files) to add work records: projects, results, performance reviews.",
     improves: "What Agy is allowed to claim. Without it, drafts can only reuse your base resume's wording.",
   });
 

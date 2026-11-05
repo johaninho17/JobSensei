@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, readdir, realpath, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import mammoth from "mammoth";
 import type { FilePreview, FileTreeNode, MarkdownSaveInput } from "../src/shared/schemas";
@@ -151,12 +151,18 @@ export async function deleteWorkspacePath(workspacePath: string, relativePath: s
   await trashItem(path);
 }
 
+/**
+ * Shows a workspace file in Finder/Explorer, or opens a workspace folder. An empty path opens the workspace itself;
+ * a missing folder (no extension, e.g. "context" in a new workspace) is created first so the user can add files to it.
+ */
 export async function revealWorkspacePath(workspacePath: string, relativePath: string): Promise<void> {
-  if (!relativePath || relativePath.startsWith(".") || relativePath.includes("\\")) throw new Error("Use a workspace-relative file or folder path.");
-  const path = assertInsideWorkspace(workspacePath, resolve(workspacePath, relativePath));
-  const info = await stat(path).catch(() => null);
+  if (relativePath.startsWith(".") || relativePath.includes("\\")) throw new Error("Use a workspace-relative file or folder path.");
+  const path = assertInsideWorkspace(workspacePath, resolve(workspacePath, relativePath || "."));
+  let info = await stat(path).catch(() => null);
+  if (!info && relativePath && !extname(relativePath)) { await mkdir(path, { recursive: true }); info = await stat(path).catch(() => null); }
   if (!info) throw new Error("The selected file or folder no longer exists.");
-  electronShell().showItemInFolder(path);
+  if (info.isDirectory()) { const failure = await electronShell().openPath(path); if (failure) throw new Error(failure); }
+  else electronShell().showItemInFolder(path);
 }
 
 function mimeForImage(path: string): string {

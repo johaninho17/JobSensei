@@ -44,6 +44,9 @@ describe("setup readiness", () => {
     await copyFile(DEMO_RESUME, join(dir, "resumes", "Alex_Morgan_Resume.md"));
     const readiness = await computeReadiness(input({ profile: profile() }));
     expect(item(readiness, "resume")).toMatchObject({ state: "done", detail: expect.stringMatching(/read \d+ jobs?, skills, and education/) });
+    // What the app read is listed so the user can confirm it: one line per job, then skills and education.
+    expect(item(readiness, "resume").lines[0]).toMatch(/\(\d+ bullets?\)$/);
+    expect(item(readiness, "resume").lines.some((line) => /^Skills: \d+ lines? · Education: \d+ lines?/.test(line))).toBe(true);
     expect(readiness.ready).toBe(true);
     expect(readiness.blocker).toBeNull();
   });
