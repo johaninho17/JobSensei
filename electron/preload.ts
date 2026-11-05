@@ -19,6 +19,7 @@ const api: SenseiApi = {
     get: () => ipcRenderer.invoke("profile:get"),
     create: (input) => ipcRenderer.invoke("profile:create", input),
     updatePreferences: (preferences) => ipcRenderer.invoke("profile:update-preferences", preferences),
+    saveVoice: (text) => ipcRenderer.invoke("profile:save-voice", text),
     updateDetails: (details) => ipcRenderer.invoke("profile:update-details", details),
     preview: () => ipcRenderer.invoke("profile:preview"),
   },

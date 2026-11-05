@@ -253,12 +253,12 @@ ipcMain.handle("settings:save", async (_event, input: Pick<Settings, "baseResume
   await updateCandidateProfileSources(requireWorkspace(), next);
   return next;
 });
-ipcMain.handle("settings:choose-resume", async (_event, role: "base" | "secondary") => {
-  if (role !== "base" && role !== "secondary") throw new Error("Resume role is invalid.");
+ipcMain.handle("settings:choose-resume", async (_event, role: "base" | "secondary" | "linkedin") => {
+  if (role !== "base" && role !== "secondary" && role !== "linkedin") throw new Error("Resume role is invalid.");
   if (!mainWindow) throw new Error("The Sensei window is not ready.");
   const resumesRoot = assertInsideWorkspace(requireWorkspace(), join(requireWorkspace(), "resumes"));
   await mkdir(resumesRoot, { recursive: true });
-  const result = await dialog.showOpenDialog(mainWindow, { title: role === "base" ? "Choose base resume" : "Add secondary resume", defaultPath: resumesRoot, properties: ["openFile"], filters: [{ name: "Resume files", extensions: ["md", "pdf", "docx"] }] });
+  const result = await dialog.showOpenDialog(mainWindow, { title: role === "base" ? "Choose base resume" : role === "linkedin" ? "Add your LinkedIn export" : "Add secondary resume", defaultPath: resumesRoot, properties: ["openFile"], filters: [{ name: role === "linkedin" ? "LinkedIn export" : "Resume files", extensions: role === "linkedin" ? ["pdf", "md", "txt", "csv", "docx"] : ["md", "pdf", "docx"] }] });
   if (result.canceled || !result.filePaths[0]) return settingsStore.get();
   const selected = resolve(result.filePaths[0]);
   let target = selected;
@@ -274,7 +274,9 @@ ipcMain.handle("settings:choose-resume", async (_event, role: "base" | "secondar
   }
   const relativeTarget = relative(requireWorkspace(), target).replaceAll("\\", "/");
   const current = await settingsStore.get();
-  const next = role === "base" ? await settingsStore.save({ baseResumePath: relativeTarget }) : await settingsStore.save({ baseResumePath: current.baseResumePath, secondaryResumePaths: [...new Set([...current.secondaryResumePaths, relativeTarget])] });
+  const next = role === "base" ? await settingsStore.save({ baseResumePath: relativeTarget })
+    : role === "linkedin" ? await settingsStore.save({ baseResumePath: current.baseResumePath, linkedinProfilePath: relativeTarget })
+    : await settingsStore.save({ baseResumePath: current.baseResumePath, secondaryResumePaths: [...new Set([...current.secondaryResumePaths, relativeTarget])] });
   await updateCandidateProfileSources(requireWorkspace(), next);
   return next;
 });
@@ -488,6 +490,18 @@ async function readinessNow() {
   return computeReadiness({ workspacePath: workspace, profile, settings, manifest, contextFileCount: summary.contextFileCount, agy: { installed: summary.agyAvailable, signedIn: await agySignInState() } });
 }
 ipcMain.handle("setup:readiness", async () => readinessNow());
+// The writing-voice file is the user's own; Setup edits only this one context file (other career sources stay read-only).
+ipcMain.handle("profile:save-voice", async (_event, text: unknown) => {
+  if (typeof text !== "string" || text.length > 20_000) throw new Error("The voice profile must be text under 20,000 characters.");
+  const workspace = requireWorkspace();
+  const profile = await readCandidateProfile(workspace).catch(() => null);
+  const relativePath = profile?.sources.applicationVoicePath ?? "context/application_voice_profile.md";
+  if (!/^context\/[^/]+\.md$/.test(relativePath)) throw new Error("The voice profile must be a Markdown file in the context folder.");
+  const path = assertInsideWorkspace(workspace, join(workspace, relativePath));
+  await mkdir(join(workspace, "context"), { recursive: true });
+  await writeFile(path, text.endsWith("\n") ? text : `${text}\n`, "utf8");
+  return relativePath;
+});
 ipcMain.handle("terminal:restart", async () => terminal.restart());
 ipcMain.handle("terminal:stop", async () => terminal.stop());
 

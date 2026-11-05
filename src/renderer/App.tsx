@@ -585,13 +585,13 @@ function WorkspaceApp() {
     await updateContext(isJobPath ? selectedCareerPaths : next, isJobPath ? next : selectedJobFiles);
   }
 
-  async function chooseResume(role: "base" | "secondary") {
+  async function chooseResume(role: "base" | "secondary" | "linkedin") {
     setError(null);
     try {
       const nextSettings = await window.sensei.settings.chooseResume(role);
       setResumeSettings(nextSettings);
       setBaseResume(nextSettings.baseResumePath);
-      const nextCareerPaths = [...new Set([...selectedCareerPaths, nextSettings.baseResumePath, ...nextSettings.secondaryResumePaths]
+      const nextCareerPaths = [...new Set([...selectedCareerPaths, nextSettings.baseResumePath, ...nextSettings.secondaryResumePaths, nextSettings.linkedinProfilePath]
         .filter((path): path is string => Boolean(path)))];
       setSelectedCareerPaths(nextCareerPaths);
       await updateContext(nextCareerPaths, selectedJobFiles);
@@ -825,12 +825,12 @@ function WorkspaceApp() {
         onSettingsUpdated={(updated) => setResumeSettings(updated)}
       />
       <section className="viewer-panel">
-        {needsSetup ? <Onboarding workspace={workspace} profile={candidateProfile} readiness={readiness} onProfileCreated={async (profile) => { setCandidateProfile(profile); await refresh(); await loadReadiness(); }} onChooseBase={async () => { await chooseResume("base"); await loadReadiness(); }} onOpenAgy={() => setRightPanelOpen(true)} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onFinish={finishOnboarding} /> : preview ? <>
+        {needsSetup ? <Onboarding workspace={workspace} profile={candidateProfile} readiness={readiness} onProfileCreated={async (profile) => { setCandidateProfile(profile); await refresh(); await loadReadiness(); }} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onChooseBase={async () => { await chooseResume("base"); await loadReadiness(); }} onOpenAgy={() => setRightPanelOpen(true)} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onFinish={finishOnboarding} /> : preview ? <>
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
           <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
           : currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
-          : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} />
+          : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome
             onOpen={(path) => void selectFile(path)}
             notice={newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">
@@ -984,7 +984,8 @@ const ONBOARDING_STEPS: Array<{ id: OnboardingStep; label: string }> = [
  * recommended steps with Skip, ending on adding the first job. Readiness (electron/setup-readiness.ts) decides
  * when each step is done; this screen never keeps its own copy of those rules.
  */
-function Onboarding({ workspace, profile, readiness, onProfileCreated, onChooseBase, onOpenAgy, onRefresh, onAction, onFinish }: { workspace: WorkspaceSummary; profile: CandidateProfile | null; readiness: Readiness | null; onProfileCreated: (profile: CandidateProfile) => Promise<void>; onChooseBase: () => Promise<void>; onOpenAgy: () => void; onRefresh: () => void; onAction: (action: ReadinessItem["action"]) => void; onFinish: (destination: "jobs" | "context") => void }) {
+function Onboarding({ workspace, profile, readiness, onProfileCreated, onProfileSaved, onChooseBase, onOpenAgy, onRefresh, onAction, onFinish }: { workspace: WorkspaceSummary; profile: CandidateProfile | null; readiness: Readiness | null; onProfileCreated: (profile: CandidateProfile) => Promise<void>; onProfileSaved: (profile: CandidateProfile | null) => void; onChooseBase: () => Promise<void>; onOpenAgy: () => void; onRefresh: () => void; onAction: (action: ReadinessItem["action"]) => void; onFinish: (destination: "jobs" | "context") => void }) {
+  const [editing, setEditing] = useState<ReadinessItem["action"] | null>(null);
   const item = (id: string) => readiness?.items.find((entry) => entry.id === id) ?? null;
   const resume = item("resume");
   const agy = item("agy");
@@ -1082,7 +1083,8 @@ function Onboarding({ workspace, profile, readiness, onProfileCreated, onChooseB
         <ul className="onboarding-better">{recommended.map((entry) => <li key={entry.id} className={`is-${entry.state}`}>
           <span className="setup-state">{entry.state === "done" ? "Done" : "To do"}</span>
           <div><strong>{entry.title}</strong><small>{entry.improves}</small></div>
-          {entry.state !== "done" && entry.action !== "none" && <button className="btn-quiet" onClick={() => entry.action === "context" ? onFinish("context") : onAction(entry.action)}>{entry.action === "context" ? "Add files" : ACTION_LABEL[entry.action] ?? "Open"}</button>}
+          {entry.state !== "done" && entry.action !== "none" && editing !== entry.action && <button className="btn-quiet" onClick={() => INLINE_SETUP.has(entry.action) ? setEditing(entry.action) : entry.action === "context" ? onFinish("context") : onAction(entry.action)}>{INLINE_SETUP.has(entry.action) ? "Fill in" : entry.action === "context" ? "Add files" : ACTION_LABEL[entry.action] ?? "Open"}</button>}
+          {editing === entry.action && <div className="setup-row-editor"><SetupEditor action={entry.action} profile={profile} onSaved={(next) => { onProfileSaved(next); onRefresh(); }} onClose={() => setEditing(null)} /></div>}
         </li>)}</ul>
         <div className="onboarding-actions"><button className="btn-primary" onClick={() => onFinish("jobs")}>Add your first job</button></div>
       </>}
@@ -1269,20 +1271,114 @@ function SetupLine({ readiness, onOpen }: { readiness: Readiness | null; onOpen:
   </section>;
 }
 
+/** Setup items that are filled in right in the row instead of in Settings. */
+const INLINE_SETUP: ReadonlySet<ReadinessItem["action"]> = new Set(["story", "logistics", "private-names", "voice"]);
+const VOICE_TEMPLATE = [
+  "# Application voice profile",
+  "- Plain words and short sentences; no buzzwords.",
+  "- Sound like a person explaining their own work to a colleague.",
+  "- Lead with what you did, then why it mattered.",
+  "- Warm and direct: confident, without overselling.",
+  "",
+].join("\n");
+
+/**
+ * A small editor for one Setup item, saved straight to the profile (or the voice file). Each field says where it is
+ * used, so nothing is filled in without the user knowing why.
+ */
+function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessItem["action"]; profile: CandidateProfile | null; onSaved: (profile: CandidateProfile | null) => void; onClose: () => void }) {
+  const pillars = profile?.preferences.coverLetter.narrativePillars;
+  const logistics = profile?.preferences.interview;
+  const [values, setValues] = useState<Record<string, string>>(() => ({
+    transitionSummary: profile?.career.transitionSummary ?? "",
+    turningPoints: pillars?.turningPoints || profile?.career.narrativePillars.turningPoints || "",
+    workingStyle: pillars?.workingStyle || profile?.career.narrativePillars.workingStyle || "",
+    personalValues: pillars?.personalValues || profile?.career.narrativePillars.personalValues || "",
+    location: logistics?.location ?? "", workAuthorization: logistics?.workAuthorization ?? "", compensation: logistics?.compensation ?? "", noticePeriod: logistics?.noticePeriod ?? "", workArrangement: logistics?.workArrangement ?? "",
+    names: (profile?.truth.confidentialNames ?? []).join("\n"),
+    voice: "",
+  }));
+  const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState("");
+  const voicePath = profile?.sources.applicationVoicePath ?? "context/application_voice_profile.md";
+  useEffect(() => {
+    if (action !== "voice") return;
+    void window.sensei.files.preview(voicePath).then((preview) => setValues((current) => ({ ...current, voice: preview.content?.trim() ? preview.content : VOICE_TEMPLATE }))).catch(() => setValues((current) => ({ ...current, voice: VOICE_TEMPLATE })));
+  }, [action, voicePath]);
+  const set = (key: string) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setValues((current) => ({ ...current, [key]: event.target.value }));
+  async function save() {
+    if (!profile && action !== "voice") return;
+    setSaving(true);
+    setProblem("");
+    try {
+      let next: CandidateProfile | null = profile;
+      if (action === "story") {
+        next = await window.sensei.profile.updateDetails({ transitionSummary: values.transitionSummary!.trim() });
+        // Story pillars have one owner: preferences.coverLetter.narrativePillars (W13).
+        next = await window.sensei.profile.updatePreferences({ ...next.preferences, coverLetter: { ...next.preferences.coverLetter, narrativePillars: { turningPoints: values.turningPoints!.trim(), workingStyle: values.workingStyle!.trim(), personalValues: values.personalValues!.trim() } } });
+      } else if (action === "logistics") {
+        next = await window.sensei.profile.updateDetails({ interviewLogistics: { location: values.location!.trim(), workAuthorization: values.workAuthorization!.trim(), compensation: values.compensation!.trim(), noticePeriod: values.noticePeriod!.trim(), workArrangement: values.workArrangement!.trim() } });
+      } else if (action === "private-names") {
+        next = await window.sensei.profile.updateDetails({ confidentialNames: [...new Set(values.names!.split(/\n|,/).map((name) => name.trim()).filter(Boolean))] });
+      } else if (action === "voice") {
+        await window.sensei.profile.saveVoice(values.voice!);
+      }
+      onSaved(next);
+      onClose();
+    } catch (caught) {
+      setProblem(messageOf(caught, "Couldn't save that."));
+    } finally { setSaving(false); }
+  }
+  const field = (key: string, label: string, hint: string, multiline = false) => <label key={key} className="setup-field"><span>{label}</span>
+    {multiline ? <textarea rows={2} value={values[key]} onChange={set(key)} placeholder={hint} /> : <input value={values[key]} onChange={set(key)} placeholder={hint} />}
+  </label>;
+  return <div className="setup-editor">
+    {action === "story" && <>
+      <p className="muted">Used for cover letters, so they're about you and your path. Your own words; a sentence or two each is enough.</p>
+      {field("transitionSummary", "Career direction", "Where your career has been and where you're heading.", true)}
+      {field("turningPoints", "Why you made your key moves", "What made you change roles or step outside your comfort zone?", true)}
+      {field("workingStyle", "How you work when things go wrong", "How you handle a stuck customer, a failing project, or friction.", true)}
+      {field("personalValues", "Who you are beyond the job", "What you care about, as a person.", true)}
+    </>}
+    {action === "logistics" && <>
+      <p className="muted">Used word for word in interview prep and application answers. Leave a field empty if you'd rather not say; it's flagged, never guessed.</p>
+      {field("location", "Where you live or will work", "e.g. Denver, CO; open to relocating")}
+      {field("workAuthorization", "Work authorization", "e.g. US citizen; no sponsorship needed")}
+      {field("compensation", "Pay target", "e.g. $120,000–$140,000 base")}
+      {field("noticePeriod", "Start date or notice", "e.g. two weeks' notice")}
+      {field("workArrangement", "Work setup you want", "e.g. hybrid or on-site, up to 3 days")}
+    </>}
+    {action === "private-names" && <>
+      <p className="muted">Clients, partners, or projects that must never appear in a resume or cover letter. One per line. Drafts describe them generically instead ("a global retail client").</p>
+      <label className="setup-field"><span>Names to keep private</span><textarea rows={4} value={values.names} onChange={set("names")} placeholder={"Orbit Health\nProject Falcon"} /></label>
+    </>}
+    {action === "voice" && <>
+      <p className="muted">A few lines about how you sound. Agy reads them before every letter and answer. Edit the starting lines so they sound like you.</p>
+      <label className="setup-field"><span>{voicePath}</span><textarea rows={8} value={values.voice} onChange={set("voice")} /></label>
+    </>}
+    {problem && <p className="inline-error" role="alert">{problem}</p>}
+    <div className="onboarding-actions"><button className="btn-primary" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</button><button className="btn-quiet" onClick={onClose}>Cancel</button></div>
+  </div>;
+}
+
 const READINESS_STATE: Record<ReadinessItem["state"], string> = { done: "Done", missing: "To do", problem: "Needs a fix", later: "Comes later" };
 const ACTION_LABEL: Partial<Record<ReadinessItem["action"], string>> = { profile: "Open Settings", resume: "Choose resume", agy: "Open Agy", context: "Open Career context", story: "Open Settings", logistics: "Open Settings", "private-names": "Open Settings", "other-resumes": "Add a resume", voice: "Open Settings" };
 
 /** Setup: what JobSensei needs (required) and what makes it better (recommended), each with how to do it in the app. */
-function SetupHome({ readiness, onRefresh, onAction, onReveal }: { readiness: Readiness | null; onRefresh: () => void; onAction: (action: ReadinessItem["action"]) => void; onReveal: (path: string) => void }) {
+function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAction, onReveal, onAddLinkedin }: { readiness: Readiness | null; profile: CandidateProfile | null; onProfileSaved: (profile: CandidateProfile | null) => void; onRefresh: () => void; onAction: (action: ReadinessItem["action"]) => void; onReveal: (path: string) => void; onAddLinkedin: () => void }) {
   useEffect(() => { onRefresh(); }, []);
+  const [editing, setEditing] = useState<ReadinessItem["action"] | null>(null);
   if (!readiness) return <section className="setup-home"><p className="muted">Checking your setup…</p></section>;
   const row = (item: ReadinessItem) => <li key={item.id} className={`setup-row is-${item.state}`}>
     <span className="setup-state">{READINESS_STATE[item.state]}</span>
     <div className="setup-text"><strong>{item.title}</strong><p>{item.detail}</p>{item.lines.length > 0 && <ul className="setup-lines">{item.lines.map((line) => <li key={line}>{line}</li>)}</ul>}<small>{item.improves}</small></div>
     <span className="setup-actions">
-      {item.state !== "done" && item.action !== "none" && ACTION_LABEL[item.action] && <button className={item.level === "required" ? "btn-primary" : "btn-quiet"} onClick={() => onAction(item.action)}>{ACTION_LABEL[item.action]}</button>}
+      {INLINE_SETUP.has(item.action) ? editing !== item.action && <button className={item.state === "done" ? "btn-link" : "btn-quiet"} onClick={() => setEditing(item.action)}>{item.state === "done" ? "Edit" : "Fill in"}</button>
+        : item.state !== "done" && item.action !== "none" && ACTION_LABEL[item.action] && <button className={item.level === "required" ? "btn-primary" : "btn-quiet"} onClick={() => onAction(item.action)}>{ACTION_LABEL[item.action]}</button>}
+      {item.action === "other-resumes" && <button className="btn-quiet" onClick={onAddLinkedin}>Add LinkedIn export</button>}
       {item.path && <button className="btn-link" onClick={() => onReveal(item.path!)}>Show in {navigator.platform.startsWith("Win") ? "Explorer" : "Finder"}</button>}
     </span>
+    {editing === item.action && <div className="setup-row-editor"><SetupEditor action={item.action} profile={profile} onSaved={(next) => { onProfileSaved(next); onRefresh(); }} onClose={() => setEditing(null)} /></div>}
   </li>;
   return <section className="setup-home">
     <header className="page-head"><div><h1>Setup</h1><p>{readiness.ready ? "JobSensei has what it needs. The recommended steps make drafts and interview prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button> · <button className="btn-link" onClick={() => onReveal("")}>Open your workspace folder</button></p></div></header>

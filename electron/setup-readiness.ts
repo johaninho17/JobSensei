@@ -104,7 +104,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
   add({
     id: "story", level: "recommended", state: hasStory ? "done" : "missing", action: "story", path: null,
     title: "Career story (3 short questions)",
-    detail: hasStory ? "Filled in." : "Not filled in. Settings → Career story.",
+    detail: hasStory ? "Filled in." : "Not filled in yet.",
     improves: "Cover letters about you and your path, not a summary of the job posting.",
   });
 
@@ -113,7 +113,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
   add({
     id: "logistics", level: "recommended", state: blanks.length ? "missing" : "done", action: "logistics", path: null,
     title: "Interview logistics",
-    detail: blanks.length ? `Missing: ${blanks.join(", ")}. Settings → Interview prep.` : "All filled in.",
+    detail: blanks.length ? `Missing: ${blanks.join(", ")}.` : "All filled in.",
     improves: "Interview prep and application answers use your words for pay, location, and start date; blanks are flagged, never guessed.",
   });
 
@@ -121,7 +121,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
   add({
     id: "private-names", level: "recommended", state: names.length ? "done" : "missing", action: "private-names", path: null,
     title: "Names to keep private",
-    detail: names.length ? `${names.length} name${names.length === 1 ? "" : "s"} kept out of resumes and letters.` : "None listed. Add client, partner, or project names that must not appear in public documents (Settings).",
+    detail: names.length ? `${names.length} name${names.length === 1 ? "" : "s"} kept out of resumes and letters.` : "None listed yet. Add client, partner, or project names that must not appear in public documents.",
     improves: "Keeps confidential clients out of resumes and cover letters.",
   });
 
@@ -130,7 +130,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
   add({
     id: "voice", level: "recommended", state: hasVoice ? "done" : "missing", action: "voice", path: voicePath,
     title: "Your writing voice",
-    detail: hasVoice ? `${voicePath} is set.` : `No voice profile yet. Add a cover letter you liked to the context folder and ask Agy to build ${voicePath}, or write it yourself.`,
+    detail: hasVoice ? `${voicePath} is set.` : "No voice profile yet. Write a few lines about how you sound (a starting template is provided).",
     improves: "Letters and answers sound like you.",
   });
 
@@ -138,7 +138,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
   add({
     id: "other-resumes", level: "recommended", state: others ? "done" : "missing", action: "other-resumes", path: "resumes",
     title: "LinkedIn export or other resumes",
-    detail: others ? `${others} added.` : "None added. Settings → Resumes.",
+    detail: others ? `${others} added.` : "None added yet.",
     improves: "Cross-checks your dates, titles, and wording.",
   });
 

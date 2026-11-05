@@ -1245,6 +1245,8 @@ export interface SenseiApi {
     get(): Promise<CandidateProfile | null>;
     create(input: CandidateProfileCreate): Promise<CandidateProfile>;
     updatePreferences(preferences: CandidateProfile["preferences"]): Promise<CandidateProfile>;
+    /** Saves the writing-voice file (context/application_voice_profile.md); returns its path. */
+    saveVoice(text: string): Promise<string>;
     updateDetails(details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[]; interviewLogistics?: Partial<InterviewLogistics> }): Promise<CandidateProfile>;
     /** What Agy will receive from the profile and voice profile on the next run. */
     preview(): Promise<{ styleRules: string[]; instructions: string[]; baseResumeHasSummary: boolean | null; interviewLogistics: string[]; storyBankPath: string | null }>;
@@ -1260,7 +1262,7 @@ export interface SenseiApi {
   settings: {
     get(): Promise<Settings>;
     save(input: SettingsUpdate): Promise<Settings>;
-    chooseResume(role: "base" | "secondary"): Promise<Settings>;
+    chooseResume(role: "base" | "secondary" | "linkedin"): Promise<Settings>;
     removeSecondary(path: string): Promise<Settings>;
   };
   files: {

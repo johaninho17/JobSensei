@@ -693,3 +693,11 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .context-add .segmented { justify-self: start; }
 .context-add-actions { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; font-size: var(--fs-13); }
 .setup-lines { margin: var(--space-1) 0; padding-left: var(--space-4); font-size: var(--fs-13); }
+
+.setup-row-editor { grid-column: 1 / -1; }
+.setup-editor { display: grid; gap: var(--space-2); max-width: 720px; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--raised); }
+.setup-editor p { margin: 0; font-size: var(--fs-13); }
+.setup-field { display: grid; gap: 4px; font-size: var(--fs-13); }
+.setup-field span { color: var(--muted); }
+.setup-field input, .setup-field textarea { padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-s); color: var(--ink); background: var(--canvas); font: inherit; }
+.onboarding-better li .setup-row-editor { grid-column: 1 / -1; }
