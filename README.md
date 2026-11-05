@@ -116,7 +116,7 @@ data/
 ## Get Started
 
 1. Enter your name and artifact filename prefix on the in-app Get Started screen.
-2. Select a Markdown, PDF, or DOCX base resume with the native file picker.
+2. Select a Word (.docx) or Markdown (.md) base resume with the native file picker (a PDF works only with its .docx or .md version beside it). The Setup page in the sidebar lists what is still needed.
 3. Add normalized evidence to `data/context/structured/` and optional source material to `data/context/broad/` using Finder, File Explorer, or the terminal.
 4. Return to JobSensei; the workspace watcher refreshes the context view automatically.
 5. Confirm that Agy is available, then open the Agy panel (top bar → Agy).

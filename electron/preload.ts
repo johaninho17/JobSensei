@@ -7,6 +7,9 @@ const api: SenseiApi = {
     openRelease: (url) => ipcRenderer.invoke("app:open-release", url),
     copyText: (text) => ipcRenderer.invoke("app:copy-text", text),
   },
+  setup: {
+    readiness: () => ipcRenderer.invoke("setup:readiness"),
+  },
   workspace: {
     getSummary: () => ipcRenderer.invoke("workspace:get-summary"),
     rescan: () => ipcRenderer.invoke("workspace:rescan"),

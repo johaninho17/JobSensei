@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { jobHealthSchema } from "./job-record";
+import type { Readiness } from "./readiness";
 
 export const schemaVersion = 1;
 
@@ -1222,6 +1223,9 @@ export type QuestionsState = {
 };
 
 export interface SenseiApi {
+  setup: {
+    readiness(): Promise<Readiness>;
+  };
   app: {
     copyText(text: string): Promise<void>;
     /** A newer GitHub release, or null (also null for builds without a recorded release source). */

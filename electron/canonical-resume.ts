@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { RESUME_FORMAT_HELP, RESUME_PDF_ONLY } from "../src/shared/readiness";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import mammoth from "mammoth";
@@ -268,7 +269,7 @@ export async function loadCanonicalResumeBaseline(workspacePath: string, relativ
       }
     }
   }
-  throw new Error("Protected resume baselines currently require a Markdown or DOCX base resume.");
+  throw new Error(extension === ".pdf" ? RESUME_PDF_ONLY : RESUME_FORMAT_HELP);
 }
 
 /** Summary tailoring applies only when the base resume has a summary and the user turned it on. */

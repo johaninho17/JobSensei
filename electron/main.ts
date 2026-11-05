@@ -23,6 +23,7 @@ import { exportMarkdownPdf } from "./pdf-export";
 import { getInterviewOverview, listInterviewRounds, refreshInterviewDashboard, setCurrentInterviewRound } from "./interviews";
 import { invalidateSearchIndex, searchWorkspace } from "./search";
 import { getJobApplicationStatus, validateJobApplication } from "./application-validation";
+import { computeReadiness } from "./setup-readiness";
 import { createCandidateProfile, readCandidateProfile, updateCandidateProfileDetails, updateCandidateProfilePreferences, updateCandidateProfileSources } from "./candidate-profile";
 import { compactStyleRules, profileInstructionLines } from "./evidence-snapshot";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
@@ -442,7 +443,36 @@ ipcMain.handle("terminal:resize", async (_event, input: { cols: number; rows: nu
   if (!Number.isInteger(input?.cols) || !Number.isInteger(input?.rows) || input.cols < 2 || input.rows < 2 || input.cols > 500 || input.rows > 200) return;
   return terminal.resize(input.cols, input.rows);
 });
-ipcMain.handle("terminal:status", async () => terminal.status());
+ipcMain.handle("terminal:status", async () => { const status = terminal.status(); void noteAgySignIn(status); return status; });
+
+// Agy runs with an app-owned home that needs one sign-in. The first time its ready screen is seen, that is
+// remembered (userData/agy-signed-in.json), so Setup can say "Agy is ready" even before Agy is started again.
+let agySignedIn: boolean | null = null;
+async function noteAgySignIn(status: ReturnType<TerminalSession["status"]>): Promise<void> {
+  if (status.agy && status.screen === "ready" && agySignedIn !== true) {
+    agySignedIn = true;
+    await writeFile(join(app.getPath("userData"), "agy-signed-in.json"), `${JSON.stringify({ seenReadyAt: new Date().toISOString() })}\n`).catch(() => undefined);
+  }
+}
+async function agySignInState(): Promise<boolean | null> {
+  if (agySignedIn === null) agySignedIn = await stat(join(app.getPath("userData"), "agy-signed-in.json")).then(() => true, () => null);
+  if (agySignedIn) return true;
+  const status = terminal.status();
+  return status.running && status.agy && /\b(?:sign in|log in|login|authenticate|authorize)\b/i.test(status.recentOutput) ? false : null;
+}
+
+/** Setup readiness for the current workspace (electron/setup-readiness.ts owns the rules). */
+async function readinessNow() {
+  const workspace = requireWorkspace();
+  const [profile, settings, manifest, summary] = await Promise.all([
+    readCandidateProfile(workspace).catch(() => null),
+    settingsStore.get().catch(() => null),
+    readActiveContextManifest(workspace).catch(() => null),
+    summarizeWorkspace(workspace, getRepositoryRoot(), await settingsStore.get().catch(() => undefined)),
+  ]);
+  return computeReadiness({ workspacePath: workspace, profile, settings, manifest, contextFileCount: summary.contextFileCount, agy: { installed: summary.agyAvailable, signedIn: await agySignInState() } });
+}
+ipcMain.handle("setup:readiness", async () => readinessNow());
 ipcMain.handle("terminal:restart", async () => terminal.restart());
 ipcMain.handle("terminal:stop", async () => terminal.stop());
 

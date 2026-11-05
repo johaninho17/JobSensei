@@ -22,7 +22,7 @@ Non-LinkedIn structured project evidence is primary for the current employer. Li
 - Eligible LinkedIn rows may support history, education, technologies, and older roles.
 - Secondary resumes may help locate historical wording but cannot independently verify a public claim.
 - The configured base resume controls identity, employer order, titles, dates, education, section grammar, and footprint. For its bullets: unchanged base-resume bullets are the candidate's own approved claims and may appear word for word, but they earn no fit-score credit, and any rewritten or new claim must trace to eligible context evidence.
-- The snapshot stores a defensive footprint profile for the selected Markdown, PDF, or DOCX base resume. Markdown and structurally readable DOCX profiles are reliable; PDF or malformed binary profiles may be partial and must expose warnings.
+- The snapshot stores a defensive footprint profile for the selected Markdown, PDF, or DOCX base resume. Markdown and structurally readable DOCX profiles are reliable; PDF or malformed binary profiles may be partial and must expose warnings. The resume's structure always comes from a DOCX or Markdown file (a PDF only with its .docx/.md version beside it); when that is missing the snapshot stops with the app's Setup wording, so ask the user to fix it in Setup instead of working around it.
 - Snapshot creation pins a deterministic `.sensei/application_run.json`. An unchanged manifest and base resume reuse the same snapshot and run. Changed inputs make earlier drafts pending review.
 - The supplied JD supports employer and requirement statements only. It never supports candidate experience.
 - `denylistRules` are mandatory policy and override resumes, old artifacts, the JD, and conversation memory.
