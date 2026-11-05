@@ -85,10 +85,11 @@ function runSmokeCheck(window: BrowserWindow, outPath: string): void {
       void window.webContents.executeJavaScript(`(async () => {
         const root = document.getElementById("root");
         const workspace = await window.sensei.workspace.getSummary().then((value) => value.status).catch((error) => "error: " + error.message);
-        return { rendered: Boolean(root && root.childElementCount > 0 && document.body.innerText.trim().length > 20), workspace, text: document.body.innerText.slice(0, 120) };
-      })()`).then((check: { rendered: boolean; workspace: string; text: string }) => {
+        // A new, empty workspace must open on the first-run steps.
+        return { rendered: Boolean(root && root.childElementCount > 0 && document.body.innerText.trim().length > 20), firstRun: Boolean(document.querySelector(".onboarding [aria-current=step]")), workspace, text: document.body.innerText.slice(0, 120) };
+      })()`).then((check: { rendered: boolean; firstRun: boolean; workspace: string; text: string }) => {
         clearTimeout(timer);
-        finish({ ok: check.rendered && !String(check.workspace).startsWith("error"), detail: JSON.stringify(check) });
+        finish({ ok: check.rendered && check.firstRun && !String(check.workspace).startsWith("error"), detail: JSON.stringify(check) });
       }, (error: unknown) => { clearTimeout(timer); finish({ ok: false, detail: String(error) }); });
     }, 4000);
   });
@@ -477,6 +478,7 @@ async function agySignInState(): Promise<boolean | null> {
 /** Setup readiness for the current workspace (electron/setup-readiness.ts owns the rules). */
 async function readinessNow() {
   const workspace = requireWorkspace();
+  await noteAgySignIn(terminal.status());
   const [profile, settings, manifest, summary] = await Promise.all([
     readCandidateProfile(workspace).catch(() => null),
     settingsStore.get().catch(() => null),

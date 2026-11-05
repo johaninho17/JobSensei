@@ -131,6 +131,13 @@ function WorkspaceApp() {
    * jobs are ahead of it. A paste that is not a job description throws (the caller decides what to do).
    */
   const [readiness, setReadiness] = useState<Readiness | null>(null);
+  // The first-run flow is finished once (per computer); existing workspaces with jobs never see it.
+  const [onboardingDone, setOnboardingDone] = useState(() => { try { return window.localStorage.getItem("sensei-onboarding-done") === "1"; } catch { return false; } });
+  function finishOnboarding(destination: "jobs" | "context") {
+    setOnboardingDone(true);
+    try { window.localStorage.setItem("sensei-onboarding-done", "1"); } catch { /* storage unavailable */ }
+    showPage(destination === "context" ? "context-home" : "jobs-home");
+  }
   async function loadReadiness() { try { const next = await window.sensei.setup.readiness(); setReadiness(next); return next; } catch { return null; } }
   async function queueJob(input: { kind: "link"; url: string } | { kind: "paste"; text: string; note?: string }, manual: boolean): Promise<number> {
     // The app says what setup is missing before a job reaches Agy (electron/setup-readiness.ts owns the rules).
@@ -592,6 +599,15 @@ function WorkspaceApp() {
     } catch (caught) { setError(messageOf(caught, "Unable to update resume sources.")); }
   }
 
+  /** What each Setup action does in the app (Setup page and the first-run flow). */
+  function runSetupAction(action: ReadinessItem["action"]) {
+    if (action === "resume" || action === "other-resumes") void chooseResume(action === "resume" ? "base" : "secondary").then(() => loadReadiness());
+    else if (action === "agy") setRightPanelOpen(true);
+    else if (action === "context") showPage("context-home");
+    else if (action === "folder") void window.sensei.files.reveal("").catch(() => undefined);
+    else if (action !== "none") setSettingsModalOpen(true);
+  }
+
   /** Files added from the app are copied into context, checked for Agy, and not flagged as "new" (the user just chose them). */
   async function addContextFiles(kind: "structured" | "broad", paths?: string[]) {
     setError(null);
@@ -651,7 +667,8 @@ function WorkspaceApp() {
   }
 
   const configured = workspace.status === "ready" && Boolean(workspace.path);
-  const needsSetup = configured && (!workspace.hasCandidateProfile || !workspace.hasBaseResume);
+  const resumeReady = readiness ? readiness.items.find((item) => item.id === "resume")?.state === "done" : workspace.hasBaseResume;
+  const needsSetup = configured && (!workspace.hasCandidateProfile || !resumeReady || (!onboardingDone && workspace.jobCount === 0));
   const activeJobIds = contextManifest?.selectedJobIds ?? [];
   const activeJobs = activeJobIds.map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job));
   const viewedPath = preview?.relativePath ?? selectedPath;
@@ -808,17 +825,12 @@ function WorkspaceApp() {
         onSettingsUpdated={(updated) => setResumeSettings(updated)}
       />
       <section className="viewer-panel">
-        {needsSetup ? <GetStarted workspace={workspace} profile={candidateProfile} settings={resumeSettings} onProfileCreated={async (profile) => { setCandidateProfile(profile); await refresh(); }} onChooseBase={() => void chooseResume("base")} /> : preview ? <>
+        {needsSetup ? <Onboarding workspace={workspace} profile={candidateProfile} readiness={readiness} onProfileCreated={async (profile) => { setCandidateProfile(profile); await refresh(); await loadReadiness(); }} onChooseBase={async () => { await chooseResume("base"); await loadReadiness(); }} onOpenAgy={() => setRightPanelOpen(true)} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onFinish={finishOnboarding} /> : preview ? <>
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
           <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
           : currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
-          : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} onRefresh={() => void loadReadiness()} onAction={(action) => {
-              if (action === "resume" || action === "other-resumes") void chooseResume(action === "resume" ? "base" : "secondary").then(() => loadReadiness());
-              else if (action === "agy") setRightPanelOpen(true);
-              else if (action === "context") showPage("context-home");
-              else setSettingsModalOpen(true);
-            }} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} />
+          : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} />
           : currentLocation.kind === "context-home" ? <ContextHome
             onOpen={(path) => void selectFile(path)}
             notice={newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">
@@ -959,15 +971,43 @@ function TopbarMenu({ theme, onToggleTheme, navigationOpen, onToggleNavigation, 
   </div>;
 }
 
-function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBase }: { workspace: WorkspaceSummary; profile: CandidateProfile | null; settings: Settings; onProfileCreated: (profile: CandidateProfile) => Promise<void>; onChooseBase: () => void }) {
+type OnboardingStep = "profile" | "resume" | "agy" | "better";
+const ONBOARDING_STEPS: Array<{ id: OnboardingStep; label: string }> = [
+  { id: "profile", label: "Your name" },
+  { id: "resume", label: "Base resume" },
+  { id: "agy", label: "Agy" },
+  { id: "better", label: "Make it better" },
+];
+
+/**
+ * First run: the required steps one at a time, each done inside the app (name, base resume, Agy), then the
+ * recommended steps with Skip, ending on adding the first job. Readiness (electron/setup-readiness.ts) decides
+ * when each step is done; this screen never keeps its own copy of those rules.
+ */
+function Onboarding({ workspace, profile, readiness, onProfileCreated, onChooseBase, onOpenAgy, onRefresh, onAction, onFinish }: { workspace: WorkspaceSummary; profile: CandidateProfile | null; readiness: Readiness | null; onProfileCreated: (profile: CandidateProfile) => Promise<void>; onChooseBase: () => Promise<void>; onOpenAgy: () => void; onRefresh: () => void; onAction: (action: ReadinessItem["action"]) => void; onFinish: (destination: "jobs" | "context") => void }) {
+  const item = (id: string) => readiness?.items.find((entry) => entry.id === id) ?? null;
+  const resume = item("resume");
+  const agy = item("agy");
+  const [step, setStep] = useState<OnboardingStep>("profile");
+  // The starting step is chosen once the profile and readiness have loaded: the first one not done yet.
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current || !readiness) return;
+    started.current = true;
+    setStep(!profile ? "profile" : resume?.state !== "done" ? "resume" : "agy");
+  }, [readiness, profile]);
   const [fullName, setFullName] = useState("");
   const [artifactPrefix, setArtifactPrefix] = useState("");
-  const [turningPoints, setTurningPoints] = useState("");
-  const [workingStyle, setWorkingStyle] = useState("");
-  const [personalValues, setPersonalValues] = useState("");
-  const [transitionSummary, setTransitionSummary] = useState("");
-  const [state, setState] = useState<"idle" | "saving" | "error">("idle");
+  const [state, setState] = useState<"idle" | "saving">("idle");
   const [message, setMessage] = useState("");
+  // On the Agy step, check every 3 seconds so the step turns green soon after sign-in.
+  useEffect(() => {
+    if (step !== "agy" || agy?.state === "done") return;
+    const timer = window.setInterval(onRefresh, 3000);
+    return () => window.clearInterval(timer);
+  }, [step, agy?.state]);
+  // Move back to an earlier step if its requirement stops being met (for example, the resume file was removed).
+  useEffect(() => { if (started.current && !profile && step !== "profile") setStep("profile"); }, [profile, step]);
   function updateName(value: string) {
     setFullName(value);
     if (!artifactPrefix) setArtifactPrefix(value.trim().replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, ""));
@@ -977,85 +1017,78 @@ function GetStarted({ workspace, profile, settings, onProfileCreated, onChooseBa
     setState("saving");
     setMessage("");
     try {
-      const narrativePillars = (turningPoints.trim() || workingStyle.trim() || personalValues.trim())
-        ? {
-            turningPoints: turningPoints.trim(),
-            workingStyle: workingStyle.trim(),
-            personalValues: personalValues.trim(),
-          }
-        : undefined;
-      const next = await window.sensei.profile.create({ fullName, artifactPrefix, narrativePillars, transitionSummary: transitionSummary.trim() || undefined });
-      await onProfileCreated(next);
-      setState("idle");
+      await onProfileCreated(await window.sensei.profile.create({ fullName, artifactPrefix }));
+      setStep("resume");
     } catch (caught) {
-      setState("error");
-      setMessage(messageOf(caught, "Unable to create the local candidate profile."));
-    }
+      setMessage(messageOf(caught, "Unable to save your name."));
+    } finally { setState("idle"); }
   }
-  const steps = [
-    ["Local workspace", Boolean(workspace.path), workspace.path || "Created automatically on first launch"],
-    ["Candidate profile", Boolean(profile), profile ? `${profile.identity.fullName} · ${profile.identity.artifactPrefix}` : "Add your name and artifact prefix"],
-    ["Base resume", Boolean(settings.baseResumePath && workspace.hasBaseResume), settings.baseResumePath ?? "Choose a Word (.docx) or Markdown (.md) resume"],
-    ["Career context", workspace.contextFileCount > 0, workspace.contextFileCount ? `${workspace.contextFileCount} local files` : "Add files to the context folder in your workspace"],
-    ["Agy terminal", workspace.agyAvailable, workspace.agyAvailable ? "Agy ready (offline bundled or installed)" : "Install Agy or add it to PATH"],
-  ] as const;
-  return <section className="get-started">
-    <div className="get-started-copy"><h1>Get JobSensei ready</h1><p>Your files stay on this computer, in your workspace folder. Nothing is uploaded except what Agy reads to draft for you.</p></div>
-    <div className="get-started-grid">
-      <ol>{steps.map(([label, complete, detail], index) => <li className={complete ? "is-complete" : ""} key={label}><span>{complete ? "✓" : index + 1}</span><div><strong>{label}</strong><small>{detail}</small></div></li>)}</ol>
-      <div className="setup-card">
-        {!profile ? <>
-          <h2>Create your candidate profile</h2>
-          <p>This stores identity and preferences locally. Career claims continue to come from your selected context files.</p>
-          <label>Full name<input value={fullName} onChange={(event) => updateName(event.target.value)} placeholder="Alex Morgan" /></label>
-          <label>Artifact prefix<input value={artifactPrefix} onChange={(event) => setArtifactPrefix(event.target.value.replace(/[^A-Za-z0-9_-]/g, ""))} placeholder="Alex_Morgan" /></label>
-          <details className="setup-story-accordion">
-            <summary>Career story (optional)</summary>
-            <p className="setup-story-hint">
-              Answer these 3 questions now or edit them anytime in Settings. JobSensei uses them so your cover letters reflect your authentic journey instead of repeating the job description.
-            </p>
-            <label>
-              Career direction
-              <textarea
-                rows={2}
-                placeholder="One or two sentences: where your career has been and where you're heading."
-                value={transitionSummary}
-                onChange={(e) => setTransitionSummary(e.target.value)}
-              />
-            </label>
-            <label>
-              1. Career Transitions & Pivots
-              <textarea
-                rows={2}
-                placeholder="Why did you make key career moves or step outside your comfort zone? What drives you?"
-                value={turningPoints}
-                onChange={(e) => setTurningPoints(e.target.value)}
-              />
-            </label>
-            <label>
-              2. Operating Style & Problem Ownership
-              <textarea
-                rows={2}
-                placeholder="How do you handle client friction or technical problems? (e.g., take full ownership, understand their shoes, work it out directly)"
-                value={workingStyle}
-                onChange={(e) => setWorkingStyle(e.target.value)}
-              />
-            </label>
-            <label>
-              3. Fit as a Person & Core Values
-              <textarea
-                rows={2}
-                placeholder="Who are you as a person beyond daily task descriptions?"
-                value={personalValues}
-                onChange={(e) => setPersonalValues(e.target.value)}
-              />
-            </label>
-          </details>
-          <button disabled={!fullName.trim() || !artifactPrefix.trim() || state === "saving"} onClick={() => void createProfile()}>{state === "saving" ? "Creating…" : "Create local profile"}</button>
-        </> : !workspace.hasBaseResume ? <><h2>Select a base resume</h2><p>The base resume protects identity, chronology, section order, and presentation. Career context remains the factual authority.</p><button onClick={onChooseBase}>Choose base resume</button></> : <><h2>Setup complete</h2><p>Open the Command Center and run Agy from the repository root. Your active workspace remains <code>data/</code>.</p></>}
-        {message && <p className="inline-error" role="alert">{message}</p>}
-      </div>
+  async function chooseResume() {
+    setState("saving");
+    try { await onChooseBase(); } finally { setState("idle"); }
+  }
+  const current = ONBOARDING_STEPS.findIndex((entry) => entry.id === step);
+  const recommended = (readiness?.items ?? []).filter((entry) => entry.level === "recommended" && entry.state !== "later");
+  return <section className="get-started onboarding" aria-labelledby="onboarding-title">
+    <div className="get-started-copy">
+      <h1 id="onboarding-title">Get JobSensei ready</h1>
+      <p>A few steps, all inside the app. Your files stay on this computer, in your workspace folder; nothing is uploaded except what Agy reads to draft for you.</p>
     </div>
+    <ol className="onboarding-steps" aria-label="Setup steps">{ONBOARDING_STEPS.map((entry, index) => <li key={entry.id} className={index < current ? "is-complete" : index === current ? "is-current" : ""} aria-current={index === current ? "step" : undefined}><span>{index < current ? "✓" : index + 1}</span>{entry.label}</li>)}</ol>
+    <div className="setup-card onboarding-card">
+      {step === "profile" && profile && <>
+        <h2>Your name</h2>
+        <p>Saved as <strong>{profile.identity.fullName}</strong>; your files start with <code>{profile.identity.artifactPrefix}</code>. You can change it later in Settings.</p>
+        <div className="onboarding-actions"><button className="btn-primary" onClick={() => setStep(resume?.state === "done" ? "agy" : "resume")}>Continue</button></div>
+      </>}
+      {step === "profile" && !profile && <>
+        <h2>Your name</h2>
+        <p>It goes on every resume and cover letter. The file prefix names your files, like <code>{artifactPrefix || "Alex_Morgan"}_Resume.md</code>.</p>
+        <label>Full name<input autoFocus value={fullName} onChange={(event) => updateName(event.target.value)} placeholder="Alex Morgan" /></label>
+        <label>File prefix<input value={artifactPrefix} onChange={(event) => setArtifactPrefix(event.target.value.replace(/[^A-Za-z0-9_-]/g, ""))} placeholder="Alex_Morgan" /></label>
+        <div className="onboarding-actions"><button className="btn-primary" disabled={!fullName.trim() || !artifactPrefix.trim() || state === "saving"} onClick={() => void createProfile()}>{state === "saving" ? "Saving…" : "Continue"}</button></div>
+      </>}
+      {step === "resume" && <>
+        <h2>Your base resume</h2>
+        <p>Choose your best resume as a Word (.docx) or Markdown (.md) file. Every tailored resume keeps its layout, order, and dates. A PDF works only when its Word or Markdown version is in the same folder.</p>
+        {resume && resume.state !== "missing" && <div className={`onboarding-result is-${resume.state}`} role="status">
+          <strong>{resume.state === "done" ? "Here is what JobSensei read" : "This resume can't be used yet"}</strong>
+          <p>{resume.detail}</p>
+          {resume.lines.length > 0 && <ul>{resume.lines.map((line) => <li key={line}>{line}</li>)}</ul>}
+        </div>}
+        <div className="onboarding-actions">
+          {resume?.state === "done" && <button className="btn-primary" onClick={() => setStep("agy")}>Looks right</button>}
+          <button className={resume?.state === "done" ? "btn-quiet" : "btn-primary"} disabled={state === "saving"} onClick={() => void chooseResume()}>{resume?.state === "missing" || !resume ? "Choose your resume" : "Choose another"}</button>
+        </div>
+      </>}
+      {step === "agy" && <>
+        <h2>Sign in to Agy</h2>
+        <p>Agy writes your drafts and interview prep. JobSensei gives Agy its own private home, so you sign in once here, even if you use Agy elsewhere.</p>
+        <div className={`onboarding-result is-${agy?.state === "done" ? "done" : agy?.state === "problem" ? "problem" : "missing"}`} role="status">
+          <strong>{agy?.state === "done" ? "Agy is signed in" : agy?.state === "problem" ? "Agy is waiting for you" : "Not signed in yet"}</strong>
+          <p>{agy?.state === "done" ? "You're ready to add jobs." : agy?.detail ?? "Checking…"}</p>
+        </div>
+        <div className="onboarding-actions">
+          {agy?.state === "done" ? <button className="btn-primary" onClick={() => setStep("better")}>Continue</button> : <>
+            <button className="btn-primary" disabled={!workspace.agyAvailable} onClick={onOpenAgy}>Open Agy and sign in</button>
+            <button className="btn-link" onClick={() => setStep("better")}>Do this later</button>
+          </>}
+        </div>
+        {agy?.state !== "done" && <p className="muted onboarding-note">This page checks again every few seconds. Jobs you add before signing in wait in the queue.</p>}
+      </>}
+      {step === "better" && <>
+        <h2>Make your drafts better</h2>
+        <p>None of these are required. Each one makes resumes, letters, or interview prep more yours. You can do them any time from Setup in the sidebar.</p>
+        <ul className="onboarding-better">{recommended.map((entry) => <li key={entry.id} className={`is-${entry.state}`}>
+          <span className="setup-state">{entry.state === "done" ? "Done" : "To do"}</span>
+          <div><strong>{entry.title}</strong><small>{entry.improves}</small></div>
+          {entry.state !== "done" && entry.action !== "none" && <button className="btn-quiet" onClick={() => entry.action === "context" ? onFinish("context") : onAction(entry.action)}>{entry.action === "context" ? "Add files" : ACTION_LABEL[entry.action] ?? "Open"}</button>}
+        </li>)}</ul>
+        <div className="onboarding-actions"><button className="btn-primary" onClick={() => onFinish("jobs")}>Add your first job</button></div>
+      </>}
+      {message && <p className="inline-error" role="alert">{message}</p>}
+    </div>
+    {current > 0 && <button className="btn-link onboarding-back" onClick={() => setStep(ONBOARDING_STEPS[current - 1]!.id)}>Back</button>}
   </section>;
 }
 

@@ -12,13 +12,6 @@ body.is-resizing-panels { cursor: col-resize; user-select: none}
 .get-started { width: min(980px, 100%); margin: auto; padding: clamp(28px, 5vw, 72px); color: var(--ink)}
 .get-started-copy h1 { margin: 8px 0 10px; color: var(--ink); font: 560 var(--fs-35)/1.1 var(--font-display)}
 .get-started-copy p { max-width: 650px; font-size: var(--fs-15); line-height: 1.6}
-.get-started-grid { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(320px, 1.2fr); gap: 24px; margin-top: 32px}
-.get-started ol { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none}
-.get-started li { display: flex; gap: 12px; align-items: center; padding: 13px; border: 1px solid var(--line, var(--line)); border-radius: 8px}
-.get-started li > span { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--raised); font-weight: 750}
-.get-started li.is-complete > span { color: var(--on-accent); background: var(--accent)}
-.get-started li div { display: grid; gap: 3px}
-.get-started li small { color: var(--muted); overflow-wrap: anywhere}
 .setup-card { padding: 22px; border: 1px solid var(--line, var(--line)); border-radius: 10px; background: var(--raised, var(--hover))}
 .setup-card h2 { margin: 0 0 8px; color: var(--ink)}
 .setup-card label { display: grid; gap: 6px; margin-top: 14px; font-size: var(--fs-12); font-weight: 700}
@@ -57,8 +50,7 @@ body.is-resizing-panels { cursor: col-resize; user-select: none}
   font-family: inherit;
   resize: vertical;
   box-sizing: border-box}
-.setup-card button { margin-top: 16px; padding: 10px 13px; border: 0; border-radius: 6px; color: var(--on-accent); background: var(--accent); cursor: pointer; font-weight: 750}
-@media (max-width: 760px) { .get-started-grid { grid-template-columns: 1fr} }
+.setup-card:not(.onboarding-card) button { margin-top: 16px; padding: 10px 13px; border: 0; border-radius: 6px; color: var(--on-accent); background: var(--accent); cursor: pointer; font-weight: 750}
 .viewer-panel { min-width: 0; overflow: auto; padding: 30px clamp(24px, 4vw, 58px)}.viewer-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; padding-bottom: 22px; border-bottom: 1px solid var(--line)}.viewer-header h1 { overflow: hidden; margin: 10px 0 0; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; font: 560 var(--fs-22) var(--font-display)}.viewer-header-actions { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto}.viewer-close { display: grid; place-items: center; width: 25px; height: 25px; padding: 0; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); background: transparent; cursor: pointer; font: var(--fs-18)/1 var(--font-ui)}.viewer-close:hover, .viewer-close:focus-visible { border-color: var(--accent); color: var(--accent); outline: none}.label { display: inline-block; padding: 4px 7px; border-radius: 4px; font: var(--fs-12) var(--font-ui); letter-spacing: .07em}.label.source { color: var(--muted); background: var(--raised)}.label.verified { color: var(--leaf); background: var(--leaf-tint)}.label.muted { color: var(--muted); background: var(--raised)}.document { min-width: 0}.document-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 13px; padding: 14px 0; color: var(--muted); font: var(--fs-12) var(--font-ui)}.document-meta span:first-child { overflow: hidden; max-width: 100%; text-overflow: ellipsis}.document pre { margin: 0; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-13)/1.7 "SF Mono", var(--font-mono)}.viewer-state, .unsupported-state { display: grid; place-items: center; min-height: 360px; color: var(--muted); text-align: center; font: var(--fs-12) var(--font-ui)}.unsupported-state { align-content: center; gap: 10px; padding: 40px}.unsupported-state h2 { margin: 5px 0 0; color: var(--ink); font: 560 var(--fs-22) var(--font-display)}.unsupported-state p { max-width: 330px; margin: 0; color: var(--muted); font: var(--fs-13)/1.5 var(--font-ui)}.file-badge { display: grid; place-items: center; width: 58px; height: 58px; border: 1px solid var(--line); border-radius: 10px; color: var(--leaf); font: var(--fs-12) var(--font-ui)}.file-meta { display: flex; gap: 18px; margin: 10px 0 13px; color: var(--muted); font: var(--fs-12) var(--font-ui)}.error-copy { color: var(--risk); font-size: var(--fs-12)}.viewer-error { white-space: pre-line}
 .terminal-panel { display: flex; min-width: 0; flex-direction: column; border-left: 1px solid var(--line); background: var(--canvas)}.terminal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 14px 12px 12px 16px; border-bottom: 1px solid var(--line)}.terminal-header strong { display: block; margin-top: 6px; overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; font: 500 var(--fs-12) var(--font-ui)}.terminal-header-actions { display: flex; gap: 5px}.terminal-host { flex: 1; min-width: 0; min-height: 0; padding: 10px 12px; overflow: hidden}.terminal-host .xterm, .terminal-host .xterm-viewport, .terminal-host .xterm-screen { width: 100%}.terminal-host .xterm { height: 100%}.terminal-status { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 8px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: var(--fs-12); letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap}.status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--raised)}.status-dot.is-ready { background: var(--accent); box-shadow: var(--shadow); color: var(--on-accent)}
 .welcome { max-width: 670px; align-self: center; margin: 0 auto; padding: 50px 30px 80px}.welcome h1 { margin: 18px 0; color: var(--ink); font: 560 var(--fs-35)/1.1 var(--font-display)}.welcome h1 em { color: var(--leaf); font-style: normal}.welcome p { max-width: 520px; margin: 0 0 27px; color: var(--muted); font-size: var(--fs-15); line-height: 1.65}.empty-small { padding: 12px; color: var(--muted); font: var(--fs-12)/1.5 var(--font-ui)}
@@ -842,3 +834,25 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
 .syntax-number { color: var(--brass); }
 .syntax-comment { color: var(--muted); font-style: italic; }
 .syntax-identifier { color: var(--ink); }
+
+.onboarding { display: grid; gap: var(--space-4); }
+.onboarding-steps { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: 0; padding: 0; list-style: none; font-size: var(--fs-13); color: var(--muted); }
+.onboarding-steps li { display: flex; gap: var(--space-2); align-items: center; }
+.onboarding-steps li span { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--line-strong); border-radius: 50%; font-size: var(--fs-12); }
+.onboarding-steps li.is-current { color: var(--ink); font-weight: 650; }
+.onboarding-steps li.is-current span { border-color: var(--accent); color: var(--accent); }
+.onboarding-steps li.is-complete span { border-color: var(--leaf); background: var(--leaf-tint); color: var(--leaf); }
+.onboarding-card { display: grid; gap: var(--space-3); max-width: 720px; }
+.onboarding-card h2 { margin: 0; }
+.onboarding-card p { margin: 0; }
+.onboarding-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.onboarding-result { padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--sunken); }
+.onboarding-result.is-done { border-color: var(--leaf); }
+.onboarding-result.is-problem { border-color: var(--risk); }
+.onboarding-result ul { margin: var(--space-2) 0 0; padding-left: var(--space-4); font-size: var(--fs-13); }
+.onboarding-better { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.onboarding-better li { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; padding: var(--space-2) 0; border-bottom: 1px solid var(--line); }
+.onboarding-better li.is-done .setup-state { color: var(--leaf); background: var(--leaf-tint); }
+.onboarding-better small { display: block; color: var(--muted); }
+.onboarding-note { font-size: var(--fs-13); }
+.onboarding-back { justify-self: start; }
