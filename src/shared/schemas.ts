@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { jobHealthSchema } from "./job-record";
 import type { Readiness } from "./readiness";
-import type { JobSearchSettings, JobSearchState, SearchRun } from "./job-search";
+import type { JobSearchSettings, JobSearchState, SearchRun, SearchStatus, WatchedSuggestion } from "./job-search";
 
 export const schemaVersion = 1;
 
@@ -1259,9 +1259,13 @@ export interface SenseiApi {
   };
   /** Job Search: settings, the inbox of found postings, and the search run (Agy finds links; the app checks them). */
   jobSearch: {
-    get(): Promise<{ settings: JobSearchSettings; state: JobSearchState; running: boolean }>;
+    get(): Promise<{ settings: JobSearchSettings; state: JobSearchState; status: SearchStatus }>;
     saveSettings(settings: JobSearchSettings): Promise<JobSearchSettings>;
-    run(): Promise<{ state: JobSearchState; run: SearchRun }>;
+    /** Starts a run in the background; progress arrives through onStatus, the result through onFinished. */
+    run(mode?: "search" | "watched"): Promise<void>;
+    suggestWatched(): Promise<WatchedSuggestion[]>;
+    onStatus(callback: (status: SearchStatus) => void): () => void;
+    onFinished(callback: (run: SearchRun | null) => void): () => void;
     setStatus(ids: string[], status: "new" | "dismissed"): Promise<JobSearchState>;
     saveJob(id: string): Promise<string>;
     openPosting(id: string): Promise<void>;

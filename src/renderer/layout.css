@@ -736,3 +736,8 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .search-checks label, .search-check { display: inline-flex; gap: var(--space-1); align-items: center; font-size: var(--fs-13); }
 .search-settings > .btn-primary { justify-self: start; }
 @media (max-width: 900px) { .find-row { grid-template-columns: auto 1fr; } .find-actions { grid-column: 1 / -1; justify-content: flex-start; max-width: none; } }
+.find-run-buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; flex: none; }
+.watched-list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; font-size: var(--fs-13); }
+.watched-list li { display: flex; justify-content: space-between; gap: var(--space-3); max-width: 520px; }
+.watched-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; font-size: var(--fs-13); }
+.find-main .find-tag { margin-left: var(--space-2); }

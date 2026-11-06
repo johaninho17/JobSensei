@@ -26,6 +26,7 @@ import { SettingsModal } from "./SettingsModal";
 import { InterviewView, LiveWindow } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { JobSearchView } from "./JobSearchView";
+import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
 import { storyTitles } from "./interview-cards";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -296,6 +297,10 @@ function WorkspaceApp() {
   const [storyBankPath, setStoryBankPath] = useState<string | null>(null);
   // Recordings in debrief/ the app hasn't imported yet (electron/content-refresh.ts), for the Interviews badge.
   const [newRecordings, setNewRecordings] = useState(0);
+  // Job Search runs in the main process; the app hears its progress and result on every page.
+  const [searchStatus, setSearchStatus] = useState<SearchStatus>({ running: false, source: null, progress: null, startedAt: null });
+  const [searchNew, setSearchNew] = useState(0);
+  const searchFinishedRef = useRef<(run: SearchRun | null) => void>(() => undefined);
   const loadRecordings = () => window.sensei.content.recordings().then(({ recordings }) => { setNewRecordings(recordings.filter((recording) => recording.state === "new" || recording.state === "changed").length); }).catch(() => undefined);
   useEffect(() => { if (workspace.status === "ready") void loadRecordings(); }, [workspace.status, tree]);
   // Setup readiness follows the workspace, profile, settings, and files; while a required step is missing it is
@@ -561,6 +566,27 @@ function WorkspaceApp() {
     window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), undo ? 8000 : 5000);
   }
 
+  // When a run finishes: say what it found, then queue strong matches only if the user turned auto-draft on.
+  searchFinishedRef.current = (run) => {
+    void (async () => {
+      if (!run) { showToast("The job search stopped unexpectedly."); return; }
+      const current = await window.sensei.jobSearch.get().catch(() => null);
+      if (!current) return;
+      const picks = run.status === "done" ? autoDraftPicks(current.state, current.settings) : [];
+      let sent = 0;
+      for (const item of picks) { try { await queueJob({ kind: "found", id: item.id, auto: true }, false); sent += 1; } catch { break; } }
+      setSearchNew(current.state.items.filter((item) => item.status === "new").length - sent);
+      notify(run.status === "failed" ? "Job search didn't finish" : "Job search finished", run.status === "failed" ? run.error ?? "" : `${run.added} new match${run.added === 1 ? "" : "es"}${sent ? `; ${sent} sent for drafts` : ""}. Open Job Search to see them.`);
+    })();
+  };
+  useEffect(() => {
+    void window.sensei.jobSearch.get().then((result) => { setSearchStatus(result.status); setSearchNew(result.state.items.filter((item) => item.status === "new").length); }).catch(() => undefined);
+    const offStatus = window.sensei.jobSearch.onStatus(setSearchStatus);
+    const offFinished = window.sensei.jobSearch.onFinished((run) => searchFinishedRef.current(run));
+    const offUpdated = window.sensei.jobSearch.onUpdated((state) => setSearchNew(state.items.filter((item) => item.status === "new").length));
+    return () => { offStatus(); offFinished(); offUpdated(); };
+  }, [workspace?.path]);
+
   /** A desktop notification when the window is in the background; a toast when it is in front. */
   function notify(title: string, body: string) {
     if (!notificationsOn) return;
@@ -787,7 +813,7 @@ function WorkspaceApp() {
       <button className="wordmark" aria-label="Sensei: all jobs" onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span><span>Sensei</span></button>
       <ul className="side-nav">
         <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
-        <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" />Job Search</button></li>
+        <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" />Job Search{searchStatus.running ? <span className="side-due" title={searchProgressText(searchStatus)}>Searching…</span> : searchNew > 0 && <span className="side-count" title={`${searchNew} new match${searchNew === 1 ? "" : "es"}`}>{searchNew}</span>}</button></li>
         <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{interviewingJobs.length > 0 && <span className="side-count">{interviewingJobs.length}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>
         <li><button aria-current={activePage === "setup-home" ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />Setup{readiness && <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>}</button></li>
         <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context{newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>
@@ -839,7 +865,7 @@ function WorkspaceApp() {
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
           <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
-          : currentLocation.kind === "search-home" ? <JobSearchView onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onOpenJob={openJob} onToast={showToast} />
+          : currentLocation.kind === "search-home" ? <JobSearchView status={searchStatus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onOpenJob={openJob} onToast={showToast} />
           : currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
           : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome

@@ -339,7 +339,8 @@ export async function pruneStagedJobDescriptions(workspacePath: string, keepIds:
     .map(async (name) => {
       const path = join(dir, name);
       const modified = await stat(path).then((info) => info.mtimeMs, () => now);
-      if (now - modified >= minAgeMs) await rm(path, { force: true });
+      // File times carry fractions of a millisecond, so a file saved this millisecond can look newer than `now`.
+      if (minAgeMs <= 0 || now - Math.floor(modified) >= minAgeMs) await rm(path, { force: true });
     }));
 }
 

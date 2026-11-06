@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { SenseiApi } from "../src/shared/schemas";
-import type { JobSearchState } from "../src/shared/job-search";
+import type { JobSearchState, SearchRun, SearchStatus } from "../src/shared/job-search";
 
 const api: SenseiApi = {
   app: {
@@ -22,7 +22,10 @@ const api: SenseiApi = {
   jobSearch: {
     get: () => ipcRenderer.invoke("search:get"),
     saveSettings: (settings) => ipcRenderer.invoke("search:save-settings", settings),
-    run: () => ipcRenderer.invoke("search:run"),
+    run: (mode) => ipcRenderer.invoke("search:run", mode),
+    suggestWatched: () => ipcRenderer.invoke("search:suggest-watched"),
+    onStatus: (callback) => { const listener = (_event: Electron.IpcRendererEvent, status: SearchStatus) => callback(status); ipcRenderer.on("search:status", listener); return () => ipcRenderer.removeListener("search:status", listener); },
+    onFinished: (callback) => { const listener = (_event: Electron.IpcRendererEvent, run: SearchRun | null) => callback(run); ipcRenderer.on("search:finished", listener); return () => ipcRenderer.removeListener("search:finished", listener); },
     setStatus: (ids, status) => ipcRenderer.invoke("search:set-status", ids, status),
     saveJob: (id) => ipcRenderer.invoke("search:save-job", id),
     openPosting: (id) => ipcRenderer.invoke("search:open-posting", id),

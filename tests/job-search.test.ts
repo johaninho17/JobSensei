@@ -11,6 +11,7 @@ import {
   saveFoundJob, saveSearchSettings, stageFoundJob, vocabularyFrom,
 } from "../electron/job-search";
 import { buildPostingRecord } from "../electron/posting-record";
+import { boardRef, fitsSearchTitles, titleSimilarity } from "../electron/job-boards";
 
 const POSTING = `# Solutions Engineer
 
@@ -106,6 +107,8 @@ describe("quick fit", () => {
     expect(fit.score).toBeGreaterThan(1);
     expect(fit.score).toBeLessThanOrEqual(5);
     expect(fit.why).toMatch(/cover \d+ of \d+/);
+    const own = quickFit(buildPostingRecord(POSTING.replace("Experience with Salesforce and Kotlin", "Experience with Northstar and SE tooling")), vocab, settings);
+    expect(own.gaps).not.toContain("Northstar");
   });
 
   it("lowers the score for pay under the floor and caps it on a blocker", () => {
@@ -158,7 +161,7 @@ describe("search run", () => {
     expect(run.status).toBe("done");
     expect(run.found).toBe(6);
     expect(run.added).toBe(1);
-    expect(run.leftOut).toMatchObject({ "already seen": 1, "posting closed": 1, "posting removed": 1, "skipped board": 1, "too old": 1 });
+    expect(run.leftOut).toMatchObject({ "already seen": 1, "posting closed": 2, "skipped board": 1, "too old": 1 });
     const [found] = state.items;
     expect(found.url).toBe("https://jobs.lever.co/northstar/abc");
     expect(found.postedAt).toBe("2026-11-03");
@@ -180,5 +183,56 @@ describe("search run", () => {
     await saveSearchSettings(workspace, settings);
     const { run } = await runSearch({ workspace, profile: null, existingKeys: new Set(), runner: async () => { throw new Error("Quota reached"); } });
     expect(run).toMatchObject({ status: "failed", error: "Agy's quota is used up for now. Try again later.", added: 0 });
+  });
+});
+
+describe("public job boards", () => {
+  const ashbyJobs = { jobs: [
+    { title: "Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/northstar/live-1", location: "Remote", publishedAt: "2026-11-01T10:00:00Z", isListed: true },
+    { title: "Account Executive", jobUrl: "https://jobs.ashbyhq.com/northstar/live-2", location: "Remote", publishedAt: "2026-11-01T10:00:00Z", isListed: true },
+  ] };
+  const page = `<html><head><title>Solutions Engineer</title></head><body><main>${POSTING.replace(/\n/g, "<br>")}</main></body></html>`;
+  const fetcher = (async (url: string | URL) => {
+    const target = String(url);
+    if (target === "https://api.ashbyhq.com/posting-api/job-board/northstar") return Response.json(ashbyJobs);
+    if (target === "https://jobs.ashbyhq.com/northstar/live-1") return new Response(page, { status: 200, headers: { "content-type": "text/html" } });
+    return new Response("", { status: 404 });
+  }) as typeof fetch;
+
+  it("reads board links and matches titles", () => {
+    expect(boardRef("https://jobs.ashbyhq.com/northstar/abc")).toEqual({ board: "ashby", slug: "northstar" });
+    expect(boardRef("https://job-boards.greenhouse.io/acme/jobs/7")).toEqual({ board: "greenhouse", slug: "acme" });
+    expect(boardRef("https://jobs.lever.co/acme")).toEqual({ board: "lever", slug: "acme" });
+    expect(boardRef("https://example.com/jobs/1")).toBeNull();
+    expect(titleSimilarity("Solutions Engineer (US)", "Solutions Engineer, East")).toBeGreaterThan(0.6);
+    expect(fitsSearchTitles("Senior Solutions Engineer", ["solutions engineering"])).toBe(true);
+    expect(fitsSearchTitles("Account Executive", ["solutions engineering"])).toBe(false);
+  });
+
+  it("swaps a dead link for the live posting with the same title and takes its date", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
+    await saveSearchSettings(workspace, settings);
+    const reply = JSON.stringify({ jobs: [
+      { url: "https://jobs.ashbyhq.com/northstar/made-up-id", title: "Solutions Engineer", company: "Northstar Labs" },
+      { url: "https://jobs.ashbyhq.com/northstar/another-dead-id", title: "Data Scientist", company: "Northstar Labs" },
+    ] });
+    const { run, state } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), now: () => new Date("2026-11-05T12:00:00Z"), runner: async () => ({ response: reply, conversationId: null }) });
+    expect(run).toMatchObject({ status: "done", added: 1, replaced: 1, leftOut: { "posting closed": 1 } });
+    expect(state.items[0]).toMatchObject({ url: "https://jobs.ashbyhq.com/northstar/live-1", postedAt: "2026-11-01", board: "ashby" });
+  });
+
+  it("checks watched companies without Agy, keeping only titles that fit", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
+    await saveSearchSettings(workspace, { ...settings, watched: [{ board: "ashby", slug: "northstar", name: "Northstar Labs" }] });
+    const { run, state } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), now: () => new Date("2026-11-05T12:00:00Z"), runner: null });
+    expect(run).toMatchObject({ status: "done", source: "watched", found: 1, added: 1 });
+    expect(state.items[0]).toMatchObject({ company: "Northstar Labs", watched: true, title: "Solutions Engineer" });
+  });
+
+  it("keeps watched results when Agy fails, and says so", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
+    await saveSearchSettings(workspace, { ...settings, watched: [{ board: "ashby", slug: "northstar", name: "Northstar Labs" }] });
+    const { run } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner: async () => { throw new Error("print_timeout"); } });
+    expect(run).toMatchObject({ status: "done", added: 1, error: "Agy took too long to search. Try fewer links per search or fewer titles." });
   });
 });

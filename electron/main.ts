@@ -8,7 +8,10 @@ import { readJobQueue, saveJobQueue } from "./job-queue";
 import { prepareAgyHome, writeSenseiLauncher } from "./agy-home";
 import { QuestionAgent, headlessAgy } from "./question-agent";
 import { SEARCH_SCHEMA, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
-import { jobKey } from "../src/shared/job-search";
+import { jobKey, type SearchRun, type SearchStatus } from "../src/shared/job-search";
+import { boardRef } from "./job-boards";
+import { readPostingRecord } from "./posting-record";
+import { reachedInterview } from "../src/shared/tracker";
 import { parsePastedQuestions } from "./application-questions";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -389,35 +392,62 @@ const questionAgent = new QuestionAgent({
   onUpdate: (jobId, state) => mainWindow?.webContents.send("questions:updated", jobId, state),
 });
 // Job Search: one headless Agy run finds links; the app opens, saves, and rates each one (electron/job-search.ts).
-let searchRunning = false;
+// The run lives here, not in the page: leaving Job Search never stops it, and every page hears its progress.
+let searchStatus: SearchStatus = { running: false, source: null, progress: null, startedAt: null };
+const setSearchStatus = (next: SearchStatus) => { searchStatus = next; mainWindow?.webContents.send("search:status", next); };
 const foundIds = (value: unknown) => (Array.isArray(value) ? value : [value]).map(String).filter((id) => /^find-[a-z0-9-]{4,40}$/.test(id));
 ipcMain.handle("search:get", async () => {
   const workspace = requireWorkspace();
   const profile = await readCandidateProfile(workspace).catch(() => null);
-  return { settings: await readSearchSettings(workspace, profile), state: await readSearchState(workspace), running: searchRunning };
+  return { settings: await readSearchSettings(workspace, profile), state: await readSearchState(workspace), status: searchStatus };
 });
 ipcMain.handle("search:save-settings", async (_event, input: unknown) => saveSearchSettings(requireWorkspace(), input));
-ipcMain.handle("search:run", async () => {
-  if (searchRunning) throw new Error("A search is already running.");
-  const agyPath = resolveAgyExecutable();
-  if (!agyPath) throw new Error("Agy isn't installed, so the search can't run.");
+/** Starts a run and returns at once; "watched" checks watched companies only (no Agy, no quota). */
+ipcMain.handle("search:run", async (_event, mode: unknown) => {
+  if (searchStatus.running) throw new Error("A search is already running.");
+  const watchedOnly = mode === "watched";
+  const agyPath = watchedOnly ? null : resolveAgyExecutable();
+  if (!watchedOnly && !agyPath) throw new Error("Agy isn't installed, so the search can't run. Check watched companies works without it.");
   const workspace = requireWorkspace();
-  searchRunning = true;
-  try {
-    questionAgyHome ??= await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath });
-    const jobs = await listJobFolders(workspace);
-    const existingKeys = new Set(jobs.map((job) => jobKey(job.company, job.title)).filter((key): key is string => Boolean(key)));
-    const result = await runSearch({
-      workspace,
-      profile: await readCandidateProfile(workspace).catch(() => null),
-      runner: headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }),
-      existingKeys,
-      onUpdate: (state) => mainWindow?.webContents.send("search:updated", state),
-    });
-    return result;
-  } finally {
-    searchRunning = false;
+  setSearchStatus({ running: true, source: watchedOnly ? "watched" : "search", progress: null, startedAt: new Date().toISOString() });
+  void (async () => {
+    let result: { run: SearchRun } | null = null;
+    try {
+      if (agyPath) questionAgyHome ??= await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath });
+      const jobs = await listJobFolders(workspace);
+      const existingKeys = new Set(jobs.map((job) => jobKey(job.company, job.title)).filter((key): key is string => Boolean(key)));
+      result = await runSearch({
+        workspace,
+        profile: await readCandidateProfile(workspace).catch(() => null),
+        runner: agyPath && questionAgyHome ? headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }) : null,
+        existingKeys,
+        onUpdate: (state) => mainWindow?.webContents.send("search:updated", state),
+        onProgress: (progress) => setSearchStatus({ ...searchStatus, progress }),
+      });
+    } catch (error) {
+      console.error("Job search failed:", error);
+    } finally {
+      setSearchStatus({ running: false, source: null, progress: null, startedAt: null });
+      mainWindow?.webContents.send("search:finished", result?.run ?? null);
+    }
+  })();
+});
+/** Companies from your jobs whose postings are on Ashby, Greenhouse, or Lever, for the watched list. */
+ipcMain.handle("search:suggest-watched", async () => {
+  const workspace = requireWorkspace();
+  const jobs = await listJobFolders(workspace);
+  const found = new Map<string, { board: "ashby" | "greenhouse" | "lever"; slug: string; name: string; jobs: number; interviewed: boolean }>();
+  for (const job of jobs) {
+    const url = (await readPostingRecord(join(workspace, "jobs", job.id)).catch(() => null))?.url;
+    const ref = url ? boardRef(url) : null;
+    if (!ref) continue;
+    const key = `${ref.board}:${ref.slug.toLowerCase()}`;
+    const current = found.get(key) ?? { ...ref, name: job.company ?? ref.slug, jobs: 0, interviewed: false };
+    current.jobs += 1;
+    current.interviewed ||= reachedInterview(job);
+    found.set(key, current);
   }
+  return [...found.values()].sort((a, b) => Number(b.interviewed) - Number(a.interviewed) || b.jobs - a.jobs || a.name.localeCompare(b.name));
 });
 ipcMain.handle("search:set-status", async (_event, ids: unknown, status: unknown) => {
   if (status !== "new" && status !== "dismissed") throw new Error("Use Save or Add to queue for those.");

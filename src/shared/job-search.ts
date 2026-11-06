@@ -51,6 +51,8 @@ export const jobSearchSettingsSchema = z.object({
   extraSites: z.array(z.string().min(1)).default([]),
   /** Extra boards or domains never to use. */
   skipSites: z.array(z.string().min(1)).default([]),
+  /** Companies whose public boards (Ashby, Greenhouse, Lever) are checked on every run, free and without Agy. */
+  watched: z.array(z.object({ board: z.enum(["ashby", "greenhouse", "lever"]), slug: z.string().min(1), name: z.string().default("") })).default([]),
   /** Companies the user never wants to see. */
   skipCompanies: z.array(z.string().min(1)).default([]),
   /** Lowest quick fit shown above the fold; lower ones are folded into "Below your bar". */
@@ -102,6 +104,8 @@ export const inboxItemSchema = z.object({
   queuedAt: z.string().nullable().default(null),
   /** Set when auto-draft queued it. */
   autoQueued: z.boolean().default(false),
+  /** Found on a watched company's board. */
+  watched: z.boolean().default(false),
 });
 export type InboxItem = z.infer<typeof inboxItemSchema>;
 
@@ -115,9 +119,28 @@ export const searchRunSchema = z.object({
   /** Why links were left out, counted: dead, stale, duplicate, unreadable, skipped board or company. */
   leftOut: z.record(z.string(), z.number().int()),
   autoQueued: z.number().int().default(0),
+  /** Dead links swapped for the company's live posting with the same title. */
+  replaced: z.number().int().default(0),
+  /** "search" = Agy + watched companies; "watched" = watched companies only (no Agy). */
+  source: z.enum(["search", "watched"]).default("search"),
+  /** A failure message; on a finished run, Agy's failure while watched companies still ran. */
   error: z.string().nullable(),
 });
 export type SearchRun = z.infer<typeof searchRunSchema>;
+
+export type SearchProgress = { phase: "watched" | "agy" | "checking"; checked: number; total: number };
+export type SearchStatus = { running: boolean; source: "search" | "watched" | null; progress: SearchProgress | null; startedAt: string | null };
+export type WatchedSuggestion = { board: "ashby" | "greenhouse" | "lever"; slug: string; name: string; jobs: number; interviewed: boolean };
+
+/** One line for the progress of a run, shown on any page. */
+export function searchProgressText(status: SearchStatus): string {
+  const progress = status.progress;
+  if (!status.running) return "";
+  if (!progress) return "Starting the search…";
+  if (progress.phase === "watched") return `Checking watched companies (${progress.checked + 1} of ${progress.total})…`;
+  if (progress.phase === "agy") return "Agy is searching the job boards (usually 1–3 minutes)…";
+  return `Checking postings: ${progress.checked} of ${progress.total}…`;
+}
 
 export const jobSearchStateSchema = z.object({
   schemaVersion: z.literal(JOB_SEARCH_SCHEMA_VERSION),
