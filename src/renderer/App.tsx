@@ -209,6 +209,7 @@ function WorkspaceApp() {
   }, [jobQueue.autoRun, queueActivity]);
   // Run watcher: notify when a pipeline run finishes, even with the Agy panel closed.
   const lastRunRef = useRef<RunStatus | null>(null);
+  const askedQuestions = useRef(new Set<string>());
   useEffect(() => {
     if (workspace.status !== "ready") return;
     let cancelled = false;
@@ -217,12 +218,19 @@ function WorkspaceApp() {
       if (cancelled) return;
       const previous = lastRunRef.current;
       lastRunRef.current = run;
+      // An application run starts the background answers for its posting's written questions as soon as the run's
+      // snapshot exists (the evidence the answers need). It lives here, not in the Agy panel, so it also happens
+      // while the panel is hidden. Once per job: main skips jobs that already have answers.
+      if (run?.kind === "application" && run.jobId && (run.state === "running" || Date.now() - Date.parse(run.at) < 15 * 60_000) && !askedQuestions.current.has(run.jobId)) {
+        askedQuestions.current.add(run.jobId);
+        void window.sensei.questions.auto(run.jobId).catch(() => undefined);
+      }
       if (previous?.state === "running" && run && run.state !== "running" && previous.kind === run.kind && previous.jobId === run.jobId) {
         notify(`${RUN_KIND_LABEL[run.kind]} finished`, `${run.label}: ${RUN_STATE_LABEL[run.state]}`);
       }
     };
     void tick();
-    const timer = window.setInterval(() => void tick(), 8000);
+    const timer = window.setInterval(() => void tick(), 4000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [workspace.status, notificationsOn]);
   // Once a day: follow-ups due. Once per launch: a newer release.
@@ -616,6 +624,12 @@ function WorkspaceApp() {
     const offRated = window.sensei.jobSearch.onRated((message) => notify("Light rating finished", message));
     return () => { offStatus(); offFinished(); offUpdated(); offRated(); };
   }, [workspace?.path]);
+
+  useEffect(() => {
+    const onAnnounce = (event: Event) => showToast(String((event as CustomEvent).detail ?? ""));
+    window.addEventListener("sensei-announce", onAnnounce);
+    return () => window.removeEventListener("sensei-announce", onAnnounce);
+  }, []);
 
   /** A desktop notification when the window is in the background; a toast when it is in front. */
   function notify(title: string, body: string) {
@@ -2278,7 +2292,15 @@ function MustHaveGroups({ mustHaves, gaps = [] }: { mustHaves: JobFolderSummary[
   </div>;
 }
 
+/** A result for a page the user may have left: shown in place while it's open, as an app toast once it's gone. */
+function useAnnounce() {
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  return (message: string) => { if (!mounted.current) window.dispatchEvent(new CustomEvent("sensei-announce", { detail: message })); };
+}
+
 function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: string | null; coverLetterPath: string | null }) {
+  const announce = useAnnounce();
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
   const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
@@ -2292,9 +2314,11 @@ function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: strin
       await window.sensei.files.exportMarkdownPdf(coverLetterPath, textSize);
       setState("done");
       setMessage("Resume and cover letter PDFs saved");
+      announce(`Resume and cover letter PDFs saved (${resumePath.split("/")[1] ?? "job"}).`);
     } catch (caught) {
       setState("error");
       setMessage(messageOf(caught, "PDF creation failed."));
+      announce(`PDF creation failed: ${messageOf(caught, "unknown error")}`);
     }
   }
   return <span className="job-pdf-export"><PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} /><button className="export-button" disabled={missing || state === "working"} title={missing ? "Both a resume Markdown file and cover_letter.md are required" : "Create PDFs for this job's resume and cover letter"} onClick={() => void exportApplicationPdfs()}>{state === "working" ? "Creating PDFs…" : "Create PDFs"}</button>{message && <small className={`export-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</small>}</span>;
@@ -2943,6 +2967,7 @@ function PdfTextSizeSelect({ value, onChange, disabled }: { value: PdfTextSize; 
 }
 
 function MarkdownExportButton({ relativePath, onExported }: { relativePath: string; onExported: () => void }) {
+  const announce = useAnnounce();
   const [state, setState] = useState<"idle" | "working" | "done" | "warning" | "error">("idle");
   const [message, setMessage] = useState("");
   const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
@@ -2953,10 +2978,12 @@ function MarkdownExportButton({ relativePath, onExported }: { relativePath: stri
       const pageUse = result.pageFillRatio === null ? "" : `, ${Math.round(result.pageFillRatio * 100)}% page use`;
       setState(result.validationStatus === "warning" ? "warning" : "done");
       setMessage(`Saved ${result.relativePath} (${result.pageCount} page${result.pageCount === 1 ? "" : "s"}${pageUse})`);
+      announce(`PDF saved: ${result.relativePath}${result.validationStatus === "warning" ? " (review: 2 pages)" : ""}.`);
       onExported();
     } catch (caught) {
       setState("error");
       setMessage(messageOf(caught, "PDF export failed."));
+      announce(`PDF export failed: ${messageOf(caught, "unknown error")}`);
     }
   }
   return <span className="markdown-actions"><PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} /><button className="export-button" disabled={state === "working"} onClick={() => void exportPdf()}>{state === "working" ? "Creating PDF…" : "Approve & Export PDF"}</button>{message && <span className={`export-message ${state === "error" ? "is-error" : ""}`} title={message}>{state === "done" ? "PDF saved" : state === "warning" ? "PDF saved - review 2 pages" : message}</span>}</span>;
@@ -3038,19 +3065,11 @@ const RUN_STATE_LABEL: Record<RunStatus["state"], string> = { running: "Running"
 function RunStatusBar({ onOpen }: { onOpen: (run: RunStatus) => void }) {
   const [run, setRun] = useState<RunStatus | null>(null);
   const [now, setNow] = useState(Date.now());
-  const askedQuestions = useRef(new Set<string>());
   useEffect(() => {
     let cancelled = false;
     const load = () => void window.sensei.runs.latest().then((next) => {
       if (cancelled) return;
       setRun(next);
-      // An application run starts the background answers for its posting's scenario questions as soon as the run's
-      // snapshot exists (the evidence the answers need), so they are written alongside the resume and letter.
-      // Once per job: main skips jobs that already have answers, so restarting the app never repeats a run.
-      if (next?.kind === "application" && next.jobId && (next.state === "running" || Date.now() - Date.parse(next.at) < 15 * 60_000)) {
-        const key = next.jobId;
-        if (!askedQuestions.current.has(key)) { askedQuestions.current.add(key); void window.sensei.questions.auto(next.jobId).catch(() => undefined); }
-      }
     }).catch(() => undefined);
     load();
     const timer = window.setInterval(() => { load(); setNow(Date.now()); }, 4000);
