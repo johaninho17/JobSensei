@@ -23,6 +23,8 @@ import {
   composeCanonicalCoverLetter,
   composeCanonicalResume,
   summaryIsEditable,
+  nthRole,
+  roleOccurrence,
 } from "./canonical-resume";
 import { pruneUnsupportedSkills } from "./application-artifacts";
 import { contextManifestHash } from "./context-manifest-hash";
@@ -76,15 +78,16 @@ export function expandBundleBaselines(
 ): ExpandedApplicationBundle {
   const key = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "").replace(/inc$/, "");
   const templates = context?.schemaVersion === 2 ? context.resumeTemplate.employers : [];
-  const baselinesFor = (name: string) => {
-    const template = templates.find((employer) => key(employer.name) === key(name));
+  // Several roles at one employer are told apart by occurrence (roleOccurrence in canonical-resume.ts).
+  const baselinesFor = (name: string, occurrence = 0) => {
+    const template = nthRole(templates, name, occurrence, key);
     if (template?.baselineBullets?.length) return template.baselineBullets;
-    const original = canonical.employers.find((employer) => key(employer.name) === key(name));
+    const original = nthRole(canonical.employers, name, occurrence, key);
     return (original?.originalBullets ?? []).map((text) => ({ text, evidenceIds: [] as string[] }));
   };
-  const expand = (name: string, bullets: ApplicationBundle["resume"]["employers"][number]["bullets"]) => bullets.map((bullet) => {
+  const expand = (name: string, bullets: ApplicationBundle["resume"]["employers"][number]["bullets"], occurrence = 0) => bullets.map((bullet) => {
     if (!("baseline" in bullet)) return bullet;
-    const reference = baselinesFor(name)[bullet.baseline - 1];
+    const reference = baselinesFor(name, occurrence)[bullet.baseline - 1];
     if (!reference) {
       throw new ApplicationInputError(".sensei/application_bundle.json", new Error(`${name} has no base-resume bullet ${bullet.baseline}.`));
     }
@@ -92,20 +95,21 @@ export function expandBundleBaselines(
   });
   const drafted = bundle.resume.employers;
   const warnings: string[] = [];
-  const baselineOf = (name: string) => baselinesFor(name).map((bullet) => ({ text: bullet.text, evidenceIds: [...bullet.evidenceIds] }));
+  const baselineOf = (name: string, occurrence = 0) => baselinesFor(name, occurrence).map((bullet) => ({ text: bullet.text, evidenceIds: [...bullet.evidenceIds] }));
   const rowEmployer = new Map((context?.schemaVersion === 2 ? context.evidenceRows ?? [] : []).map((row) => [row.evidenceId, row.employer ?? ""]));
   const employers = canonical.employers.map((employer, index) => {
-    const match = drafted.find((candidate) => key(candidate.name) === key(employer.name));
-    if (!match) return { name: employer.name, bullets: baselineOf(employer.name) };
-    const bullets = expand(employer.name, match.bullets);
+    const occurrence = roleOccurrence(canonical.employers, index, key);
+    const match = nthRole(drafted, employer.name, occurrence, key);
+    if (!match) return { name: employer.name, bullets: baselineOf(employer.name, occurrence) };
+    const bullets = expand(employer.name, match.bullets, occurrence);
     // Earlier roles stay exactly as in the base resume unless every changed bullet cites that employer's evidence.
     if (index > 0) {
-      const original = new Set(baselineOf(employer.name).map((bullet) => key(bullet.text)));
+      const original = new Set(baselineOf(employer.name, occurrence).map((bullet) => key(bullet.text)));
       const unbacked = bullets.filter((bullet) => !original.has(key(bullet.text))
         && !bullet.evidenceIds.some((id) => key(rowEmployer.get(id) ?? "") === key(employer.name)));
       if (unbacked.length) {
         warnings.push(`Kept ${employer.name} as in the base resume: ${unbacked.length} changed bullet(s) cited no ${employer.name} evidence.`);
-        return { name: employer.name, bullets: baselineOf(employer.name) };
+        return { name: employer.name, bullets: baselineOf(employer.name, occurrence) };
       }
     }
     return { name: match.name, bullets };
@@ -156,8 +160,9 @@ function materializeBundle(
     if (ids.length === 0 && employerName && snapshot.canonicalResume) {
       // Unchanged base-resume bullets are the candidate's own approved wording.
       // Record them as baseline text; never borrow an unrelated evidence ID.
-      const baselineEmp = snapshot.canonicalResume.employers.find((e) => normalizeText(e.name) === normalizeText(employerName));
-      if (baselineEmp?.originalBullets.some((b) => normalizeText(b) === normalizeText(item.text))) {
+      // Every role at that employer counts (someone promoted there holds several roles under one name).
+      const baselineRoles = snapshot.canonicalResume.employers.filter((e) => normalizeText(e.name) === normalizeText(employerName));
+      if (baselineRoles.some((role) => role.originalBullets.some((b) => normalizeText(b) === normalizeText(item.text)))) {
         return {
           publicText: item.text,
           claimType: "baseline" as const,

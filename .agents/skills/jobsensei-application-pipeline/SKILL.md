@@ -27,7 +27,7 @@ For a JD pasted in the app ("Evaluate the job description I pasted (paste ID <id
 5. In one file-writing turn, create only `.sensei/application_bundle.json` (contract below). Keep it short; the finalizer fills in everything unchanged:
    - Leave out earlier employers entirely. They are kept exactly as in the base resume.
    - For the current employer, write the 3–4 reworked bullets as text, and keep each remaining bullet as `{ "baseline": N }` (N = its position in `baselineBullets`, starting at 1), in the order you want.
-   - Curate the skills lines from `resumeTemplate.editableSkillCategories`.
+   - Skills lines: start from `resumeTemplate.editableSkillCategories` and follow the snapshot `instructions` (keep the base resume's items).
    - `evaluationMarkdown`: the scoring table, the must-have table, and at most three one-line bullets (top strength, main gap, apply recommendation).
    - Draft the cover letter exactly as `coverLetterBrief` specifies.
 6. Run `sensei application:finalize <job-id>` exactly once. Report its `fitScore`, `fitConfidence`, `gateStatus`, `durationSeconds`, and warnings, then stop. Never inspect code, patch output, or retry after finalization.
@@ -41,7 +41,7 @@ For an explicit regeneration, the saved JD is the only job-specific input. Exist
 - Follow `resumePlan`, `resumeTemplate`, `footprint`, `denylistRules`, and the local candidate preferences. The finalizer restores protected identity, contact details, chronology, titles, dates, locations, education, and layout.
 - Unchanged base-resume bullets are the candidate's own approved claims: copy them word for word. A *rewritten* bullet must trace every claim to `evidenceRows`; the baseline wording shows the confidence level to match, not new facts to add.
 - Resume summary: only if `resumeTemplate.summary.editable` is true, add `"summary": { "text": ..., "evidenceIds": [...] }` to `resume` in the bundle (at most 3 lines, same truth rules as bullets). Otherwise leave it out; the base resume's own summary, if any, stays verbatim.
-- Surgical tailoring (principle owned by `AGENTS.md`): earlier roles stay out of the bundle unless evidence makes them directly relevant; curate skills categories for the target domain; rework only 3–4 current-role bullets toward the JD's core work; keep bullets about 16–20 words. Within ±15% of the footprint needs no manual counting.
+- Surgical tailoring (principle owned by `AGENTS.md`): earlier roles stay out of the bundle unless evidence makes them directly relevant; skills and length follow the snapshot `instructions`; rework only 3–4 current-role bullets toward the JD's core work; keep bullets about 16–20 words. Within ±15% of the footprint needs no manual counting.
 - Align bullet emphasis with the core discipline of the target role (e.g., leadership, operations, commercial, technical, or people enablement) based on the candidate's supported background without exaggerating scope or ownership.
 - Plain professional language for the candidate's field (`$jobsensei-anti-slop`): an accurate action, a concrete method or tool, and a supported purpose or result.
 - Keep the cover letter candidate-first. `coverLetterBrief` in the application context is the only cover-letter specification (structure, opening, word range, banned phrases); follow it and nothing else.

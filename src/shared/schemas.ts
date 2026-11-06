@@ -616,6 +616,10 @@ export const canonicalResumeBaselineSchema = z.object({
   employers: z.array(canonicalResumeEmployerSchema).min(1),
   educationHeadingLine: z.string().min(1),
   educationLines: z.array(z.string().min(1)).min(1),
+  /** The base resume's own section order ("summary", "skills", "experience", "education", "extra:N"); kept on every draft. */
+  sectionOrder: z.array(z.string().regex(/^(?:summary|skills|experience|education|extra:\d+)$/)).optional(),
+  /** Other sections (licenses, certifications, projects…), kept word for word. */
+  extraSections: z.array(z.object({ headingLine: z.string().min(1), lines: z.array(z.string().min(1)) })).optional(),
   originalSkillsLines: z.array(z.string().min(1)).min(1),
   footprint: resumeFootprintSchema,
   warnings: z.array(z.string()).default([]),

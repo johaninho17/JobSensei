@@ -346,48 +346,33 @@ export function buildApplicationRouting(
   });
 }
 
-function buildResumePlan(
+export function buildResumePlan(
   rows: EvidenceSnapshotRow[],
   canonicalResume: NonNullable<EvidenceSnapshot["canonicalResume"]>,
   footprint: EvidenceSnapshot["baseResumeFootprint"],
   jobDescription: string,
   candidateProfile: CandidateProfile | null,
 ): NonNullable<ApplicationContext["resumePlan"]> {
-  const totalRange = candidateProfile?.preferences.resume.totalExperienceBullets ?? { min: 10, max: 14 };
-  const currentRange = candidateProfile?.preferences.resume.currentEmployerBullets ?? { min: 6, max: 8 };
+  // Ledger R3: the base resume sets the length. Each role keeps its own number of bullets; a role may gain one bullet
+  // when more routed evidence exists than it has bullets (at most two roles, most recent first), and PDF export keeps
+  // the base's page count. Never fewer bullets than the base, so useful lines are replaced, not dropped.
   const baselineTotal = canonicalResume.employers.reduce((sum, employer) => sum + employer.originalBulletCount, 0);
-  const densityTarget = footprint?.targetExperienceWordMin
-    ? Math.ceil(footprint.targetExperienceWordMin / 17)
-    : baselineTotal;
   const routedCounts = new Map<string, number>();
   for (const row of rows) {
     if (row.employer) routedCounts.set(row.employer, (routedCounts.get(row.employer) ?? 0) + 1);
   }
   const currentEmployer = canonicalResume.employers[0]?.name ?? null;
-  const targets = canonicalResume.employers.map((employer, index) => ({
+  const targets = canonicalResume.employers.map((employer) => ({
     employer: employer.name,
-    targetBullets: index === 0
-      ? Math.max(currentRange.min, Math.min(currentRange.max, employer.originalBulletCount))
-      : employer.originalBulletCount,
+    targetBullets: employer.originalBulletCount,
     routedEvidenceCount: routedCounts.get(employer.name) ?? 0,
   }));
-  let plannedMinimum = targets.reduce((sum, target) => sum + target.targetBullets, 0);
-  while (plannedMinimum > totalRange.max) {
-    const reducible = [...targets].reverse().find((target) => target.employer !== currentEmployer && target.targetBullets > 1);
-    if (!reducible) break;
-    reducible.targetBullets -= 1;
-    plannedMinimum -= 1;
+  let added = 0;
+  for (const target of targets) {
+    if (added >= 2) break;
+    if (target.targetBullets > 0 && target.routedEvidenceCount > target.targetBullets) { target.targetBullets += 1; added += 1; }
   }
-  const targetTotalBullets = Math.max(totalRange.min, Math.min(totalRange.max, Math.max(baselineTotal, densityTarget, plannedMinimum)));
-  let remaining = targetTotalBullets - plannedMinimum;
-  while (remaining > 0) {
-    const candidate = targets.filter((target) => target.employer !== currentEmployer || target.targetBullets < currentRange.max).sort((left, right) =>
-      (right.routedEvidenceCount - right.targetBullets) - (left.routedEvidenceCount - left.targetBullets)
-      || right.routedEvidenceCount - left.routedEvidenceCount)[0];
-    if (!candidate || candidate.routedEvidenceCount <= candidate.targetBullets) break;
-    candidate.targetBullets += 1;
-    remaining -= 1;
-  }
+  const targetTotalBullets = Math.max(1, baselineTotal + added);
   const customerTarget = customerFacingTarget(jobDescription);
   const customerFacingEvidenceIds = rows
     .filter((row) => row.employer === currentEmployer)
@@ -1021,7 +1006,8 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       coverLetterBrief: buildCoverLetterBrief(jobDescriptionText, canonicalJob, candidateProfile),
       instructions: [
         "Use only evidenceRows for candidate facts; preserve employer, timeline, scope, eligibility, and classification ceilings.",
-        "Resume scope: keep earlier, less relevant roles verbatim from resumeTemplate.employers[i].baselineBullets. At the current employer, rework the 3-4 bullets that matter most for this job and keep the rest of its baseline bullets as anchors; curate the skills lines for the role.",
+        "Resume scope: keep earlier, less relevant roles verbatim from resumeTemplate.employers[i].baselineBullets. At the current employer, rework the 3-4 bullets that matter most for this job and keep the rest of its baseline bullets as anchors.",
+        "Length and skills follow the base resume (owner of this rule): every role keeps at least its baseline number of bullets (resumePlan.employerTargets); a weaker bullet may be replaced by a stronger supported one, never dropped. Keep every skills item from the base resume: lead with what this job needs, add supported items, and remove an item only when nothing supports it. Skills the posting does not ask for still show the candidate's range, so they stay. The resume keeps the base resume's page count.",
         "Unchanged baseline bullets are the candidate's own approved claims: copy them word for word with the evidenceIds listed in baselineBullets (often none). Never attach an unrelated evidence ID to make a bullet look supported.",
         "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. Never add an event, metric, tool, or ownership that did not happen.",
         ...profileInstructionLines(candidateProfile),

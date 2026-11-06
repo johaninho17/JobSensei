@@ -602,24 +602,31 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
     const stats = resumeArtifactStats(loaded.resumeMarkdown);
     const footprint = loaded.snapshot?.baseResumeFootprint;
     const resumePlan = loaded.applicationContext?.resumePlan;
-    if (resumePlan && stats.bulletCount !== resumePlan.targetTotalBullets) {
+    // Ledger R3: never fewer bullets than the base resume (useful lines are replaced, not dropped); the plan's extra
+    // bullet per role is optional, so only going over it is reported.
+    const baseEmployers = loaded.snapshot?.canonicalResume?.employers ?? [];
+    const baseTotal = baseEmployers.reduce((sum, employer) => sum + employer.originalBulletCount, 0);
+    if (resumePlan && (stats.bulletCount < baseTotal || stats.bulletCount > resumePlan.targetTotalBullets)) {
       issues.push(issue(
         "RESUME_BULLET_PLAN_MISMATCH",
         loaded.resumeName,
         "bulletCount",
-        `The resume has ${stats.bulletCount} experience bullets; this run planned ${resumePlan.targetTotalBullets}.`,
-        "In the next explicit run, follow the routed employer allocation and add distinct supported bullets before lengthening existing ones.",
+        stats.bulletCount < baseTotal
+          ? `The resume has ${stats.bulletCount} experience bullets; the base resume has ${baseTotal}, so lines were dropped.`
+          : `The resume has ${stats.bulletCount} experience bullets; this run planned at most ${resumePlan.targetTotalBullets}.`,
+        "In the next explicit run, keep every role's bullet count from the base resume; replace a weaker bullet instead of dropping or adding beyond the plan.",
         "warning",
       ));
     }
     const currentEmployerTarget = resumePlan?.employerTargets[0];
-    if (currentEmployerTarget && stats.currentEmployerBulletCount !== currentEmployerTarget.targetBullets) {
+    const currentBase = baseEmployers[0]?.originalBulletCount ?? 0;
+    if (currentEmployerTarget && (stats.currentEmployerBulletCount < currentBase || stats.currentEmployerBulletCount > currentEmployerTarget.targetBullets)) {
       issues.push(issue(
         "RESUME_EMPLOYER_PLAN_MISMATCH",
         loaded.resumeName,
         "currentEmployerBulletCount",
-        `The resume has ${stats.currentEmployerBulletCount} current-employer bullets; this run planned ${currentEmployerTarget.targetBullets}.`,
-        "In the next explicit run, use the profile's planned distinct evidence-backed current-employer bullets without duplicating claims or inventing detail.",
+        `The resume has ${stats.currentEmployerBulletCount} current-employer bullets; the base resume has ${currentBase} and this run allows up to ${currentEmployerTarget.targetBullets}.`,
+        "In the next explicit run, keep the current role's bullets from the base resume, replacing weaker ones with stronger supported bullets.",
         "warning",
       ));
     }
@@ -634,9 +641,9 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
       issues.push(issue("RESUME_DENSITY_LOW", loaded.resumeName, "wordCount", `The resume has ${stats.wordCount} words; the preferred minimum is ${footprint.targetWordMin}.`, "Review density if the exported page looks sparse; do not add unsupported content.", "warning"));
     }
     if (footprint?.targetExperienceWordMax && stats.experienceWordCount > maxExpWordTolerance) {
-      issues.push(issue("RESUME_EXPERIENCE_DENSITY_HIGH", loaded.resumeName, "experienceWordCount", `The experience bullets contain ${stats.experienceWordCount} words; the preferred maximum is ${footprint.targetExperienceWordMax}.`, "Review readability and one-page export without automatically deleting relevant truthful content.", "warning"));
+      issues.push(issue("RESUME_EXPERIENCE_DENSITY_HIGH", loaded.resumeName, "experienceWordCount", `The experience bullets contain ${stats.experienceWordCount} words; the preferred maximum is ${footprint.targetExperienceWordMax}.`, "Review readability and the PDF page count (the base resume's) without automatically deleting relevant truthful content.", "warning"));
     } else if (footprint?.targetWordMax && stats.wordCount > maxWordTolerance) {
-      issues.push(issue("RESUME_DENSITY_HIGH", loaded.resumeName, "wordCount", `The resume has ${stats.wordCount} words; the preferred maximum is ${footprint.targetWordMax}.`, "Review density and one-page export without deleting relevant truthful content automatically.", "warning"));
+      issues.push(issue("RESUME_DENSITY_HIGH", loaded.resumeName, "wordCount", `The resume has ${stats.wordCount} words; the preferred maximum is ${footprint.targetWordMax}.`, "Review density and the PDF page count (the base resume's) without deleting relevant truthful content automatically.", "warning"));
     }
   }
   if (!loaded.coverMarkdown) {

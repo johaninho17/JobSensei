@@ -79,7 +79,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
     id: "resume", level: "required", state: !resumePath ? "missing" : resume?.ok ? "done" : "problem", action: "resume", path: resumePath ?? "resumes",
     title: "Base resume (Word or Markdown)",
     detail: !resumePath ? `Not chosen yet. ${RESUME_FORMAT_HELP}` : resume?.ok ? `${resumePath.split("/").pop()}: read ${resume.employers} job${resume.employers === 1 ? "" : "s"}, skills, and education.` : (resume as { message: string }).message,
-    improves: "Every tailored resume keeps its layout, order, dates, and one-page length.",
+    improves: "Every tailored resume keeps its layout, section order, dates, and length (its number of pages).",
     lines: resume?.ok ? resume.lines : [],
   });
 

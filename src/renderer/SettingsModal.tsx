@@ -41,10 +41,6 @@ export function SettingsModal({
     narrativeDepth: "journey_first",
   });
   const [includeSummary, setIncludeSummary] = useState(false);
-  const [totalMin, setTotalMin] = useState(10);
-  const [totalMax, setTotalMax] = useState(14);
-  const [currentMin, setCurrentMin] = useState(6);
-  const [currentMax, setCurrentMax] = useState(8);
 
   // Narrative Pillars (Human Career Story)
   const [turningPoints, setTurningPoints] = useState("");
@@ -98,10 +94,6 @@ export function SettingsModal({
         narrativeDepth: "journey_first",
       });
       setIncludeSummary(profile.preferences.resume.includeSummary ?? false);
-      setTotalMin(profile.preferences.resume.totalExperienceBullets.min ?? 10);
-      setTotalMax(profile.preferences.resume.totalExperienceBullets.max ?? 14);
-      setCurrentMin(profile.preferences.resume.currentEmployerBullets.min ?? 6);
-      setCurrentMax(profile.preferences.resume.currentEmployerBullets.max ?? 8);
 
       setTurningPoints(profile.preferences.coverLetter?.narrativePillars?.turningPoints ?? profile.career?.narrativePillars?.turningPoints ?? "");
       setLetterFocus(profile.preferences.coverLetter?.focus ?? "career-story");
@@ -148,8 +140,6 @@ export function SettingsModal({
         resume: {
           ...profile.preferences.resume,
           includeSummary,
-          totalExperienceBullets: { min: totalMin, max: totalMax },
-          currentEmployerBullets: { min: currentMin, max: currentMax },
         },
         coverLetter: {
           ...profile.preferences.coverLetter,
@@ -642,28 +632,7 @@ export function SettingsModal({
                 </label>
               </div>
 
-              <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-bullet-density-targets">Bullet density targets</h3>
-                <p className="settings-group-desc">Control how many experience bullets are budgeted across your resume.</p>
-                <div className="settings-inputs-grid">
-                  <label>
-                    <span>Total Experience Bullets (Min):</span>
-                    <input aria-labelledby="settings-bullet-density-targets" type="number" min={8} max={20} value={totalMin} onChange={(e) => setTotalMin(Number(e.target.value))} />
-                  </label>
-                  <label>
-                    <span>Total Experience Bullets (Max):</span>
-                    <input type="number" min={8} max={20} value={totalMax} onChange={(e) => setTotalMax(Number(e.target.value))} />
-                  </label>
-                  <label>
-                    <span>Current Employer Bullets (Min):</span>
-                    <input type="number" min={3} max={10} value={currentMin} onChange={(e) => setCurrentMin(Number(e.target.value))} />
-                  </label>
-                  <label>
-                    <span>Current Employer Bullets (Max):</span>
-                    <input type="number" min={3} max={10} value={currentMax} onChange={(e) => setCurrentMax(Number(e.target.value))} />
-                  </label>
-                </div>
-              </div>
+              <p className="settings-group-desc">Length and bullets follow your base resume: each job keeps its number of bullets, and the resume keeps its number of pages.</p>
             </div>
           )}
 
