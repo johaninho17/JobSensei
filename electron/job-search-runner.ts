@@ -9,7 +9,7 @@
 import { execFile } from "node:child_process";
 import { appendFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { autoDraftPicks } from "../src/shared/job-search";
+import { autoDraftPicks, dailyRunDue } from "../src/shared/job-search";
 import { prepareAgyHome } from "./agy-home";
 import { readCandidateProfile } from "./candidate-profile";
 import { listJobFolders } from "./job-folders";
@@ -23,6 +23,18 @@ export function runnerArgs(argv: string[]): { workspace: string; userData: strin
   const workspace = value("--workspace");
   const userData = value("--user-data");
   return workspace && userData ? { workspace: resolve(workspace), userData: resolve(userData) } : null;
+}
+
+/** Right after a wake the network can take a moment; waits up to about 2 minutes. */
+export async function waitForNetwork(fetcher: typeof fetch = fetch, tries = 8, delayMs = 15_000): Promise<boolean> {
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    try {
+      const response = await fetcher("https://www.google.com/generate_204", { method: "HEAD", signal: AbortSignal.timeout(8_000) });
+      if (response.status < 500) return true;
+    } catch { /* offline: wait and try again */ }
+    if (attempt < tries - 1) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return false;
 }
 
 /** A desktop notification without a window (macOS only; Windows shows the result when the app opens). */
@@ -44,6 +56,12 @@ async function main(): Promise<number> {
   const settings = await readSearchSettings(workspace, profile);
   if (!settings.schedule.enabled) { await log("Schedule is off in Search settings; nothing to do."); return 0; }
   if (!settings.titles.length) { await log("No job titles in Search settings; skipped."); return 0; }
+  // Daily mode: the OS checks often (hourly, at login, on wake); only the day's first chance after the start time runs.
+  if (settings.schedule.mode === "daily") {
+    const due = dailyRunDue((await readSearchState(workspace)).runs, settings.schedule);
+    if (!due.due) return 0;
+  }
+  if (!(await waitForNetwork())) { await log("No network after waiting 2 minutes; will try at the next check."); return 0; }
   const lock = await takeSearchLock(workspace, "schedule");
   if (!lock.ok) { await log(`A search started from the ${lock.by} is already running; skipped.`); return 0; }
   try {

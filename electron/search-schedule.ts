@@ -30,10 +30,16 @@ const xml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").
 
 export function launchdPlist(label: string, target: ScheduleTarget, schedule: JobSearchSettings["schedule"]): string {
   const days = schedule.days.length ? [...new Set(schedule.days)].sort() : [0, 1, 2, 3, 4, 5, 6];
-  const intervals = days.flatMap((day) => schedule.times.map((time) => {
-    const [hour, minute] = time.split(":").map(Number);
-    return `    <dict><key>Weekday</key><integer>${day}</integer><key>Hour</key><integer>${hour}</integer><key>Minute</key><integer>${minute}</integer></dict>`;
-  }));
+  // Daily mode: a check every hour from the start time to midnight, and one at login. A check missed during sleep
+  // runs once on wake (calendar intervals catch up; plain intervals are unreliable after sleep). The runner decides
+  // whether it is the day's first chance (dailyRunDue), so extra checks cost nothing.
+  const [afterHour, afterMinute] = schedule.after.split(":").map(Number);
+  const intervals = schedule.mode === "daily"
+    ? Array.from({ length: 24 - afterHour }, (_, index) => `    <dict><key>Hour</key><integer>${afterHour + index}</integer><key>Minute</key><integer>${afterMinute}</integer></dict>`)
+    : days.flatMap((day) => schedule.times.map((time) => {
+      const [hour, minute] = time.split(":").map(Number);
+      return `    <dict><key>Weekday</key><integer>${day}</integer><key>Hour</key><integer>${hour}</integer><key>Minute</key><integer>${minute}</integer></dict>`;
+    }));
   const args = [target.runtime, target.runner, "--workspace", target.workspace, "--user-data", target.userData];
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -50,7 +56,7 @@ ${args.map((arg) => `    <string>${xml(arg)}</string>`).join("\n")}
   <array>
 ${intervals.join("\n")}
   </array>
-  <key>ProcessType</key><string>Background</string>
+${schedule.mode === "daily" ? "  <key>RunAtLoad</key><true/>\n" : ""}  <key>ProcessType</key><string>Background</string>
   <key>LowPriorityIO</key><true/>
   <key>StandardOutPath</key><string>${xml(join(target.userData, "job-search-schedule.log"))}</string>
   <key>StandardErrorPath</key><string>${xml(join(target.userData, "job-search-schedule.log"))}</string>
@@ -62,10 +68,19 @@ ${intervals.join("\n")}
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 /** Task Scheduler XML (one weekly trigger per time; runs only when the user is logged on, no admin rights). */
-export function windowsTaskXml(target: ScheduleTarget, schedule: JobSearchSettings["schedule"], today = new Date()): string {
+const RESUME_QUERY = "<QueryList><Query Id=\"0\" Path=\"System\"><Select Path=\"System\">*[System[Provider[@Name='Microsoft-Windows-Power-Troubleshooter'] and EventID=1]]</Select></Query></QueryList>";
+
+export function windowsTaskXml(target: ScheduleTarget, schedule: JobSearchSettings["schedule"], today = new Date(), user = ""): string {
   const days = (schedule.days.length ? [...new Set(schedule.days)].sort() : [0, 1, 2, 3, 4, 5, 6]).map((day) => `<${WEEKDAYS[day]} />`).join("");
   const date = today.toISOString().slice(0, 10);
-  const triggers = schedule.times.map((time) => `    <CalendarTrigger><StartBoundary>${date}T${time}:00</StartBoundary><Enabled>true</Enabled><ScheduleByWeek><DaysOfWeek>${days}</DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>`).join("\n");
+  // Daily mode: at the start time (then hourly to midnight; a missed one starts when available), at sign-in, and when
+  // the PC resumes from sleep (Power-Troubleshooter event 1). The runner keeps it to the day's first chance.
+  const [afterHour] = schedule.after.split(":").map(Number);
+  const triggers = schedule.mode === "daily" ? [
+    `    <CalendarTrigger><StartBoundary>${date}T${schedule.after}:00</StartBoundary><Repetition><Interval>PT1H</Interval><Duration>PT${24 - afterHour}H</Duration></Repetition><Enabled>true</Enabled><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>`,
+    `    <LogonTrigger><Enabled>true</Enabled>${user ? `<UserId>${xml(user)}</UserId>` : ""}<Delay>PT1M</Delay></LogonTrigger>`,
+    `    <EventTrigger><Enabled>true</Enabled><Subscription>${xml(RESUME_QUERY)}</Subscription><Delay>PT1M</Delay></EventTrigger>`,
+  ].join("\n") : schedule.times.map((time) => `    <CalendarTrigger><StartBoundary>${date}T${time}:00</StartBoundary><Enabled>true</Enabled><ScheduleByWeek><DaysOfWeek>${days}</DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>`).join("\n");
   const quote = (value: string) => `"${value}"`;
   return `<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
@@ -79,7 +94,7 @@ ${triggers}
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <StartWhenAvailable>true</StartWhenAvailable>
-    <WakeToRun>${schedule.wake ? "true" : "false"}</WakeToRun>
+    <WakeToRun>${schedule.wake && schedule.mode === "times" ? "true" : "false"}</WakeToRun>
     <RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable>
     <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
     <Enabled>true</Enabled>
@@ -128,7 +143,8 @@ export async function installSchedule(target: ScheduleTarget, schedule: JobSearc
   } else if (process.platform === "win32") {
     const file = join(target.userData, "job-search-task.xml");
     // Task Scheduler reads UTF-16 XML.
-    await writeFile(file, `﻿${windowsTaskXml(target, schedule)}`, "utf16le");
+    const user = [process.env.USERDOMAIN, process.env.USERNAME ?? userInfo().username].filter(Boolean).join("\\");
+    await writeFile(file, `\ufeff${windowsTaskXml(target, schedule, new Date(), user)}`, "utf16le");
     const created = await run("schtasks", ["/Create", "/TN", windowsTaskName(label), "/XML", file, "/F"]);
     if (created.code !== 0) throw new Error(`Windows didn't accept the schedule: ${created.output.slice(0, 200)}`);
   } else {
