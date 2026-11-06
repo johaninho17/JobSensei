@@ -8,7 +8,7 @@ import { runnerArgs } from "../electron/job-search-runner";
 import { clearPendingDrafts, readSearchState, releaseSearchLock, saveSearchState, searchLockHolder, takeSearchLock } from "../electron/job-search";
 import { EMPTY_JOB_SEARCH_STATE } from "../src/shared/job-search";
 
-const target = { runtime: "/Apps/Job Sensei.app/Contents/MacOS/JobSensei", runner: "/Apps/app.asar/dist-electron/electron/job-search-runner.js", workspace: "/Users/alex/Documents/JobSensei & co", userData: "/Users/alex/Library/Application Support/JobSensei" };
+const target = { runtime: "/Apps/Job Sensei.app/Contents/MacOS/JobSensei", runner: "/Apps/app.asar/dist-electron/electron/job-search-runner.js", workspace: "/workspaces/JobSensei & co", userData: "/app-data/JobSensei" };
 const schedule = { enabled: true, days: [1, 3, 5], times: ["08:00", "17:30"] };
 
 describe("search schedule files", () => {
