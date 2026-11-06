@@ -246,7 +246,7 @@ function SearchSettingsForm({ settings, onSaved }: { settings: JobSearchSettings
       <div className="search-field"><span>Level</span><div className="search-checks">{SEARCH_LEVELS.map((level) => <label key={level}><input type="checkbox" checked={draft.levels.includes(level)} onChange={() => set("levels", toggleIn(draft.levels, level))} />{level[0].toUpperCase() + level.slice(1)}</label>)}</div></div>
       <label className="search-field"><span>Lowest base pay (per year, USD)</span><input type="number" min={0} step={5000} value={draft.payFloor ?? ""} onChange={(event) => set("payFloor", event.target.value ? Number(event.target.value) : null)} placeholder="No floor" /></label>
       <label className="search-check"><input type="checkbox" checked={draft.needsSponsorship} onChange={(event) => set("needsSponsorship", event.target.checked)} />I need visa sponsorship</label>
-      <label className="search-field"><span>Posted within (days)</span><input type="number" min={1} max={90} value={draft.postedWithinDays} onChange={(event) => set("postedWithinDays", Number(event.target.value) || 14)} /></label>
+      <label className="search-field"><span>Posted within (days)</span><input type="number" min={1} max={90} value={draft.postedWithinDays} onChange={(event) => set("postedWithinDays", Number(event.target.value) || 30)} /></label>
       {text("includeKeywords", "Should mention", "Optional keywords")}
       {text("excludeKeywords", "Leave out postings about", "e.g. commission only, clearance")}
       {text("skipCompanies", "Never show these companies", "Optional")}

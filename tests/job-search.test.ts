@@ -272,3 +272,27 @@ describe("Agy light rating", () => {
     expect(effectiveFit(state.items[0])).toBe(4.4);
   });
 });
+
+describe("left-out postings can come back", () => {
+  it("brings back a posting left out as too old once the age limit is raised, but never a closed one", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
+    const page = `<html><head><title>Northstar Labs - Solutions Engineer</title></head><body><main>${POSTING.replace(/\n/g, "<br>")}</main></body></html>`;
+    const fetcher = (async (url: string | URL) => {
+      const target = String(url);
+      if (target === "https://api.ashbyhq.com/posting-api/job-board/northstar") return Response.json({ jobs: [{ title: "Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/Northstar/live-1", publishedAt: "2026-09-20T10:00:00Z", isListed: true }] });
+      if (target.toLowerCase() === "https://jobs.ashbyhq.com/northstar/live-1") return new Response(page, { status: 200, headers: { "content-type": "text/html" } });
+      return new Response("", { status: 404 });
+    }) as typeof fetch;
+    const reply = JSON.stringify({ jobs: [{ url: "https://jobs.ashbyhq.com/northstar/live-1", title: "Solutions Engineer" }, { url: "https://jobs.ashbyhq.com/northstar/gone-9", title: "Data Scientist" }] });
+    const runner = async () => ({ response: reply, conversationId: null });
+    const now = () => new Date("2026-11-06T12:00:00Z");
+    expect(DEFAULT_JOB_SEARCH_SETTINGS.postedWithinDays).toBe(30);
+    await saveSearchSettings(workspace, { ...settings, postedWithinDays: 14 });
+    const first = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner, now });
+    expect(first.run).toMatchObject({ added: 0, leftOut: { "too old": 1, "posting closed": 1 } });
+    await saveSearchSettings(workspace, { ...settings, postedWithinDays: 60 });
+    const second = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner, now });
+    expect(second.run).toMatchObject({ added: 1, leftOut: { "already seen": 1 } });
+    expect(second.state.items[0]).toMatchObject({ title: "Solutions Engineer", postedAt: "2026-09-20" });
+  });
+});

@@ -42,7 +42,7 @@ export const jobSearchSettingsSchema = z.object({
   payFloor: z.number().int().min(0).nullable().default(null),
   needsSponsorship: z.boolean().default(false),
   /** Postings older than this are treated as stale. */
-  postedWithinDays: z.number().int().min(1).max(90).default(14),
+  postedWithinDays: z.number().int().min(1).max(90).default(30),
   includeKeywords: z.array(z.string().min(1)).default([]),
   excludeKeywords: z.array(z.string().min(1)).default([]),
   /** Built-in boards the user turned off (by id). */

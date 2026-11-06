@@ -372,7 +372,11 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   }
 
   // 3. The app checks every link.
+  // `seen` is kept between runs and only grows with jobs that were added or found closed, so a posting left out for
+  // its age, its board, or a filter comes back once the user changes that setting. `checked` stops repeats within a run.
   const seen = new Set([...state.seen, ...deps.existingKeys]);
+  const checked = new Set<string>();
+  const sameUrl = (a: string, b: string) => canonicalUrl(a).toLowerCase() === b.toLowerCase();
   const vocab = await loadVocabulary(deps.workspace, deps.profile);
   const skipCompanies = settings.skipCompanies.map((name) => name.toLowerCase());
   let added = 0;
@@ -380,8 +384,8 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   for (const [index, link] of links.entries()) {
     deps.onProgress?.({ phase: "checking", checked: index, total: links.length });
     let url = canonicalUrl(await resolveLink(link.url, fetcher));
-    if (seen.has(url)) { skip("already seen"); continue; }
-    seen.add(url);
+    if (seen.has(url) || checked.has(url)) { skip("already seen"); continue; }
+    checked.add(url);
     if (skippedSite(url, settings)) { skip("skipped board"); continue; }
     if (!singlePosting(url)) { skip("not a single posting"); continue; }
     let postedDate = link.postedDate;
@@ -390,13 +394,13 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
     const ref = boardRef(url);
     const jobs = ref ? await boardJobs(ref) : null;
     if (jobs) {
-      const live = jobs.find((job) => canonicalUrl(job.url) === url);
+      const live = jobs.find((job) => sameUrl(job.url, url));
       const swap = live ? null : link.title ? bestMatch(jobs, link.title) : null;
-      if (!live && !swap) { skip("posting closed"); continue; }
+      if (!live && !swap) { seen.add(url); skip("posting closed"); continue; }
       if (swap) {
         url = canonicalUrl(swap.url);
-        if (seen.has(url)) { skip("already seen"); continue; }
-        seen.add(url);
+        if (seen.has(url) || checked.has(url)) { skip("already seen"); continue; }
+        checked.add(url);
         replaced += 1;
       }
       postedDate = (live ?? swap)!.postedAt ?? postedDate;
@@ -410,16 +414,18 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
       markdown = extracted.markdown;
       meta = extracted;
     } catch (error) {
-      skip(/HTTP 4(?:04|10)/.test(String(error)) ? "posting closed" : "couldn't open");
+      const gone = /HTTP 4(?:04|10)/.test(String(error));
+      if (gone) seen.add(url);
+      skip(gone ? "posting closed" : "couldn't open");
       continue;
     }
-    if (closedPosting(markdown)) { skip("posting closed"); continue; }
+    if (closedPosting(markdown)) { seen.add(url); skip("posting closed"); continue; }
     if (markdown.replace(/^[\s\S]*?\*\*Source:\*\*[^\n]*\n/, "").trim().length < MIN_POSTING_CHARS) { skip("couldn't read"); continue; }
     const record = buildPostingRecord(markdown);
     const { company, title } = nameJob(link, meta.company ?? record.company ?? null, meta.title ?? record.title ?? null);
     const key = jobKey(company, title);
-    if (key && seen.has(key)) { skip("already seen"); continue; }
-    if (key) seen.add(key);
+    if (key && (seen.has(key) || checked.has(key))) { skip("already seen"); continue; }
+    if (key) checked.add(key);
     if (company && skipCompanies.includes(company.toLowerCase())) { skip("skipped company"); continue; }
     const text = `${title ?? ""} ${record.summary.join(" ")}`.toLowerCase();
     if (settings.excludeKeywords.some((word) => text.includes(word.toLowerCase()))) { skip("excluded keyword"); continue; }
@@ -445,6 +451,8 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
       agyFit: null,
     };
     await writeTextAtomic(path(deps.workspace, `${POSTINGS_DIR}/${item.id}.md`), markdown);
+    seen.add(url);
+    if (key) seen.add(key);
     added += 1;
     state = await saveSearchState(deps.workspace, { ...state, items: [...state.items, item], seen: [...seen] });
     deps.onUpdate?.(state);
