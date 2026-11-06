@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { jobHealthSchema } from "./job-record";
 import type { Readiness } from "./readiness";
+import type { JobSearchSettings, JobSearchState, SearchRun } from "./job-search";
 
 export const schemaVersion = 1;
 
@@ -52,6 +53,14 @@ export const voiceSettingsSchema = z.object({
   narrativeDepth: z.enum(["journey_first", "balanced", "technical_proof"]).default("journey_first"),
 });
 export type VoiceSettings = z.infer<typeof voiceSettingsSchema>;
+
+export const COVER_LETTER_FOCUS = ["career-story", "examples"] as const;
+export type CoverLetterFocus = (typeof COVER_LETTER_FOCUS)[number];
+export const DEFAULT_COVER_LETTER_LENGTH = { min: 200, max: 280 };
+/** Extra words allowed past the target before the letter is refused. */
+export const COVER_LETTER_HARD_MARGIN = 50;
+export const coverLetterLengthSchema = z.object({ min: z.number().int().min(80).max(800), max: z.number().int().min(100).max(900) })
+  .refine((value) => value.max >= value.min + 20, { message: "The longest length must be at least 20 words more than the shortest." });
 
 export const candidateNarrativePillarsSchema = z.object({
   turningPoints: z.string().default(""),
@@ -116,6 +125,10 @@ export const candidateProfileSchema = z.object({
         workingStyle: "",
         personalValues: "",
       }),
+      /** Target length in words; the hard limit is max + 50. Each candidate sets their own (default 200–280). */
+      length: coverLetterLengthSchema.default(DEFAULT_COVER_LETTER_LENGTH),
+      /** What carries the letter: the career story (default) or one or two worked examples. */
+      focus: z.enum(COVER_LETTER_FOCUS).default("career-story"),
     }),
     voice: voiceSettingsSchema.default({
       tonePreset: "direct_outcomes",
@@ -731,6 +744,8 @@ export const applicationCoverLetterBriefSchema = z.object({
   roleProblems: z.array(z.string().min(1)).max(6).optional(),
   company: z.string().nullable().optional(),
   role: z.string().nullable().optional(),
+  /** What carries the letter (the candidate's setting); the checks read it. Older contexts have none. */
+  focus: z.enum(COVER_LETTER_FOCUS).optional(),
   /** Paragraph-by-paragraph structure; the single owner of cover-letter structure. */
   structure: z.array(z.string().min(1)).optional(),
   introContract: z.array(z.string().min(1)).min(1).optional(),
@@ -1241,6 +1256,17 @@ export interface SenseiApi {
     finishUpdate(keepOld: string[]): Promise<{ restored: number }>;
     undoUpdate(): Promise<void>;
     skip(paths: string[]): Promise<void>;
+  };
+  /** Job Search: settings, the inbox of found postings, and the search run (Agy finds links; the app checks them). */
+  jobSearch: {
+    get(): Promise<{ settings: JobSearchSettings; state: JobSearchState; running: boolean }>;
+    saveSettings(settings: JobSearchSettings): Promise<JobSearchSettings>;
+    run(): Promise<{ state: JobSearchState; run: SearchRun }>;
+    setStatus(ids: string[], status: "new" | "dismissed"): Promise<JobSearchState>;
+    saveJob(id: string): Promise<string>;
+    openPosting(id: string): Promise<void>;
+    stage(id: string, pasteId: string, auto?: boolean): Promise<string>;
+    onUpdated(callback: (state: JobSearchState) => void): () => void;
   };
   app: {
     copyText(text: string): Promise<void>;

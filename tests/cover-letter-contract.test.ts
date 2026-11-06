@@ -41,12 +41,28 @@ describe("cover letter brief and guidance contract", () => {
     expect(brief.role).toBe("Solution Analyst III");
   });
 
-  it("owns one college-style structure and a 200-280 word target", () => {
+  it("leads with the career story by default, at 200-280 words", () => {
     const brief = buildCoverLetterBrief("Build integrations.", { title: "Solutions Engineer", company: "Acme" });
-    expect(brief.structure).toHaveLength(3);
+    expect(brief.focus).toBe("career-story");
+    expect(brief.structure).toHaveLength(4);
     expect(brief.structure?.[0]).toMatch(/applying for Solutions Engineer at Acme/);
+    expect(brief.structure?.[1]).toMatch(/career story/i);
+    expect(brief.structure?.[2]).toMatch(/how they work now/i);
+    expect(brief.structure?.[2]).toMatch(/never a narrated scene/i);
+    expect(brief.structure?.join(" ")).not.toMatch(/one or two concrete, evidence-backed examples/i);
     expect(brief.structure?.join(" ")).not.toMatch(/act\s*\d|3-act|4-act/i);
     expect([brief.targetWordMin, brief.targetWordMax, brief.hardWordMax]).toEqual([200, 280, 330]);
+  });
+
+  it("follows the candidate's own length and focus settings", () => {
+    const brief = buildCoverLetterBrief("Build integrations.", { title: "Solutions Engineer", company: "Acme" }, {
+      preferences: { coverLetter: { focus: "examples", length: { min: 150, max: 220 } } },
+      truth: { confidentialNames: [] },
+    } as never);
+    expect(brief.focus).toBe("examples");
+    expect(brief.structure).toHaveLength(3);
+    expect(brief.structure?.[1]).toMatch(/one or two concrete, evidence-backed examples/i);
+    expect([brief.targetWordMin, brief.targetWordMax, brief.hardWordMax]).toEqual([150, 220, 270]);
   });
 
   it("keeps every banned opener and the candidate's confidential client names in the prohibited list", () => {
@@ -127,5 +143,32 @@ describe("cover letter composition and public-file checks", () => {
     expect(openingSentencesNotAboutCandidate(lecturing)).toHaveLength(1);
     const personal = "I am applying for the Analyst role at Acme. I started as a backend developer and moved into customer work because I wanted to see how my systems held up with real users. Acme's onboarding work is close to what I do every day.";
     expect(openingSentencesNotAboutCandidate(personal)).toHaveLength(0);
+  });
+});
+
+describe("story-led letters", () => {
+  it("flags letters whose body is told as scenes, not as a career story", async () => {
+    const { scenarioParagraphs } = await import("../electron/application-validation");
+    const scenes = [
+      "I am applying for the Solutions Consultant role at Acme. I moved from back-end development into customer work.",
+      "At Northstar Labs, I ran data discovery with a research client whose records sat in spreadsheets. I explained when documents belonged in search and when in fine-tuning.",
+      "When a consulting partner was unsure what our platform could do, I kept both sides aligned and wrote their enablement guide.",
+      "Thank you for your time. I would welcome a conversation.",
+    ];
+    expect(scenarioParagraphs(scenes)).toEqual([1, 2]);
+    const story = [
+      "I am applying for the Solutions Consultant role at Acme. I started as a back-end developer and now work with customers every day.",
+      "I spent my first years writing services nobody outside the team saw. I wanted to be the person who explains the system to the people who use it, so I moved into customer onboarding, even though it meant being uncomfortable.",
+      "Today I guide customers from setup to go-live at Northstar Labs and stay with a problem until it is solved, working with our engineers when it needs a fix.",
+      "Thank you for your time. I would welcome a conversation.",
+    ];
+    expect(scenarioParagraphs(story)).toEqual([]);
+  });
+
+  it("uses the candidate's hard word limit when it is set", async () => {
+    const { validateApplicationArtifact } = await import("../electron/application-artifacts");
+    const letter = ["Dear Hiring Team,", "", Array.from({ length: 300 }, () => "word").join(" "), "", "Sincerely,", "Alex Morgan"].join("\n");
+    expect(() => validateApplicationArtifact(letter, "cover-letter", { letterHardWordMax: 250 })).toThrow(/hard limit is 250/);
+    expect(() => validateApplicationArtifact(letter, "cover-letter", { letterHardWordMax: 400 })).not.toThrow();
   });
 });

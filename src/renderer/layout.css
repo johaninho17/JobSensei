@@ -707,3 +707,32 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .recording-list li small { display: block; color: var(--muted); }
 .content-review ul { margin: var(--space-1) 0; padding-left: var(--space-4); font-size: var(--fs-13); }
 .content-replaced li { display: grid; gap: 2px; margin-bottom: var(--space-2); }
+
+/* Job Search (src/renderer/JobSearchView.tsx) */
+.job-search .page-head > .btn-primary { flex: none; }
+.find-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.find-row { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3); align-items: start; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); }
+.find-row:has(> input[type="checkbox"]) { grid-template-columns: auto auto 1fr; cursor: pointer; }
+.find-row.is-selected { border-color: var(--line-strong); box-shadow: inset 3px 0 0 var(--brass); }
+.find-main { min-width: 0; }
+.find-main p { margin: var(--space-1) 0 0; }
+.find-facts { color: var(--muted); font-size: var(--fs-13); }
+.find-why { font-size: var(--fs-13); }
+.find-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.find-tag { padding: 1px 8px; border-radius: var(--radius-pill); background: var(--brass-tint); color: var(--ink); font-size: var(--fs-12, 12px); }
+.find-tag.is-blocker { background: var(--risk-tint); color: var(--risk); }
+.find-tag.is-gap { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+.find-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); justify-content: flex-end; align-items: center; max-width: 260px; }
+.find-sort select { margin-left: var(--space-1); }
+.find-note { margin-top: var(--space-4); font-size: var(--fs-13); }
+.find-runs { display: grid; gap: var(--space-2); padding: 0; list-style: none; font-size: var(--fs-13); }
+.search-settings { display: grid; gap: var(--space-4); max-width: 760px; }
+.search-settings fieldset { display: grid; gap: var(--space-3); margin: 0; padding: var(--space-3) 0 0; border: 0; border-top: 1px solid var(--line); }
+.search-settings legend { padding: 0; font-weight: 650; }
+.search-field { display: grid; gap: var(--space-1); font-size: var(--fs-13); }
+.search-field > span { color: var(--muted); }
+.search-field input:not([type="checkbox"]) { max-width: 520px; }
+.search-checks { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.search-checks label, .search-check { display: inline-flex; gap: var(--space-1); align-items: center; font-size: var(--fs-13); }
+.search-settings > .btn-primary { justify-self: start; }
+@media (max-width: 900px) { .find-row { grid-template-columns: auto 1fr; } .find-actions { grid-column: 1 / -1; justify-content: flex-start; max-width: none; } }

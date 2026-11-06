@@ -62,7 +62,9 @@ export function advanceQueue(queue: JobQueue, latest: RunStatus | null, now: num
 }
 
 /** Screens where Agy cannot take a prompt: sign-in, folder trust, or a used-up quota. */
-const BLOCKING = /select login method|waiting for authentication|authorization code|authentication (?:failed|timed out)|do you trust the contents|use a google cloud project|quota reached|upgrade your subscription|safe to run outside of the sandbox|do you want to proceed\?|allow access to this file\?/gi;
+// Agy's first-run setup (theme picker, Terms of Service and data-use consent) waits for the user too: a job sent
+// there is lost, and only the user may accept the terms.
+const BLOCKING = /select login method|waiting for authentication|authorization code|authentication (?:failed|timed out)|do you trust the contents|use a google cloud project|quota reached|upgrade your subscription|safe to run outside of the sandbox|do you want to proceed\?|allow access to this file\?|terms of service & data use|i agree to help improve|navigate · enter confirm/gi;
 /** Agy's status line (model and effort), drawn once it is signed in and at its prompt. */
 const READY_LINE = /(?:gemini|claude|gpt)[^\n·]{0,40}·\s*(?:low|medium|high|xhigh|max)\b/gi;
 /** Agy redraws while it works, so this long without output means it is idle. */

@@ -1,0 +1,184 @@
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_JOB_SEARCH_SETTINGS, autoDraftPicks, canonicalUrl, rankInbox, skippedSite,
+  type InboxItem, type JobSearchState,
+} from "../src/shared/job-search";
+import {
+  boardOf, buildSearchPrompt, closedPosting, nameJob, resolveLink, singlePosting, parseSearchReply, postingAgeDays, quickFit, readSearchState, runSearch,
+  saveFoundJob, saveSearchSettings, stageFoundJob, vocabularyFrom,
+} from "../electron/job-search";
+import { buildPostingRecord } from "../electron/posting-record";
+
+const POSTING = `# Solutions Engineer
+
+**Company:** Northstar Labs
+**Location:** Remote, United States
+**Source:** https://jobs.lever.co/northstar/abc
+
+Northstar Labs builds data tools for retail teams. You will help customers launch and get value from the product.
+
+## Requirements
+- 3+ years in a customer-facing technical role such as solutions engineering or onboarding
+- Strong SQL and Python skills for data troubleshooting
+- Experience with Salesforce and Kotlin
+- Clear written and spoken communication with technical and business audiences
+
+## Responsibilities
+- Run technical discovery with new customers and scope their onboarding
+- Troubleshoot integrations and work with engineering to resolve issues
+
+Pay: $120,000 - $150,000 per year. This role is remote.
+`;
+
+const settings = { ...DEFAULT_JOB_SEARCH_SETTINGS, titles: ["Solutions Engineer"] };
+
+function item(id: string, score: number, patch: Partial<InboxItem> = {}): InboxItem {
+  return {
+    id, url: `https://jobs.lever.co/x/${id}`, title: "Solutions Engineer", company: id, location: null, board: "lever", postedAt: null,
+    foundAt: "2026-11-05T10:00:00.000Z", runId: "run-1", status: "new", pay: null, workSetup: null, level: null,
+    fit: { score, why: "", covered: 0, total: 0, gaps: [], blockers: [], flags: [] }, jobId: null, queuedAt: null, autoQueued: false, ...patch,
+  };
+}
+
+describe("job search links", () => {
+  it("skips boards that block reading and the user's own skip list", () => {
+    expect(skippedSite("https://www.linkedin.com/jobs/view/1", settings)).toBe("LinkedIn");
+    expect(skippedSite("https://jobs.lever.co/acme/1", settings)).toBeNull();
+    expect(skippedSite("https://jobs.lever.co/acme/1", { ...settings, boardsOff: ["lever"] })).toBe("Lever");
+    expect(skippedSite("https://careers.example.com/1", { ...settings, skipSites: ["example.com"] })).toBe("example.com");
+  });
+
+  it("treats the same posting with tracking parameters as one link", () => {
+    expect(canonicalUrl("https://www.boards.greenhouse.io/acme/jobs/1?gh_src=abc&utm_source=x#apply")).toBe("https://boards.greenhouse.io/acme/jobs/1");
+  });
+
+  it("reads Agy's reply and drops entries without a real link", () => {
+    const links = parseSearchReply('```json\n{"jobs":[{"url":"https://jobs.ashbyhq.com/acme/1","title":"SE","company":"Acme"},{"url":"not a link"},{"title":"no url"}]}\n```');
+    expect(links).toEqual([{ url: "https://jobs.ashbyhq.com/acme/1", title: "SE", company: "Acme", location: undefined, postedDate: undefined }]);
+  });
+
+  it("finds closed postings and their age", () => {
+    expect(closedPosting("Sorry, this job is no longer accepting applications.")).toBe(true);
+    expect(closedPosting(POSTING)).toBe(false);
+    expect(postingAgeDays("2026-10-01", new Date("2026-11-05T00:00:00Z"))).toBe(35);
+    expect(postingAgeDays("yesterday", new Date())).toBeNull();
+  });
+
+  it("resolves search-result redirects to the posting's own address", async () => {
+    const fetcher = (async (url: string | URL) => String(url).includes("vertexaisearch")
+      ? new Response(null, { status: 302, headers: { location: "https://job-boards.greenhouse.io/acme/jobs/7?gh_src=x" } })
+      : new Response("", { status: 200 })) as typeof fetch;
+    expect(await resolveLink("https://vertexaisearch.cloud.google.com/grounding-api-redirect/AB12", fetcher)).toBe("https://job-boards.greenhouse.io/acme/jobs/7?gh_src=x");
+    expect(await resolveLink("https://jobs.lever.co/acme/1", fetcher)).toBe("https://jobs.lever.co/acme/1");
+    expect(boardOf("https://job-boards.greenhouse.io/acme/jobs/7")).toBe("greenhouse");
+    expect(singlePosting("https://jobs.lever.co/acme?team=Sales")).toBe(false);
+    expect(singlePosting("https://jobs.lever.co/acme/")).toBe(false);
+    expect(singlePosting("https://jobs.lever.co/acme/1f2e3d")).toBe(true);
+    expect(singlePosting("https://job-boards.greenhouse.io/acme/jobs/7")).toBe(true);
+    expect(singlePosting("https://job-boards.greenhouse.io/acme")).toBe(false);
+  });
+
+  it("splits Lever-style page titles into company and title", () => {
+    expect(nameJob({ url: "x" }, null, "Northstar Labs - Solutions Engineer")).toEqual({ company: "Northstar Labs", title: "Solutions Engineer" });
+    expect(nameJob({ url: "x", title: "Solutions Engineer", company: "Northstar Labs" }, null, "Careers | Northstar")).toEqual({ company: "Northstar Labs", title: "Solutions Engineer" });
+  });
+
+  it("gives Agy the search settings only, with the skipped boards", () => {
+    const prompt = buildSearchPrompt({ ...settings, needsSponsorship: true }, ["Acme — SE"], new Date("2026-11-05T00:00:00Z"));
+    expect(prompt).toContain("Solutions Engineer");
+    expect(prompt).toContain("linkedin.com");
+    expect(prompt).toContain("sponsorship");
+    expect(prompt).toContain("do not read or write any files");
+  });
+});
+
+describe("quick fit", () => {
+  const record = buildPostingRecord(POSTING);
+  const vocab = vocabularyFrom(["Customer Solutions Engineer: technical discovery and onboarding for customers", "Skills: SQL, Python, Looker", "Troubleshoot integrations with engineering"]);
+
+  it("scores coverage from the candidate's own words and lists missing tools", () => {
+    const fit = quickFit(record, vocab, settings);
+    expect(fit.total).toBeGreaterThan(0);
+    expect(fit.gaps).toEqual(expect.arrayContaining(["Salesforce", "Kotlin"]));
+    expect(fit.score).toBeGreaterThan(1);
+    expect(fit.score).toBeLessThanOrEqual(5);
+    expect(fit.why).toMatch(/cover \d+ of \d+/);
+  });
+
+  it("lowers the score for pay under the floor and caps it on a blocker", () => {
+    const base = quickFit(record, vocab, settings).score;
+    expect(quickFit(record, vocab, { ...settings, payFloor: 200_000 }).score).toBeLessThan(base);
+    const clearance = buildPostingRecord(POSTING.replace("## Responsibilities", "- Active security clearance required\n\n## Responsibilities"));
+    const fit = quickFit(clearance, vocab, settings);
+    expect(fit.blockers).toContain("Security clearance required");
+    expect(fit.score).toBeLessThanOrEqual(1.5);
+  });
+});
+
+describe("inbox", () => {
+  it("ranks by fit and auto-drafts only at or above the rating, within the daily cap", () => {
+    const state: JobSearchState = { schemaVersion: 1, runs: [], seen: [], items: [item("a", 3.2), item("b", 4.6), item("c", 4.1), item("d", 4.8, { fit: { score: 4.8, why: "", covered: 0, total: 0, gaps: [], blockers: ["No visa sponsorship"], flags: [] } })] };
+    expect(rankInbox(state.items).map((entry) => entry.id)).toEqual(["d", "b", "c", "a"]);
+    expect(autoDraftPicks(state, settings)).toEqual([]);
+    const picks = autoDraftPicks(state, { ...settings, autoDraftAt: 4, autoDraftDailyCap: 1 }, new Date("2026-11-05T12:00:00Z"));
+    expect(picks.map((entry) => entry.id)).toEqual(["b"]);
+    const used = { ...state, items: [...state.items, item("e", 4.9, { status: "queued", autoQueued: true, queuedAt: "2026-11-05T09:00:00.000Z" })] };
+    expect(autoDraftPicks(used, { ...settings, autoDraftAt: 4, autoDraftDailyCap: 1 }, new Date("2026-11-05T12:00:00Z"))).toEqual([]);
+  });
+});
+
+describe("search run", () => {
+  it("keeps only live, new, readable postings and saves them", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
+    await saveSearchSettings(workspace, settings);
+    const pages: Record<string, { status: number; body: string }> = {
+      "https://jobs.lever.co/northstar/abc": { status: 200, body: `<html><head><title>Northstar Labs - Solutions Engineer</title></head><body><main>${POSTING.replace(/\n/g, "<br>")}</main></body></html>` },
+      "https://jobs.lever.co/northstar/closed": { status: 200, body: `<html><body><main>This job is no longer accepting applications. ${"Filler text about the company. ".repeat(30)}</main></body></html>` },
+      "https://jobs.lever.co/northstar/gone": { status: 404, body: "Not found" },
+    };
+    const fetcher = (async (url: string | URL) => {
+      const page = pages[String(url)] ?? { status: 404, body: "" };
+      return new Response(page.body, { status: page.status, headers: { "content-type": "text/html" } });
+    }) as typeof fetch;
+    const reply = JSON.stringify({ jobs: [
+      { url: "https://jobs.lever.co/northstar/abc?utm_source=x", title: "Solutions Engineer", company: "Northstar Labs", postedDate: "2026-11-03" },
+      { url: "https://jobs.lever.co/northstar/abc", title: "Solutions Engineer", company: "Northstar Labs" },
+      { url: "https://jobs.lever.co/northstar/closed" },
+      { url: "https://jobs.lever.co/northstar/gone" },
+      { url: "https://www.linkedin.com/jobs/view/1" },
+      { url: "https://jobs.lever.co/northstar/old", postedDate: "2026-08-01" },
+    ] });
+    const { run, state } = await runSearch({
+      workspace, profile: null, fetcher, existingKeys: new Set(), now: () => new Date("2026-11-05T12:00:00Z"),
+      runner: async () => ({ response: reply, conversationId: null }),
+    });
+    expect(run.status).toBe("done");
+    expect(run.found).toBe(6);
+    expect(run.added).toBe(1);
+    expect(run.leftOut).toMatchObject({ "already seen": 1, "posting closed": 1, "posting removed": 1, "skipped board": 1, "too old": 1 });
+    const [found] = state.items;
+    expect(found.url).toBe("https://jobs.lever.co/northstar/abc");
+    expect(found.postedAt).toBe("2026-11-03");
+
+    const pasteId = "paste-test-0001";
+    expect(await stageFoundJob(workspace, found.id, pasteId)).toContain("Solutions Engineer");
+    expect(await readFile(join(workspace, ".sensei/staged-jds", `${pasteId}.md`), "utf8")).toContain("Strong SQL and Python");
+    const jobId = await saveFoundJob(workspace, found.id);
+    expect(await readFile(join(workspace, "jobs", jobId, "original_jd.md"), "utf8")).toContain("Northstar Labs");
+    expect((await readSearchState(workspace)).items[0]).toMatchObject({ status: "saved", jobId });
+
+    // A second run never brings the same posting back.
+    const again = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner: async () => ({ response: reply, conversationId: null }), now: () => new Date("2026-11-05T13:00:00Z") });
+    expect(again.run.added).toBe(0);
+  });
+
+  it("reports a failed Agy run without adding anything", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
+    await saveSearchSettings(workspace, settings);
+    const { run } = await runSearch({ workspace, profile: null, existingKeys: new Set(), runner: async () => { throw new Error("Quota reached"); } });
+    expect(run).toMatchObject({ status: "failed", error: "Agy's quota is used up for now. Try again later.", added: 0 });
+  });
+});

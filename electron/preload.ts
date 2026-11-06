@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { SenseiApi } from "../src/shared/schemas";
+import type { JobSearchState } from "../src/shared/job-search";
 
 const api: SenseiApi = {
   app: {
@@ -17,6 +18,16 @@ const api: SenseiApi = {
     finishUpdate: (keepOld) => ipcRenderer.invoke("content:finish-update", keepOld),
     undoUpdate: () => ipcRenderer.invoke("content:undo-update"),
     skip: (paths) => ipcRenderer.invoke("content:skip", paths),
+  },
+  jobSearch: {
+    get: () => ipcRenderer.invoke("search:get"),
+    saveSettings: (settings) => ipcRenderer.invoke("search:save-settings", settings),
+    run: () => ipcRenderer.invoke("search:run"),
+    setStatus: (ids, status) => ipcRenderer.invoke("search:set-status", ids, status),
+    saveJob: (id) => ipcRenderer.invoke("search:save-job", id),
+    openPosting: (id) => ipcRenderer.invoke("search:open-posting", id),
+    stage: (id, pasteId, auto) => ipcRenderer.invoke("search:stage", id, pasteId, auto),
+    onUpdated: (callback) => { const listener = (_event: Electron.IpcRendererEvent, state: JobSearchState) => callback(state); ipcRenderer.on("search:updated", listener); return () => ipcRenderer.removeListener("search:updated", listener); },
   },
   workspace: {
     getSummary: () => ipcRenderer.invoke("workspace:get-summary"),

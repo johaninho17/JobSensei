@@ -7,6 +7,8 @@ import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription } 
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { prepareAgyHome, writeSenseiLauncher } from "./agy-home";
 import { QuestionAgent, headlessAgy } from "./question-agent";
+import { SEARCH_SCHEMA, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
+import { jobKey } from "../src/shared/job-search";
 import { parsePastedQuestions } from "./application-questions";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -238,14 +240,9 @@ ipcMain.handle("settings:get", async () => {
         linkedinProfilePath = null;
       }
     }
-    const changed = baseResumePath !== current.baseResumePath
-      || linkedinProfilePath !== current.linkedinProfilePath
-      || secondaryResumePaths.length !== current.secondaryResumePaths.length
-      || secondaryResumePaths.some((path, i) => path !== current.secondaryResumePaths[i]);
-
-    if (changed) {
-      return settingsStore.save({ baseResumePath, secondaryResumePaths, linkedinProfilePath });
-    }
+    // Show only files that exist, but never save that view: a file missing for a moment (another workspace on
+    // the same settings, a resume being saved) must not erase the user's choice of base resume.
+    return { ...current, baseResumePath, secondaryResumePaths, linkedinProfilePath };
   }
   return current;
 });
@@ -390,6 +387,60 @@ const questionAgent = new QuestionAgent({
     return headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace });
   },
   onUpdate: (jobId, state) => mainWindow?.webContents.send("questions:updated", jobId, state),
+});
+// Job Search: one headless Agy run finds links; the app opens, saves, and rates each one (electron/job-search.ts).
+let searchRunning = false;
+const foundIds = (value: unknown) => (Array.isArray(value) ? value : [value]).map(String).filter((id) => /^find-[a-z0-9-]{4,40}$/.test(id));
+ipcMain.handle("search:get", async () => {
+  const workspace = requireWorkspace();
+  const profile = await readCandidateProfile(workspace).catch(() => null);
+  return { settings: await readSearchSettings(workspace, profile), state: await readSearchState(workspace), running: searchRunning };
+});
+ipcMain.handle("search:save-settings", async (_event, input: unknown) => saveSearchSettings(requireWorkspace(), input));
+ipcMain.handle("search:run", async () => {
+  if (searchRunning) throw new Error("A search is already running.");
+  const agyPath = resolveAgyExecutable();
+  if (!agyPath) throw new Error("Agy isn't installed, so the search can't run.");
+  const workspace = requireWorkspace();
+  searchRunning = true;
+  try {
+    questionAgyHome ??= await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath });
+    const jobs = await listJobFolders(workspace);
+    const existingKeys = new Set(jobs.map((job) => jobKey(job.company, job.title)).filter((key): key is string => Boolean(key)));
+    const result = await runSearch({
+      workspace,
+      profile: await readCandidateProfile(workspace).catch(() => null),
+      runner: headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }),
+      existingKeys,
+      onUpdate: (state) => mainWindow?.webContents.send("search:updated", state),
+    });
+    return result;
+  } finally {
+    searchRunning = false;
+  }
+});
+ipcMain.handle("search:set-status", async (_event, ids: unknown, status: unknown) => {
+  if (status !== "new" && status !== "dismissed") throw new Error("Use Save or Add to queue for those.");
+  return setItemStatus(requireWorkspace(), foundIds(ids), status);
+});
+ipcMain.handle("search:save-job", async (_event, id: unknown) => {
+  const [itemId] = foundIds(id);
+  if (!itemId) throw new Error("That isn't a found job.");
+  const workspace = requireWorkspace();
+  const jobId = await saveFoundJob(workspace, itemId);
+  invalidateJobCache(workspace, join(workspace, "jobs", jobId));
+  return jobId;
+});
+// Opens only a found job's own posting link (taken from the inbox, never from the renderer).
+ipcMain.handle("search:open-posting", async (_event, id: unknown) => {
+  const [itemId] = foundIds(id);
+  const item = (await readSearchState(requireWorkspace())).items.find((candidate) => candidate.id === itemId);
+  if (item && /^https?:\/\//i.test(item.url)) await shell.openExternal(item.url);
+});
+ipcMain.handle("search:stage", async (_event, id: unknown, pasteId: unknown, auto: unknown) => {
+  const [itemId] = foundIds(id);
+  if (!itemId || typeof pasteId !== "string") throw new Error("That isn't a found job.");
+  return stageFoundJob(requireWorkspace(), itemId, pasteId, auto === true);
 });
 const questionJobId = (value: unknown) => { const jobId = String(value ?? ""); if (!/^[a-z0-9][a-z0-9._-]*$/i.test(jobId)) throw new Error("Invalid job."); return jobId; };
 ipcMain.handle("questions:get", async (_event, jobId: unknown) => { const id = questionJobId(jobId); return { state: await questionAgent.get(id), running: questionAgent.isRunning(id) }; });
@@ -550,6 +601,14 @@ app.whenReady().then(async () => {
     logAgentSync(await initializeWorkspace(workspacePath));
     await indexContext(workspacePath);
     await settingsStore.setWorkspace(workspacePath);
+    // The profile also records the base resume; if the app's settings lost it, put it back so nothing downstream
+    // (career sources, the context manifest, Setup) sees "no resume".
+    const savedSettings = await settingsStore.get();
+    const profileResume = (await readCandidateProfile(workspacePath).catch(() => null))?.sources.baseResumePath ?? null;
+    if (!savedSettings.baseResumePath && profileResume) {
+      await settingsStore.save({ baseResumePath: profileResume, secondaryResumePaths: savedSettings.secondaryResumePaths, linkedinProfilePath: savedSettings.linkedinProfilePath });
+      console.info(`Base resume restored from the profile: ${profileResume}`);
+    }
     startWorkspaceWatcher(workspacePath);
   } catch (error) {
     console.error("Sensei startup initialization error:", error);

@@ -25,6 +25,7 @@ import { SearchPalette, type PaletteAction } from "./SearchPalette";
 import { SettingsModal } from "./SettingsModal";
 import { InterviewView, LiveWindow } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
+import { JobSearchView } from "./JobSearchView";
 import { storyTitles } from "./interview-cards";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -41,7 +42,7 @@ const VIEWER_PANEL_MIN = 320;
 type PromptRequest = { id: number; text: string; label: string };
 type JobWorkspaceTab = "overview" | "application" | "interview" | "files";
 type JobLocation = { kind: "job"; jobId: string; tab: JobWorkspaceTab; roundId?: string };
-type PageLocation = { kind: "jobs-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" };
+type PageLocation = { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" };
 type WorkspaceLocation =
   | PageLocation
   | JobLocation
@@ -140,14 +141,17 @@ function WorkspaceApp() {
     showPage(destination === "context" ? "context-home" : "jobs-home");
   }
   async function loadReadiness() { try { const next = await window.sensei.setup.readiness(); setReadiness(next); return next; } catch { return null; } }
-  async function queueJob(input: { kind: "link"; url: string } | { kind: "paste"; text: string; note?: string }, manual: boolean): Promise<number> {
+  async function queueJob(input: { kind: "link"; url: string } | { kind: "paste"; text: string; note?: string } | { kind: "found"; id: string; auto?: boolean }, manual: boolean): Promise<number> {
     // The app says what setup is missing before a job reaches Agy (electron/setup-readiness.ts owns the rules).
     const ready = await loadReadiness();
     if (ready && !ready.ready) throw new Error(`${ready.blocker} Open Setup in the sidebar.`);
     // Links are fetched here, by the app: Agy's sandbox has no network. The saved posting is queued like a paste,
     // and a page that can't be read is reported now instead of stalling the queue.
     const item = newQueueItem({ kind: "paste", label: null, note: input.kind === "paste" ? input.note : null }, new Date(), manual);
-    if (input.kind === "link") {
+    if (input.kind === "found") {
+      // A Job Search match: its posting is already saved and cleaned, so it is copied to the queue without a fetch.
+      item.label = await window.sensei.jobSearch.stage(input.id, item.id, input.auto === true);
+    } else if (input.kind === "link") {
       const meta = await window.sensei.jobs.stageLink(input.url, item.id);
       item.url = input.url;
       item.label = [meta.company, meta.title].filter(Boolean).join(", ") || input.url;
@@ -469,7 +473,7 @@ function WorkspaceApp() {
 
   function currentReturnLocation(jobId: string | null): JobLocation | PageLocation {
     const current = navigationHistory[navigationIndex];
-    if (current?.kind === "job" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home") return current;
+    if (current?.kind === "job" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home") return current;
     if (current?.kind === "document") return current.returnTo;
     return jobId ? { kind: "job", jobId, tab: "overview" } : { kind: "jobs-home" };
   }
@@ -783,6 +787,7 @@ function WorkspaceApp() {
       <button className="wordmark" aria-label="Sensei: all jobs" onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span><span>Sensei</span></button>
       <ul className="side-nav">
         <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
+        <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" />Job Search</button></li>
         <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{interviewingJobs.length > 0 && <span className="side-count">{interviewingJobs.length}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>
         <li><button aria-current={activePage === "setup-home" ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />Setup{readiness && <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>}</button></li>
         <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context{newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>
@@ -834,6 +839,7 @@ function WorkspaceApp() {
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
           <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
+          : currentLocation.kind === "search-home" ? <JobSearchView onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onOpenJob={openJob} onToast={showToast} />
           : currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
           : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome
@@ -861,9 +867,10 @@ function WorkspaceApp() {
   </main>;
 }
 
-function NavIcon({ name }: { name: "jobs" | "interviews" | "context" | "settings" | "sidebar" | "setup" }) {
+function NavIcon({ name }: { name: "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" }) {
   const paths: Record<typeof name, string> = {
     jobs: "M4 8h16v11H4zM9 8V5h6v3M4 13h16",
+    search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z M15.5 15.5L20 20",
     interviews: "M5 5h14v10H9l-4 4z M8.5 9.5h7 M8.5 12h4",
     context: "M5 4h10l4 4v12H5z M15 4v4h4 M8 12h8 M8 16h6",
     settings: "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1",

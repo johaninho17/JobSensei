@@ -136,7 +136,7 @@ function cleanExtracted(extracted: Extracted): { extracted: Extracted; form: str
 }
 
 /** Fetches a posting link (apply-page links are turned into the posting first) and cleans it. */
-async function fetchAndClean(url: string, fetcher: typeof fetch): Promise<{ extracted: Extracted; form: string | null }> {
+export async function fetchAndClean(url: string, fetcher: typeof fetch): Promise<{ extracted: Extracted; form: string | null }> {
   const target = postingUrl(url);
   return cleanExtracted(await fetchOracleCloudPosting(target, fetcher) ?? extractJobDescription(await fetchPage(target, fetcher), target));
 }
@@ -297,6 +297,14 @@ export async function stageLinkJobDescription(workspacePath: string, url: string
   await writeJsonAtomic(paths.meta, meta);
   await writeForm(paths.form, form);
   return meta;
+}
+
+/** Saves an already fetched and cleaned posting under a paste ID, so the queue loads it like any other. */
+export async function stageCleanedPosting(workspacePath: string, id: string, markdown: string, meta: Omit<FetchedJobDescription, "markdown">): Promise<void> {
+  const paths = stagedPaths(workspacePath, id);
+  await mkdir(join(paths.markdown, ".."), { recursive: true });
+  await writeTextAtomic(paths.markdown, markdown);
+  await writeJsonAtomic(paths.meta, meta);
 }
 
 /** Network errors (no route out of a sandbox, DNS, reset), as opposed to a page that couldn't be read. */

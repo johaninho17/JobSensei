@@ -217,9 +217,9 @@ export function answersMarkdown(state: Pick<QuestionsState, "questions" | "answe
 export type AgyRunner = (prompt: string, options: { conversationId: string | null }) => Promise<{ response: string; conversationId: string | null }>;
 
 /** Runs `agy -p` with the app's Agy home; stdin closed, no terminal. */
-export function headlessAgy(options: { agyPath: string; agyHome: string; cwd: string; timeoutSeconds?: number }): AgyRunner {
+export function headlessAgy(options: { agyPath: string; agyHome: string; cwd: string; timeoutSeconds?: number; jsonSchema?: string }): AgyRunner {
   return (prompt, { conversationId }) => new Promise((resolve, reject) => {
-    const args = ["--sandbox", "-p", prompt, "--output-format", "json", "--json-schema", ANSWER_SCHEMA, "--print-timeout", `${options.timeoutSeconds ?? 240}s`, ...(conversationId ? ["--conversation", conversationId] : [])];
+    const args = ["--sandbox", "-p", prompt, "--output-format", "json", "--json-schema", options.jsonSchema ?? ANSWER_SCHEMA, "--print-timeout", `${options.timeoutSeconds ?? 240}s`, ...(conversationId ? ["--conversation", conversationId] : [])];
     const child = spawn(options.agyPath, args, { cwd: options.cwd, env: { ...process.env, HOME: options.agyHome, ...(process.platform === "win32" ? { USERPROFILE: options.agyHome } : {}) }, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";

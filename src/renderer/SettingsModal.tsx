@@ -47,6 +47,10 @@ export function SettingsModal({
 
   // Narrative Pillars (Human Career Story)
   const [turningPoints, setTurningPoints] = useState("");
+  // Cover letter length and focus: each candidate's own (defaults 200–280, career story first).
+  const [letterFocus, setLetterFocus] = useState<"career-story" | "examples">("career-story");
+  const [letterMin, setLetterMin] = useState(200);
+  const [letterMax, setLetterMax] = useState(280);
   const [workingStyle, setWorkingStyle] = useState("");
   const [personalValues, setPersonalValues] = useState("");
   const [transitionSummary, setTransitionSummary] = useState("");
@@ -99,6 +103,9 @@ export function SettingsModal({
       setCurrentMax(profile.preferences.resume.currentEmployerBullets.max ?? 8);
 
       setTurningPoints(profile.preferences.coverLetter?.narrativePillars?.turningPoints ?? profile.career?.narrativePillars?.turningPoints ?? "");
+      setLetterFocus(profile.preferences.coverLetter?.focus ?? "career-story");
+      setLetterMin(profile.preferences.coverLetter?.length?.min ?? 200);
+      setLetterMax(profile.preferences.coverLetter?.length?.max ?? 280);
       setWorkingStyle(profile.preferences.coverLetter?.narrativePillars?.workingStyle ?? profile.career?.narrativePillars?.workingStyle ?? "");
       setPersonalValues(profile.preferences.coverLetter?.narrativePillars?.personalValues ?? profile.career?.narrativePillars?.personalValues ?? "");
       setTransitionSummary(profile.career?.transitionSummary ?? "");
@@ -145,6 +152,8 @@ export function SettingsModal({
         },
         coverLetter: {
           ...profile.preferences.coverLetter,
+          focus: letterFocus,
+          length: { min: Math.min(letterMin, letterMax - 20), max: Math.max(letterMax, letterMin + 20) },
           narrativePillars: {
             turningPoints,
             workingStyle,
@@ -449,6 +458,21 @@ export function SettingsModal({
                 <p className="settings-group-desc">
                   JobSensei uses your authentic human journey instead of parroting job descriptions. These three questions define your career transitions, problem-solving ethos, and person-fit across all cover letters and interviews.
                 </p>
+              </div>
+
+              <div className="settings-group">
+                <h3 className="settings-group-title" id="settings-cover-letter-shape">Cover letter</h3>
+                <p className="settings-group-desc">
+                  What carries your letters, and how long they are. Career story first tells where you started, why you moved, and how you work now; examples first tells one or two real situations. The longest letter allowed is your maximum plus 50 words.
+                </p>
+                <div className="segmented" role="group" aria-labelledby="settings-cover-letter-shape">
+                  <button type="button" aria-pressed={letterFocus === "career-story"} onClick={() => setLetterFocus("career-story")}>Career story first</button>
+                  <button type="button" aria-pressed={letterFocus === "examples"} onClick={() => setLetterFocus("examples")}>Examples first</button>
+                </div>
+                <div className="settings-inline-fields">
+                  <label>Shortest (words)<input type="number" min={80} max={800} step={10} value={letterMin} onChange={(e) => setLetterMin(Number(e.target.value) || 200)} /></label>
+                  <label>Longest (words)<input type="number" min={100} max={900} step={10} value={letterMax} onChange={(e) => setLetterMax(Number(e.target.value) || 280)} /></label>
+                </div>
               </div>
 
               <div className="settings-group">

@@ -1,0 +1,434 @@
+import { randomBytes } from "node:crypto";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { extname, join, resolve } from "node:path";
+import type { CandidateProfile } from "../src/shared/schemas";
+import type { PostingRecord } from "../src/shared/posting";
+import {
+  DEFAULT_JOB_SEARCH_SETTINGS, EMPTY_JOB_SEARCH_STATE, SEARCH_BOARDS, SKIPPED_BOARDS,
+  canonicalUrl, jobKey, jobSearchSettingsSchema, jobSearchStateSchema, skippedSite,
+  type InboxItem, type JobSearchSettings, type JobSearchState, type QuickFit, type SearchRun,
+} from "../src/shared/job-search";
+import { readActiveContextManifest } from "./context";
+import { loadCanonicalResumeBaseline } from "./canonical-resume";
+import { fetchAndClean, stageCleanedPosting, suggestJobId } from "./jd-fetch";
+import { assertInsideWorkspace } from "./files";
+import { readJson, writeJsonAtomic, writeTextAtomic } from "./persistence";
+import { buildPostingRecord } from "./posting-record";
+import type { AgyRunner } from "./question-agent";
+
+/**
+ * Job Search (phase 1). One headless Agy run finds posting links from the user's search settings only (no resume,
+ * no career files). The app then opens every link itself: dead, stale, duplicate, unreadable, and skipped-board
+ * links are left out; each live posting is saved, read into a posting record, and given a quick fit from the
+ * candidate's own files (no Agy). This file owns the search instructions Agy gets.
+ */
+
+export const JOB_SEARCH_DIR = ".sensei/job-search";
+const SETTINGS_FILE = `${JOB_SEARCH_DIR}/settings.json`;
+const STATE_FILE = `${JOB_SEARCH_DIR}/state.json`;
+const POSTINGS_DIR = `${JOB_SEARCH_DIR}/postings`;
+const MAX_RUNS_KEPT = 30;
+const MAX_SEEN = 3000;
+const MIN_POSTING_CHARS = 400;
+
+export const SEARCH_SCHEMA = JSON.stringify({
+  type: "object",
+  required: ["jobs"],
+  properties: {
+    jobs: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["url"],
+        properties: {
+          url: { type: "string" },
+          title: { type: "string" },
+          company: { type: "string" },
+          location: { type: "string" },
+          postedDate: { type: "string" },
+        },
+      },
+    },
+  },
+});
+
+const path = (workspace: string, relative: string) => assertInsideWorkspace(workspace, join(resolve(workspace), relative));
+
+// ---------- Settings and state ----------
+
+/** Search settings; a first read is seeded from the profile (role families, location, work arrangement). */
+export async function readSearchSettings(workspace: string, profile: CandidateProfile | null): Promise<JobSearchSettings> {
+  const stored = jobSearchSettingsSchema.safeParse(await readJson<unknown>(path(workspace, SETTINGS_FILE)));
+  if (stored.success) return stored.data;
+  const arrangement = profile?.preferences.interview.workArrangement.toLowerCase() ?? "";
+  const setups = (["remote", "hybrid", "onsite"] as const).filter((mode) => arrangement.includes(mode === "onsite" ? "on-site" : mode) || (mode === "onsite" && arrangement.includes("onsite")));
+  return {
+    ...DEFAULT_JOB_SEARCH_SETTINGS,
+    titles: profile?.career.preferredRoleFamilies.filter(Boolean).slice(0, 8) ?? [],
+    locations: profile?.preferences.interview.location ? [profile.preferences.interview.location] : profile?.identity.location ? [profile.identity.location] : [],
+    workSetups: setups.length ? [...setups] : DEFAULT_JOB_SEARCH_SETTINGS.workSetups,
+  };
+}
+
+export async function saveSearchSettings(workspace: string, input: unknown): Promise<JobSearchSettings> {
+  const settings = jobSearchSettingsSchema.parse(input);
+  await writeJsonAtomic(path(workspace, SETTINGS_FILE), settings);
+  return settings;
+}
+
+export async function readSearchState(workspace: string): Promise<JobSearchState> {
+  const parsed = jobSearchStateSchema.safeParse(await readJson<unknown>(path(workspace, STATE_FILE)));
+  return parsed.success ? parsed.data : structuredClone(EMPTY_JOB_SEARCH_STATE);
+}
+
+export async function saveSearchState(workspace: string, state: JobSearchState): Promise<JobSearchState> {
+  const next = jobSearchStateSchema.parse({ ...state, runs: state.runs.slice(-MAX_RUNS_KEPT), seen: [...new Set(state.seen)].slice(-MAX_SEEN) });
+  await writeJsonAtomic(path(workspace, STATE_FILE), next);
+  return next;
+}
+
+// ---------- The search prompt (owner of what Agy is told) ----------
+
+export function buildSearchPrompt(settings: JobSearchSettings, recent: string[], today: Date = new Date()): string {
+  const boards = SEARCH_BOARDS.filter((board) => !settings.boardsOff.includes(board.id));
+  const list = (items: string[], empty: string) => items.length ? items.join("; ") : empty;
+  return [
+    `Find up to ${settings.resultsPerRun} current job postings, quickly (a few searches, no more than a few minutes) in the United States that match the search below. Use web search only: do not read or write any files, and run no commands.`,
+    "",
+    "Search:",
+    `- Titles or role families: ${list(settings.titles, "use the include keywords")}`,
+    `- Where: ${list(settings.locations, "anywhere in the United States")}; work setup: ${settings.workSetups.join(", ") || "any"}`,
+    `- Level: ${list(settings.levels, "any")}${settings.payFloor ? `; base pay at least $${settings.payFloor.toLocaleString("en-US")} a year when the posting states pay` : ""}`,
+    settings.needsSponsorship ? "- The candidate needs visa sponsorship: skip postings that say they don't sponsor." : "",
+    `- Posted within the last ${settings.postedWithinDays} days (today is ${today.toISOString().slice(0, 10)}).`,
+    settings.includeKeywords.length ? `- Should mention: ${settings.includeKeywords.join(", ")}` : "",
+    settings.excludeKeywords.length ? `- Leave out postings about: ${settings.excludeKeywords.join(", ")}` : "",
+    settings.skipCompanies.length ? `- Never these companies: ${settings.skipCompanies.join(", ")}` : "",
+    "",
+    "Where to look:",
+    `- Search these boards first (site: searches work well): ${boards.map((board) => `${board.name} (${board.domain})`).join(", ")}${settings.extraSites.length ? `; also these sites: ${settings.extraSites.join(", ")}` : ""}.`,
+    `- Never use or link to: ${[...SKIPPED_BOARDS.map((board) => board.domain), ...settings.skipSites].join(", ")}. If a job is only found there, find the same job on the company's own careers page or applicant system, or leave it out.`,
+    "- Prefer the company's own applicant-system link (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, or its careers site) over aggregators.",
+    recent.length ? `- Already seen, don't return again: ${recent.slice(-30).join("; ")}` : "",
+    "",
+    "Return only links to single job postings (never search pages, lists, or company home pages), each with its title, company, location, and posted date (YYYY-MM-DD) when the page shows one. Don't guess a field you can't see; leave it out. Don't rate or describe the jobs: the app opens every link and checks it.",
+  ].filter((line) => line !== "").join("\n");
+}
+
+export type FoundLink = { url: string; title?: string; company?: string; location?: string; postedDate?: string };
+
+export function parseSearchReply(response: string): FoundLink[] {
+  const text = response.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+  let value: unknown;
+  try { value = JSON.parse(text); } catch {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return [];
+    try { value = JSON.parse(match[0]); } catch { return []; }
+  }
+  const jobs = Array.isArray((value as { jobs?: unknown })?.jobs) ? (value as { jobs: unknown[] }).jobs : [];
+  const str = (input: unknown) => typeof input === "string" && input.trim() ? input.trim() : undefined;
+  return jobs.flatMap((job) => {
+    const record = job as Record<string, unknown>;
+    const url = str(record?.url);
+    if (!url || !/^https?:\/\//i.test(url)) return [];
+    return [{ url, title: str(record.title), company: str(record.company), location: str(record.location), postedDate: str(record.postedDate) }];
+  });
+}
+
+// ---------- Dead and stale postings ----------
+
+const CLOSED = /\b(?:no longer (?:accepting applications|available|open|active)|(?:this )?(?:job|position|posting|role) (?:has been|was|is) (?:filled|closed|removed)|(?:job|posting|position) (?:has )?expired|no longer accepting|this job is closed|position is closed|page (?:you(?:'re| are) looking for )?(?:can(?:no|')t be found|not found|does not exist))\b/i;
+
+export function closedPosting(text: string): boolean {
+  return CLOSED.test(text.slice(0, 4000));
+}
+
+/** Days since the posted date, or null when unknown or unreadable. */
+export function postingAgeDays(postedDate: string | undefined | null, now: Date): number | null {
+  if (!postedDate) return null;
+  const time = Date.parse(postedDate);
+  if (Number.isNaN(time)) return null;
+  return Math.max(0, Math.floor((now.getTime() - time) / 86_400_000));
+}
+
+// ---------- Quick fit (no Agy) ----------
+
+const STOP = new Set(("ability able about across also and any are around based being both build building can collaborate communication complex "
+  + "cross customer customers deep demonstrated desire drive environment etc excellent experience experienced familiarity fast for from "
+  + "functional good great have help high including into its join knowledge least like more must new not other our paced plus preferred "
+  + "proven related required requirements role skills strong team teams than that the their them this through using well what will with "
+  + "work working years you your").split(" "));
+
+function contentWords(text: string): string[] {
+  return [...new Set(text.toLowerCase().split(/[^a-z0-9+#.]+/).map((word) => word.replace(/\.+$/, "")).filter((word) => word.length >= 4 && !STOP.has(word) && !/^\d+$/.test(word)))];
+}
+
+export type Vocabulary = { words: Set<string>; text: string };
+
+export function vocabularyFrom(texts: string[]): Vocabulary {
+  const text = texts.join("\n").toLowerCase();
+  return { words: new Set(contentWords(text)), text };
+}
+
+const hasTerm = (vocab: Vocabulary, term: string) => {
+  const needle = term.toLowerCase().trim();
+  if (!needle) return true;
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`).test(vocab.text);
+};
+
+/** The candidate's own words: base resume lines and the checked work records (text files only). */
+export async function loadVocabulary(workspace: string, profile: CandidateProfile | null): Promise<Vocabulary> {
+  const texts: string[] = [];
+  const resume = profile?.sources.baseResumePath;
+  if (resume) {
+    const baseline = await loadCanonicalResumeBaseline(workspace, resume).catch(() => null);
+    if (baseline) texts.push(...baseline.employers.flatMap((employer) => [employer.title ?? "", ...employer.originalBullets]), ...baseline.originalSkillsLines);
+  }
+  const manifest = await readActiveContextManifest(workspace);
+  for (const relative of manifest?.selectedStructuredPaths ?? []) {
+    if (![".md", ".txt", ".json", ".csv"].includes(extname(relative).toLowerCase())) continue;
+    const file = path(workspace, relative);
+    const info = await stat(file).catch(() => null);
+    if (!info?.isFile() || info.size > 2_000_000) continue;
+    texts.push(await readFile(file, "utf8").catch(() => ""));
+  }
+  return vocabularyFrom(texts);
+}
+
+const NO_SPONSOR = /\b(?:no|not|unable to|cannot|can't|won't|will not|does not|do not)\b[^.]{0,40}\bsponsor/i;
+const CLEARANCE = /\b(?:security clearance|clearance (?:is )?required|ts\/sci|secret clearance)\b/i;
+const CITIZEN = /\bu\.?s\.? citizen(?:ship)?\b[^.]{0,30}\brequired\b|\bmust be a u\.?s\.? citizen\b/i;
+
+export function quickFit(record: PostingRecord, vocab: Vocabulary, settings: JobSearchSettings): QuickFit {
+  const required = record.requirements.filter((row) => row.kind === "required");
+  const rows = required.length ? required : record.requirements;
+  const toolsByRow = new Map<string, string[]>();
+  for (const tool of record.tools) for (const id of tool.requirementIds) toolsByRow.set(id, [...(toolsByRow.get(id) ?? []), tool.name]);
+  const gaps = [...new Set(record.tools.filter((tool) => !hasTerm(vocab, tool.name)).map((tool) => tool.name))];
+  const coveredRows = rows.filter((row) => {
+    const tools = toolsByRow.get(row.id) ?? [];
+    if (tools.some((tool) => !hasTerm(vocab, tool))) return false;
+    const words = contentWords(row.text);
+    if (!words.length) return true;
+    return words.filter((word) => vocab.words.has(word)).length / words.length >= 0.4;
+  });
+  const coverage = rows.length ? coveredRows.length / rows.length : 0.5;
+
+  const blockers: string[] = [];
+  const flags: string[] = [];
+  const auth = `${record.workAuthorization ?? ""} ${record.requiredItems.join(" ")}`;
+  if (settings.needsSponsorship && NO_SPONSOR.test(auth)) blockers.push("No visa sponsorship");
+  if (CLEARANCE.test(auth)) blockers.push("Security clearance required");
+  if (CITIZEN.test(auth)) blockers.push("US citizenship required");
+
+  let score = 1 + 4 * coverage;
+  const level = record.seniority;
+  if (settings.levels.length && level && !settings.levels.includes(level as JobSearchSettings["levels"][number])) { score -= 0.5; flags.push(`Level: ${level}`); }
+  const yearlyMax = record.pay?.period === "year" ? record.pay.max ?? record.pay.min : null;
+  if (settings.payFloor && yearlyMax !== null && yearlyMax !== undefined && yearlyMax < settings.payFloor) { score -= 0.5; flags.push(`Pay below your floor (${record.pay!.text})`); }
+  const mode = record.workSetup?.mode;
+  if (mode && settings.workSetups.length && !settings.workSetups.includes(mode)) { score -= 0.5; flags.push(`Work setup: ${mode}`); }
+  if ((record.workSetup?.daysInOffice ?? 0) >= 5) flags.push("5 days in the office");
+  if (record.travel && /\b(?:[5-9]\d)\s?%/.test(record.travel)) flags.push(`Travel: ${record.travel}`);
+  if (/\b(?:contract|temporary|temp-to-hire|fixed[- ]term)\b/i.test(`${record.title ?? ""} ${record.summary.slice(0, 2).join(" ")}`)) flags.push("Contract or temporary");
+  if (!rows.length) flags.push("The posting lists no requirements");
+  if (blockers.length) score = Math.min(score, 1.5);
+  score = Math.round(Math.max(1, Math.min(5, score)) * 10) / 10;
+
+  const why = [
+    rows.length ? `Your files cover ${coveredRows.length} of ${rows.length} ${required.length ? "requirements" : "main duties"}` : "No requirement list to compare",
+    gaps.length ? `missing ${gaps.slice(0, 3).join(", ")}` : "",
+    blockers[0] ?? "",
+  ].filter(Boolean).join("; ");
+  return { score, why: `${why}.`, covered: coveredRows.length, total: rows.length, gaps: gaps.slice(0, 8), blockers, flags };
+}
+
+// ---------- The run ----------
+
+const REDIRECT_HOSTS = /(?:^|\.)(?:vertexaisearch\.cloud\.google\.com|google\.com|bing\.com|duckduckgo\.com)$/i;
+
+/** Search-result redirect links (Agy's web search returns Google grounding redirects) resolved to the posting's own address. */
+export async function resolveLink(url: string, fetcher: typeof fetch): Promise<string> {
+  let host = "";
+  try { host = new URL(url).hostname; } catch { return url; }
+  if (!REDIRECT_HOSTS.test(host)) return url;
+  let current = url;
+  for (let hop = 0; hop < 5; hop += 1) {
+    const response = await fetcher(current, { redirect: "manual", signal: AbortSignal.timeout(15_000) }).catch(() => null);
+    const location = response?.headers.get("location");
+    if (!response || response.status < 300 || response.status >= 400 || !location) break;
+    current = new URL(location, current).toString();
+    try { if (!REDIRECT_HOSTS.test(new URL(current).hostname)) return current; } catch { break; }
+  }
+  return current;
+}
+
+/** False for a known board's list or company page (not one posting); unknown sites are given the benefit of the doubt. */
+export function singlePosting(url: string): boolean {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return false; }
+  const host = parsed.hostname.toLowerCase();
+  const parts = parsed.pathname.split("/").filter(Boolean);
+  if (/lever\.co$/.test(host) || /ashbyhq\.com$/.test(host)) return parts.length >= 2 && !["apply", "application"].includes(parts[1]);
+  if (/greenhouse\.io$/.test(host)) return parts.includes("jobs") && /^\d+$/.test(parts[parts.indexOf("jobs") + 1] ?? "") || parsed.searchParams.has("gh_jid");
+  if (/workable\.com$/.test(host)) return parts.includes("j") || parts.includes("view");
+  if (/smartrecruiters\.com$/.test(host)) return parts.length >= 2;
+  return parsed.pathname.length > 1;
+}
+
+const BOARD_BY_HOST: Array<[RegExp, string]> = [[/greenhouse\.io$/, "greenhouse"], [/lever\.co$/, "lever"], [/ashbyhq\.com$/, "ashby"], [/workable\.com$/, "workable"], [/smartrecruiters\.com$/, "smartrecruiters"], [/myworkdayjobs\.com$/, "workday"], [/ycombinator\.com$/, "yc"], [/builtin\.com$/, "builtin"], [/wellfound\.com$/, "wellfound"]];
+export function boardOf(url: string): string | null {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    return BOARD_BY_HOST.find(([pattern]) => pattern.test(host))?.[1] ?? host;
+  } catch { return null; }
+}
+
+/** Title and company: what Agy saw on the page first, then the page; "Company - Title" page titles (Lever) are split. */
+export function nameJob(link: FoundLink, pageCompany: string | null, pageTitle: string | null): { company: string | null; title: string | null } {
+  let company = link.company ?? pageCompany;
+  let title = link.title ?? pageTitle;
+  const split = !link.title && pageTitle ? /^(.{2,60}?)\s+[-–|]\s+(.{3,})$/.exec(pageTitle) : null;
+  if (split && (!company || split[1].toLowerCase() === company.toLowerCase())) { company = company ?? split[1].trim(); title = split[2].trim(); }
+  return { company, title };
+}
+
+export type SearchDeps = {
+  workspace: string;
+  profile: CandidateProfile | null;
+  runner: AgyRunner;
+  fetcher?: typeof fetch;
+  now?: () => Date;
+  /** Keys of jobs already in Jobs (canonical URLs and company|title keys). */
+  existingKeys: Set<string>;
+  onUpdate?: (state: JobSearchState) => void;
+};
+
+const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
+
+export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchState; run: SearchRun }> {
+  const now = deps.now ?? (() => new Date());
+  const settings = await readSearchSettings(deps.workspace, deps.profile);
+  let state = await readSearchState(deps.workspace);
+  const run: SearchRun = { id: newId("run"), startedAt: now().toISOString(), finishedAt: null, status: "running", found: 0, added: 0, leftOut: {}, autoQueued: 0, error: null };
+  state = await saveSearchState(deps.workspace, { ...state, runs: [...state.runs, run] });
+  deps.onUpdate?.(state);
+  const finish = async (patch: Partial<SearchRun>) => {
+    const done = { ...run, ...patch, finishedAt: now().toISOString() };
+    state = await saveSearchState(deps.workspace, { ...state, runs: state.runs.map((candidate) => candidate.id === run.id ? done : candidate) });
+    deps.onUpdate?.(state);
+    return { state, run: done };
+  };
+  const recent = state.items.slice(-30).map((item) => [item.company, item.title].filter(Boolean).join(" — ")).filter(Boolean);
+  let links: FoundLink[];
+  try {
+    links = parseSearchReply((await deps.runner(buildSearchPrompt(settings, recent, now()), { conversationId: null })).response);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return finish({ status: "failed", error: /print_timeout|DEADLINE_EXCEEDED/.test(message) ? "Agy took too long to search. Try fewer links per search or fewer titles." : /quota|RESOURCE_EXHAUSTED/i.test(message) ? "Agy's quota is used up for now. Try again later." : message.slice(0, 200) });
+  }
+  const leftOut: Record<string, number> = {};
+  const skip = (reason: string) => { leftOut[reason] = (leftOut[reason] ?? 0) + 1; };
+  const seen = new Set([...state.seen, ...deps.existingKeys]);
+  const vocab = await loadVocabulary(deps.workspace, deps.profile);
+  const skipCompanies = settings.skipCompanies.map((name) => name.toLowerCase());
+  const added: InboxItem[] = [];
+  for (const link of links) {
+    const url = canonicalUrl(await resolveLink(link.url, deps.fetcher ?? fetch));
+    if (seen.has(url)) { skip("already seen"); continue; }
+    seen.add(url);
+    if (skippedSite(url, settings)) { skip("skipped board"); continue; }
+    if (!singlePosting(url)) { skip("not a single posting"); continue; }
+    const age = postingAgeDays(link.postedDate, now());
+    if (age !== null && age > settings.postedWithinDays) { skip("too old"); continue; }
+    let markdown: string;
+    let meta: { title: string | null; company: string | null; location: string | null };
+    try {
+      const { extracted } = await fetchAndClean(url, deps.fetcher ?? fetch);
+      markdown = extracted.markdown;
+      meta = extracted;
+    } catch (error) {
+      skip(/HTTP 4(?:04|10)/.test(String(error)) ? "posting removed" : "couldn't open");
+      continue;
+    }
+    if (closedPosting(markdown)) { skip("posting closed"); continue; }
+    if (markdown.replace(/^[\s\S]*?\*\*Source:\*\*[^\n]*\n/, "").trim().length < MIN_POSTING_CHARS) { skip("couldn't read"); continue; }
+    const record = buildPostingRecord(markdown);
+    const { company, title } = nameJob(link, meta.company ?? record.company ?? null, meta.title ?? record.title ?? null);
+    const key = jobKey(company, title);
+    if (key && seen.has(key)) { skip("already seen"); continue; }
+    if (key) seen.add(key);
+    if (company && skipCompanies.includes(company.toLowerCase())) { skip("skipped company"); continue; }
+    const text = `${title ?? ""} ${record.summary.join(" ")}`.toLowerCase();
+    if (settings.excludeKeywords.some((word) => text.includes(word.toLowerCase()))) { skip("excluded keyword"); continue; }
+    const item: InboxItem = {
+      id: newId("find"),
+      url,
+      title,
+      company,
+      location: meta.location ?? record.location ?? link.location ?? null,
+      board: boardOf(url),
+      postedAt: link.postedDate && age !== null ? new Date(Date.parse(link.postedDate)).toISOString().slice(0, 10) : null,
+      foundAt: now().toISOString(),
+      runId: run.id,
+      status: "new",
+      pay: record.pay?.text ?? null,
+      workSetup: record.workSetup?.text ?? record.workSetup?.mode ?? null,
+      level: record.seniority,
+      fit: quickFit(record, vocab, settings),
+      jobId: null,
+      queuedAt: null,
+      autoQueued: false,
+    };
+    await writeTextAtomic(path(deps.workspace, `${POSTINGS_DIR}/${item.id}.md`), markdown);
+    added.push(item);
+    state = await saveSearchState(deps.workspace, { ...state, items: [...state.items, item], seen: [...seen] });
+    deps.onUpdate?.(state);
+  }
+  state = await saveSearchState(deps.workspace, { ...state, seen: [...seen] });
+  return finish({ status: "done", found: links.length, added: added.length, leftOut });
+}
+
+// ---------- Inbox actions ----------
+
+export async function postingFor(workspace: string, itemId: string): Promise<string> {
+  if (!/^find-[a-z0-9-]{4,40}$/.test(itemId)) throw new Error("That isn't a found job.");
+  return readFile(path(workspace, `${POSTINGS_DIR}/${itemId}.md`), "utf8");
+}
+
+export async function setItemStatus(workspace: string, ids: string[], status: InboxItem["status"], patch: Partial<InboxItem> = {}): Promise<JobSearchState> {
+  const state = await readSearchState(workspace);
+  const wanted = new Set(ids);
+  return saveSearchState(workspace, { ...state, items: state.items.map((item) => wanted.has(item.id) ? { ...item, ...patch, status } : item) });
+}
+
+/** Saves a found job into Jobs (status Saved) with its posting, without running Agy. */
+export async function saveFoundJob(workspace: string, itemId: string): Promise<string> {
+  const state = await readSearchState(workspace);
+  const item = state.items.find((candidate) => candidate.id === itemId);
+  if (!item) throw new Error("That found job is gone.");
+  if (item.jobId) return item.jobId;
+  const posting = await postingFor(workspace, itemId);
+  const base = suggestJobId(item.company, item.title) ?? item.id.replace(/^find-/, "job-");
+  let jobId = base;
+  for (let n = 2; await stat(path(workspace, `jobs/${jobId}`)).catch(() => null); n += 1) jobId = `${base}-${n}`;
+  const folder = path(workspace, `jobs/${jobId}`);
+  await mkdir(join(folder, ".sensei"), { recursive: true });
+  await writeFile(join(folder, "original_jd.md"), posting, { flag: "wx" });
+  await setItemStatus(workspace, [itemId], "saved", { jobId });
+  return jobId;
+}
+
+/** Copies a found posting into the queue's saved postings under a paste ID; returns the queue label. */
+export async function stageFoundJob(workspace: string, itemId: string, pasteId: string, auto = false, now = new Date()): Promise<string> {
+  const state = await readSearchState(workspace);
+  const item = state.items.find((candidate) => candidate.id === itemId);
+  if (!item) throw new Error("That found job is gone.");
+  const posting = await postingFor(workspace, itemId);
+  await stageCleanedPosting(workspace, pasteId, posting, {
+    url: item.url, fetchedAt: item.foundAt, title: item.title, company: item.company, location: item.location, suggestedJobId: suggestJobId(item.company, item.title),
+  });
+  await setItemStatus(workspace, [itemId], "queued", { queuedAt: now.toISOString(), autoQueued: auto });
+  return [item.company, item.title].filter(Boolean).join(", ") || item.url;
+}
