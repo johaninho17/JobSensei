@@ -1264,6 +1264,9 @@ export interface SenseiApi {
     /** Starts a run in the background; progress arrives through onStatus, the result through onFinished. */
     run(mode?: "search" | "watched"): Promise<void>;
     suggestWatched(): Promise<WatchedSuggestion[]>;
+    /** Agy's light rating for up to 10 matches, in the background; the result message arrives through onRated. */
+    rate(ids: string[]): Promise<void>;
+    onRated(callback: (message: string) => void): () => void;
     onStatus(callback: (status: SearchStatus) => void): () => void;
     onFinished(callback: (run: SearchRun | null) => void): () => void;
     setStatus(ids: string[], status: "new" | "dismissed"): Promise<JobSearchState>;

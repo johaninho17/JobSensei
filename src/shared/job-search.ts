@@ -60,6 +60,8 @@ export const jobSearchSettingsSchema = z.object({
   /** Quick fit at or above which a found job is queued for drafts by itself; null = never (default). */
   autoDraftAt: z.number().min(1).max(5).nullable().default(null),
   autoDraftDailyCap: z.number().int().min(1).max(10).default(3),
+  /** After a search, Agy rates up to 10 new matches near or above the bar in one call (a little quota). */
+  lightRating: z.boolean().default(true),
   /** How many postings one search asks Agy for. */
   resultsPerRun: z.number().int().min(5).max(40).default(20),
 });
@@ -80,6 +82,15 @@ export const quickFitSchema = z.object({
   flags: z.array(z.string()),
 });
 export type QuickFit = z.infer<typeof quickFitSchema>;
+
+/** Agy's light rating: the job's requirements against the candidate's short profile card, one call for up to 10 jobs. */
+export const agyFitSchema = z.object({
+  score: z.number().min(1).max(5),
+  why: z.string(),
+  gaps: z.array(z.string()),
+  ratedAt: z.string(),
+});
+export type AgyFit = z.infer<typeof agyFitSchema>;
 
 export const INBOX_STATUSES = ["new", "dismissed", "saved", "queued"] as const;
 
@@ -106,6 +117,7 @@ export const inboxItemSchema = z.object({
   autoQueued: z.boolean().default(false),
   /** Found on a watched company's board. */
   watched: z.boolean().default(false),
+  agyFit: agyFitSchema.nullable().default(null),
 });
 export type InboxItem = z.infer<typeof inboxItemSchema>;
 
@@ -121,6 +133,8 @@ export const searchRunSchema = z.object({
   autoQueued: z.number().int().default(0),
   /** Dead links swapped for the company's live posting with the same title. */
   replaced: z.number().int().default(0),
+  /** Matches Agy gave a light rating in this run. */
+  rated: z.number().int().default(0),
   /** "search" = Agy + watched companies; "watched" = watched companies only (no Agy). */
   source: z.enum(["search", "watched"]).default("search"),
   /** A failure message; on a finished run, Agy's failure while watched companies still ran. */
@@ -128,8 +142,8 @@ export const searchRunSchema = z.object({
 });
 export type SearchRun = z.infer<typeof searchRunSchema>;
 
-export type SearchProgress = { phase: "watched" | "agy" | "checking"; checked: number; total: number };
-export type SearchStatus = { running: boolean; source: "search" | "watched" | null; progress: SearchProgress | null; startedAt: string | null };
+export type SearchProgress = { phase: "watched" | "agy" | "checking" | "rating"; checked: number; total: number };
+export type SearchStatus = { running: boolean; source: "search" | "watched" | "rating" | null; progress: SearchProgress | null; startedAt: string | null };
 export type WatchedSuggestion = { board: "ashby" | "greenhouse" | "lever"; slug: string; name: string; jobs: number; interviewed: boolean };
 
 /** One line for the progress of a run, shown on any page. */
@@ -139,6 +153,7 @@ export function searchProgressText(status: SearchStatus): string {
   if (!progress) return "Starting the search…";
   if (progress.phase === "watched") return `Checking watched companies (${progress.checked + 1} of ${progress.total})…`;
   if (progress.phase === "agy") return "Agy is searching the job boards (usually 1–3 minutes)…";
+  if (progress.phase === "rating") return `Agy is rating ${progress.total} match${progress.total === 1 ? "" : "es"} (about a minute)…`;
   return `Checking postings: ${progress.checked} of ${progress.total}…`;
 }
 
@@ -182,12 +197,21 @@ export function skippedSite(url: string, settings: Pick<JobSearchSettings, "skip
   return settings.skipSites.find(matches) ?? null;
 }
 
-/** Inbox order: by quick fit (highest first), then newest. */
+/** The score that ranks and auto-drafts a match: Agy's light rating when it has one, else the quick fit. */
+export const effectiveFit = (item: Pick<InboxItem, "fit" | "agyFit">) => item.agyFit?.score ?? item.fit.score;
+
+/** Matches worth Agy's light rating: new, unrated, no blocker, quick fit within half a point of the bar. */
+export function lightRatingPicks(items: InboxItem[], settings: Pick<JobSearchSettings, "minFit">, limit = 10): InboxItem[] {
+  return items.filter((item) => item.status === "new" && !item.agyFit && !item.fit.blockers.length && item.fit.score >= settings.minFit - 0.5)
+    .sort((a, b) => b.fit.score - a.fit.score).slice(0, limit);
+}
+
+/** Inbox order: by fit (Agy's light rating, else quick fit; highest first), then newest. */
 export function rankInbox(items: InboxItem[], sort: "fit" | "newest" | "company" = "fit"): InboxItem[] {
   const time = (item: InboxItem) => Date.parse(item.postedAt ?? item.foundAt) || 0;
-  return [...items].sort((a, b) => sort === "company" ? (a.company ?? "").localeCompare(b.company ?? "") || b.fit.score - a.fit.score
-    : sort === "newest" ? time(b) - time(a) || b.fit.score - a.fit.score
-      : b.fit.score - a.fit.score || time(b) - time(a));
+  return [...items].sort((a, b) => sort === "company" ? (a.company ?? "").localeCompare(b.company ?? "") || effectiveFit(b) - effectiveFit(a)
+    : sort === "newest" ? time(b) - time(a) || effectiveFit(b) - effectiveFit(a)
+      : effectiveFit(b) - effectiveFit(a) || time(b) - time(a));
 }
 
 /** Which new items to queue for drafts by themselves: at or above the user's rating, within today's cap. */
@@ -196,5 +220,5 @@ export function autoDraftPicks(state: JobSearchState, settings: JobSearchSetting
   const today = now.toISOString().slice(0, 10);
   const queuedToday = state.items.filter((item) => item.autoQueued && item.queuedAt?.slice(0, 10) === today).length;
   const room = Math.max(0, settings.autoDraftDailyCap - queuedToday);
-  return rankInbox(state.items.filter((item) => item.status === "new" && item.fit.blockers.length === 0 && item.fit.score >= settings.autoDraftAt!)).slice(0, room);
+  return rankInbox(state.items.filter((item) => item.status === "new" && item.fit.blockers.length === 0 && effectiveFit(item) >= settings.autoDraftAt!)).slice(0, room);
 }

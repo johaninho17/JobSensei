@@ -7,7 +7,7 @@ import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription } 
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { prepareAgyHome, writeSenseiLauncher } from "./agy-home";
 import { QuestionAgent, headlessAgy } from "./question-agent";
-import { SEARCH_SCHEMA, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
+import { RATING_SCHEMA, SEARCH_SCHEMA, rateItems, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
 import { jobKey, type SearchRun, type SearchStatus } from "../src/shared/job-search";
 import { boardRef } from "./job-boards";
 import { readPostingRecord } from "./posting-record";
@@ -420,6 +420,7 @@ ipcMain.handle("search:run", async (_event, mode: unknown) => {
         workspace,
         profile: await readCandidateProfile(workspace).catch(() => null),
         runner: agyPath && questionAgyHome ? headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }) : null,
+        rater: agyPath && questionAgyHome ? headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace, timeoutSeconds: 240, jsonSchema: RATING_SCHEMA }) : null,
         existingKeys,
         onUpdate: (state) => mainWindow?.webContents.send("search:updated", state),
         onProgress: (progress) => setSearchStatus({ ...searchStatus, progress }),
@@ -429,6 +430,29 @@ ipcMain.handle("search:run", async (_event, mode: unknown) => {
     } finally {
       setSearchStatus({ running: false, source: null, progress: null, startedAt: null });
       mainWindow?.webContents.send("search:finished", result?.run ?? null);
+    }
+  })();
+});
+/** Agy's light rating for chosen matches (up to 10, one call), in the background like a search. */
+ipcMain.handle("search:rate", async (_event, ids: unknown) => {
+  if (searchStatus.running) throw new Error("A search is already running.");
+  const chosen = foundIds(ids).slice(0, 10);
+  if (!chosen.length) return;
+  const agyPath = resolveAgyExecutable();
+  if (!agyPath) throw new Error("Agy isn't installed, so matches can't be rated.");
+  const workspace = requireWorkspace();
+  setSearchStatus({ running: true, source: "rating", progress: { phase: "rating", checked: 0, total: chosen.length }, startedAt: new Date().toISOString() });
+  void (async () => {
+    let message = "";
+    try {
+      questionAgyHome ??= await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath });
+      const rated = await rateItems({ workspace, profile: await readCandidateProfile(workspace).catch(() => null), rater: headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace, timeoutSeconds: 240, jsonSchema: RATING_SCHEMA }), ids: chosen, onUpdate: (state) => mainWindow?.webContents.send("search:updated", state) });
+      message = `Agy rated ${rated} of ${chosen.length} match${chosen.length === 1 ? "" : "es"}.`;
+    } catch (error) {
+      message = `Agy couldn't rate them: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`;
+    } finally {
+      setSearchStatus({ running: false, source: null, progress: null, startedAt: null });
+      mainWindow?.webContents.send("search:rated", message);
     }
   })();
 });

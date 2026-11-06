@@ -584,7 +584,8 @@ function WorkspaceApp() {
     const offStatus = window.sensei.jobSearch.onStatus(setSearchStatus);
     const offFinished = window.sensei.jobSearch.onFinished((run) => searchFinishedRef.current(run));
     const offUpdated = window.sensei.jobSearch.onUpdated((state) => setSearchNew(state.items.filter((item) => item.status === "new").length));
-    return () => { offStatus(); offFinished(); offUpdated(); };
+    const offRated = window.sensei.jobSearch.onRated((message) => notify("Light rating finished", message));
+    return () => { offStatus(); offFinished(); offUpdated(); offRated(); };
   }, [workspace?.path]);
 
   /** A desktop notification when the window is in the background; a toast when it is in front. */

@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_JOB_SEARCH_SETTINGS, autoDraftPicks, canonicalUrl, rankInbox, skippedSite,
+  DEFAULT_JOB_SEARCH_SETTINGS, autoDraftPicks, canonicalUrl, effectiveFit, lightRatingPicks, rankInbox, skippedSite,
   type InboxItem, type JobSearchState,
 } from "../src/shared/job-search";
 import {
-  boardOf, buildSearchPrompt, closedPosting, nameJob, resolveLink, singlePosting, parseSearchReply, postingAgeDays, quickFit, readSearchState, runSearch,
+  boardOf, buildRatingPrompt, buildSearchPrompt, parseRatingReply, closedPosting, nameJob, resolveLink, singlePosting, parseSearchReply, postingAgeDays, quickFit, readSearchState, runSearch,
   saveFoundJob, saveSearchSettings, stageFoundJob, vocabularyFrom,
 } from "../electron/job-search";
 import { buildPostingRecord } from "../electron/posting-record";
@@ -40,7 +40,7 @@ function item(id: string, score: number, patch: Partial<InboxItem> = {}): InboxI
   return {
     id, url: `https://jobs.lever.co/x/${id}`, title: "Solutions Engineer", company: id, location: null, board: "lever", postedAt: null,
     foundAt: "2026-11-05T10:00:00.000Z", runId: "run-1", status: "new", pay: null, workSetup: null, level: null,
-    fit: { score, why: "", covered: 0, total: 0, gaps: [], blockers: [], flags: [] }, jobId: null, queuedAt: null, autoQueued: false, ...patch,
+    fit: { score, why: "", covered: 0, total: 0, gaps: [], blockers: [], flags: [] }, jobId: null, queuedAt: null, autoQueued: false, watched: false, agyFit: null, ...patch,
   };
 }
 
@@ -234,5 +234,39 @@ describe("public job boards", () => {
     await saveSearchSettings(workspace, { ...settings, watched: [{ board: "ashby", slug: "northstar", name: "Northstar Labs" }] });
     const { run } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner: async () => { throw new Error("print_timeout"); } });
     expect(run).toMatchObject({ status: "done", added: 1, error: "Agy took too long to search. Try fewer links per search or fewer titles." });
+  });
+});
+
+describe("Agy light rating", () => {
+  it("picks new, unrated matches near the bar without blockers, at most 10", () => {
+    const items = [item("a", 2.4), item("b", 2.6), item("c", 4.0, { agyFit: { score: 3, why: "", gaps: [], ratedAt: "x" } }), item("d", 3.5, { status: "dismissed" }),
+      item("e", 4.8, { fit: { score: 4.8, why: "", covered: 0, total: 0, gaps: [], blockers: ["No visa sponsorship"], flags: [] } }), ...Array.from({ length: 12 }, (_, n) => item(`z${n}`, 3.1))];
+    const picks = lightRatingPicks(items, { minFit: 3 });
+    expect(picks).toHaveLength(10);
+    expect(picks.map((entry) => entry.id)).not.toEqual(expect.arrayContaining(["a", "c", "d", "e"]));
+  });
+
+  it("asks with the card and requirements only, and keeps only known ids", () => {
+    const prompt = buildRatingPrompt("Roles: Support Engineer (2022 – present)", [{ id: "find-abc1", title: "Solutions Engineer", company: "Northstar Labs", level: "mid", requirements: ["Strong SQL"] }]);
+    expect(prompt).toContain("do not search, read files");
+    expect(prompt).toContain("Job find-abc1: Solutions Engineer at Northstar Labs (mid)");
+    expect(prompt).toContain("- Strong SQL");
+    const parsed = parseRatingReply('{"ratings":[{"id":"find-abc1","score":7,"why":"Close **match**.","gaps":["Kotlin","a","b","c"]},{"id":"find-other","score":4,"why":"x"}]}', ["find-abc1"]);
+    expect([...parsed.keys()]).toEqual(["find-abc1"]);
+    expect(parsed.get("find-abc1")).toEqual({ score: 5, why: "Close match.", gaps: ["Kotlin", "a", "b"] });
+  });
+
+  it("rates a search's best new matches in one call, and Agy's score ranks them", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
+    await saveSearchSettings(workspace, { ...settings, minFit: 1 });
+    const page = `<html><head><title>Northstar Labs - Solutions Engineer</title></head><body><main>${POSTING.replace(/\n/g, "<br>")}</main></body></html>`;
+    const fetcher = (async (url: string | URL) => String(url) === "https://jobs.lever.co/northstar/abc" ? new Response(page, { status: 200, headers: { "content-type": "text/html" } }) : new Response("", { status: 404 })) as typeof fetch;
+    let calls = 0;
+    const rater = async (prompt: string) => { calls += 1; const id = /Job (find-[a-z0-9-]+):/.exec(prompt)![1]; return { response: JSON.stringify({ ratings: [{ id, score: 4.4, why: "Strong overlap.", gaps: ["Kotlin"] }] }), conversationId: null }; };
+    const { run, state } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), rater, runner: async () => ({ response: JSON.stringify({ jobs: [{ url: "https://jobs.lever.co/northstar/abc" }] }), conversationId: null }) });
+    expect(calls).toBe(1);
+    expect(run).toMatchObject({ added: 1, rated: 1 });
+    expect(state.items[0].agyFit).toMatchObject({ score: 4.4, why: "Strong overlap.", gaps: ["Kotlin"] });
+    expect(effectiveFit(state.items[0])).toBe(4.4);
   });
 });

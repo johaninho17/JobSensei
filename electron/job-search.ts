@@ -5,7 +5,7 @@ import type { CandidateProfile } from "../src/shared/schemas";
 import type { PostingRecord } from "../src/shared/posting";
 import {
   DEFAULT_JOB_SEARCH_SETTINGS, EMPTY_JOB_SEARCH_STATE, SEARCH_BOARDS, SKIPPED_BOARDS,
-  canonicalUrl, jobKey, jobSearchSettingsSchema, jobSearchStateSchema, skippedSite,
+  canonicalUrl, jobKey, jobSearchSettingsSchema, lightRatingPicks, jobSearchStateSchema, skippedSite,
   type InboxItem, type JobSearchSettings, type JobSearchState, type QuickFit, type SearchProgress, type SearchRun,
 } from "../src/shared/job-search";
 import { readActiveContextManifest } from "./context";
@@ -305,6 +305,8 @@ export type SearchDeps = {
   profile: CandidateProfile | null;
   /** Null checks watched companies only (no Agy). */
   runner: AgyRunner | null;
+  /** Agy runner for the light rating (with the rating schema); null skips it. */
+  rater?: AgyRunner | null;
   fetcher?: typeof fetch;
   now?: () => Date;
   /** Keys of jobs already in Jobs (canonical URLs and company|title keys). */
@@ -323,7 +325,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   const fetcher = deps.fetcher ?? fetch;
   const settings = await readSearchSettings(deps.workspace, deps.profile);
   let state = await readSearchState(deps.workspace);
-  const run: SearchRun = { id: newId("run"), startedAt: now().toISOString(), finishedAt: null, status: "running", found: 0, added: 0, leftOut: {}, autoQueued: 0, replaced: 0, error: null, source: deps.runner ? "search" : "watched" };
+  const run: SearchRun = { id: newId("run"), startedAt: now().toISOString(), finishedAt: null, status: "running", found: 0, added: 0, leftOut: {}, autoQueued: 0, replaced: 0, rated: 0, error: null, source: deps.runner ? "search" : "watched" };
   state = await saveSearchState(deps.workspace, { ...state, runs: [...state.runs, run] });
   deps.onUpdate?.(state);
   const finish = async (patch: Partial<SearchRun>) => {
@@ -439,6 +441,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
       queuedAt: null,
       autoQueued: false,
       watched: link.watched === true,
+      agyFit: null,
     };
     await writeTextAtomic(path(deps.workspace, `${POSTINGS_DIR}/${item.id}.md`), markdown);
     added += 1;
@@ -447,7 +450,113 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   }
   deps.onProgress?.({ phase: "checking", checked: links.length, total: links.length });
   state = await saveSearchState(deps.workspace, { ...state, seen: [...seen] });
-  return finish({ status: "done", found: links.length, added, replaced, leftOut, error: agyFailure });
+  // 4. Agy's light rating for this run's best new matches (one call), when the search used Agy.
+  let rated = 0;
+  if (deps.runner && deps.rater && settings.lightRating && !agyFailure) {
+    const picks = lightRatingPicks(state.items.filter((item) => item.runId === run.id), settings);
+    if (picks.length) {
+      deps.onProgress?.({ phase: "rating", checked: 0, total: picks.length });
+      try {
+        rated = await rateItems({ workspace: deps.workspace, profile: deps.profile, rater: deps.rater, ids: picks.map((item) => item.id), now, onUpdate: deps.onUpdate });
+        state = await readSearchState(deps.workspace);
+      } catch (error) {
+        agyFailure = `The light rating didn't finish (${agyError(error instanceof Error ? error.message : String(error))}); quick fit is shown instead.`;
+      }
+    }
+  }
+  return finish({ status: "done", found: links.length, added, replaced, rated, leftOut, error: agyFailure });
+}
+
+// ---------- Agy light rating (one call for up to 10 jobs) ----------
+
+export const RATING_SCHEMA = JSON.stringify({
+  type: "object",
+  required: ["ratings"],
+  properties: {
+    ratings: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["id", "score", "why"],
+        properties: { id: { type: "string" }, score: { type: "number" }, why: { type: "string" }, gaps: { type: "array", items: { type: "string" } } },
+      },
+    },
+  },
+});
+
+const clip = (text: string, max: number) => text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+const plain = (text: string) => text.replace(/[*_`#]/g, "").replace(/\s+/g, " ").trim();
+
+/** A short card of the candidate for the light rating: role titles and dates, skills lines, story, target roles. No employer names. */
+export async function profileCard(workspace: string, profile: CandidateProfile | null): Promise<string> {
+  const baseline = profile?.sources.baseResumePath ? await loadCanonicalResumeBaseline(workspace, profile.sources.baseResumePath).catch(() => null) : null;
+  const roles = profile?.career.employers.length
+    ? profile.career.employers.map((role) => `${role.title} (${role.startDate} – ${role.endDate ?? "present"})`)
+    : (baseline?.employers ?? []).map((role) => `${plain(role.title ?? "Role")} (${role.dateRange ?? "dates not stated"})`);
+  const lines = [
+    roles.length ? `Roles: ${roles.slice(0, 6).join("; ")}` : "",
+    baseline?.originalSkillsLines.length ? `Skills: ${clip(baseline.originalSkillsLines.map(plain).join(" | "), 700)}` : "",
+    profile?.career.transitionSummary ? `Story: ${clip(plain(profile.career.transitionSummary), 500)}` : "",
+    profile?.career.preferredRoleFamilies.length ? `Wants: ${profile.career.preferredRoleFamilies.join(", ")}` : "",
+  ].filter(Boolean);
+  return lines.join("\n") || "No profile details yet.";
+}
+
+export function buildRatingPrompt(card: string, jobs: Array<{ id: string; title: string | null; company: string | null; level: string | null; requirements: string[] }>): string {
+  return [
+    "Rate how well this candidate fits each job below, from 1 (poor) to 5 (excellent). Use only the candidate card and each job's requirements: do not search, read files, or run commands.",
+    "Score the work itself: transferable experience counts, tools that can be learned quickly are a small gap, and missing core experience is a big one. Be honest, not generous.",
+    "For each job return its id, a score (one decimal), why in one plain sentence under 25 words (say \"you\", not \"the candidate\"), and up to 3 gaps of a few words each.",
+    "",
+    "Candidate:",
+    card,
+    "",
+    ...jobs.flatMap((job) => [
+      `Job ${job.id}: ${job.title ?? "Untitled"} at ${job.company ?? "an unnamed company"}${job.level ? ` (${job.level})` : ""}`,
+      ...(job.requirements.length ? job.requirements.map((text) => `- ${clip(plain(text), 180)}`) : ["- (the posting lists no requirements)"]),
+      "",
+    ]),
+  ].join("\n");
+}
+
+export function parseRatingReply(response: string, ids: string[]): Map<string, { score: number; why: string; gaps: string[] }> {
+  const wanted = new Set(ids);
+  const text = response.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+  let value: unknown;
+  try { value = JSON.parse(text); } catch { const match = text.match(/\{[\s\S]*\}/); try { value = match ? JSON.parse(match[0]) : null; } catch { value = null; } }
+  const ratings = Array.isArray((value as { ratings?: unknown })?.ratings) ? (value as { ratings: Array<Record<string, unknown>> }).ratings : [];
+  const out = new Map<string, { score: number; why: string; gaps: string[] }>();
+  for (const rating of ratings) {
+    const id = typeof rating.id === "string" ? rating.id.trim() : "";
+    const score = typeof rating.score === "number" ? rating.score : Number(rating.score);
+    if (!wanted.has(id) || !Number.isFinite(score)) continue;
+    out.set(id, {
+      score: Math.round(Math.min(5, Math.max(1, score)) * 10) / 10,
+      why: typeof rating.why === "string" ? clip(plain(rating.why), 220) : "",
+      gaps: Array.isArray(rating.gaps) ? rating.gaps.filter((gap): gap is string => typeof gap === "string").map((gap) => clip(plain(gap), 80)).slice(0, 3) : [],
+    });
+  }
+  return out;
+}
+
+/** Rates the given matches (at most 10) in one Agy call and saves the ratings. Returns how many were rated. */
+export async function rateItems(deps: { workspace: string; profile: CandidateProfile | null; rater: AgyRunner; ids: string[]; now?: () => Date; onUpdate?: (state: JobSearchState) => void }): Promise<number> {
+  const now = deps.now ?? (() => new Date());
+  const state = await readSearchState(deps.workspace);
+  const items = deps.ids.map((id) => state.items.find((item) => item.id === id)).filter((item): item is InboxItem => Boolean(item)).slice(0, 10);
+  if (!items.length) return 0;
+  const jobs = await Promise.all(items.map(async (item) => {
+    const record = buildPostingRecord(await postingFor(deps.workspace, item.id).catch(() => ""));
+    const required = record.requirements.filter((row) => row.kind === "required");
+    return { id: item.id, title: item.title, company: item.company, level: item.level, requirements: (required.length ? required : record.requirements).slice(0, 12).map((row) => row.text) };
+  }));
+  const reply = await deps.rater(buildRatingPrompt(await profileCard(deps.workspace, deps.profile), jobs), { conversationId: null });
+  const ratings = parseRatingReply(reply.response, items.map((item) => item.id));
+  const latest = await readSearchState(deps.workspace);
+  const ratedAt = now().toISOString();
+  const next = await saveSearchState(deps.workspace, { ...latest, items: latest.items.map((item) => ratings.has(item.id) ? { ...item, agyFit: { ...ratings.get(item.id)!, ratedAt } } : item) });
+  deps.onUpdate?.(next);
+  return ratings.size;
 }
 
 // ---------- Inbox actions ----------

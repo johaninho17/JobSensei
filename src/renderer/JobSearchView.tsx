@@ -2,7 +2,7 @@
 // Agy only finds links; the app opened, saved, and rated every posting shown here (electron/job-search.ts).
 import { useEffect, useMemo, useState } from "react";
 import {
-  DEFAULT_JOB_SEARCH_SETTINGS, SEARCH_BOARDS, SEARCH_LEVELS, SKIPPED_BOARDS, WORK_SETUPS, rankInbox, searchProgressText,
+  DEFAULT_JOB_SEARCH_SETTINGS, SEARCH_BOARDS, SEARCH_LEVELS, SKIPPED_BOARDS, WORK_SETUPS, effectiveFit, rankInbox, searchProgressText,
   type InboxItem, type JobSearchSettings, type JobSearchState, type SearchRun, type SearchStatus, type WatchedSuggestion,
 } from "../shared/job-search";
 import { SubTabs } from "./SubTabs";
@@ -22,6 +22,7 @@ export function runSummary(run: SearchRun): string {
   if (run.status === "failed") return `The search didn't finish: ${run.error ?? "unknown error"}`;
   const head = `${run.added} new match${run.added === 1 ? "" : "es"} from ${run.found} link${run.found === 1 ? "" : "s"}`;
   const notes = [
+    run.rated ? `${run.rated} rated by Agy` : "",
     run.replaced ? `${run.replaced} dead link${run.replaced === 1 ? "" : "s"} swapped for the live posting` : "",
     left ? `left out: ${left}` : "",
     run.error ? `Agy: ${run.error}` : "",
@@ -54,7 +55,7 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
 
   const live = useMemo(() => rankInbox((state?.items ?? []).filter((item) => item.status !== "dismissed"), sort), [state, sort]);
   const bar = settings?.minFit ?? DEFAULT_JOB_SEARCH_SETTINGS.minFit;
-  const above = live.filter((item) => item.fit.score >= bar && !item.fit.blockers.length);
+  const above = live.filter((item) => effectiveFit(item) >= bar && !item.fit.blockers.length);
   const below = live.filter((item) => !above.includes(item));
   const newCount = live.filter((item) => item.status === "new").length;
   const lastRun = state?.runs.at(-1) ?? null;
@@ -71,6 +72,17 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
 
   function toggle(id: string) {
     setSelected((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }
+
+  async function rate(ids: string[]) {
+    setError("");
+    try {
+      await window.sensei.jobSearch.rate(ids.slice(0, 10));
+      setSelecting(false);
+      setSelected(new Set());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(reason));
+    }
   }
 
   async function dismiss(ids: string[]) {
@@ -113,11 +125,12 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
     const facts = [item.location, item.workSetup, item.pay, capital(item.level), item.postedAt ? `Posted ${item.postedAt}` : null, item.board ? BOARD_NAMES[item.board] ?? item.board : null].filter(Boolean);
     return <li key={item.id} className={`find-row${isSelected ? " is-selected" : ""}`} onClick={selecting ? () => toggle(item.id) : undefined}>
       {selecting && <input type="checkbox" checked={isSelected} onChange={() => toggle(item.id)} onClick={(event) => event.stopPropagation()} aria-label={`Select ${item.company ?? ""} ${item.title ?? ""}`} />}
-      <span className={`fit-badge ${fitClass(item.fit.score)}`} title="Quick fit: the app's own check of your files against the posting, not a full rating">{item.fit.score.toFixed(1)}</span>
+      <span className={`fit-badge ${fitClass(effectiveFit(item))}`} title={item.agyFit ? `Agy's light rating (quick fit ${item.fit.score.toFixed(1)}); the full rating runs when you draft` : "Quick fit: the app's own check of your files against the posting, not a full rating"}>{effectiveFit(item).toFixed(1)}{item.agyFit && <small className="fit-badge-source">Agy</small>}</span>
       <div className="find-main">
         <strong>{item.title ?? "Untitled role"}</strong> <span className="muted">· {item.company ?? "Company not named"}</span>{item.watched && <span className="find-tag">Watched company</span>}
         {facts.length > 0 && <p className="find-facts">{facts.join(" · ")}</p>}
-        <p className="find-why">{item.fit.why}</p>
+        {item.agyFit && <p className="find-why">{item.agyFit.why}{item.agyFit.gaps.length > 0 && <span className="muted"> Gaps: {item.agyFit.gaps.join("; ")}.</span>}</p>}
+        <p className={item.agyFit ? "find-why muted" : "find-why"}>{item.agyFit ? `Quick check: ${item.fit.why}` : item.fit.why}</p>
         {(item.fit.blockers.length > 0 || item.fit.flags.length > 0 || item.fit.gaps.length > 0) && <p className="find-tags">
           {item.fit.blockers.map((text) => <span key={text} className="find-tag is-blocker">{text}</span>)}
           {item.fit.flags.map((text) => <span key={text} className="find-tag">{text}</span>)}
@@ -167,6 +180,7 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
         <button className="btn-link" onClick={() => setSelected(new Set(below.filter((item) => item.status === "new").map((item) => item.id)))}>Select all below your bar</button>
         {selected.size > 0 && <button className="btn-link" onClick={() => setSelected(new Set())}>Clear</button>}
         <span className="select-bar-actions">
+          <button className="btn-quiet" disabled={!selected.size || busy || running} title="One Agy call for up to 10 matches" onClick={() => void rate([...selected])}>Rate with Agy{selected.size > 10 ? " (first 10)" : ""}</button>
           <button className="btn-quiet" disabled={!selected.size || busy} onClick={() => void queue([...selected])}>Draft applications</button>
           <button className="btn-quiet" disabled={!selected.size || busy} onClick={() => void save([...selected])}>Save for later</button>
           <button className="btn-quiet" disabled={!selected.size || busy} onClick={() => void dismiss([...selected])}>Dismiss</button>
@@ -179,7 +193,7 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
           <p className="muted">Live postings that scored under {bar.toFixed(1)} or have a blocker. They're never drafted automatically.</p>
           <ul className="find-list">{below.map(renderItem)}</ul></details>}
       </>}
-      <p className="muted find-note">Quick fit is the app's own check of your resume and checked work records against the posting's requirements. The full rating runs when you draft an application.</p>
+      <p className="muted find-note">Quick fit is the app's own check of your resume and checked work records against the posting's requirements (no quota). Scores marked Agy are its light rating of the requirements against a short card of your roles, skills, and story. The full rating runs when you draft an application.</p>
     </div>}
 
     {tab === "settings" && settings && <SearchSettingsForm settings={settings} onSaved={(next) => { setSettings(next); onToast("Search settings saved."); }} />}
@@ -251,6 +265,7 @@ function SearchSettingsForm({ settings, onSaved }: { settings: JobSearchSettings
         <label className="search-field"><span>At or above</span><input type="number" min={1} max={5} step={0.1} value={draft.autoDraftAt} onChange={(event) => set("autoDraftAt", Number(event.target.value) || 4)} /></label>
         <label className="search-field"><span>At most per day</span><input type="number" min={1} max={10} value={draft.autoDraftDailyCap} onChange={(event) => set("autoDraftDailyCap", Number(event.target.value) || 3)} /></label>
       </div>}
+      <label className="search-check"><input type="checkbox" checked={draft.lightRating} onChange={(event) => set("lightRating", event.target.checked)} />After each search, let Agy rate up to 10 of the best new matches (one short call)</label>
       <label className="search-field"><span>Links per search</span><input type="number" min={5} max={40} value={draft.resultsPerRun} onChange={(event) => set("resultsPerRun", Number(event.target.value) || 20)} /></label>
     </fieldset>
     {error && <p className="inline-error" role="alert">{error}</p>}

@@ -24,6 +24,8 @@ const api: SenseiApi = {
     saveSettings: (settings) => ipcRenderer.invoke("search:save-settings", settings),
     run: (mode) => ipcRenderer.invoke("search:run", mode),
     suggestWatched: () => ipcRenderer.invoke("search:suggest-watched"),
+    rate: (ids) => ipcRenderer.invoke("search:rate", ids),
+    onRated: (callback) => { const listener = (_event: Electron.IpcRendererEvent, message: string) => callback(message); ipcRenderer.on("search:rated", listener); return () => ipcRenderer.removeListener("search:rated", listener); },
     onStatus: (callback) => { const listener = (_event: Electron.IpcRendererEvent, status: SearchStatus) => callback(status); ipcRenderer.on("search:status", listener); return () => ipcRenderer.removeListener("search:status", listener); },
     onFinished: (callback) => { const listener = (_event: Electron.IpcRendererEvent, run: SearchRun | null) => callback(run); ipcRenderer.on("search:finished", listener); return () => ipcRenderer.removeListener("search:finished", listener); },
     setStatus: (ids, status) => ipcRenderer.invoke("search:set-status", ids, status),
