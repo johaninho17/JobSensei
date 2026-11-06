@@ -47,6 +47,15 @@ export function candidateFolder(id: string): string {
 /** `alex-morgan-7k2f`: letters and digits of the name (accents dropped), then a 4-character suffix. */
 export function candidateIdFor(displayName: string, suffix: string): string {
   if (!/^[a-z0-9]{4}$/.test(suffix)) throw new Error("The suffix must be 4 lowercase letters or digits.");
-  const slug = displayName.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
+  const slug = displayName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
   return `${slug || "candidate"}-${suffix}`;
+}
+
+/** What the renderer gets: the roster and who is active. */
+export type CandidatesState = { candidates: CandidateEntry[]; activeId: string | null };
+
+/** File prefix for a new candidate's documents: `Alex_Morgan` (accents dropped; "Candidate" when nothing is left). */
+export function artifactPrefixFor(displayName: string): string {
+  const prefix = displayName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40).replace(/_+$/, "");
+  return prefix || "Candidate";
 }

@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, realpathSync } from "node:fs";
-import { chmod, lstat, mkdir, readFile, readlink, symlink, writeFile } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, readFile, readlink, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import { writeJsonAtomic } from "./persistence";
@@ -19,6 +19,37 @@ const GENERATED = [".gemini", "antigravity-cli", "jobsensei-rules.json"] as cons
 
 export function agyHomePath(userDataPath: string): string {
   return join(userDataPath, "agy-home");
+}
+
+/** A candidate's own Agy home (Recruiter Edition). The name is the candidate id, checked by the caller. */
+export function candidateAgyHomePath(userDataPath: string, candidateId: string): string {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidateId)) throw new Error("Invalid candidate home.");
+  return join(agyHomePath(userDataPath), "candidates", candidateId);
+}
+
+const SIGN_IN_FILE = [".gemini", "antigravity-cli", "antigravity-oauth-token"] as const;
+
+/**
+ * Shares the Agy sign-in with a candidate's new home. macOS keeps it in the keychain (the Keychains link covers it;
+ * tested 2026-11-05). Agy also writes a token file in its home, which is what other systems rely on: a home without
+ * one gets a copy of the newest token from the other candidates' homes. Only that file is copied, never memory.
+ */
+export async function shareSignIn(home: string): Promise<boolean> {
+  const target = join(home, ...SIGN_IN_FILE);
+  if (existsSync(target)) return false;
+  const homes = dirname(home);
+  let newest: { path: string; mtime: number } | null = null;
+  for (const name of (() => { try { return readdirSync(homes); } catch { return []; } })()) {
+    const path = join(homes, name, ...SIGN_IN_FILE);
+    if (path === target) continue;
+    const info = await lstat(path).catch(() => null);
+    if (info?.isFile() && (!newest || info.mtimeMs > newest.mtime)) newest = { path, mtime: info.mtimeMs };
+  }
+  if (!newest) return false;
+  await mkdir(dirname(target), { recursive: true });
+  await copyFile(newest.path, target);
+  await chmod(target, 0o600).catch(() => undefined);
+  return true;
 }
 
 function realPath(path: string): string {
@@ -125,8 +156,11 @@ type AgySettings = { permissions?: { allow?: string[]; deny?: string[] }; [key: 
  * Writes the app-owned Agy settings for this workspace and returns the home folder to launch Agy with.
  * Keeps the user's own choices in that file (model, allowed commands); replaces only the rules this app added last time.
  */
-export async function prepareAgyHome(userDataPath: string, workspacePath: string, extraPaths: string[] = [], launcher?: { appRoot: string; runtimePath: string }): Promise<string> {
-  const home = agyHomePath(userDataPath);
+export async function prepareAgyHome(userDataPath: string, workspacePath: string, extraPaths: string[] = [], launcher?: { appRoot: string; runtimePath: string }, homeName?: string): Promise<string> {
+  // The Recruiter Edition gives each candidate their own home (recruiter plan R2): Agy keeps its conversations and
+  // memory there, so one candidate's details can never come back in another's run. The sign-in is shared.
+  const home = homeName ? candidateAgyHomePath(userDataPath, homeName) : agyHomePath(userDataPath);
+  if (homeName) await shareSignIn(home);
   const settingsPath = join(home, ...SETTINGS);
   const generatedPath = join(home, ...GENERATED);
   await mkdir(dirname(settingsPath), { recursive: true });

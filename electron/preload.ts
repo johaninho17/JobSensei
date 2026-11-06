@@ -19,6 +19,14 @@ const api: SenseiApi = {
     undoUpdate: () => ipcRenderer.invoke("content:undo-update"),
     skip: (paths) => ipcRenderer.invoke("content:skip", paths),
   },
+  // Recruiter Edition only (registered when the edition has candidates).
+  candidates: {
+    state: () => ipcRenderer.invoke("candidates:state"),
+    add: (name) => ipcRenderer.invoke("candidates:add", name),
+    switchTo: (id) => ipcRenderer.invoke("candidates:switch", id),
+    rename: (id, name) => ipcRenderer.invoke("candidates:rename", id, name),
+    setStatus: (id, status) => ipcRenderer.invoke("candidates:set-status", id, status),
+  },
   jobSearch: {
     get: () => ipcRenderer.invoke("search:get"),
     saveSettings: (settings) => ipcRenderer.invoke("search:save-settings", settings),

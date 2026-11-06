@@ -25,6 +25,8 @@ import { SearchPalette, type PaletteAction } from "./SearchPalette";
 import { SettingsModal } from "./SettingsModal";
 import { InterviewView, LiveWindow } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
+import { CandidateGate, CandidateSwitcher } from "./Candidates";
+import type { CandidatesState } from "../shared/candidates";
 import { JobSearchView } from "./JobSearchView";
 import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
 import { storyTitles } from "./interview-cards";
@@ -73,10 +75,12 @@ export function App() {
   const params = new URLSearchParams(window.location.search);
   if (FEATURES.interviews && params.get("interviewWorkspace") === "1" && params.get("live") === "1") return <LiveWindow jobId={params.get("jobId") ?? ""} roundId={params.get("roundId") ?? ""} />;
   if (FEATURES.interviews && params.get("interviewWorkspace") === "1") return <InterviewWorkspaceStandalone jobId={params.get("jobId") ?? ""} roundId={params.get("roundId") ?? ""} />;
+  // Recruiter Edition: the candidate list comes first; the workspace is the open candidate's folder.
+  if (FEATURES.candidates) return <CandidateGate>{(candidates) => <WorkspaceApp candidates={candidates} />}</CandidateGate>;
   return <WorkspaceApp />;
 }
 
-function WorkspaceApp() {
+function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const [workspace, setWorkspace] = useState(emptyWorkspace);
   const [tree, setTree] = useState<FileTreeNode[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -859,6 +863,7 @@ function WorkspaceApp() {
   return <main className={`shell ${leftPanelOpen ? "" : "is-sidebar-closed"}`} style={shellStyle}>
     <nav className="app-sidebar" aria-label="Main" aria-hidden={!leftPanelOpen}>
       <button className="wordmark" aria-label={`${EDITION.productName}: all jobs`} onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span><span className="wordmark-name">Sensei{EDITION.subtitle && <small className="wordmark-edition">{EDITION.subtitle}</small>}</span></button>
+      {FEATURES.candidates && candidates && <CandidateSwitcher state={candidates} />}
       <ul className="side-nav">
         <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
         {FEATURES.jobSearch && <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" />Job Search{searchStatus.running ? <span className="side-due" title={searchProgressText(searchStatus)}>Searching…</span> : searchNew > 0 && <span className="side-count" title={`${searchNew} new match${searchNew === 1 ? "" : "es"}`}>{searchNew}</span>}</button></li>}

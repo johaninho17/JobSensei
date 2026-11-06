@@ -746,3 +746,32 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .watched-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; font-size: var(--fs-13); }
 .find-main .find-tag { margin-left: var(--space-2); }
 .fit-badge-source { display: block; font-size: 10px; font-weight: 500; line-height: 1; opacity: 0.8; }
+
+/* Recruiter Edition: candidate switcher and first-candidate screen (src/renderer/Candidates.tsx). */
+.candidate-switcher { position: relative; }
+.candidate-switcher summary { display: grid; gap: 2px; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--raised); list-style: none; cursor: pointer; }
+.candidate-switcher summary::-webkit-details-marker { display: none; }
+.candidate-switcher summary:hover { border-color: var(--line-strong); }
+.candidate-switcher summary small { color: var(--muted); font: 600 var(--fs-12)/1.2 var(--font-ui); }
+.candidate-switcher summary strong { overflow: hidden; font: 650 var(--fs-15)/1.3 var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.candidate-switcher summary strong::after { content: " ▾"; color: var(--muted); font-weight: 400; }
+.candidate-menu { left: 0; right: auto; min-width: 100%; width: max-content; max-width: 320px; }
+.candidate-menu .menu-item { display: flex; justify-content: space-between; gap: var(--space-3); }
+.candidate-menu .menu-item small { color: var(--muted); }
+.candidate-menu hr { width: 100%; margin: var(--space-1) 0; border: 0; border-top: 1px solid var(--line); }
+.candidate-add { display: grid; gap: var(--space-3); padding: var(--space-2); }
+.candidate-add label { display: grid; gap: var(--space-1); font-size: var(--fs-13); }
+.candidate-add input { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-s); color: var(--ink); background: var(--canvas); font: var(--fs-15) var(--font-ui); }
+.candidate-start { display: grid; gap: var(--space-5); align-content: start; max-width: 720px; min-height: 100vh; margin: 0 auto; padding: var(--space-7) var(--space-5); background: var(--canvas); }
+.candidate-start header { display: grid; gap: var(--space-2); }
+.candidate-start h1 { margin: 0; font: 560 var(--fs-28)/1.2 var(--font-display); }
+.candidate-start header p { margin: 0; color: var(--muted); }
+.candidate-start .candidate-start-edition { color: var(--accent); font: 650 var(--fs-13)/1.2 var(--font-ui); }
+.candidate-start .candidate-add { padding: 0; }
+.candidate-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.candidate-open { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-s); color: var(--ink); background: var(--raised); font: var(--fs-15) var(--font-ui); text-align: left; cursor: pointer; }
+.candidate-open:hover { border-color: var(--accent); }
+.candidate-open small { color: var(--muted); }
+.candidate-archived summary { color: var(--muted); font-size: var(--fs-13); cursor: pointer; }
+.candidate-archived ul { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.candidate-archived li { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--fs-13); }

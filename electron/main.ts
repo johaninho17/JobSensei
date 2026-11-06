@@ -3,6 +3,7 @@ import { textContextMenu } from "./context-menu";
 import { EDITION_INFO, featuresFor } from "../src/shared/edition";
 import { currentEdition, prepareEditionFolder } from "./edition";
 import type { FeatureContext } from "./feature-context";
+import { activeCandidatePath, ensureRecruiterRoot, readRoster } from "./candidates";
 import { watch, type FSWatcher } from "node:fs";
 import { updateJobTracker } from "./tracker";
 import { latestRun } from "./run-status";
@@ -90,7 +91,7 @@ function runSmokeCheck(window: BrowserWindow, outPath: string): void {
         const root = document.getElementById("root");
         const workspace = await window.sensei.workspace.getSummary().then((value) => value.status).catch((error) => "error: " + error.message);
         // A new, empty workspace must open on the first-run steps.
-        return { rendered: Boolean(root && root.childElementCount > 0 && document.body.innerText.trim().length > 20), firstRun: Boolean(document.querySelector(".onboarding [aria-current=step]")), workspace, text: document.body.innerText.slice(0, 120) };
+        return { rendered: Boolean(root && root.childElementCount > 0 && document.body.innerText.trim().length > 20), firstRun: Boolean(document.querySelector(${JSON.stringify(features.candidates ? ".candidate-start" : ".onboarding [aria-current=step]")})), workspace, text: document.body.innerText.slice(0, 120) };
       })()`).then((check: { rendered: boolean; firstRun: boolean; workspace: string; text: string }) => {
         clearTimeout(timer);
         finish({ ok: check.rendered && check.firstRun && !String(check.workspace).startsWith("error"), detail: JSON.stringify(check) });
@@ -142,7 +143,10 @@ function getRepositoryRoot(): string {
   return app.isPackaged ? workspacePath : resolve(app.getAppPath());
 }
 
-ipcMain.handle("workspace:get-summary", async () => summarizeWorkspace(workspacePath, getRepositoryRoot(), await settingsStore.get()));
+// No workspace yet (Recruiter Edition before the first candidate): say so instead of reporting an error.
+ipcMain.handle("workspace:get-summary", async () => workspacePath
+  ? summarizeWorkspace(workspacePath, getRepositoryRoot(), await settingsStore.get())
+  : { path: "", repositoryRoot: getRepositoryRoot(), status: "unconfigured" as const, contextFileCount: 0, jobCount: 0, hasIndex: false, hasCandidateProfile: false, hasBaseResume: false, agyAvailable: false, warnings: [] });
 ipcMain.handle("workspace:rescan", async () => {
   invalidateSearchIndex(requireWorkspace());
   return summarizeWorkspace(requireWorkspace(), getRepositoryRoot(), await settingsStore.get());
@@ -342,7 +346,7 @@ ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
   if (await capWorkspaceNpmCache(workspace).catch(() => false)) console.info("Agy npm cache passed its size limit and was cleared.");
   const manifest = await buildContextManifest(workspace, {}, await settingsStore.get());
   // Agy runs with an app-owned home whose rules keep its file tools inside the workspace.
-  const agyHome = await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath })
+  const agyHome = await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath }, agyHomeName)
     .then(async (home) => { await writeSenseiLauncher(home, { appRoot: terminalAppRoot(), packaged: app.isPackaged, runtimePath: process.execPath }); return home; })
     .catch((error) => { console.error("Agy home setup failed:", error); return null; });
   terminal.setAgyHome(agyHome);
@@ -435,6 +439,64 @@ async function registerFeatureIpc(): Promise<void> {
   if (features.applicationQuestions) (await import("./question-ipc.js")).registerQuestionIpc(featureContext);
   if (features.contentRefresh) (await import("./content-ipc.js")).registerContentIpc(featureContext);
   if (features.jobSearch) (await import("./search-ipc.js")).registerSearchIpc(featureContext);
+  if (features.candidates) (await import("./candidate-ipc.js")).registerCandidateIpc({
+    root: () => { if (!recruiterRoot) throw new Error("The recruiter folder isn't open."); return recruiterRoot; },
+    busyReason: candidateBusyReason,
+    openCandidate: async (_id, folder) => { await closeCandidateFolder(); await openCandidateFolder(folder); },
+    closeCandidate: closeCandidateFolder,
+  });
+}
+
+/** Opens a workspace: seeds Agy's files, indexes career context, restores the base resume, and watches for changes. */
+async function openWorkspace(folder: string): Promise<void> {
+  workspacePath = folder;
+  logAgentSync(await initializeWorkspace(workspacePath));
+  await indexContext(workspacePath);
+  await settingsStore.setWorkspace(workspacePath);
+  // The profile also records the base resume; if the app's settings lost it, put it back so nothing downstream
+  // (career sources, the context manifest, Setup) sees "no resume".
+  const savedSettings = await settingsStore.get();
+  const profileResume = (await readCandidateProfile(workspacePath).catch(() => null))?.sources.baseResumePath ?? null;
+  if (!savedSettings.baseResumePath && profileResume) {
+    await settingsStore.save({ baseResumePath: profileResume, secondaryResumePaths: savedSettings.secondaryResumePaths, linkedinProfilePath: savedSettings.linkedinProfilePath });
+    console.info(`Base resume restored from the profile: ${profileResume}`);
+  }
+  startWorkspaceWatcher(workspacePath);
+}
+
+// Recruiter Edition (recruiter plan R1/R2): the recruiter folder, and the active candidate's own settings and Agy home.
+let recruiterRoot: string | null = null;
+let agyHomeName: string | undefined;
+async function openCandidateFolder(folder: string): Promise<void> {
+  const id = basename(folder);
+  const { candidateSettingsStore } = await import("./candidate-ipc.js");
+  settingsStore = candidateSettingsStore(folder);
+  agyHomeName = id;
+  lastAgyHome = null;
+  invalidateSearchIndex();
+  await openWorkspace(folder);
+}
+async function closeCandidateFolder(): Promise<void> {
+  terminal.stop();
+  workspaceWatcher?.close();
+  workspaceWatcher = undefined;
+  workspacePath = undefined as unknown as string;
+  agyHomeName = undefined;
+  lastAgyHome = null;
+  invalidateSearchIndex();
+}
+/**
+ * A job still running for the current candidate blocks a switch: a queue item Agy is working on, or a run the run
+ * tracker reports as running (a job sent from the chat). Agy's own output (starting up, signing in) never counts.
+ */
+async function candidateBusyReason(): Promise<string | null> {
+  if (!workspacePath) return null;
+  const queue = await readJobQueue(workspacePath).catch(() => null);
+  const queued = queue?.items.some((item) => item.status === "running") ?? false;
+  const run = await latestRun(workspacePath).catch(() => null);
+  if (!queued && run?.state !== "running") return null;
+  const name = recruiterRoot ? (await readRoster(recruiterRoot).catch(() => null))?.candidates.find((candidate) => candidate.id === basename(workspacePath))?.displayName : null;
+  return `${name ?? "This candidate"}'s job is still running. Wait for it to finish or stop Agy first.`;
 }
 
 async function resolveInitialWorkspacePath(store: SettingsStore): Promise<string> {
@@ -461,19 +523,17 @@ app.whenReady().then(async () => {
   try {
     await registerFeatureIpc();
     settingsStore = new SettingsStore(app.getPath("userData"));
-    workspacePath = await prepareEditionFolder(await resolveInitialWorkspacePath(settingsStore), edition, join(app.getPath("documents"), EDITION_INFO[edition].defaultFolder));
-    logAgentSync(await initializeWorkspace(workspacePath));
-    await indexContext(workspacePath);
-    await settingsStore.setWorkspace(workspacePath);
-    // The profile also records the base resume; if the app's settings lost it, put it back so nothing downstream
-    // (career sources, the context manifest, Setup) sees "no resume".
-    const savedSettings = await settingsStore.get();
-    const profileResume = (await readCandidateProfile(workspacePath).catch(() => null))?.sources.baseResumePath ?? null;
-    if (!savedSettings.baseResumePath && profileResume) {
-      await settingsStore.save({ baseResumePath: profileResume, secondaryResumePaths: savedSettings.secondaryResumePaths, linkedinProfilePath: savedSettings.linkedinProfilePath });
-      console.info(`Base resume restored from the profile: ${profileResume}`);
+    const chosen = await prepareEditionFolder(await resolveInitialWorkspacePath(settingsStore), edition, join(app.getPath("documents"), EDITION_INFO[edition].defaultFolder));
+    if (features.candidates) {
+      // Recruiter Edition: the chosen folder holds the candidate list; the workspace is the active candidate's folder.
+      recruiterRoot = chosen;
+      await ensureRecruiterRoot(chosen);
+      await settingsStore.setWorkspace(chosen);
+      const active = await activeCandidatePath(chosen);
+      if (active) await openCandidateFolder(active);
+    } else {
+      await openWorkspace(chosen);
     }
-    startWorkspaceWatcher(workspacePath);
   } catch (error) {
     console.error("Sensei startup initialization error:", error);
   }

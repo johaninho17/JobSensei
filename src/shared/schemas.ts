@@ -1245,6 +1245,16 @@ export type ContentReviewInfo = { added: ContentItemInfo[]; upgraded: Array<{ be
 export type ContextImportResult = { added: string[]; skipped: Array<{ name: string; reason: string }> };
 
 export interface SenseiApi {
+  /** Recruiter Edition only: the candidate list and switching (electron/candidate-ipc.ts). */
+  candidates: {
+    state(): Promise<import("./candidates").CandidatesState>;
+    /** Adds a candidate and opens them; reload the window afterwards. */
+    add(name: string): Promise<import("./candidates").CandidateEntry>;
+    /** Opens another candidate; reload the window afterwards. */
+    switchTo(id: string): Promise<void>;
+    rename(id: string, name: string): Promise<import("./candidates").CandidateEntry>;
+    setStatus(id: string, status: import("./candidates").CandidateStatus): Promise<import("./candidates").CandidateEntry>;
+  };
   setup: {
     readiness(): Promise<Readiness>;
   };

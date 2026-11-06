@@ -97,3 +97,30 @@ describe("active candidate", () => {
     expect(await setActiveCandidate(dir, alex.id)).toBe(join(dir, "candidates", alex.id));
   });
 });
+
+describe("Agy home per candidate (recruiter plan R2)", () => {
+  it("gives each candidate their own home and refuses names that could leave it", async () => {
+    const { candidateAgyHomePath } = await import("../electron/agy-home");
+    expect(candidateAgyHomePath("/data", "alex-morgan-7k2f")).toBe(join("/data", "agy-home", "candidates", "alex-morgan-7k2f"));
+    for (const bad of ["../x", "a/b", "Alex"]) expect(() => candidateAgyHomePath("/data", bad)).toThrow();
+  });
+
+  it("copies only the sign-in into a new candidate's home, never memory", async () => {
+    const { shareSignIn } = await import("../electron/agy-home");
+    const { mkdir, writeFile, utimes } = await import("node:fs/promises");
+    const homes = join(await root(), "agy-home", "candidates");
+    const token = (name: string) => join(homes, name, ".gemini", "antigravity-cli", "antigravity-oauth-token");
+    for (const [name, text, age] of [["alex-morgan-7k2f", "old token", 100], ["jordan-lee-q9w3", "new token", 10]] as const) {
+      await mkdir(join(homes, name, ".gemini", "antigravity-cli", "conversations"), { recursive: true });
+      await writeFile(token(name), text);
+      await writeFile(join(homes, name, ".gemini", "antigravity-cli", "conversations", "chat.pb"), `${name} memory`);
+      const when = new Date(Date.now() - age * 1000);
+      await utimes(token(name), when, when);
+    }
+    const fresh = join(homes, "sam-rivera-a1b2");
+    expect(await shareSignIn(fresh)).toBe(true);
+    expect(await readFile(token("sam-rivera-a1b2"), "utf8")).toBe("new token");
+    expect(await exists(join(fresh, ".gemini", "antigravity-cli", "conversations"))).toBe(false);
+    expect(await shareSignIn(fresh)).toBe(false); // already signed in: left alone
+  });
+});

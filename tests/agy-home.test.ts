@@ -176,7 +176,7 @@ describe("pipeline commands run without Electron", () => {
   it("only main-process files import electron at the top level", async () => {
     const { readdir } = await import("node:fs/promises");
     // Feature IPC modules are loaded only by main.ts (src/shared/edition.ts); feature-context imports electron types only.
-    const allowed = new Set(["main.ts", "preload.ts", "pdf-export.ts", "interview-ipc.ts", "question-ipc.ts", "content-ipc.ts", "search-ipc.ts", "feature-context.ts"]);
+    const allowed = new Set(["main.ts", "preload.ts", "pdf-export.ts", "interview-ipc.ts", "question-ipc.ts", "content-ipc.ts", "search-ipc.ts", "candidate-ipc.ts", "feature-context.ts"]);
     for (const file of (await readdir("electron")).filter((name) => name.endsWith(".ts") && !allowed.has(name))) {
       expect(await readFile(join("electron", file), "utf8"), file).not.toMatch(/^import [^;]* from "electron";/m);
     }

@@ -92,6 +92,7 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   "job-search-runner": "jobSearch",
   "job-boards": "jobSearch",
   "search-schedule": "jobSearch",
+  "candidate-ipc": "candidates",
 };
 
 export function includedAgentEntry(features: Features, entry: string): boolean {
