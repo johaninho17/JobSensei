@@ -67,7 +67,9 @@ export const jobSearchSettingsSchema = z.object({
     enabled: z.boolean().default(false),
     days: z.array(z.number().int().min(0).max(6)).default([1, 2, 3, 4, 5]),
     times: z.array(z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/)).min(1).max(4).default(["08:00"]),
-  }).default({ enabled: false, days: [1, 2, 3, 4, 5], times: ["08:00"] }),
+    /** Windows only: wake a sleeping PC for the search (Task Scheduler WakeToRun, no admin rights). */
+    wake: z.boolean().default(false),
+  }).default({ enabled: false, days: [1, 2, 3, 4, 5], times: ["08:00"], wake: false }),
   /** How many postings one search asks Agy for. */
   resultsPerRun: z.number().int().min(5).max(40).default(20),
 });
@@ -152,7 +154,7 @@ export type SearchRun = z.infer<typeof searchRunSchema>;
 
 export type SearchProgress = { phase: "watched" | "agy" | "checking" | "rating"; checked: number; total: number };
 export type SearchStatus = { running: boolean; source: "search" | "watched" | "rating" | null; progress: SearchProgress | null; startedAt: string | null; scheduled?: boolean };
-export type ScheduleInfo = { supported: boolean; installed: boolean; label: string; detail: string };
+export type ScheduleInfo = { supported: boolean; installed: boolean; label: string; detail: string; platform: string };
 export type WatchedSuggestion = { board: "ashby" | "greenhouse" | "lever"; slug: string; name: string; jobs: number; interviewed: boolean };
 
 /** One line for the progress of a run, shown on any page. */

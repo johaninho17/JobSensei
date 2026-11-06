@@ -9,7 +9,7 @@ import { clearPendingDrafts, readSearchState, releaseSearchLock, saveSearchState
 import { EMPTY_JOB_SEARCH_STATE } from "../src/shared/job-search";
 
 const target = { runtime: "/Apps/Job Sensei.app/Contents/MacOS/JobSensei", runner: "/Apps/app.asar/dist-electron/electron/job-search-runner.js", workspace: "/workspaces/JobSensei & co", userData: "/app-data/JobSensei" };
-const schedule = { enabled: true, days: [1, 3, 5], times: ["08:00", "17:30"] };
+const schedule = { enabled: true, days: [1, 3, 5], times: ["08:00", "17:30"], wake: false };
 
 describe("search schedule files", () => {
   it("writes a launchd agent with one calendar entry per day and time, run as Node", async () => {
@@ -33,6 +33,8 @@ describe("search schedule files", () => {
     expect(task).toContain("<StartWhenAvailable>true</StartWhenAvailable>");
     expect(task).toContain("<RunLevel>LeastPrivilege</RunLevel>");
     expect(task).toContain("set ELECTRON_RUN_AS_NODE=1&amp;&amp;");
+    expect(task).toContain("<WakeToRun>false</WakeToRun>");
+    expect(windowsTaskXml(target, { ...schedule, wake: true })).toContain("<WakeToRun>true</WakeToRun>");
   });
 
   it("keeps a test profile's schedule apart from the real one", () => {

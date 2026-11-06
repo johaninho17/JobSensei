@@ -19,7 +19,7 @@ export type ScheduleTarget = {
   userData: string;
 };
 
-export type ScheduleInfo = { supported: boolean; installed: boolean; label: string; detail: string };
+export type ScheduleInfo = { supported: boolean; installed: boolean; label: string; detail: string; platform: string };
 
 /** One schedule per app data folder, so a test profile never replaces the real one. */
 export function scheduleLabel(userData: string): string {
@@ -79,6 +79,7 @@ ${triggers}
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <StartWhenAvailable>true</StartWhenAvailable>
+    <WakeToRun>${schedule.wake ? "true" : "false"}</WakeToRun>
     <RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable>
     <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
     <Enabled>true</Enabled>
@@ -105,13 +106,13 @@ export async function scheduleInfo(userData: string): Promise<ScheduleInfo> {
   if (process.platform === "darwin") {
     const file = await stat(plistPath(label)).catch(() => null);
     const loaded = file ? (await run("launchctl", ["print", `gui/${userInfo().uid}/${label}`])).code === 0 : false;
-    return { supported: true, installed: Boolean(file) && loaded, label, detail: file ? (loaded ? "Scheduled with macOS (launchd)." : "The schedule file exists but macOS hasn't loaded it.") : "Not scheduled." };
+    return { platform: process.platform, supported: true, installed: Boolean(file) && loaded, label, detail: file ? (loaded ? "Scheduled with macOS (launchd)." : "The schedule file exists but macOS hasn't loaded it.") : "Not scheduled." };
   }
   if (process.platform === "win32") {
     const result = await run("schtasks", ["/Query", "/TN", windowsTaskName(label)]);
-    return { supported: true, installed: result.code === 0, label, detail: result.code === 0 ? "Scheduled with Windows Task Scheduler." : "Not scheduled." };
+    return { platform: process.platform, supported: true, installed: result.code === 0, label, detail: result.code === 0 ? "Scheduled with Windows Task Scheduler." : "Not scheduled." };
   }
-  return { supported: false, installed: false, label, detail: "Scheduled searches work on macOS and Windows." };
+  return { platform: process.platform, supported: false, installed: false, label, detail: "Scheduled searches work on macOS and Windows." };
 }
 
 /** Installs (or replaces) the schedule. */
