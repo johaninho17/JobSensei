@@ -30,12 +30,12 @@ const xml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").
 
 export function launchdPlist(label: string, target: ScheduleTarget, schedule: JobSearchSettings["schedule"]): string {
   const days = schedule.days.length ? [...new Set(schedule.days)].sort() : [0, 1, 2, 3, 4, 5, 6];
-  // Daily mode: a check every hour from the start time to midnight, and one at login. A check missed during sleep
-  // runs once on wake (calendar intervals catch up; plain intervals are unreliable after sleep). The runner decides
-  // whether it is the day's first chance (dailyRunDue), so extra checks cost nothing.
-  const [afterHour, afterMinute] = schedule.after.split(":").map(Number);
+  // Daily mode: a check every hour, on the set time's minute (so one lands exactly at the set time), and one at login.
+  // A check missed during sleep runs once on wake (calendar intervals catch up; plain intervals are unreliable after
+  // sleep). The runner decides whether this is the window's first chance (dailyRunDue), so extra checks cost nothing.
+  const [, afterMinute] = schedule.after.split(":").map(Number);
   const intervals = schedule.mode === "daily"
-    ? Array.from({ length: 24 - afterHour }, (_, index) => `    <dict><key>Hour</key><integer>${afterHour + index}</integer><key>Minute</key><integer>${afterMinute}</integer></dict>`)
+    ? [`    <dict><key>Minute</key><integer>${afterMinute}</integer></dict>`]
     : days.flatMap((day) => schedule.times.map((time) => {
       const [hour, minute] = time.split(":").map(Number);
       return `    <dict><key>Weekday</key><integer>${day}</integer><key>Hour</key><integer>${hour}</integer><key>Minute</key><integer>${minute}</integer></dict>`;
@@ -73,11 +73,10 @@ const RESUME_QUERY = "<QueryList><Query Id=\"0\" Path=\"System\"><Select Path=\"
 export function windowsTaskXml(target: ScheduleTarget, schedule: JobSearchSettings["schedule"], today = new Date(), user = ""): string {
   const days = (schedule.days.length ? [...new Set(schedule.days)].sort() : [0, 1, 2, 3, 4, 5, 6]).map((day) => `<${WEEKDAYS[day]} />`).join("");
   const date = today.toISOString().slice(0, 10);
-  // Daily mode: at the start time (then hourly to midnight; a missed one starts when available), at sign-in, and when
-  // the PC resumes from sleep (Power-Troubleshooter event 1). The runner keeps it to the day's first chance.
-  const [afterHour] = schedule.after.split(":").map(Number);
+  // Daily mode: at the set time and then hourly around the clock (a missed one starts when available), at sign-in, and
+  // when the PC resumes from sleep (Power-Troubleshooter event 1). The runner keeps it to the window's first chance.
   const triggers = schedule.mode === "daily" ? [
-    `    <CalendarTrigger><StartBoundary>${date}T${schedule.after}:00</StartBoundary><Repetition><Interval>PT1H</Interval><Duration>PT${24 - afterHour}H</Duration></Repetition><Enabled>true</Enabled><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>`,
+    `    <CalendarTrigger><StartBoundary>${date}T${schedule.after}:00</StartBoundary><Repetition><Interval>PT1H</Interval><Duration>P1D</Duration></Repetition><Enabled>true</Enabled><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>`,
     `    <LogonTrigger><Enabled>true</Enabled>${user ? `<UserId>${xml(user)}</UserId>` : ""}<Delay>PT1M</Delay></LogonTrigger>`,
     `    <EventTrigger><Enabled>true</Enabled><Subscription>${xml(RESUME_QUERY)}</Subscription><Delay>PT1M</Delay></EventTrigger>`,
   ].join("\n") : schedule.times.map((time) => `    <CalendarTrigger><StartBoundary>${date}T${time}:00</StartBoundary><Enabled>true</Enabled><ScheduleByWeek><DaysOfWeek>${days}</DaysOfWeek><WeeksInterval>1</WeeksInterval></ScheduleByWeek></CalendarTrigger>`).join("\n");

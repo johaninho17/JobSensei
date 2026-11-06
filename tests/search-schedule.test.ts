@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { launchdPlist, scheduleLabel, windowsTaskXml } from "../electron/search-schedule";
 import { runnerArgs, waitForNetwork } from "../electron/job-search-runner";
 import { clearPendingDrafts, readSearchState, releaseSearchLock, saveSearchState, searchLockHolder, takeSearchLock } from "../electron/job-search";
-import { EMPTY_JOB_SEARCH_STATE, dailyRunDue, type SearchRun } from "../src/shared/job-search";
+import { EMPTY_JOB_SEARCH_STATE, dailyRunDue, windowStart, type SearchRun } from "../src/shared/job-search";
 
 const target = { runtime: "/Apps/Job Sensei.app/Contents/MacOS/JobSensei", runner: "/Apps/app.asar/dist-electron/electron/job-search-runner.js", workspace: "/workspaces/JobSensei & co", userData: "/app-data/JobSensei" };
 const schedule = { enabled: true, mode: "times" as const, after: "08:00", days: [1, 3, 5], times: ["08:00", "17:30"], wake: false };
@@ -69,29 +69,40 @@ describe("one search at a time", () => {
   });
 });
 
-describe("once a day, first time on after the start time", () => {
-  const at = (hour: number, minute = 0) => new Date(2026, 10, 6, hour, minute);
+describe("once per window, from the set time to the same time next day", () => {
+  const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, hour, minute); // Nov 9 2026 is a Monday
   const run = (when: Date, patch: Partial<SearchRun> = {}): SearchRun => ({ id: `run-${when.getTime()}`, startedAt: when.toISOString(), finishedAt: when.toISOString(), status: "done", found: 1, added: 1, leftOut: {}, autoQueued: 0, replaced: 0, rated: 0, source: "search", scheduled: true, error: null, ...patch });
 
-  it("never runs before the start time (a 1 a.m. session), then runs the first time after it, once", () => {
-    expect(dailyRunDue([], daily, at(1))).toEqual({ due: false, reason: "before 08:00" });
-    expect(dailyRunDue([], daily, at(8, 40)).due).toBe(true);
-    expect(dailyRunDue([run(at(8, 41))], daily, at(13)).reason).toBe("already searched today");
-    expect(dailyRunDue([run(new Date(2026, 10, 5, 9))], daily, at(9)).due).toBe(true);
+  it("follows the example: Monday 8:30 runs, Tuesday 1 a.m. doesn't, Tuesday 9:30 runs", () => {
+    expect(dailyRunDue([], daily, at(9, 8, 30)).due).toBe(true);
+    const monday = [run(at(9, 8, 30))];
+    expect(dailyRunDue(monday, daily, at(9, 22)).reason).toBe("already searched in this window");
+    expect(dailyRunDue(monday, daily, at(10, 1)).reason).toBe("already searched in this window");
+    expect(dailyRunDue(monday, daily, at(10, 9, 30)).due).toBe(true);
   });
 
-  it("counts a search the user ran after the start time, but not one before it, a failed one, or watched-only", () => {
-    expect(dailyRunDue([run(at(9), { scheduled: false })], daily, at(10)).due).toBe(false);
-    expect(dailyRunDue([run(at(7), { scheduled: false })], daily, at(10)).due).toBe(true);
-    expect(dailyRunDue([run(at(9), { status: "failed" })], daily, at(10)).due).toBe(true);
-    expect(dailyRunDue([run(at(9), { source: "watched" })], daily, at(10)).due).toBe(true);
-    expect(dailyRunDue([], { ...daily, days: [1] }, at(10)).reason).toBe("not a search day");
+  it("runs once in a window that had no search yet, even before the set time the next morning", () => {
+    expect(windowStart("08:00", at(10, 1)).getTime()).toBe(at(9, 8).getTime());
+    expect(dailyRunDue([run(at(8, 9))], daily, at(10, 1)).due).toBe(true);
   });
 
-  it("schedules hourly checks from the start time and one at login (macOS), resume and sign-in triggers (Windows)", async () => {
+  it("counts a search the user ran in the window, but not a failed or watched-only one", () => {
+    expect(dailyRunDue([run(at(9, 9), { scheduled: false })], daily, at(9, 10)).due).toBe(false);
+    expect(dailyRunDue([run(at(9, 7), { scheduled: false })], daily, at(9, 10)).due).toBe(true);
+    expect(dailyRunDue([run(at(9, 9), { status: "failed" })], daily, at(9, 10)).due).toBe(true);
+    expect(dailyRunDue([run(at(9, 9), { source: "watched" })], daily, at(9, 10)).due).toBe(true);
+  });
+
+  it("uses the day the window starts on for the chosen days", () => {
+    const weekdays = { ...daily, days: [1, 2, 3, 4, 5] };
+    expect(dailyRunDue([], weekdays, at(14, 10)).reason).toBe("not a search day"); // Saturday
+    expect(dailyRunDue([], weekdays, at(14, 7)).due).toBe(true); // Saturday 7 a.m. is still Friday's window
+  });
+
+  it("checks every hour and at login (macOS), hourly, at sign-in, and on resume (Windows)", async () => {
     const plist = launchdPlist(scheduleLabel(target.userData), target, daily);
-    expect(plist.match(/<key>Hour<\/key>/g)).toHaveLength(16);
-    expect(plist).not.toContain("<key>Weekday</key>");
+    expect(plist).toContain("<dict><key>Minute</key><integer>0</integer></dict>");
+    expect(plist).not.toContain("<key>Hour</key>");
     expect(plist).toContain("<key>RunAtLoad</key><true/>");
     if (process.platform === "darwin") {
       const file = join(await mkdtemp(join(tmpdir(), "sensei-plist-")), "daily.plist");
@@ -101,7 +112,7 @@ describe("once a day, first time on after the start time", () => {
     const task = windowsTaskXml(target, { ...daily, wake: true }, new Date("2026-11-06T00:00:00Z"), "PC\\alex");
     expect(task).toContain("<LogonTrigger><Enabled>true</Enabled><UserId>PC\\alex</UserId>");
     expect(task).toContain("Microsoft-Windows-Power-Troubleshooter");
-    expect(task).toContain("<Interval>PT1H</Interval><Duration>PT16H</Duration>");
+    expect(task).toContain("<Interval>PT1H</Interval><Duration>P1D</Duration>");
     expect(task).toContain("<WakeToRun>false</WakeToRun>");
   });
 

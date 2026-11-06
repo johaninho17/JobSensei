@@ -65,7 +65,7 @@ export const jobSearchSettingsSchema = z.object({
   /** Searches while the app is closed (launchd on macOS, Task Scheduler on Windows). Days: 0 = Sunday. */
   schedule: z.object({
     enabled: z.boolean().default(false),
-    /** "daily": once a day, the first time the computer is on (awake, woken, or started) after `after`. "times": at set times. */
+    /** "daily": one search per window from `after` to `after` the next day, the first time the computer is on in it. "times": at set times. */
     mode: z.enum(["daily", "times"]).default("daily"),
     after: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).default("08:00"),
     days: z.array(z.number().int().min(0).max(6)).default([1, 2, 3, 4, 5]),
@@ -160,21 +160,25 @@ export type SearchStatus = { running: boolean; source: "search" | "watched" | "r
 export type ScheduleInfo = { supported: boolean; installed: boolean; label: string; detail: string; platform: string };
 export type WatchedSuggestion = { board: "ashby" | "greenhouse" | "lever"; slug: string; name: string; jobs: number; interviewed: boolean };
 
-const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-const minutesOf = (time: string) => { const [hour, minute] = time.split(":").map(Number); return hour * 60 + minute; };
+/** The start of the current daily window: the most recent occurrence of the set time (today's, or yesterday's if it hasn't come yet). */
+export function windowStart(after: string, now = new Date()): Date {
+  const [hour, minute] = after.split(":").map(Number);
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0, 0);
+  if (start.getTime() > now.getTime()) start.setDate(start.getDate() - 1);
+  return start;
+}
 
 /**
- * Daily mode: whether the scheduled search should run now. It runs once per day (local time), on a chosen day, at or
- * after the chosen time; a finished search today (scheduled, or a full search started in the app after that time)
- * counts, so waking the computer again or a 1 a.m. session never adds a second run.
+ * Daily mode: one search per window, from the set time to the same time the next day (8:00 Monday → 8:00 Tuesday).
+ * The first time the computer is on in a window, it searches; later wakes in the same window (a 1 a.m. session after
+ * a Monday 8:30 search) don't. A finished full search started in the window counts, whether scheduled or started by
+ * the user; failed and watched-only runs don't. `days` are the days a window may start on.
  */
 export function dailyRunDue(runs: SearchRun[], schedule: Pick<JobSearchSettings["schedule"], "after" | "days">, now = new Date()): { due: boolean; reason: string } {
-  if (schedule.days.length && !schedule.days.includes(now.getDay())) return { due: false, reason: "not a search day" };
-  if (now.getHours() * 60 + now.getMinutes() < minutesOf(schedule.after)) return { due: false, reason: `before ${schedule.after}` };
-  const today = localDate(now);
-  const done = runs.some((run) => run.status === "done" && run.source === "search" && localDate(new Date(run.startedAt)) === today
-    && (run.scheduled || new Date(run.startedAt).getHours() * 60 + new Date(run.startedAt).getMinutes() >= minutesOf(schedule.after)));
-  return done ? { due: false, reason: "already searched today" } : { due: true, reason: "first time on today" };
+  const start = windowStart(schedule.after, now);
+  if (schedule.days.length && !schedule.days.includes(start.getDay())) return { due: false, reason: "not a search day" };
+  const done = runs.some((run) => run.status === "done" && run.source === "search" && Date.parse(run.startedAt) >= start.getTime());
+  return done ? { due: false, reason: "already searched in this window" } : { due: true, reason: "first time on in this window" };
 }
 
 /** One line for the progress of a run, shown on any page. */
