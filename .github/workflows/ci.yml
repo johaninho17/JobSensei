@@ -21,3 +21,10 @@ jobs:
       - run: npm run typecheck
       - run: npm run test
       - run: npm run build
+      # The recruiter edition must build too, with its left-out screens absent from the bundle (tests/edition.test.ts).
+      - run: npm run build
+        env:
+          JOBSENSEI_EDITION: recruiter
+      - run: npx vitest run tests/edition-bundle.test.ts
+        env:
+          JOBSENSEI_EDITION: recruiter

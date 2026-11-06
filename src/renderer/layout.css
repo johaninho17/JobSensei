@@ -29,6 +29,10 @@
 .app-sidebar { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; min-height: 0; overflow: auto; padding: var(--space-3) var(--space-3) var(--space-4); border-right: 1px solid var(--line); background: var(--sunken); }
 .app-sidebar .wordmark { display: inline-flex; align-items: center; gap: var(--space-2); align-self: flex-start; padding: var(--space-1) var(--space-2); border: 0; border-radius: var(--radius-s); color: var(--ink); background: none; font: 560 var(--fs-22)/1.2 var(--font-display); cursor: pointer; }
 .wordmark-mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius-s); color: var(--on-accent); background: var(--accent); font: 700 var(--fs-15)/1 var(--font-ui); }
+/* Edition name in small print under the app name, and its short badge where space is short (src/shared/edition.ts). */
+.wordmark-name { display: inline-flex; flex-direction: column; line-height: 1.1; text-align: left; }
+.wordmark-edition { color: var(--muted); font: 600 var(--fs-12)/1.2 var(--font-ui); letter-spacing: 0.02em; }
+.edition-badge { margin-left: var(--space-1); padding: 0 var(--space-1); border: 1px solid var(--line-strong); border-radius: var(--radius-s); color: var(--muted); font: 700 var(--fs-12)/1.4 var(--font-ui); }
 .side-nav { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .side-nav button, .side-foot button { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 38px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-s); color: var(--ink); background: none; font: 500 var(--fs-15) var(--font-ui); text-align: left; cursor: pointer; }
 .side-nav button:hover, .side-foot button:hover:not(:disabled), .side-recent button:hover { background: var(--hover); }

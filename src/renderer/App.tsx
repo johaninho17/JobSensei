@@ -69,8 +69,8 @@ function storedPanelOpen(key: string): boolean {
 
 export function App() {
   const params = new URLSearchParams(window.location.search);
-  if (params.get("interviewWorkspace") === "1" && params.get("live") === "1") return <LiveWindow jobId={params.get("jobId") ?? ""} roundId={params.get("roundId") ?? ""} />;
-  if (params.get("interviewWorkspace") === "1") return <InterviewWorkspaceStandalone jobId={params.get("jobId") ?? ""} roundId={params.get("roundId") ?? ""} />;
+  if (FEATURES.interviews && params.get("interviewWorkspace") === "1" && params.get("live") === "1") return <LiveWindow jobId={params.get("jobId") ?? ""} roundId={params.get("roundId") ?? ""} />;
+  if (FEATURES.interviews && params.get("interviewWorkspace") === "1") return <InterviewWorkspaceStandalone jobId={params.get("jobId") ?? ""} roundId={params.get("roundId") ?? ""} />;
   return <WorkspaceApp />;
 }
 
@@ -222,7 +222,7 @@ function WorkspaceApp() {
   }, [workspace.status, notificationsOn]);
   // Once a day: follow-ups due. Once per launch: a newer release.
   useEffect(() => {
-    if (!jobs.length) return;
+    if (!FEATURES.nudges || !jobs.length) return;
     const today = new Date().toISOString().slice(0, 10);
     let last: string | null = null;
     try { last = window.localStorage.getItem("sensei-followups-notified"); } catch { last = null; }
@@ -233,7 +233,7 @@ function WorkspaceApp() {
     // Once a week: applications with no reply after 30 days.
     let lastNudge = 0;
     try { lastNudge = Date.parse(window.localStorage.getItem("sensei-stale-nudged") ?? "") || 0; } catch { lastNudge = 0; }
-    if (Date.now() - lastNudge > 7 * 86_400_000) {
+    if (FEATURES.nudges && Date.now() - lastNudge > 7 * 86_400_000) {
       const stale = staleApplications(jobs);
       if (stale.length) notify(`${stale.length} application${stale.length === 1 ? " has" : "s have"} had no reply for ${STALE_DAYS}+ days`, "Open Jobs to mark them as rejected in one step.");
       try { window.localStorage.setItem("sensei-stale-nudged", new Date().toISOString()); } catch { /* storage unavailable */ }
@@ -254,7 +254,7 @@ function WorkspaceApp() {
       if (event.key === "g") { goPrefix.current = Date.now(); return; }
       if (Date.now() - goPrefix.current < 1200) {
         goPrefix.current = 0;
-        const page = ({ j: "jobs-home", i: "interviews-home", c: "context-home" } as const)[event.key as "j" | "i" | "c"];
+        const page = FEATURES.interviews || event.key !== "i" ? ({ j: "jobs-home", i: "interviews-home", c: "context-home" } as const)[event.key as "j" | "i" | "c"] : undefined;
         if (page) { event.preventDefault(); showPage(page); }
         return;
       }
@@ -293,7 +293,7 @@ function WorkspaceApp() {
   // Recordings in debrief/ the app hasn't imported yet (electron/content-refresh.ts), for the Interviews badge.
   const [newRecordings, setNewRecordings] = useState(0);
   const loadRecordings = () => window.sensei.content.recordings().then(({ recordings }) => { setNewRecordings(recordings.filter((recording) => recording.state === "new" || recording.state === "changed").length); }).catch(() => undefined);
-  useEffect(() => { if (workspace.status === "ready") void loadRecordings(); }, [workspace.status, tree]);
+  useEffect(() => { if (FEATURES.contentRefresh && workspace.status === "ready") void loadRecordings(); }, [workspace.status, tree]);
   // Setup readiness follows the workspace, profile, settings, and files; while a required step is missing it is
   // checked again every 15 seconds (for example, Agy finishing its sign-in in the panel).
   useEffect(() => { if (workspace.status === "ready") void loadReadiness(); }, [workspace, candidateProfile, resumeSettings, tree, settingsModalOpen]);
@@ -302,7 +302,7 @@ function WorkspaceApp() {
     const timer = window.setInterval(() => void loadReadiness(), 15_000);
     return () => window.clearInterval(timer);
   }, [workspace.status, readiness?.ready]);
-  useEffect(() => { if (workspace.status === "ready") void window.sensei.profile.preview().then((preview) => setStoryBankPath(preview.storyBankPath)).catch(() => undefined); }, [workspace.status, jobTree]);
+  useEffect(() => { if (FEATURES.interviewProfile && workspace.status === "ready") void window.sensei.profile.preview().then((preview) => setStoryBankPath(preview.storyBankPath)).catch(() => undefined); }, [workspace.status, jobTree]);
   const [recentJobIds, setRecentJobIds] = useState<string[]>(() => { try { return JSON.parse(window.localStorage.getItem("sensei-recent-jobs") ?? "[]") as string[]; } catch { return []; } });
   useEffect(() => {
     if (!activeJobId) return;
@@ -716,7 +716,7 @@ function WorkspaceApp() {
   const recentForStatus = recentJobIds.slice(0, 3).map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job) && job!.id !== viewedJob?.id);
   const paletteActions: PaletteAction[] = [
     { id: "go-jobs", title: "Go to Jobs", subtitle: "All jobs, the queue, and the status strip", keywords: "home list cards", shortcut: "g j", run: () => showPage("jobs-home") },
-    { id: "go-interviews", title: "Go to Interviews", subtitle: "Every job with interview prep", keywords: "rounds prep", shortcut: "g i", run: () => showPage("interviews-home") },
+    ...(FEATURES.interviews ? [{ id: "go-interviews", title: "Go to Interviews", subtitle: "Every job with interview prep", keywords: "rounds prep", shortcut: "g i", run: () => showPage("interviews-home") }] : []),
     { id: "go-context", title: "Go to Career context", subtitle: "Resumes and sources Agy reads", keywords: "files sources resume", shortcut: "g c", run: () => showPage("context-home") },
     ...[["interviewing", "Interviewing"], ["applied", "Applied"], ["offer", "Offer"], ["closed", "Closed"], ["saved", "Saved"]].map(([group, label]) => ({ id: `filter:${group}`, title: `Show ${label.toLowerCase()} jobs`, subtitle: "Filter the Jobs page by status", keywords: `status:${group} filter`, run: () => { setJobsStatusGroup(group!); showPage("jobs-home"); } })),
     ...recentForStatus.flatMap((job) => TRACKER_STATUSES.filter((status) => status !== effectiveStatus(job)).map((status) => ({ id: `tracker:${job.id}:${status}`, title: `Mark ${job.company ?? displayJobName(job.name)} as ${TRACKER_LABELS[status].toLowerCase()}`, subtitle: job.title ?? "Recent job", keywords: `status ${status}`, run: () => void updateTracker(job.id, { status }) }))),
@@ -772,7 +772,7 @@ function WorkspaceApp() {
   ];
   const recentJobs = recentJobIds.map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job)).slice(0, 6);
   const interviewingJobs = jobs.filter((job) => job.interviewRoundLabel);
-  const followUpsDue = jobs.filter((job) => { const days = followUpDays(job.tracker); return days !== null && days <= 0 && !["rejected", "withdrawn"].includes(effectiveStatus(job)); }).length;
+  const followUpsDue = !FEATURES.nudges ? 0 : jobs.filter((job) => { const days = followUpDays(job.tracker); return days !== null && days <= 0 && !["rejected", "withdrawn"].includes(effectiveStatus(job)); }).length;
   const activePage = currentLocation.kind === "document" ? currentLocation.returnTo.kind : currentLocation.kind;
   const shellStyle = {
     "--right-panel-width": `${rightPanelOpen ? rightPanelWidth : 0}px`,
@@ -780,12 +780,12 @@ function WorkspaceApp() {
   } as CSSProperties;
   return <main className={`shell ${leftPanelOpen ? "" : "is-sidebar-closed"}`} style={shellStyle}>
     <nav className="app-sidebar" aria-label="Main" aria-hidden={!leftPanelOpen}>
-      <button className="wordmark" aria-label="Sensei: all jobs" onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span><span>Sensei</span></button>
+      <button className="wordmark" aria-label={`${EDITION.productName}: all jobs`} onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span><span className="wordmark-name">Sensei{EDITION.subtitle && <small className="wordmark-edition">{EDITION.subtitle}</small>}</span></button>
       <ul className="side-nav">
         <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
-        <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{interviewingJobs.length > 0 && <span className="side-count">{interviewingJobs.length}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>
+        {FEATURES.interviews && <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{interviewingJobs.length > 0 && <span className="side-count">{interviewingJobs.length}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>}
         <li><button aria-current={activePage === "setup-home" ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />Setup{readiness && <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>}</button></li>
-        <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context{newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>
+        <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context{FEATURES.nudges && newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>
       </ul>
       {recentJobs.length > 0 && <section className="side-recent" aria-labelledby="side-recent-title">
         <h2 id="side-recent-title">Recent jobs</h2>
@@ -797,7 +797,7 @@ function WorkspaceApp() {
     </nav>
     <div className="shell-main">
       <header className="topbar">
-        {!leftPanelOpen && <button className="topbar-home" aria-label="Sensei: all jobs" title="All jobs" onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span></button>}
+        {!leftPanelOpen && <button className="topbar-home" aria-label={`${EDITION.productName}: all jobs`} title="All jobs" onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span>{EDITION.badge && <span className="edition-badge" title={EDITION.productName}>{EDITION.badge}</span>}</button>}
         <button className="topbar-icon" aria-label={leftPanelOpen ? "Hide sidebar" : "Show sidebar"} aria-pressed={leftPanelOpen} title={leftPanelOpen ? "Hide sidebar" : "Show sidebar"} onClick={() => setLeftPanelOpen((open) => !open)}><NavIcon name="sidebar" /></button>
         <nav className="history-controls" aria-label="History">
           <button aria-label="Go back" title="Back" disabled={navigationIndex === 0} onClick={() => navigateHistory(-1)}><span aria-hidden="true">‹</span></button>
@@ -834,11 +834,11 @@ function WorkspaceApp() {
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
           <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
-          : currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
+          : FEATURES.interviews && currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
           : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome
             onOpen={(path) => void selectFile(path)}
-            notice={newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">
+            notice={FEATURES.nudges && newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">
               <h2 id="new-files-title">New since you last looked</h2>
               <p>Check each one, then tick it below if Agy should use it as evidence.</p>
               <ul>{newContextFiles.map((path) => <li key={path}><button className="btn-link" onClick={() => void selectFile(path)}>{path.replace(/^context\//, "")}</button>{selectedCareerPaths.includes(path) ? <span className="doc-state is-ready">Used by Agy</span> : <span className="doc-state">Not used yet</span>}</li>)}</ul>
@@ -1230,8 +1230,8 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
     <SubTabPanel idPrefix="jobs" value={tab}>
     <div className="jobs-toolbar">
       <label className="workspace-search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search jobs…" aria-label="Search jobs" /></label>
-      {(["follow-up", "review", "favorites"] as JobsFilter[]).filter((value) => filterCounts[value] > 0 || filter === value).map((value) => <button key={value} className="filter-toggle" aria-pressed={filter === value} onClick={() => setFilter(filter === value ? "all" : value)}>{filterLabels[value]}<span>{filterCounts[value]}</span></button>)}
-      <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option><option value="follow-up">Follow-up date</option><option value="fit">Best fit</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
+      {(["follow-up", "review", "favorites"] as JobsFilter[]).filter((value) => FEATURES.nudges || value !== "follow-up").filter((value) => filterCounts[value] > 0 || filter === value).map((value) => <button key={value} className="filter-toggle" aria-pressed={filter === value} onClick={() => setFilter(filter === value ? "all" : value)}>{filterLabels[value]}<span>{filterCounts[value]}</span></button>)}
+      <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option>{FEATURES.nudges && <option value="follow-up">Follow-up date</option>}<option value="fit">Best fit</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
       <button className="filter-toggle" aria-pressed={selecting} title="Select several jobs to change their status at once (or Cmd/Ctrl-click a job)" onClick={() => selecting ? exitSelect() : setSelecting(true)}>{selecting ? "Done" : "Select"}</button>
       <div className="segmented" role="group" aria-label="Layout">{(["cards", "list"] as JobsView[]).map((value) => <button key={value} aria-pressed={view === value} onClick={() => setView(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div>
       <details className="jobs-more">
@@ -1804,14 +1804,14 @@ function ContextHome({ notice, sources, resumes, jobFiles, onOpen }: { notice: R
       label="Career context sections"
       value={view}
       onChange={setView}
-      tabs={[{ id: "sources", label: "Sources" }, { id: "resumes", label: "Resumes" }, { id: "jobs", label: "Job files" }, { id: "stories", label: "Story bank" }, { id: "voice", label: "Interview voice" }]}
+      tabs={[{ id: "sources", label: "Sources" }, { id: "resumes", label: "Resumes" }, { id: "jobs", label: "Job files" }, ...(FEATURES.interviewProfile ? [{ id: "stories" as const, label: "Story bank" }, { id: "voice" as const, label: "Interview voice" }] : [])]}
     />
     <SubTabPanel idPrefix="ctx" value={view}>
       {view === "sources" && sources}
       {view === "resumes" && resumes}
       {view === "jobs" && jobFiles}
-      {view === "stories" && <DocInline path="profile/story_bank.md" label="story bank (it is made on your first interview prep)" />}
-      {view === "voice" && <DocInline path="profile/interview_voice.md" label="interview voice (it is made when you import an interview)" />}
+      {FEATURES.interviewProfile && view === "stories" && <DocInline path="profile/story_bank.md" label="story bank (it is made on your first interview prep)" />}
+      {FEATURES.interviewProfile && view === "voice" && <DocInline path="profile/interview_voice.md" label="interview voice (it is made when you import an interview)" />}
     </SubTabPanel>
   </section>;
 }
@@ -1836,7 +1836,7 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
     void window.sensei.interviews.setCurrentRound(job.id, roundId).catch(() => undefined);
     onNavigate(job.id, "interview", roundId);
   }
-  const tabs: Array<[JobWorkspaceTab, string, number | null]> = [["overview", "Overview", null], ["application", "Application", null], ["interview", "Interview", rounds.length || null], ["files", "Files", files.length]];
+  const tabs: Array<[JobWorkspaceTab, string, number | null]> = [["overview", "Overview", null], ["application", "Application", null], ...(FEATURES.interviews ? [["interview", "Interview", rounds.length || null] as [JobWorkspaceTab, string, number | null]] : []), ["files", "Files", files.length]];
   const [appView, setAppView] = useState<ApplicationView>("resume");
   useEffect(() => { setAppView("resume"); }, [job.id]);
   function openChecks() { setAppView("checks"); onNavigate(job.id, "application"); }
@@ -1869,7 +1869,7 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
         <button className="btn-primary" onClick={() => onInsertPrompt(next)}>Send to Agy</button>
         {more.length > 0 && <details className="jobs-more next-bar-more"><summary aria-label="Other next steps">More</summary><div className="jobs-more-menu">{more.slice(0, 6).map((action) => <button key={action.id} className="menu-item" onClick={() => onInsertPrompt(action)}>{action.label}</button>)}</div></details>}
       </section>}
-      {(trackerStatus === "rejected" || trackerStatus === "withdrawn" || trackerStatus === "interviewing" || trackerStatus === "offer") && <DebriefPanel job={job} closed={trackerStatus === "rejected" || trackerStatus === "withdrawn"} onUpdateTracker={onUpdateTracker} onInsertPrompt={onInsertPrompt} />}
+      {FEATURES.interviews && (trackerStatus === "rejected" || trackerStatus === "withdrawn" || trackerStatus === "interviewing" || trackerStatus === "offer") && <DebriefPanel job={job} closed={trackerStatus === "rejected" || trackerStatus === "withdrawn"} onUpdateTracker={onUpdateTracker} onInsertPrompt={onInsertPrompt} />}
       {reviewIssues.length > 0 && <p className="review-line" role="status">
         <span className={`review-kind ${allIssues.some((issue) => issue.severity === "error") ? "is-error" : ""}`}>{allIssues.some((issue) => issue.severity === "error") ? "Fix" : "Check"}</span>
         <span>{plural(allIssues.length, "thing")} to look at before you send, from the last check.</span>
@@ -1890,10 +1890,10 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
               {job.mustHaves.length === 0 && job.ratingHighlights.length > 0 && <details className="must-group is-met"><summary>Strengths ({job.ratingHighlights.length})</summary><ul>{job.ratingHighlights.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul></details>}
             </>}
           </section>
-          <section className="overview-panel">
+          {FEATURES.interviews && <section className="overview-panel">
             <h2>Interviews</h2>
             {interviewLoading ? <p className="muted">Reading rounds…</p> : rounds.length ? <ol className="round-list">{rounds.map((round) => <li key={round.id}><button className="btn-link" onClick={() => navigateRound(round.id)}>{round.label}</button><span className={`round-state is-${round.status}`}>{round.scheduledDate ?? round.status.replace("_", " ")}</span></li>)}</ol> : <p className="muted">No rounds yet.</p>}
-          </section>
+          </section>}
           <TrackerPanel job={job} onUpdate={onUpdateTracker} />
         </div>
       </div>
@@ -1907,7 +1907,7 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
         tabs={[
           { id: "resume", label: "Resume", disabled: !resumeMarkdown },
           { id: "letter", label: "Cover letter", disabled: !coverLetterMarkdown },
-          { id: "questions", label: "Questions" },
+          ...(FEATURES.applicationQuestions ? [{ id: "questions" as const, label: "Questions" }] : []),
           { id: "evaluation", label: "Evaluation", disabled: !evaluation },
           { id: "checks", label: "Checks" },
         ]}
@@ -1915,12 +1915,12 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
       <SubTabPanel idPrefix="app" value={appView}>
         {appView === "resume" && <DocInline path={resumeMarkdown?.relativePath ?? null} label="resume" />}
         {appView === "letter" && <DocInline path={coverLetterMarkdown?.relativePath ?? null} label="cover letter" />}
-        {appView === "questions" && <QuestionsPanel jobId={job.id} />}
+        {FEATURES.applicationQuestions && appView === "questions" && <QuestionsPanel jobId={job.id} />}
         {appView === "evaluation" && <DocInline path={evaluation?.relativePath ?? null} label="evaluation" />}
         {appView === "checks" && <div className="dashboard-stack"><ApplicationHealth job={job} files={applicationFiles} status={status} loading={applicationLoading} onStatus={onStatus} /><section className="context-block"><h2>Application files</h2><ArtifactTable files={applicationFiles} onSelect={onSelect} empty="No application documents found." /></section></div>}
       </SubTabPanel>
     </>}
-    {activeTab === "interview" && <InterviewView job={job} overview={overview} loading={interviewLoading} initialRoundId={activeRoundId} onRoundChange={navigateRound} onOpenFile={(path) => onSelect(path)} onInsertPrompt={(text, label) => onInsertPrompt({ prompt: text, label })} />}
+    {FEATURES.interviews && activeTab === "interview" && <InterviewView job={job} overview={overview} loading={interviewLoading} initialRoundId={activeRoundId} onRoundChange={navigateRound} onOpenFile={(path) => onSelect(path)} onInsertPrompt={(text, label) => onInsertPrompt({ prompt: text, label })} />}
     {activeTab === "files" && <FilesTab files={files} onSelect={onSelect} />}
   </section>;
 }
@@ -2986,7 +2986,7 @@ function RunStatusBar({ onOpen }: { onOpen: (run: RunStatus) => void }) {
       // Once per job: main skips jobs that already have answers, so restarting the app never repeats a run.
       if (next?.kind === "application" && next.jobId && (next.state === "running" || Date.now() - Date.parse(next.at) < 15 * 60_000)) {
         const key = next.jobId;
-        if (!askedQuestions.current.has(key)) { askedQuestions.current.add(key); void window.sensei.questions.auto(next.jobId).catch(() => undefined); }
+        if (FEATURES.applicationQuestions && !askedQuestions.current.has(key)) { askedQuestions.current.add(key); void window.sensei.questions.auto(next.jobId).catch(() => undefined); }
       }
     }).catch(() => undefined);
     load();

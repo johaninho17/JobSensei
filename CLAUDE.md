@@ -21,7 +21,7 @@
 | `dev-notes/` | Private builder notes, including the decisions ledger (gitignored) |
 | `PRODUCT_FLOWS.md`, `docs/` | User-facing workflow and data-format docs |
 
-Commands: `npm run typecheck`, `npm test`, `npm run build`, `npm run dev`. Pipeline commands (`npm run context:snapshot -- <job-id>`, `application:finalize`, `application:validate`) rewrite a job's hidden `.sensei/` state, so run them only on demo or test jobs unless the user names a real job.
+Commands: `npm run typecheck`, `npm test`, `npm run build`, `npm run dev`. Set `JOBSENSEI_EDITION=recruiter` on `build`, `dev`, or `dist:*` for the Recruiter Edition (`src/shared/edition.ts` owns what each edition contains; code checks `FEATURES.*` / `featuresFor`, never the edition name). Pipeline commands (`npm run context:snapshot -- <job-id>`, `application:finalize`, `application:validate`) rewrite a job's hidden `.sensei/` state, so run them only on demo or test jobs unless the user names a real job.
 
 ## Builder skills (`.claude/skills/`)
 

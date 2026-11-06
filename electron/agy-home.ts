@@ -3,6 +3,8 @@ import { chmod, lstat, mkdir, readFile, readlink, symlink, writeFile } from "nod
 import { homedir } from "node:os";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import { writeJsonAtomic } from "./persistence";
+import { featuresFor, includedCommand } from "../src/shared/edition";
+import { currentEdition } from "./edition";
 
 // The app runs Agy with its own home folder, so these rules never change the user's own Agy settings.
 // Tested 2026-10-25: `--sandbox` blocks shell writes outside the workspace but not Agy's file tools;
@@ -177,8 +179,11 @@ export async function writeSenseiLauncher(home: string, options: { appRoot: stri
   await mkdir(bin, { recursive: true });
   // The build writes the command list (scripts/write-pipeline-scripts.mjs); a source checkout can fall back to package.json.
   const built = await readFile(join(options.appRoot, "dist-electron", "pipeline-scripts.json"), "utf8").then((raw) => JSON.parse(raw) as Record<string, string>).catch(() => null);
-  const scripts = built && Object.keys(built).length ? built
+  const all = built && Object.keys(built).length ? built
     : pipelineScripts(JSON.parse(await readFile(join(options.appRoot, "package.json"), "utf8")) as { scripts?: Record<string, string> });
+  // Only this edition's commands (the build already filters; a source checkout filters here).
+  const features = featuresFor(currentEdition());
+  const scripts = Object.fromEntries(Object.entries(all).filter(([name]) => includedCommand(features, name)));
   const names = Object.keys(scripts).join(", ");
   const usage = `Usage: sensei <command> [args]. Commands: ${names}`;
   const compiled = (file: string) => options.packaged || existsSync(join(options.appRoot, file));

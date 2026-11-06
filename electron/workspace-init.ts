@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { agentsMdFor, featuresFor, includedAgentEntry, type Features } from "../src/shared/edition";
+import { currentEdition } from "./edition";
 
 /** Agy runtime directories the app owns and keeps in sync inside the workspace. */
 export const MANAGED_AGENT_DIRS = ["skills", "rules", "workflows"] as const;
@@ -23,19 +25,19 @@ export interface AgentSyncReport {
   backupPath: string | null;
 }
 
-export async function initializeWorkspace(workspacePath: string): Promise<AgentSyncReport> {
+export async function initializeWorkspace(workspacePath: string, features: Features = featuresFor(currentEdition())): Promise<AgentSyncReport> {
   await Promise.all([
     mkdir(join(workspacePath, "profile"), { recursive: true }),
     mkdir(join(workspacePath, "context", "structured"), { recursive: true }),
     mkdir(join(workspacePath, "context", "broad"), { recursive: true }),
     mkdir(join(workspacePath, "resumes"), { recursive: true }),
     mkdir(join(workspacePath, "jobs"), { recursive: true }),
-    mkdir(join(workspacePath, "debrief"), { recursive: true }),
+    ...(features.contentRefresh ? [mkdir(join(workspacePath, "debrief"), { recursive: true })] : []),
     mkdir(join(workspacePath, "fallback-references"), { recursive: true }),
     mkdir(join(workspacePath, ".sensei"), { recursive: true }),
   ]);
 
-  return syncWorkspaceAgentFiles(workspacePath);
+  return syncWorkspaceAgentFiles(workspacePath, { features });
 }
 
 interface AgentSource {
@@ -127,7 +129,8 @@ async function digest(path: string): Promise<string | null> {
  * Agy runs from the workspace, so a stale copy silently undoes every skill fix.
  * Differing workspace files are backed up before replacement; nothing is lost.
  */
-export async function syncWorkspaceAgentFiles(workspacePath: string, options: { sourceRoots?: string[]; now?: Date } = {}): Promise<AgentSyncReport> {
+export async function syncWorkspaceAgentFiles(workspacePath: string, options: { sourceRoots?: string[]; now?: Date; features?: Features } = {}): Promise<AgentSyncReport> {
+  const features = options.features ?? featuresFor(currentEdition());
   const report: AgentSyncReport = { sourceRoot: null, updated: [], added: [], removed: [], backupPath: null };
   const source = await resolveAgentSource(options.sourceRoots);
   if (!source) return report;
@@ -158,17 +161,21 @@ export async function syncWorkspaceAgentFiles(workspacePath: string, options: { 
     await cp(sourcePath, target, { recursive: true });
   };
 
+  const leftOut: string[] = [];
   for (const dir of MANAGED_AGENT_DIRS) {
     const sourceDir = source.dirs[dir];
     if (!sourceDir || !await exists(sourceDir)) continue;
     const entries = await readdir(sourceDir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.name === ".DS_Store") continue;
-      await replace(join(sourceDir, entry.name), join(agentsRoot, dir, entry.name), `${dir}/${entry.name}`);
+      const label = `${dir}/${entry.name}`;
+      // Files for a feature this edition doesn't have are never seeded (and removed below if an older copy exists).
+      if (!includedAgentEntry(features, label)) { leftOut.push(label); continue; }
+      await replace(join(sourceDir, entry.name), join(agentsRoot, dir, entry.name), label);
     }
   }
 
-  for (const retired of RETIRED_WORKSPACE_ENTRIES) {
+  for (const retired of [...RETIRED_WORKSPACE_ENTRIES, ...leftOut]) {
     const target = join(agentsRoot, retired);
     if (await exists(target)) {
       await backup(target, retired);
@@ -178,7 +185,15 @@ export async function syncWorkspaceAgentFiles(workspacePath: string, options: { 
   }
 
   if (source.agentsMd) {
-    await replace(source.agentsMd, join(workspacePath, "AGENTS.md"), "AGENTS.md");
+    // AGENTS.md is written with only this edition's sections (feature markers in the source decide).
+    const text = agentsMdFor(features, await readFile(source.agentsMd, "utf8"));
+    const target = join(workspacePath, "AGENTS.md");
+    const current = await readFile(target, "utf8").catch(() => null);
+    if (current !== text) {
+      if (current !== null) { await backup(target, "AGENTS.md"); report.updated.push("AGENTS.md"); }
+      else report.added.push("AGENTS.md");
+      await writeFile(target, text, "utf8");
+    }
   }
 
   await pruneAgentBackups(agentsRoot);

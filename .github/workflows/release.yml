@@ -36,12 +36,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # One tag builds every edition on every platform into the same draft release (src/shared/edition.ts).
         include:
-          - os: macos-latest
-            platform: mac
-          - os: windows-latest
-            platform: win
+          - { os: macos-latest, platform: mac, edition: solo }
+          - { os: windows-latest, platform: win, edition: solo }
+          - { os: macos-latest, platform: mac, edition: recruiter }
+          - { os: windows-latest, platform: win, edition: recruiter }
     runs-on: ${{ matrix.os }}
+    env:
+      JOBSENSEI_EDITION: ${{ matrix.edition }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -96,7 +99,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
-          npx electron-builder --publish always
+          npx electron-builder --config build-config/edition.cjs --publish always
 
       # Opens the packaged app on this OS with an empty workspace and fails if the window doesn't render.
       # The release stays a draft until this passes on both platforms.

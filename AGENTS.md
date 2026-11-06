@@ -30,12 +30,14 @@ Do not inspect implementation code, validators, schemas, package metadata, or ot
 
 Default application output is limited to `original_jd.md`, `evaluation.md`, the tailored resume, `cover_letter.md`, `pdfs/`, and hidden `.sensei/` state. Do not create README, checklist, match, change-plan, or separate audit files.
 
+<!-- feature:interviews -->
 ## Interview flow
 
 Use `$jobsensei-interview-pipeline` only after the user explicitly asks to prepare an existing job for an interview. Use `$jobsensei-technical-challenge` only for an explicitly requested challenge or test. A pasted JD never creates interview content.
 
 Interview preparation follows `$jobsensei-interview-pipeline` (One-Pass flow with `interview:context` and `interview:check`). It owns every interview rule: framing (strong but never invented), the knowability test (no company-internal or impossible questions), the question card (short cues, no scripts), gap questions, and no overlap between rounds. Logistics come only from the candidate's Settings. The candidate's own work stories from interviews become career evidence only after the user confirms them into `context/structured/interview-stories.md`.
 
+<!-- /feature -->
 ## Engineering work
 
 Inspect the current implementation before editing, preserve unrelated changes and private data, keep Electron/renderer interfaces narrow, and run proportionate tests. Do not publish or deploy without explicit user authorization.

@@ -5,6 +5,8 @@ import { dirname, extname, join, resolve, sep } from "node:path";
 import { readinessSchema, RESUME_FORMAT_HELP, RESUME_PDF_ONLY, type Readiness, type ReadinessItem } from "../src/shared/readiness";
 import type { CandidateProfile, ContextManifest, Settings } from "../src/shared/schemas";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
+import { featuresFor, type Features } from "../src/shared/edition";
+import { currentEdition } from "./edition";
 
 export type ReadinessInput = {
   workspacePath: string;
@@ -13,6 +15,8 @@ export type ReadinessInput = {
   manifest: ContextManifest | null;
   contextFileCount: number;
   agy: { installed: boolean; signedIn: boolean | null };
+  /** Defaults to this build's edition; items for left-out features are not listed. */
+  features?: Features;
 };
 
 type ResumeCheck = { ok: true; employers: number; lines: string[] } | { ok: false; message: string };
@@ -56,6 +60,7 @@ const exists = (path: string) => stat(path).then((info) => info.isFile() && info
 
 export async function computeReadiness(input: ReadinessInput): Promise<Readiness> {
   const { profile, settings, manifest } = input;
+  const features = input.features ?? featuresFor(currentEdition());
   const root = resolve(input.workspacePath);
   const items: ReadinessItem[] = [];
   const add = (item: Omit<ReadinessItem, "lines"> & { lines?: string[] }) => items.push({ lines: [], ...item });
@@ -108,14 +113,16 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
     improves: "Cover letters about you and your path, not a summary of the job posting.",
   });
 
-  const logistics = profile?.preferences.interview;
-  const blanks = logistics ? Object.entries({ location: logistics.location, "work authorization": logistics.workAuthorization, "pay target": logistics.compensation, "notice period": logistics.noticePeriod, "work setup": logistics.workArrangement }).filter(([, value]) => !filled(value)).map(([label]) => label) : ["all"];
-  add({
-    id: "logistics", level: "recommended", state: blanks.length ? "missing" : "done", action: "logistics", path: null,
-    title: "Interview logistics",
-    detail: blanks.length ? `Missing: ${blanks.join(", ")}.` : "All filled in.",
-    improves: "Interview prep and application answers use your words for pay, location, and start date; blanks are flagged, never guessed.",
-  });
+  if (features.interviews) {
+    const logistics = profile?.preferences.interview;
+    const blanks = logistics ? Object.entries({ location: logistics.location, "work authorization": logistics.workAuthorization, "pay target": logistics.compensation, "notice period": logistics.noticePeriod, "work setup": logistics.workArrangement }).filter(([, value]) => !filled(value)).map(([label]) => label) : ["all"];
+    add({
+      id: "logistics", level: "recommended", state: blanks.length ? "missing" : "done", action: "logistics", path: null,
+      title: "Interview logistics",
+      detail: blanks.length ? `Missing: ${blanks.join(", ")}.` : "All filled in.",
+      improves: "Interview prep and application answers use your words for pay, location, and start date; blanks are flagged, never guessed.",
+    });
+  }
 
   const names = profile?.truth.confidentialNames ?? [];
   add({
@@ -142,13 +149,15 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
     improves: "Cross-checks your dates, titles, and wording.",
   });
 
-  const hasStoryBank = await exists(join(root, "profile", "story_bank.md"));
-  add({
-    id: "story-bank", level: "recommended", state: hasStoryBank ? "done" : "later", action: "none", path: "profile/story_bank.md",
-    title: "Story bank",
-    detail: hasStoryBank ? "Ready." : "Made automatically on your first interview prep.",
-    improves: "Interview answers use your best real examples, without repeats.",
-  });
+  if (features.interviewProfile) {
+    const hasStoryBank = await exists(join(root, "profile", "story_bank.md"));
+    add({
+      id: "story-bank", level: "recommended", state: hasStoryBank ? "done" : "later", action: "none", path: "profile/story_bank.md",
+      title: "Story bank",
+      detail: hasStoryBank ? "Ready." : "Made automatically on your first interview prep.",
+      improves: "Interview answers use your best real examples, without repeats.",
+    });
+  }
 
   const required = items.filter((item) => item.level === "required");
   // Jobs may be added once Agy is installed: the queue itself waits until Agy is signed in and idle.

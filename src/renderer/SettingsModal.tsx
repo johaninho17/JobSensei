@@ -3,7 +3,8 @@ import { EMPTY_INTERVIEW_LOGISTICS, type BulletBank, type BulletBankItem, type C
 import { deriveVoicePresets } from "../shared/voice-presets";
 
 type SettingsTab = "voice" | "story" | "truth" | "interview" | "resume" | "bullets" | "identity" | "preview";
-const SETTINGS_TABS: SettingsTab[] = ["voice", "story", "truth", "interview", "resume", "bullets", "identity", "preview"];
+// Interview prep settings exist only where the edition has interviews (src/shared/edition.ts).
+const SETTINGS_TABS: SettingsTab[] = ["voice", "story", "truth", ...(FEATURES.interviews ? ["interview" as const] : []), "resume", "bullets", "identity", "preview"];
 
 type ProfilePreview = { styleRules: string[]; instructions: string[]; baseResumeHasSummary: boolean | null; interviewLogistics: string[]; storyBankPath: string | null };
 
@@ -247,7 +248,7 @@ export function SettingsModal({
           >
             Truth and privacy
           </button>
-          <button
+          {FEATURES.interviews && <button
             type="button"
             role="tab"
             id="settings-tab-interview"
@@ -258,7 +259,7 @@ export function SettingsModal({
             onClick={() => setActiveTab("interview")}
           >
             Interview prep
-          </button>
+          </button>}
           <button
             role="tab"
             id="settings-tab-resume"
@@ -540,7 +541,7 @@ export function SettingsModal({
             </div>
           )}
 
-          {activeTab === "interview" && (
+          {FEATURES.interviews && activeTab === "interview" && (
             <div className="settings-section">
               <div className="settings-group">
                 <h3 className="settings-group-title" id="settings-interview-logistics">Interview logistics</h3>

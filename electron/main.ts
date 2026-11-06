@@ -1,13 +1,14 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, session, shell } from "electron";
 import { textContextMenu } from "./context-menu";
+import { EDITION_INFO, featuresFor } from "../src/shared/edition";
+import { currentEdition, prepareEditionFolder } from "./edition";
+import type { FeatureContext } from "./feature-context";
 import { watch, type FSWatcher } from "node:fs";
 import { updateJobTracker } from "./tracker";
 import { latestRun } from "./run-status";
 import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription } from "./jd-fetch";
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { prepareAgyHome, writeSenseiLauncher } from "./agy-home";
-import { QuestionAgent, headlessAgy } from "./question-agent";
-import { parsePastedQuestions } from "./application-questions";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import type { Settings } from "../src/shared/schemas";
@@ -20,11 +21,9 @@ import { capWorkspaceNpmCache, initializeWorkspace, syncWorkspaceAgentFiles, typ
 import { TerminalSession, appRoot as terminalAppRoot, resolveAgyExecutable } from "./terminal";
 import { buildContextManifest, contextSources, readActiveContextManifest } from "./context";
 import { exportMarkdownPdf } from "./pdf-export";
-import { getInterviewOverview, listInterviewRounds, refreshInterviewDashboard, setCurrentInterviewRound } from "./interviews";
 import { invalidateSearchIndex, searchWorkspace } from "./search";
 import { getJobApplicationStatus, validateJobApplication } from "./application-validation";
 import { computeReadiness } from "./setup-readiness";
-import { finishUpdate, readPendingUpdate, reviewUpdate, scanRecordings, skipRecordings, startUpdate, undoUpdate } from "./content-refresh";
 import { CONTEXT_EXTENSIONS, importContextFiles, type ContextKind } from "./context-import";
 import { createCandidateProfile, readCandidateProfile, updateCandidateProfileDetails, updateCandidateProfilePreferences, updateCandidateProfileSources } from "./candidate-profile";
 import { compactStyleRules, profileInstructionLines } from "./evidence-snapshot";
@@ -33,13 +32,16 @@ import { readBulletBank, saveBulletBank } from "./bullet-bank";
 import { generateJobClarifyingQuestions, saveJobClarificationAnswers } from "./clarifying-questions";
 
 // Tests and the new-user check run the app with a throwaway settings folder, so real settings are never touched.
+const edition = currentEdition();
+const features = featuresFor(edition);
+// The recruiter edition keeps its own settings folder and Agy homes; solo keeps the name it always had.
+if (edition !== "solo") app.setName(EDITION_INFO[edition].productName);
 if (process.env.SENSEI_USER_DATA) app.setPath("userData", resolve(process.env.SENSEI_USER_DATA));
 if (process.argv.includes("--dev") && !process.env.VITE_DEV_SERVER_URL) {
   process.env.VITE_DEV_SERVER_URL = "http://127.0.0.1:5173";
 }
 
 let mainWindow: BrowserWindow | undefined;
-let interviewWindow: BrowserWindow | undefined;
 let workspacePath: string;
 let settingsStore: SettingsStore;
 let workspaceWatcher: FSWatcher | undefined;
@@ -49,6 +51,7 @@ const terminal = new TerminalSession();
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
+    title: EDITION_INFO[edition].productName,
     width: 1500,
     height: 960,
     minWidth: 900,
@@ -94,56 +97,6 @@ function runSmokeCheck(window: BrowserWindow, outPath: string): void {
       }, (error: unknown) => { clearTimeout(timer); finish({ ok: false, detail: String(error) }); });
     }, 4000);
   });
-}
-
-async function openInterviewWorkspaceWindow(jobId: string, roundId: string): Promise<void> {
-  if (!jobId || !roundId) throw new Error("A job and interview round are required.");
-  if (interviewWindow && !interviewWindow.isDestroyed()) {
-    const query = `interviewWorkspace=1&jobId=${encodeURIComponent(jobId)}&roundId=${encodeURIComponent(roundId)}`;
-    if (process.env.VITE_DEV_SERVER_URL) await interviewWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?${query}`);
-    else await interviewWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"), { search: `?${query}` });
-    interviewWindow.focus();
-    return;
-  }
-  interviewWindow = new BrowserWindow({
-    width: 1280,
-    height: 900,
-    minWidth: 900,
-    minHeight: 620,
-    title: "Sensei Interview Workspace",
-    backgroundColor: "#f4f6f8",
-    webPreferences: { preload: join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
-  });
-  const query = `interviewWorkspace=1&jobId=${encodeURIComponent(jobId)}&roundId=${encodeURIComponent(roundId)}`;
-  if (process.env.VITE_DEV_SERVER_URL) await interviewWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?${query}`);
-  else await interviewWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"), { search: `?${query}` });
-  interviewWindow.on("closed", () => { interviewWindow = undefined; });
-}
-
-let liveWindow: BrowserWindow | undefined;
-const LIVE_SIZE = { width: 440, height: 560 };
-const LIVE_STRIP_HEIGHT = 176;
-
-/** Compact always-on-top live window: one interview card at a time over the video call. */
-async function openLiveWindow(jobId: string, roundId: string): Promise<void> {
-  if (!jobId || !roundId) throw new Error("A job and interview round are required.");
-  const query = `interviewWorkspace=1&live=1&jobId=${encodeURIComponent(jobId)}&roundId=${encodeURIComponent(roundId)}`;
-  if (!liveWindow || liveWindow.isDestroyed()) {
-    liveWindow = new BrowserWindow({
-      ...LIVE_SIZE,
-      minWidth: 340,
-      minHeight: LIVE_STRIP_HEIGHT,
-      alwaysOnTop: true,
-      title: "Sensei Live",
-      backgroundColor: "#f6f7f5",
-      webPreferences: { preload: join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
-    });
-    liveWindow.setAlwaysOnTop(true, "floating");
-    liveWindow.on("closed", () => { liveWindow = undefined; });
-  }
-  if (process.env.VITE_DEV_SERVER_URL) await liveWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?${query}`);
-  else await liveWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"), { search: `?${query}` });
-  liveWindow.focus();
 }
 
 function logAgentSync(report: AgentSyncReport | null): void {
@@ -377,51 +330,9 @@ ipcMain.handle("app:open-release", async (_event, url: unknown) => {
 });
 ipcMain.handle("runs:latest", async () => latestRun(requireWorkspace()));
 
-// Written application questions: answered by a separate headless Agy in the background (never the terminal Agy).
-let questionAgyHome: string | null = null;
-const questionAgent = new QuestionAgent({
-  workspace: requireWorkspace,
-  runner: async () => {
-    const agyPath = resolveAgyExecutable();
-    if (!agyPath) throw new Error("Agy isn't installed, so questions can't be answered.");
-    const workspace = requireWorkspace();
-    // The same app-owned Agy home (and sign-in) as the terminal; prepared here when the terminal hasn't started yet.
-    questionAgyHome ??= await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath });
-    return headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace });
-  },
-  onUpdate: (jobId, state) => mainWindow?.webContents.send("questions:updated", jobId, state),
-});
-const questionJobId = (value: unknown) => { const jobId = String(value ?? ""); if (!/^[a-z0-9][a-z0-9._-]*$/i.test(jobId)) throw new Error("Invalid job."); return jobId; };
-ipcMain.handle("questions:get", async (_event, jobId: unknown) => { const id = questionJobId(jobId); return { state: await questionAgent.get(id), running: questionAgent.isRunning(id) }; });
-ipcMain.handle("questions:auto", async (_event, jobId: unknown) => { void questionAgent.auto(questionJobId(jobId)); });
-ipcMain.handle("questions:ask", async (_event, jobId: unknown, text: unknown) => {
-  if (typeof text !== "string" || text.length > 20_000) throw new Error("Paste the questions as text.");
-  if (!parsePastedQuestions(text).length) throw new Error("Paste at least one question.");
-  void questionAgent.ask(questionJobId(jobId), text).catch(() => undefined);
-});
-ipcMain.handle("questions:answer-anyway", async (_event, jobId: unknown, questionId: unknown) => {
-  if (typeof questionId !== "string" || !/^q:\d+$/.test(questionId)) throw new Error("Invalid question.");
-  void questionAgent.answerAnyway(questionJobId(jobId), questionId);
-});
-ipcMain.handle("questions:retry", async (_event, jobId: unknown) => {
-  const id = questionJobId(jobId);
-  const state = await questionAgent.get(id);
-  if (!state || state.source === "posting") { void questionAgent.auto(id, true); return; }
-  void questionAgent.ask(id, state.questions.map((question) => question.label).join("\n\n"));
-});
 ipcMain.handle("jobs:update-tracker", async (_event, jobId: unknown, update: unknown) => updateJobTracker(requireWorkspace(), String(jobId), update));
 ipcMain.handle("jobs:validate-application", async (_event, jobId: string) => validateJobApplication(requireWorkspace(), jobId, false));
 
-ipcMain.handle("interviews:get-overview", async (_event, jobId: string) => getInterviewOverview(requireWorkspace(), jobId));
-ipcMain.handle("interviews:list-rounds", async (_event, jobId: string) => listInterviewRounds(requireWorkspace(), jobId));
-ipcMain.handle("interviews:set-current-round", async (_event, input: { jobId: string; roundId: string }) => setCurrentInterviewRound(requireWorkspace(), input?.jobId, input?.roundId));
-ipcMain.handle("interviews:refresh-dashboard", async (_event, jobId: string) => refreshInterviewDashboard(requireWorkspace(), jobId));
-ipcMain.handle("interviews:open-workspace-window", async (_event, input: { jobId: string; roundId: string; live?: boolean }) => input?.live ? openLiveWindow(String(input.jobId), String(input.roundId)) : openInterviewWorkspaceWindow(input?.jobId, input?.roundId));
-ipcMain.handle("interviews:set-live-collapsed", async (_event, collapsed: unknown) => {
-  if (!liveWindow || liveWindow.isDestroyed()) return;
-  const [width] = liveWindow.getSize();
-  liveWindow.setSize(width ?? LIVE_SIZE.width, collapsed === true ? LIVE_STRIP_HEIGHT : LIVE_SIZE.height, true);
-});
 ipcMain.handle("search:query", async (_event, input) => searchWorkspace(requireWorkspace(), input));
 
 ipcMain.handle("context:get-manifest", async (_event, selection) => { const settings = await settingsStore.get(); return buildContextManifest(requireWorkspace(), selection ?? {}, settings); });
@@ -440,13 +351,13 @@ ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
     .then(async (home) => { await writeSenseiLauncher(home, { appRoot: terminalAppRoot(), packaged: app.isPackaged, runtimePath: process.execPath }); return home; })
     .catch((error) => { console.error("Agy home setup failed:", error); return null; });
   terminal.setAgyHome(agyHome);
-  questionAgyHome = agyHome ?? questionAgyHome;
+  lastAgyHome = agyHome ?? lastAgyHome;
   return terminal.start(cwd, workspace, manifest);
 });
 ipcMain.handle("terminal:set-context", async (_event, input) => {
   const manifest = await buildContextManifest(requireWorkspace(), input ?? {}, await settingsStore.get());
   terminal.setContext(manifest);
-  interviewWindow?.webContents.send("context:updated", manifest);
+  for (const window of featureWindows()) window.webContents.send("context:updated", manifest);
   return manifest;
 });
 ipcMain.handle("terminal:write", async (_event, data: string) => terminal.write(data));
@@ -496,18 +407,6 @@ async function jobNames(): Promise<Record<string, string>> {
   const jobs = await listJobFolders(requireWorkspace()).catch(() => []);
   return Object.fromEntries(jobs.map((job) => [job.id, [job.company, job.title].filter(Boolean).join(", ")]));
 }
-ipcMain.handle("content:recordings", async () => {
-  const names = await jobNames();
-  return { recordings: await scanRecordings(requireWorkspace(), Object.keys(names)), pending: await readPendingUpdate(requireWorkspace()) };
-});
-ipcMain.handle("content:start-update", async () => {
-  const names = await jobNames();
-  return (await startUpdate(requireWorkspace(), await scanRecordings(requireWorkspace(), Object.keys(names)), names)).prompt;
-});
-ipcMain.handle("content:review-update", async () => reviewUpdate(requireWorkspace()));
-ipcMain.handle("content:finish-update", async (_event, keepOld: unknown) => finishUpdate(requireWorkspace(), Array.isArray(keepOld) ? keepOld.filter((item): item is string => typeof item === "string") : []));
-ipcMain.handle("content:undo-update", async () => undoUpdate(requireWorkspace()));
-ipcMain.handle("content:skip", async (_event, paths: unknown) => skipRecordings(requireWorkspace(), Array.isArray(paths) ? paths.filter((path): path is string => typeof path === "string") : []));
 // The writing-voice file is the user's own; Setup edits only this one context file (other career sources stay read-only).
 ipcMain.handle("profile:save-voice", async (_event, text: unknown) => {
   if (typeof text !== "string" || text.length > 20_000) throw new Error("The voice profile must be text under 20,000 characters.");
@@ -522,6 +421,25 @@ ipcMain.handle("profile:save-voice", async (_event, text: unknown) => {
 });
 ipcMain.handle("terminal:restart", async () => terminal.restart());
 ipcMain.handle("terminal:stop", async () => terminal.stop());
+
+// Feature-only IPC lives in its own modules, loaded only when this edition has the feature (src/shared/edition.ts);
+// the recruiter build leaves those modules out of the app entirely.
+let lastAgyHome: string | null = null;
+let interviewIpc: typeof import("./interview-ipc.js") | null = null;
+const featureContext: FeatureContext = {
+  requireWorkspace,
+  mainWindow: () => mainWindow,
+  agyHome: () => lastAgyHome,
+  userDataPath: () => app.getPath("userData"),
+  appRoot: terminalAppRoot,
+  jobNames,
+};
+function featureWindows(): BrowserWindow[] { return interviewIpc?.interviewWindows() ?? []; }
+async function registerFeatureIpc(): Promise<void> {
+  if (features.interviews) { const module = await import("./interview-ipc.js"); module.registerInterviewIpc(featureContext); interviewIpc = module; }
+  if (features.applicationQuestions) (await import("./question-ipc.js")).registerQuestionIpc(featureContext);
+  if (features.contentRefresh) (await import("./content-ipc.js")).registerContentIpc(featureContext);
+}
 
 async function resolveInitialWorkspacePath(store: SettingsStore): Promise<string> {
   if (process.env.SENSEI_WORKSPACE) {
@@ -538,15 +456,16 @@ async function resolveInitialWorkspacePath(store: SettingsStore): Promise<string
     }
   }
   if (app.isPackaged) {
-    return join(app.getPath("documents"), "JobSensei");
+    return join(app.getPath("documents"), EDITION_INFO[edition].defaultFolder);
   }
   return resolve(app.getAppPath(), "data");
 }
 
 app.whenReady().then(async () => {
   try {
+    await registerFeatureIpc();
     settingsStore = new SettingsStore(app.getPath("userData"));
-    workspacePath = await resolveInitialWorkspacePath(settingsStore);
+    workspacePath = await prepareEditionFolder(await resolveInitialWorkspacePath(settingsStore), edition, join(app.getPath("documents"), EDITION_INFO[edition].defaultFolder));
     logAgentSync(await initializeWorkspace(workspacePath));
     await indexContext(workspacePath);
     await settingsStore.setWorkspace(workspacePath);
