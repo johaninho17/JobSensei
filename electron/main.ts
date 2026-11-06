@@ -7,7 +7,8 @@ import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription } 
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { prepareAgyHome, writeSenseiLauncher } from "./agy-home";
 import { QuestionAgent, headlessAgy } from "./question-agent";
-import { RATING_SCHEMA, SEARCH_SCHEMA, rateItems, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
+import { installSchedule, removeSchedule, scheduleInfo } from "./search-schedule";
+import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
 import { jobKey, type SearchRun, type SearchStatus } from "../src/shared/job-search";
 import { boardRef } from "./job-boards";
 import { readPostingRecord } from "./posting-record";
@@ -399,9 +400,22 @@ const foundIds = (value: unknown) => (Array.isArray(value) ? value : [value]).ma
 ipcMain.handle("search:get", async () => {
   const workspace = requireWorkspace();
   const profile = await readCandidateProfile(workspace).catch(() => null);
-  return { settings: await readSearchSettings(workspace, profile), state: await readSearchState(workspace), status: searchStatus };
+  // A search the OS schedule started (the app was closed or in the background) shows as running too.
+  const scheduled = !searchStatus.running && (await searchLockHolder(workspace))?.by === "schedule";
+  return { settings: await readSearchSettings(workspace, profile), state: await readSearchState(workspace), status: scheduled ? { running: true, source: "search" as const, progress: null, startedAt: null, scheduled: true } : searchStatus };
 });
-ipcMain.handle("search:save-settings", async (_event, input: unknown) => saveSearchSettings(requireWorkspace(), input));
+const scheduleTarget = (workspace: string) => ({ runtime: process.execPath, runner: join(terminalAppRoot(), "dist-electron", "electron", "job-search-runner.js"), workspace, userData: app.getPath("userData") });
+/** Saves the settings and makes the OS schedule match them (installed when on, removed when off). */
+ipcMain.handle("search:save-settings", async (_event, input: unknown) => {
+  const workspace = requireWorkspace();
+  const settings = await saveSearchSettings(workspace, input);
+  const info = await scheduleInfo(app.getPath("userData"));
+  if (settings.schedule.enabled) await installSchedule(scheduleTarget(workspace), settings.schedule);
+  else if (info.installed) await removeSchedule(app.getPath("userData"));
+  return settings;
+});
+ipcMain.handle("search:schedule-info", async () => scheduleInfo(app.getPath("userData")));
+ipcMain.handle("search:clear-pending", async (_event, ids: unknown) => clearPendingDrafts(requireWorkspace(), foundIds(ids)));
 /** Starts a run and returns at once; "watched" checks watched companies only (no Agy, no quota). */
 ipcMain.handle("search:run", async (_event, mode: unknown) => {
   if (searchStatus.running) throw new Error("A search is already running.");
@@ -409,6 +423,8 @@ ipcMain.handle("search:run", async (_event, mode: unknown) => {
   const agyPath = watchedOnly ? null : resolveAgyExecutable();
   if (!watchedOnly && !agyPath) throw new Error("Agy isn't installed, so the search can't run. Check watched companies works without it.");
   const workspace = requireWorkspace();
+  const lock = await takeSearchLock(workspace, "app");
+  if (!lock.ok) throw new Error(lock.by === "schedule" ? "A scheduled search is running right now; its matches appear here when it finishes." : "A search is already running.");
   setSearchStatus({ running: true, source: watchedOnly ? "watched" : "search", progress: null, startedAt: new Date().toISOString() });
   void (async () => {
     let result: { run: SearchRun } | null = null;
@@ -428,6 +444,7 @@ ipcMain.handle("search:run", async (_event, mode: unknown) => {
     } catch (error) {
       console.error("Job search failed:", error);
     } finally {
+      await releaseSearchLock(workspace).catch(() => undefined);
       setSearchStatus({ running: false, source: null, progress: null, startedAt: null });
       mainWindow?.webContents.send("search:finished", result?.run ?? null);
     }
@@ -441,6 +458,8 @@ ipcMain.handle("search:rate", async (_event, ids: unknown) => {
   const agyPath = resolveAgyExecutable();
   if (!agyPath) throw new Error("Agy isn't installed, so matches can't be rated.");
   const workspace = requireWorkspace();
+  const lock = await takeSearchLock(workspace, "app");
+  if (!lock.ok) throw new Error("A search is running right now; rate these when it finishes.");
   setSearchStatus({ running: true, source: "rating", progress: { phase: "rating", checked: 0, total: chosen.length }, startedAt: new Date().toISOString() });
   void (async () => {
     let message = "";
@@ -451,6 +470,7 @@ ipcMain.handle("search:rate", async (_event, ids: unknown) => {
     } catch (error) {
       message = `Agy couldn't rate them: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`;
     } finally {
+      await releaseSearchLock(workspace).catch(() => undefined);
       setSearchStatus({ running: false, source: null, progress: null, startedAt: null });
       mainWindow?.webContents.send("search:rated", message);
     }

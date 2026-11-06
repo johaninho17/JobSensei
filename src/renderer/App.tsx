@@ -579,8 +579,37 @@ function WorkspaceApp() {
       notify(run.status === "failed" ? "Job search didn't finish" : "Job search finished", run.status === "failed" ? run.error ?? "" : `${run.added} new match${run.added === 1 ? "" : "es"}${sent ? `; ${sent} sent for drafts` : ""}. Open Job Search to see them.`);
     })();
   };
+  // A scheduled search (app closed or in the background) writes its matches to disk and marks strong ones for drafts.
+  // The app checks on start, on focus, and every minute: it shows the new count and queues the marked drafts.
+  const pendingBusy = useRef(false);
+  async function pickUpScheduled() {
+    const current = await window.sensei.jobSearch.get().catch(() => null);
+    if (!current) return;
+    setSearchStatus((status) => status.running && !status.scheduled ? status : current.status);
+    setSearchNew(current.state.items.filter((item) => item.status === "new").length);
+    if (!current.state.pendingDrafts.length || pendingBusy.current) return;
+    pendingBusy.current = true;
+    try {
+      const done: string[] = [];
+      for (const id of current.state.pendingDrafts) {
+        const item = current.state.items.find((candidate) => candidate.id === id);
+        if (item?.status === "new") { try { await queueJob({ kind: "found", id, auto: true }, false); } catch { break; } }
+        done.push(id);
+      }
+      if (done.length) {
+        await window.sensei.jobSearch.clearPending(done);
+        showToast(`Sent ${done.length} strong match${done.length === 1 ? "" : "es"} from the scheduled search for drafts.`);
+      }
+    } finally { pendingBusy.current = false; }
+  }
   useEffect(() => {
-    void window.sensei.jobSearch.get().then((result) => { setSearchStatus(result.status); setSearchNew(result.state.items.filter((item) => item.status === "new").length); }).catch(() => undefined);
+    const onFocus = () => void pickUpScheduled();
+    window.addEventListener("focus", onFocus);
+    const timer = window.setInterval(() => void pickUpScheduled(), 60_000);
+    return () => { window.removeEventListener("focus", onFocus); window.clearInterval(timer); };
+  }, [workspace?.path]);
+  useEffect(() => {
+    void pickUpScheduled();
     const offStatus = window.sensei.jobSearch.onStatus(setSearchStatus);
     const offFinished = window.sensei.jobSearch.onFinished((run) => searchFinishedRef.current(run));
     const offUpdated = window.sensei.jobSearch.onUpdated((state) => setSearchNew(state.items.filter((item) => item.status === "new").length));

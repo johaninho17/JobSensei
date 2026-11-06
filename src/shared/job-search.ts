@@ -62,6 +62,12 @@ export const jobSearchSettingsSchema = z.object({
   autoDraftDailyCap: z.number().int().min(1).max(10).default(3),
   /** After a search, Agy rates up to 10 new matches near or above the bar in one call (a little quota). */
   lightRating: z.boolean().default(true),
+  /** Searches while the app is closed (launchd on macOS, Task Scheduler on Windows). Days: 0 = Sunday. */
+  schedule: z.object({
+    enabled: z.boolean().default(false),
+    days: z.array(z.number().int().min(0).max(6)).default([1, 2, 3, 4, 5]),
+    times: z.array(z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/)).min(1).max(4).default(["08:00"]),
+  }).default({ enabled: false, days: [1, 2, 3, 4, 5], times: ["08:00"] }),
   /** How many postings one search asks Agy for. */
   resultsPerRun: z.number().int().min(5).max(40).default(20),
 });
@@ -137,19 +143,23 @@ export const searchRunSchema = z.object({
   rated: z.number().int().default(0),
   /** "search" = Agy + watched companies; "watched" = watched companies only (no Agy). */
   source: z.enum(["search", "watched"]).default("search"),
+  /** True when the OS schedule started it (app closed or in the background). */
+  scheduled: z.boolean().default(false),
   /** A failure message; on a finished run, Agy's failure while watched companies still ran. */
   error: z.string().nullable(),
 });
 export type SearchRun = z.infer<typeof searchRunSchema>;
 
 export type SearchProgress = { phase: "watched" | "agy" | "checking" | "rating"; checked: number; total: number };
-export type SearchStatus = { running: boolean; source: "search" | "watched" | "rating" | null; progress: SearchProgress | null; startedAt: string | null };
+export type SearchStatus = { running: boolean; source: "search" | "watched" | "rating" | null; progress: SearchProgress | null; startedAt: string | null; scheduled?: boolean };
+export type ScheduleInfo = { supported: boolean; installed: boolean; label: string; detail: string };
 export type WatchedSuggestion = { board: "ashby" | "greenhouse" | "lever"; slug: string; name: string; jobs: number; interviewed: boolean };
 
 /** One line for the progress of a run, shown on any page. */
 export function searchProgressText(status: SearchStatus): string {
   const progress = status.progress;
   if (!status.running) return "";
+  if (status.scheduled) return "A scheduled search is running in the background…";
   if (!progress) return "Starting the search…";
   if (progress.phase === "watched") return `Checking watched companies (${progress.checked + 1} of ${progress.total})…`;
   if (progress.phase === "agy") return "Agy is searching the job boards (usually 1–3 minutes)…";
@@ -163,9 +173,11 @@ export const jobSearchStateSchema = z.object({
   runs: z.array(searchRunSchema),
   /** URLs and company+title keys already seen (kept after dismissal so they never come back). */
   seen: z.array(z.string()),
+  /** Matches a scheduled search chose for auto-draft; the app queues them when it next runs (it owns the queue). */
+  pendingDrafts: z.array(z.string()).default([]),
 });
 export type JobSearchState = z.infer<typeof jobSearchStateSchema>;
-export const EMPTY_JOB_SEARCH_STATE: JobSearchState = { schemaVersion: JOB_SEARCH_SCHEMA_VERSION, items: [], runs: [], seen: [] };
+export const EMPTY_JOB_SEARCH_STATE: JobSearchState = { schemaVersion: JOB_SEARCH_SCHEMA_VERSION, items: [], runs: [], seen: [], pendingDrafts: [] };
 
 /** A posting link with its tracking query removed, so the same job found twice is one job. */
 export function canonicalUrl(url: string): string {

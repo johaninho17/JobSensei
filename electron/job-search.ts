@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import type { CandidateProfile } from "../src/shared/schemas";
 import type { PostingRecord } from "../src/shared/posting";
@@ -313,6 +313,8 @@ export type SearchDeps = {
   existingKeys: Set<string>;
   onUpdate?: (state: JobSearchState) => void;
   onProgress?: (progress: SearchProgress) => void;
+  /** Set by the scheduled runner. */
+  scheduled?: boolean;
 };
 
 const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
@@ -325,7 +327,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   const fetcher = deps.fetcher ?? fetch;
   const settings = await readSearchSettings(deps.workspace, deps.profile);
   let state = await readSearchState(deps.workspace);
-  const run: SearchRun = { id: newId("run"), startedAt: now().toISOString(), finishedAt: null, status: "running", found: 0, added: 0, leftOut: {}, autoQueued: 0, replaced: 0, rated: 0, error: null, source: deps.runner ? "search" : "watched" };
+  const run: SearchRun = { id: newId("run"), startedAt: now().toISOString(), finishedAt: null, status: "running", found: 0, added: 0, leftOut: {}, autoQueued: 0, replaced: 0, rated: 0, error: null, source: deps.runner ? "search" : "watched", scheduled: deps.scheduled === true };
   state = await saveSearchState(deps.workspace, { ...state, runs: [...state.runs, run] });
   deps.onUpdate?.(state);
   const finish = async (patch: Partial<SearchRun>) => {
@@ -465,6 +467,41 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
     }
   }
   return finish({ status: "done", found: links.length, added, replaced, rated, leftOut, error: agyFailure });
+}
+
+// ---------- One search at a time (the app and the scheduled runner share this lock) ----------
+
+const LOCK_FILE = `${JOB_SEARCH_DIR}/run.lock`;
+const LOCK_STALE_MS = 30 * 60_000;
+
+const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; } };
+
+/** Who holds the search lock, or null when free (a lock older than 30 minutes or from a dead process is free). */
+export async function searchLockHolder(workspace: string, now = Date.now()): Promise<{ pid: number; startedAt: string; by: "app" | "schedule" } | null> {
+  const lock = await readJson<{ pid?: number; startedAt?: string; by?: "app" | "schedule" }>(path(workspace, LOCK_FILE));
+  if (!lock?.pid || !lock.startedAt) return null;
+  if (now - Date.parse(lock.startedAt) > LOCK_STALE_MS || !alive(lock.pid)) return null;
+  return { pid: lock.pid, startedAt: lock.startedAt, by: lock.by === "schedule" ? "schedule" : "app" };
+}
+
+/** Takes the lock, or returns who holds it. */
+export async function takeSearchLock(workspace: string, by: "app" | "schedule"): Promise<{ ok: true } | { ok: false; by: "app" | "schedule" }> {
+  const holder = await searchLockHolder(workspace);
+  if (holder && holder.pid !== process.pid) return { ok: false, by: holder.by };
+  await writeJsonAtomic(path(workspace, LOCK_FILE), { pid: process.pid, startedAt: new Date().toISOString(), by });
+  return { ok: true };
+}
+
+export async function releaseSearchLock(workspace: string): Promise<void> {
+  const holder = await searchLockHolder(workspace);
+  if (!holder || holder.pid === process.pid) await rm(path(workspace, LOCK_FILE), { force: true });
+}
+
+/** Removes queued-draft ids the app has handled. */
+export async function clearPendingDrafts(workspace: string, ids: string[]): Promise<JobSearchState> {
+  const state = await readSearchState(workspace);
+  const done = new Set(ids);
+  return saveSearchState(workspace, { ...state, pendingDrafts: state.pendingDrafts.filter((id) => !done.has(id)) });
 }
 
 // ---------- Agy light rating (one call for up to 10 jobs) ----------

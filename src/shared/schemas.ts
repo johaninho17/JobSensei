@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { jobHealthSchema } from "./job-record";
 import type { Readiness } from "./readiness";
-import type { JobSearchSettings, JobSearchState, SearchRun, SearchStatus, WatchedSuggestion } from "./job-search";
+import type { JobSearchSettings, JobSearchState, ScheduleInfo, SearchRun, SearchStatus, WatchedSuggestion } from "./job-search";
 
 export const schemaVersion = 1;
 
@@ -1266,6 +1266,8 @@ export interface SenseiApi {
     suggestWatched(): Promise<WatchedSuggestion[]>;
     /** Agy's light rating for up to 10 matches, in the background; the result message arrives through onRated. */
     rate(ids: string[]): Promise<void>;
+    scheduleInfo(): Promise<ScheduleInfo>;
+    clearPending(ids: string[]): Promise<JobSearchState>;
     onRated(callback: (message: string) => void): () => void;
     onStatus(callback: (status: SearchStatus) => void): () => void;
     onFinished(callback: (run: SearchRun | null) => void): () => void;

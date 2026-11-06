@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_JOB_SEARCH_SETTINGS, SEARCH_BOARDS, SEARCH_LEVELS, SKIPPED_BOARDS, WORK_SETUPS, effectiveFit, rankInbox, searchProgressText,
-  type InboxItem, type JobSearchSettings, type JobSearchState, type SearchRun, type SearchStatus, type WatchedSuggestion,
+  type InboxItem, type JobSearchSettings, type JobSearchState, type ScheduleInfo, type SearchRun, type SearchStatus, type WatchedSuggestion,
 } from "../shared/job-search";
 import { SubTabs } from "./SubTabs";
 
@@ -201,7 +201,7 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
     {tab === "runs" && <div role="tabpanel" aria-labelledby="job-search-tab-runs">
       {!state?.runs.length ? <p className="muted">No searches yet.</p> : <ul className="find-runs">
         {[...state.runs].reverse().map((run) => <li key={run.id}>
-          <strong>{new Date(run.startedAt).toLocaleString()}</strong>{run.status === "running" && " · running"}
+          <strong>{new Date(run.startedAt).toLocaleString()}</strong>{run.scheduled && " · scheduled"}{run.status === "running" && " · running"}
           <span className="muted"> · {run.source === "watched" ? "watched companies" : "Agy search + watched companies"}: {runSummary(run)}</span>
         </li>)}
       </ul>}
@@ -258,6 +258,7 @@ function SearchSettingsForm({ settings, onSaved }: { settings: JobSearchSettings
       <p className="muted">Always skipped: {SKIPPED_BOARDS.map((board) => `${board.name} (${board.reason})`).join("; ")}.</p>
     </fieldset>
     <WatchedCompanies watched={draft.watched} onChange={(watched) => set("watched", watched)} />
+    <ScheduleFields schedule={draft.schedule} onChange={(schedule) => set("schedule", schedule)} />
     <fieldset><legend>Ratings and drafts</legend>
       <label className="search-field"><span>Your bar (quick fit, 1–5)</span><input type="number" min={1} max={5} step={0.1} value={draft.minFit} onChange={(event) => set("minFit", Number(event.target.value) || 3)} /></label>
       <label className="search-check"><input type="checkbox" checked={draft.autoDraftAt !== null} onChange={(event) => set("autoDraftAt", event.target.checked ? 4 : null)} />Draft applications automatically for strong matches</label>
@@ -317,4 +318,32 @@ function parseBoardLink(text: string): { board: WatchedSuggestion["board"]; slug
   if (host === "jobs.lever.co" && slug) return { board: "lever", slug };
   if (/(?:^|\.)greenhouse\.io$/.test(host)) { const ghSlug = first === "embed" ? parsed.searchParams.get("for") : slug; if (ghSlug) return { board: "greenhouse", slug: ghSlug }; }
   return null;
+}
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** When searches run by themselves, even with the app closed (installed with the OS when settings are saved). */
+function ScheduleFields({ schedule, onChange }: { schedule: JobSearchSettings["schedule"]; onChange: (schedule: JobSearchSettings["schedule"]) => void }) {
+  const [info, setInfo] = useState<ScheduleInfo | null>(null);
+  const [times, setTimes] = useState(schedule.times.join(", "));
+  useEffect(() => { void window.sensei.jobSearch.scheduleInfo().then(setInfo).catch(() => undefined); }, [schedule.enabled]);
+  function updateTimes(text: string) {
+    setTimes(text);
+    const parsed = text.split(/[,\s]+/).map((value) => value.trim()).filter(Boolean).map((value) => {
+      const match = /^(\d{1,2}):?(\d{2})$/.exec(value);
+      return match && Number(match[1]) < 24 && Number(match[2]) < 60 ? `${match[1].padStart(2, "0")}:${match[2]}` : null;
+    });
+    if (parsed.length && parsed.length <= 4 && parsed.every(Boolean)) onChange({ ...schedule, times: parsed as string[] });
+  }
+  return <fieldset><legend>Schedule</legend>
+    {info && !info.supported ? <p className="muted">{info.detail}</p> : <>
+      <label className="search-check"><input type="checkbox" checked={schedule.enabled} onChange={(event) => onChange({ ...schedule, enabled: event.target.checked })} />Search on a schedule, even when JobSensei is closed</label>
+      {schedule.enabled && <>
+        <div className="search-field"><span>Days</span><div className="search-checks">{DAY_LABELS.map((label, day) => <label key={label}><input type="checkbox" checked={schedule.days.includes(day)} onChange={() => onChange({ ...schedule, days: schedule.days.includes(day) ? schedule.days.filter((value) => value !== day) : [...schedule.days, day].sort() })} />{label}</label>)}</div></div>
+        <label className="search-field"><span>Times (24-hour, up to 4, e.g. 08:00, 17:30)</span><input value={times} onChange={(event) => updateTimes(event.target.value)} /></label>
+        <p className="muted">Each scheduled search is one Agy run plus the light rating. If your computer is asleep at that time, the search runs when it wakes; if it's off, the next time comes around. Strong matches are drafted when you next open the app.</p>
+      </>}
+      {info && <p className="muted">{info.installed ? (schedule.enabled ? "Status: scheduled. Changes apply when you save." : "Status: scheduled. Saving turns it off.") : schedule.enabled ? "Status: not scheduled yet. Save to turn it on." : "Status: off."}</p>}
+    </>}
+  </fieldset>;
 }
