@@ -173,9 +173,11 @@ describe("search run", () => {
     expect(await readFile(join(workspace, "jobs", jobId, "original_jd.md"), "utf8")).toContain("Northstar Labs");
     expect((await readSearchState(workspace)).items[0]).toMatchObject({ status: "saved", jobId });
 
-    // A second run never brings the same posting back.
+    // A second run never brings the same posting back, and never removes what's there.
     const again = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner: async () => ({ response: reply, conversationId: null }), now: () => new Date("2026-11-05T13:00:00Z") });
     expect(again.run.added).toBe(0);
+    expect(again.state.items).toHaveLength(1);
+    expect(again.state.runs).toHaveLength(2);
   });
 
   it("reports a failed Agy run without adding anything", async () => {

@@ -61,6 +61,16 @@ describe("one search at a time", () => {
     expect(await takeSearchLock(workspace, "app")).toEqual({ ok: true });
   });
 
+  it("never drops runs, found jobs, or seen links", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-lock-"));
+    const runs = Array.from({ length: 45 }, (_, n): SearchRun => ({ id: `run-${n}`, startedAt: new Date(2026, 0, 1 + n).toISOString(), finishedAt: null, status: "done", found: 1, added: 1, leftOut: {}, autoQueued: 0, replaced: 0, rated: 0, source: "search", scheduled: false, error: null }));
+    const seen = Array.from({ length: 3500 }, (_, n) => `https://jobs.lever.co/acme/${n}`);
+    await saveSearchState(workspace, { ...EMPTY_JOB_SEARCH_STATE, runs, seen });
+    const state = await readSearchState(workspace);
+    expect(state.runs).toHaveLength(45);
+    expect(state.seen).toHaveLength(3500);
+  });
+
   it("clears drafts the app has queued", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "sensei-lock-"));
     await saveSearchState(workspace, { ...EMPTY_JOB_SEARCH_STATE, pendingDrafts: ["find-aaaa1", "find-bbbb2"] });
@@ -86,9 +96,8 @@ describe("once per window, from the set time to the same time next day", () => {
     expect(dailyRunDue([run(at(8, 9))], daily, at(10, 1)).due).toBe(true);
   });
 
-  it("counts a search the user ran in the window, but not a failed or watched-only one", () => {
-    expect(dailyRunDue([run(at(9, 9), { scheduled: false })], daily, at(9, 10)).due).toBe(false);
-    expect(dailyRunDue([run(at(9, 7), { scheduled: false })], daily, at(9, 10)).due).toBe(true);
+  it("counts only a finished scheduled search: the user's own searches, failed, and watched-only runs don't", () => {
+    expect(dailyRunDue([run(at(9, 9), { scheduled: false })], daily, at(9, 10)).due).toBe(true);
     expect(dailyRunDue([run(at(9, 9), { status: "failed" })], daily, at(9, 10)).due).toBe(true);
     expect(dailyRunDue([run(at(9, 9), { source: "watched" })], daily, at(9, 10)).due).toBe(true);
   });
@@ -99,10 +108,10 @@ describe("once per window, from the set time to the same time next day", () => {
     expect(dailyRunDue([], weekdays, at(14, 7)).due).toBe(true); // Saturday 7 a.m. is still Friday's window
   });
 
-  it("checks every hour and at login (macOS), hourly, at sign-in, and on resume (Windows)", async () => {
+  it("checks once a day at the set time and at login (macOS); at the set time, sign-in, and resume (Windows)", async () => {
     const plist = launchdPlist(scheduleLabel(target.userData), target, daily);
-    expect(plist).toContain("<dict><key>Minute</key><integer>0</integer></dict>");
-    expect(plist).not.toContain("<key>Hour</key>");
+    expect(plist.match(/<key>Minute<\/key>/g)).toHaveLength(1);
+    expect(plist).toContain("<dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>");
     expect(plist).toContain("<key>RunAtLoad</key><true/>");
     if (process.platform === "darwin") {
       const file = join(await mkdtemp(join(tmpdir(), "sensei-plist-")), "daily.plist");
@@ -112,7 +121,8 @@ describe("once per window, from the set time to the same time next day", () => {
     const task = windowsTaskXml(target, { ...daily, wake: true }, new Date("2026-11-06T00:00:00Z"), "PC\\alex");
     expect(task).toContain("<LogonTrigger><Enabled>true</Enabled><UserId>PC\\alex</UserId>");
     expect(task).toContain("Microsoft-Windows-Power-Troubleshooter");
-    expect(task).toContain("<Interval>PT1H</Interval><Duration>P1D</Duration>");
+    expect(task).not.toContain("<Repetition>");
+    expect(task).toContain("<StartBoundary>2026-11-06T08:00:00</StartBoundary><Enabled>true</Enabled><ScheduleByDay>");
     expect(task).toContain("<WakeToRun>false</WakeToRun>");
   });
 

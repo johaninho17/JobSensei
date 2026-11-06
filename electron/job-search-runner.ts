@@ -25,8 +25,8 @@ export function runnerArgs(argv: string[]): { workspace: string; userData: strin
   return workspace && userData ? { workspace: resolve(workspace), userData: resolve(userData) } : null;
 }
 
-/** Right after a wake the network can take a moment; waits up to about 2 minutes. */
-export async function waitForNetwork(fetcher: typeof fetch = fetch, tries = 8, delayMs = 15_000): Promise<boolean> {
+/** Right after a wake the network can take a while (Wi-Fi, VPN, captive portals); waits up to about 10 minutes. */
+export async function waitForNetwork(fetcher: typeof fetch = fetch, tries = 20, delayMs = 30_000): Promise<boolean> {
   for (let attempt = 0; attempt < tries; attempt += 1) {
     try {
       const response = await fetcher("https://www.google.com/generate_204", { method: "HEAD", signal: AbortSignal.timeout(8_000) });
@@ -61,7 +61,7 @@ async function main(): Promise<number> {
     const due = dailyRunDue((await readSearchState(workspace)).runs, settings.schedule);
     if (!due.due) return 0;
   }
-  if (!(await waitForNetwork())) { await log("No network after waiting 2 minutes; will try at the next check."); return 0; }
+  if (!(await waitForNetwork())) { await log("No network after waiting 10 minutes; the search will try again at the next login, wake, or set time."); return 0; }
   const lock = await takeSearchLock(workspace, "schedule");
   if (!lock.ok) { await log(`A search started from the ${lock.by} is already running; skipped.`); return 0; }
   try {

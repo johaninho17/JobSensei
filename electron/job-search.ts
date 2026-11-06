@@ -28,8 +28,6 @@ export const JOB_SEARCH_DIR = ".sensei/job-search";
 const SETTINGS_FILE = `${JOB_SEARCH_DIR}/settings.json`;
 const STATE_FILE = `${JOB_SEARCH_DIR}/state.json`;
 const POSTINGS_DIR = `${JOB_SEARCH_DIR}/postings`;
-const MAX_RUNS_KEPT = 30;
-const MAX_SEEN = 3000;
 const MIN_POSTING_CHARS = 400;
 
 export const SEARCH_SCHEMA = JSON.stringify({
@@ -83,7 +81,8 @@ export async function readSearchState(workspace: string): Promise<JobSearchState
 }
 
 export async function saveSearchState(workspace: string, state: JobSearchState): Promise<JobSearchState> {
-  const next = jobSearchStateSchema.parse({ ...state, runs: state.runs.slice(-MAX_RUNS_KEPT), seen: [...new Set(state.seen)].slice(-MAX_SEEN) });
+  // Nothing is ever dropped: every found job, every run, and every seen link stays (seen links keep dismissed jobs away).
+  const next = jobSearchStateSchema.parse({ ...state, seen: [...new Set(state.seen)] });
   await writeJsonAtomic(path(workspace, STATE_FILE), next);
   return next;
 }

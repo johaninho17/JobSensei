@@ -171,13 +171,13 @@ export function windowStart(after: string, now = new Date()): Date {
 /**
  * Daily mode: one search per window, from the set time to the same time the next day (8:00 Monday → 8:00 Tuesday).
  * The first time the computer is on in a window, it searches; later wakes in the same window (a 1 a.m. session after
- * a Monday 8:30 search) don't. A finished full search started in the window counts, whether scheduled or started by
- * the user; failed and watched-only runs don't. `days` are the days a window may start on.
+ * a Monday 8:30 search) don't. Only a finished scheduled search counts: searches the user runs add jobs but never use
+ * up the window; failed and watched-only runs don't count either. `days` are the days a window may start on.
  */
 export function dailyRunDue(runs: SearchRun[], schedule: Pick<JobSearchSettings["schedule"], "after" | "days">, now = new Date()): { due: boolean; reason: string } {
   const start = windowStart(schedule.after, now);
   if (schedule.days.length && !schedule.days.includes(start.getDay())) return { due: false, reason: "not a search day" };
-  const done = runs.some((run) => run.status === "done" && run.source === "search" && Date.parse(run.startedAt) >= start.getTime());
+  const done = runs.some((run) => run.scheduled && run.status === "done" && run.source === "search" && Date.parse(run.startedAt) >= start.getTime());
   return done ? { due: false, reason: "already searched in this window" } : { due: true, reason: "first time on in this window" };
 }
 
