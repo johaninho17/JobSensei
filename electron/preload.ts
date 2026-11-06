@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { SenseiApi } from "../src/shared/schemas";
+import type { JobSearchState, SearchRun, SearchStatus } from "../src/shared/job-search";
 
 const api: SenseiApi = {
   app: {
@@ -17,6 +18,23 @@ const api: SenseiApi = {
     finishUpdate: (keepOld) => ipcRenderer.invoke("content:finish-update", keepOld),
     undoUpdate: () => ipcRenderer.invoke("content:undo-update"),
     skip: (paths) => ipcRenderer.invoke("content:skip", paths),
+  },
+  jobSearch: {
+    get: () => ipcRenderer.invoke("search:get"),
+    saveSettings: (settings) => ipcRenderer.invoke("search:save-settings", settings),
+    run: (mode) => ipcRenderer.invoke("search:run", mode),
+    suggestWatched: () => ipcRenderer.invoke("search:suggest-watched"),
+    rate: (ids) => ipcRenderer.invoke("search:rate", ids),
+    scheduleInfo: () => ipcRenderer.invoke("search:schedule-info"),
+    clearPending: (ids) => ipcRenderer.invoke("search:clear-pending", ids),
+    onRated: (callback) => { const listener = (_event: Electron.IpcRendererEvent, message: string) => callback(message); ipcRenderer.on("search:rated", listener); return () => ipcRenderer.removeListener("search:rated", listener); },
+    onStatus: (callback) => { const listener = (_event: Electron.IpcRendererEvent, status: SearchStatus) => callback(status); ipcRenderer.on("search:status", listener); return () => ipcRenderer.removeListener("search:status", listener); },
+    onFinished: (callback) => { const listener = (_event: Electron.IpcRendererEvent, run: SearchRun | null) => callback(run); ipcRenderer.on("search:finished", listener); return () => ipcRenderer.removeListener("search:finished", listener); },
+    setStatus: (ids, status) => ipcRenderer.invoke("search:set-status", ids, status),
+    saveJob: (id) => ipcRenderer.invoke("search:save-job", id),
+    openPosting: (id) => ipcRenderer.invoke("search:open-posting", id),
+    stage: (id, pasteId, auto) => ipcRenderer.invoke("search:stage", id, pasteId, auto),
+    onUpdated: (callback) => { const listener = (_event: Electron.IpcRendererEvent, state: JobSearchState) => callback(state); ipcRenderer.on("search:updated", listener); return () => ipcRenderer.removeListener("search:updated", listener); },
   },
   workspace: {
     getSummary: () => ipcRenderer.invoke("workspace:get-summary"),

@@ -425,6 +425,15 @@ function validateRunIntegrity(loaded: LoadedApplication, issues: ValidationIssue
   }
 }
 
+/**
+ * Body paragraphs that open as a narrated scene ("When a partner was unsure…", "At Northstar, I ran…",
+ * "In another implementation…"): the story-led letter keeps at most one of these.
+ */
+export function scenarioParagraphs(paragraphs: string[]): number[] {
+  const scene = /^(?:When|While|After|During|Once|Recently|Last (?:year|month|quarter)|In (?:another|one|a recent|my last|a past)\b[^,]*,|At [A-Z][\w&.'’-]*(?:\s+[A-Z][\w&.'’-]*){0,3},\s*(?:I|we)\s+(?:ran|led|worked|helped|guided|built|was|had|joined|took|stepped|handled))/;
+  return paragraphs.map((paragraph, index) => scene.test(paragraph.trim()) ? index : -1).filter((index) => index >= 0);
+}
+
 function sentenceCount(paragraph: string): number {
   return paragraph.split(/(?<=[.!?])\s+/).filter((sentence) => sentence.trim().split(/\s+/).length >= 3).length;
 }
@@ -635,7 +644,7 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
   } else {
     let result: ReturnType<typeof validateApplicationArtifact> | null = null;
     try {
-      result = validateApplicationArtifact(loaded.coverMarkdown, "cover-letter");
+      result = validateApplicationArtifact(loaded.coverMarkdown, "cover-letter", { letterHardWordMax: loaded.applicationContext?.coverLetterBrief?.hardWordMax ?? null });
       if (loaded.snapshot?.canonicalResume) {
         for (const drift of canonicalCoverLetterDrifts(loaded.coverMarkdown, loaded.snapshot.canonicalResume)) {
           issues.push({
@@ -680,14 +689,28 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
     const namesCompany = !brief?.company || firstParagraph.toLowerCase().includes(brief.company.toLowerCase());
     const namesRole = !brief?.role || firstParagraph.toLowerCase().includes(brief.role.toLowerCase());
     const bodyParagraphs = coverLetterBodyParagraphs(loaded.coverMarkdown);
-    const denseIndex = bodyParagraphs.findIndex((paragraph) => sentenceCount(paragraph) > MAX_COVER_LETTER_SENTENCES_PER_PARAGRAPH);
+    // The career story paragraph may run to 4 sentences; an examples-led letter keeps 3.
+    const storyLed = brief?.focus !== "examples";
+    const sentenceLimit = storyLed ? MAX_COVER_LETTER_SENTENCES_PER_PARAGRAPH + 1 : MAX_COVER_LETTER_SENTENCES_PER_PARAGRAPH;
+    const denseIndex = bodyParagraphs.findIndex((paragraph) => sentenceCount(paragraph) > sentenceLimit);
     if (denseIndex >= 0) {
       issues.push(issue(
         "COVER_LETTER_DENSE_PARAGRAPH",
         "cover_letter.md",
         `bodyParagraphs.${denseIndex}`,
-        `Paragraph ${denseIndex + 1} has ${sentenceCount(bodyParagraphs[denseIndex]!)} sentences; at most ${MAX_COVER_LETTER_SENTENCES_PER_PARAGRAPH} reads well.`,
-        "Tell one or two examples properly instead of listing several.",
+        `Paragraph ${denseIndex + 1} has ${sentenceCount(bodyParagraphs[denseIndex]!)} sentences; at most ${sentenceLimit} reads well.`,
+        storyLed ? "Keep each paragraph to one idea: the career story, then how you work now." : "Tell one or two examples properly instead of listing several.",
+        "warning",
+      ));
+    }
+    const scenes = storyLed ? scenarioParagraphs(bodyParagraphs) : [];
+    if (scenes.length >= 2) {
+      issues.push(issue(
+        "COVER_LETTER_SCENARIO_HEAVY",
+        "cover_letter.md",
+        `bodyParagraphs.${scenes[0]}`,
+        `${scenes.length} paragraphs tell a scene ("${bodyParagraphs[scenes[0]!]!.split(/\s+/).slice(0, 8).join(" ")}…") instead of the career story.`,
+        "Tell where you started, why you moved, and how you work now; keep at most one concrete detail, woven in rather than told as a scene.",
         "warning",
       ));
     }

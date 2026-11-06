@@ -30,6 +30,8 @@ export interface ArtifactValidationOptions {
   selectedBroadPaths?: string[];
   changePlanMarkdown?: string | null;
   resumeFootprint?: ResumeFootprint | null;
+  /** The candidate's hard word limit for the letter (coverLetterBrief.hardWordMax). */
+  letterHardWordMax?: number | null;
 }
 
 export interface AuditValidationOptions {
@@ -99,7 +101,8 @@ export const MIN_RESUME_BULLETS = 10;
 export const TARGET_RESUME_BULLETS = 12;
 export const MAX_RESUME_BULLETS = 14;
 export const MIN_CURRENT_EMPLOYER_BULLETS = 5;
-// Keep in sync with buildCoverLetterBrief (200-280 target, 330 hard), the owner of letter shape.
+// Defaults only: each candidate's letter length comes from their settings through coverLetterBrief
+// (buildCoverLetterBrief owns letter shape); the checks read the brief's hardWordMax when there is one.
 export const MIN_COVER_LETTER_WORDS = 160;
 export const TARGET_MAX_COVER_LETTER_WORDS = 280;
 export const MAX_COVER_LETTER_WORDS = 330;
@@ -153,7 +156,8 @@ export function validateApplicationArtifact(markdown: string, artifactType: Appl
   }
 
   if (artifactType === "cover-letter") {
-    if (wordCount > MAX_COVER_LETTER_WORDS) throw new Error(`The cover letter has ${wordCount} words; the hard limit is ${MAX_COVER_LETTER_WORDS}.`);
+    const hardMax = options.letterHardWordMax ?? MAX_COVER_LETTER_WORDS;
+    if (wordCount > hardMax) throw new Error(`The cover letter has ${wordCount} words; the hard limit is ${hardMax}.`);
     const paragraphs = coverLetterBodyParagraphs(markdown);
     return { artifactType, wordCount, paragraphCount: paragraphs.length, bulletCount: null, currentEmployerBulletCount: null, experienceBulletChanges: null, skillChanges: null };
   }

@@ -191,14 +191,9 @@ ipcMain.handle("settings:get", async () => {
         linkedinProfilePath = null;
       }
     }
-    const changed = baseResumePath !== current.baseResumePath
-      || linkedinProfilePath !== current.linkedinProfilePath
-      || secondaryResumePaths.length !== current.secondaryResumePaths.length
-      || secondaryResumePaths.some((path, i) => path !== current.secondaryResumePaths[i]);
-
-    if (changed) {
-      return settingsStore.save({ baseResumePath, secondaryResumePaths, linkedinProfilePath });
-    }
+    // Show only files that exist, but never save that view: a file missing for a moment (another workspace on
+    // the same settings, a resume being saved) must not erase the user's choice of base resume.
+    return { ...current, baseResumePath, secondaryResumePaths, linkedinProfilePath };
   }
   return current;
 });
@@ -439,6 +434,7 @@ async function registerFeatureIpc(): Promise<void> {
   if (features.interviews) { const module = await import("./interview-ipc.js"); module.registerInterviewIpc(featureContext); interviewIpc = module; }
   if (features.applicationQuestions) (await import("./question-ipc.js")).registerQuestionIpc(featureContext);
   if (features.contentRefresh) (await import("./content-ipc.js")).registerContentIpc(featureContext);
+  if (features.jobSearch) (await import("./search-ipc.js")).registerSearchIpc(featureContext);
 }
 
 async function resolveInitialWorkspacePath(store: SettingsStore): Promise<string> {
@@ -469,6 +465,14 @@ app.whenReady().then(async () => {
     logAgentSync(await initializeWorkspace(workspacePath));
     await indexContext(workspacePath);
     await settingsStore.setWorkspace(workspacePath);
+    // The profile also records the base resume; if the app's settings lost it, put it back so nothing downstream
+    // (career sources, the context manifest, Setup) sees "no resume".
+    const savedSettings = await settingsStore.get();
+    const profileResume = (await readCandidateProfile(workspacePath).catch(() => null))?.sources.baseResumePath ?? null;
+    if (!savedSettings.baseResumePath && profileResume) {
+      await settingsStore.save({ baseResumePath: profileResume, secondaryResumePaths: savedSettings.secondaryResumePaths, linkedinProfilePath: savedSettings.linkedinProfilePath });
+      console.info(`Base resume restored from the profile: ${profileResume}`);
+    }
     startWorkspaceWatcher(workspacePath);
   } catch (error) {
     console.error("Sensei startup initialization error:", error);

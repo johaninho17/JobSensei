@@ -136,7 +136,7 @@ function cleanExtracted(extracted: Extracted): { extracted: Extracted; form: str
 }
 
 /** Fetches a posting link (apply-page links are turned into the posting first) and cleans it. */
-async function fetchAndClean(url: string, fetcher: typeof fetch): Promise<{ extracted: Extracted; form: string | null }> {
+export async function fetchAndClean(url: string, fetcher: typeof fetch): Promise<{ extracted: Extracted; form: string | null }> {
   const target = postingUrl(url);
   return cleanExtracted(await fetchOracleCloudPosting(target, fetcher) ?? extractJobDescription(await fetchPage(target, fetcher), target));
 }
@@ -299,6 +299,14 @@ export async function stageLinkJobDescription(workspacePath: string, url: string
   return meta;
 }
 
+/** Saves an already fetched and cleaned posting under a paste ID, so the queue loads it like any other. */
+export async function stageCleanedPosting(workspacePath: string, id: string, markdown: string, meta: Omit<FetchedJobDescription, "markdown">): Promise<void> {
+  const paths = stagedPaths(workspacePath, id);
+  await mkdir(join(paths.markdown, ".."), { recursive: true });
+  await writeTextAtomic(paths.markdown, markdown);
+  await writeJsonAtomic(paths.meta, meta);
+}
+
 /** Network errors (no route out of a sandbox, DNS, reset), as opposed to a page that couldn't be read. */
 export function isNetworkError(message: string): boolean {
   return /\bfetch failed\b|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EPERM|UND_ERR|network/i.test(message);
@@ -331,7 +339,8 @@ export async function pruneStagedJobDescriptions(workspacePath: string, keepIds:
     .map(async (name) => {
       const path = join(dir, name);
       const modified = await stat(path).then((info) => info.mtimeMs, () => now);
-      if (now - modified >= minAgeMs) await rm(path, { force: true });
+      // File times carry fractions of a millisecond, so a file saved this millisecond can look newer than `now`.
+      if (minAgeMs <= 0 || now - Math.floor(modified) >= minAgeMs) await rm(path, { force: true });
     }));
 }
 

@@ -25,6 +25,8 @@ import { SearchPalette, type PaletteAction } from "./SearchPalette";
 import { SettingsModal } from "./SettingsModal";
 import { InterviewView, LiveWindow } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
+import { JobSearchView } from "./JobSearchView";
+import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
 import { storyTitles } from "./interview-cards";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -41,7 +43,7 @@ const VIEWER_PANEL_MIN = 320;
 type PromptRequest = { id: number; text: string; label: string };
 type JobWorkspaceTab = "overview" | "application" | "interview" | "files";
 type JobLocation = { kind: "job"; jobId: string; tab: JobWorkspaceTab; roundId?: string };
-type PageLocation = { kind: "jobs-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" };
+type PageLocation = { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" };
 type WorkspaceLocation =
   | PageLocation
   | JobLocation
@@ -140,14 +142,17 @@ function WorkspaceApp() {
     showPage(destination === "context" ? "context-home" : "jobs-home");
   }
   async function loadReadiness() { try { const next = await window.sensei.setup.readiness(); setReadiness(next); return next; } catch { return null; } }
-  async function queueJob(input: { kind: "link"; url: string } | { kind: "paste"; text: string; note?: string }, manual: boolean): Promise<number> {
+  async function queueJob(input: { kind: "link"; url: string } | { kind: "paste"; text: string; note?: string } | { kind: "found"; id: string; auto?: boolean }, manual: boolean): Promise<number> {
     // The app says what setup is missing before a job reaches Agy (electron/setup-readiness.ts owns the rules).
     const ready = await loadReadiness();
     if (ready && !ready.ready) throw new Error(`${ready.blocker} Open Setup in the sidebar.`);
     // Links are fetched here, by the app: Agy's sandbox has no network. The saved posting is queued like a paste,
     // and a page that can't be read is reported now instead of stalling the queue.
     const item = newQueueItem({ kind: "paste", label: null, note: input.kind === "paste" ? input.note : null }, new Date(), manual);
-    if (input.kind === "link") {
+    if (input.kind === "found") {
+      // A Job Search match: its posting is already saved and cleaned, so it is copied to the queue without a fetch.
+      item.label = await window.sensei.jobSearch.stage(input.id, item.id, input.auto === true);
+    } else if (input.kind === "link") {
       const meta = await window.sensei.jobs.stageLink(input.url, item.id);
       item.url = input.url;
       item.label = [meta.company, meta.title].filter(Boolean).join(", ") || input.url;
@@ -204,6 +209,7 @@ function WorkspaceApp() {
   }, [jobQueue.autoRun, queueActivity]);
   // Run watcher: notify when a pipeline run finishes, even with the Agy panel closed.
   const lastRunRef = useRef<RunStatus | null>(null);
+  const askedQuestions = useRef(new Set<string>());
   useEffect(() => {
     if (workspace.status !== "ready") return;
     let cancelled = false;
@@ -212,12 +218,19 @@ function WorkspaceApp() {
       if (cancelled) return;
       const previous = lastRunRef.current;
       lastRunRef.current = run;
+      // An application run starts the background answers for its posting's written questions as soon as the run's
+      // snapshot exists (the evidence the answers need). It lives here, not in the Agy panel, so it also happens
+      // while the panel is hidden. Once per job: main skips jobs that already have answers.
+      if (FEATURES.applicationQuestions && run?.kind === "application" && run.jobId && (run.state === "running" || Date.now() - Date.parse(run.at) < 15 * 60_000) && !askedQuestions.current.has(run.jobId)) {
+        askedQuestions.current.add(run.jobId);
+        void window.sensei.questions.auto(run.jobId).catch(() => undefined);
+      }
       if (previous?.state === "running" && run && run.state !== "running" && previous.kind === run.kind && previous.jobId === run.jobId) {
         notify(`${RUN_KIND_LABEL[run.kind]} finished`, `${run.label}: ${RUN_STATE_LABEL[run.state]}`);
       }
     };
     void tick();
-    const timer = window.setInterval(() => void tick(), 8000);
+    const timer = window.setInterval(() => void tick(), 4000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [workspace.status, notificationsOn]);
   // Once a day: follow-ups due. Once per launch: a newer release.
@@ -292,6 +305,10 @@ function WorkspaceApp() {
   const [storyBankPath, setStoryBankPath] = useState<string | null>(null);
   // Recordings in debrief/ the app hasn't imported yet (electron/content-refresh.ts), for the Interviews badge.
   const [newRecordings, setNewRecordings] = useState(0);
+  // Job Search runs in the main process; the app hears its progress and result on every page.
+  const [searchStatus, setSearchStatus] = useState<SearchStatus>({ running: false, source: null, progress: null, startedAt: null });
+  const [searchNew, setSearchNew] = useState(0);
+  const searchFinishedRef = useRef<(run: SearchRun | null) => void>(() => undefined);
   const loadRecordings = () => window.sensei.content.recordings().then(({ recordings }) => { setNewRecordings(recordings.filter((recording) => recording.state === "new" || recording.state === "changed").length); }).catch(() => undefined);
   useEffect(() => { if (FEATURES.contentRefresh && workspace.status === "ready") void loadRecordings(); }, [workspace.status, tree]);
   // Setup readiness follows the workspace, profile, settings, and files; while a required step is missing it is
@@ -469,7 +486,7 @@ function WorkspaceApp() {
 
   function currentReturnLocation(jobId: string | null): JobLocation | PageLocation {
     const current = navigationHistory[navigationIndex];
-    if (current?.kind === "job" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home") return current;
+    if (current?.kind === "job" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home") return current;
     if (current?.kind === "document") return current.returnTo;
     return jobId ? { kind: "job", jobId, tab: "overview" } : { kind: "jobs-home" };
   }
@@ -556,6 +573,67 @@ function WorkspaceApp() {
     setToasts((current) => [...current.slice(-2), { id, message, undo }]);
     window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), undo ? 8000 : 5000);
   }
+
+  // When a run finishes: say what it found, then queue strong matches only if the user turned auto-draft on.
+  searchFinishedRef.current = (run) => {
+    if (!FEATURES.jobSearch) return;
+    void (async () => {
+      if (!run) { showToast("The job search stopped unexpectedly."); return; }
+      const current = await window.sensei.jobSearch.get().catch(() => null);
+      if (!current) return;
+      const picks = run.status === "done" ? autoDraftPicks(current.state, current.settings) : [];
+      let sent = 0;
+      for (const item of picks) { try { await queueJob({ kind: "found", id: item.id, auto: true }, false); sent += 1; } catch { break; } }
+      setSearchNew(current.state.items.filter((item) => item.status === "new").length - sent);
+      notify(run.status === "failed" ? "Job search didn't finish" : "Job search finished", run.status === "failed" ? run.error ?? "" : `${run.added} new match${run.added === 1 ? "" : "es"}${sent ? `; ${sent} sent for drafts` : ""}. Open Job Search to see them.`);
+    })();
+  };
+  // A scheduled search (app closed or in the background) writes its matches to disk and marks strong ones for drafts.
+  // The app checks on start, on focus, and every minute: it shows the new count and queues the marked drafts.
+  const pendingBusy = useRef(false);
+  async function pickUpScheduled() {
+    if (!FEATURES.jobSearch) return;
+    const current = await window.sensei.jobSearch.get().catch(() => null);
+    if (!current) return;
+    setSearchStatus((status) => status.running && !status.scheduled ? status : current.status);
+    setSearchNew(current.state.items.filter((item) => item.status === "new").length);
+    if (!current.state.pendingDrafts.length || pendingBusy.current) return;
+    pendingBusy.current = true;
+    try {
+      const done: string[] = [];
+      for (const id of current.state.pendingDrafts) {
+        const item = current.state.items.find((candidate) => candidate.id === id);
+        if (item?.status === "new") { try { await queueJob({ kind: "found", id, auto: true }, false); } catch { break; } }
+        done.push(id);
+      }
+      if (done.length) {
+        await window.sensei.jobSearch.clearPending(done);
+        showToast(`Sent ${done.length} strong match${done.length === 1 ? "" : "es"} from the scheduled search for drafts.`);
+      }
+    } finally { pendingBusy.current = false; }
+  }
+  useEffect(() => {
+    if (!FEATURES.jobSearch) return;
+    const onFocus = () => void pickUpScheduled();
+    window.addEventListener("focus", onFocus);
+    const timer = window.setInterval(() => void pickUpScheduled(), 60_000);
+    return () => { window.removeEventListener("focus", onFocus); window.clearInterval(timer); };
+  }, [workspace?.path]);
+  useEffect(() => {
+    if (!FEATURES.jobSearch) return;
+    void pickUpScheduled();
+    const offStatus = window.sensei.jobSearch.onStatus(setSearchStatus);
+    const offFinished = window.sensei.jobSearch.onFinished((run) => searchFinishedRef.current(run));
+    const offUpdated = window.sensei.jobSearch.onUpdated((state) => setSearchNew(state.items.filter((item) => item.status === "new").length));
+    const offRated = window.sensei.jobSearch.onRated((message) => notify("Light rating finished", message));
+    return () => { offStatus(); offFinished(); offUpdated(); offRated(); };
+  }, [workspace?.path]);
+
+  useEffect(() => {
+    const onAnnounce = (event: Event) => showToast(String((event as CustomEvent).detail ?? ""));
+    window.addEventListener("sensei-announce", onAnnounce);
+    return () => window.removeEventListener("sensei-announce", onAnnounce);
+  }, []);
 
   /** A desktop notification when the window is in the background; a toast when it is in front. */
   function notify(title: string, body: string) {
@@ -783,6 +861,7 @@ function WorkspaceApp() {
       <button className="wordmark" aria-label={`${EDITION.productName}: all jobs`} onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span><span className="wordmark-name">Sensei{EDITION.subtitle && <small className="wordmark-edition">{EDITION.subtitle}</small>}</span></button>
       <ul className="side-nav">
         <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
+        {FEATURES.jobSearch && <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" />Job Search{searchStatus.running ? <span className="side-due" title={searchProgressText(searchStatus)}>Searching…</span> : searchNew > 0 && <span className="side-count" title={`${searchNew} new match${searchNew === 1 ? "" : "es"}`}>{searchNew}</span>}</button></li>}
         {FEATURES.interviews && <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{interviewingJobs.length > 0 && <span className="side-count">{interviewingJobs.length}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>}
         <li><button aria-current={activePage === "setup-home" ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />Setup{readiness && <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>}</button></li>
         <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context{FEATURES.nudges && newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>
@@ -834,6 +913,7 @@ function WorkspaceApp() {
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
           <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
+          : FEATURES.jobSearch && currentLocation.kind === "search-home" ? <JobSearchView status={searchStatus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onOpenJob={openJob} onToast={showToast} />
           : FEATURES.interviews && currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
           : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome
@@ -861,9 +941,10 @@ function WorkspaceApp() {
   </main>;
 }
 
-function NavIcon({ name }: { name: "jobs" | "interviews" | "context" | "settings" | "sidebar" | "setup" }) {
+function NavIcon({ name }: { name: "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" }) {
   const paths: Record<typeof name, string> = {
     jobs: "M4 8h16v11H4zM9 8V5h6v3M4 13h16",
+    search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z M15.5 15.5L20 20",
     interviews: "M5 5h14v10H9l-4 4z M8.5 9.5h7 M8.5 12h4",
     context: "M5 4h10l4 4v12H5z M15 4v4h4 M8 12h8 M8 16h6",
     settings: "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1",
@@ -2215,7 +2296,15 @@ function MustHaveGroups({ mustHaves, gaps = [] }: { mustHaves: JobFolderSummary[
   </div>;
 }
 
+/** A result for a page the user may have left: shown in place while it's open, as an app toast once it's gone. */
+function useAnnounce() {
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  return (message: string) => { if (!mounted.current) window.dispatchEvent(new CustomEvent("sensei-announce", { detail: message })); };
+}
+
 function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: string | null; coverLetterPath: string | null }) {
+  const announce = useAnnounce();
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
   const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
@@ -2229,9 +2318,11 @@ function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: strin
       await window.sensei.files.exportMarkdownPdf(coverLetterPath, textSize);
       setState("done");
       setMessage("Resume and cover letter PDFs saved");
+      announce(`Resume and cover letter PDFs saved (${resumePath.split("/")[1] ?? "job"}).`);
     } catch (caught) {
       setState("error");
       setMessage(messageOf(caught, "PDF creation failed."));
+      announce(`PDF creation failed: ${messageOf(caught, "unknown error")}`);
     }
   }
   return <span className="job-pdf-export"><PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} /><button className="export-button" disabled={missing || state === "working"} title={missing ? "Both a resume Markdown file and cover_letter.md are required" : "Create PDFs for this job's resume and cover letter"} onClick={() => void exportApplicationPdfs()}>{state === "working" ? "Creating PDFs…" : "Create PDFs"}</button>{message && <small className={`export-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</small>}</span>;
@@ -2880,6 +2971,7 @@ function PdfTextSizeSelect({ value, onChange, disabled }: { value: PdfTextSize; 
 }
 
 function MarkdownExportButton({ relativePath, onExported }: { relativePath: string; onExported: () => void }) {
+  const announce = useAnnounce();
   const [state, setState] = useState<"idle" | "working" | "done" | "warning" | "error">("idle");
   const [message, setMessage] = useState("");
   const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
@@ -2890,10 +2982,12 @@ function MarkdownExportButton({ relativePath, onExported }: { relativePath: stri
       const pageUse = result.pageFillRatio === null ? "" : `, ${Math.round(result.pageFillRatio * 100)}% page use`;
       setState(result.validationStatus === "warning" ? "warning" : "done");
       setMessage(`Saved ${result.relativePath} (${result.pageCount} page${result.pageCount === 1 ? "" : "s"}${pageUse})`);
+      announce(`PDF saved: ${result.relativePath}${result.validationStatus === "warning" ? " (review: 2 pages)" : ""}.`);
       onExported();
     } catch (caught) {
       setState("error");
       setMessage(messageOf(caught, "PDF export failed."));
+      announce(`PDF export failed: ${messageOf(caught, "unknown error")}`);
     }
   }
   return <span className="markdown-actions"><PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} /><button className="export-button" disabled={state === "working"} onClick={() => void exportPdf()}>{state === "working" ? "Creating PDF…" : "Approve & Export PDF"}</button>{message && <span className={`export-message ${state === "error" ? "is-error" : ""}`} title={message}>{state === "done" ? "PDF saved" : state === "warning" ? "PDF saved - review 2 pages" : message}</span>}</span>;
@@ -2975,19 +3069,11 @@ const RUN_STATE_LABEL: Record<RunStatus["state"], string> = { running: "Running"
 function RunStatusBar({ onOpen }: { onOpen: (run: RunStatus) => void }) {
   const [run, setRun] = useState<RunStatus | null>(null);
   const [now, setNow] = useState(Date.now());
-  const askedQuestions = useRef(new Set<string>());
   useEffect(() => {
     let cancelled = false;
     const load = () => void window.sensei.runs.latest().then((next) => {
       if (cancelled) return;
       setRun(next);
-      // An application run starts the background answers for its posting's scenario questions as soon as the run's
-      // snapshot exists (the evidence the answers need), so they are written alongside the resume and letter.
-      // Once per job: main skips jobs that already have answers, so restarting the app never repeats a run.
-      if (next?.kind === "application" && next.jobId && (next.state === "running" || Date.now() - Date.parse(next.at) < 15 * 60_000)) {
-        const key = next.jobId;
-        if (FEATURES.applicationQuestions && !askedQuestions.current.has(key)) { askedQuestions.current.add(key); void window.sensei.questions.auto(next.jobId).catch(() => undefined); }
-      }
     }).catch(() => undefined);
     load();
     const timer = window.setInterval(() => { load(); setNow(Date.now()); }, 4000);

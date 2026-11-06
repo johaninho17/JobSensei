@@ -856,3 +856,8 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
 .onboarding-better small { display: block; color: var(--muted); }
 .onboarding-note { font-size: var(--fs-13); }
 .onboarding-back { justify-self: start; }
+
+.settings-inline-fields { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); font-size: var(--fs-13); }
+.settings-inline-fields label { display: grid; gap: 4px; color: var(--muted); }
+.settings-inline-fields input { width: 120px; padding: var(--space-1) var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-s); color: var(--ink); background: var(--canvas); font: inherit; }
+.settings-group > .segmented { display: inline-flex; width: auto; }

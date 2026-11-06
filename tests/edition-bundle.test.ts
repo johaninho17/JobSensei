@@ -8,7 +8,7 @@ const assets = join(__dirname, "..", "dist-renderer", "assets");
 const recruiterBuild = process.env.JOBSENSEI_EDITION === "recruiter" && existsSync(assets);
 
 // Text that only the left-out screens contain (interview view, live window, questions, Learnings, Your content).
-const LEFT_OUT = ["No interview rounds yet", "Answer anyway", "How far applications got", "Update from", "Delivery fixes", "Story bank", "Interview prep uses these exactly"];
+const LEFT_OUT = ["No interview rounds yet", "Answer anyway", "How far applications got", "Update from", "Delivery fixes", "Story bank", "Interview prep uses these exactly", "Check watched companies", "Job search finished"];
 
 describe.skipIf(!recruiterBuild)("recruiter renderer bundle", () => {
   it("contains none of the left-out screens", () => {

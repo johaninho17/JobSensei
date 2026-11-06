@@ -103,3 +103,13 @@ describe("pasted jobs in the queue", () => {
     expect(promptForItem(noted)).toBe(`Evaluate the job description I pasted (paste ID ${noted.id}) and draft the application. Note: focus on the API work`);
   });
 });
+
+describe("Agy first-run screens", () => {
+  it("treats the theme picker and the terms consent as waiting for the user, even below a status line", async () => {
+    const { classifyAgyScreen } = await import("../src/shared/job-queue");
+    const status = "Gemini 4 Argon · medium";
+    expect(classifyAgyScreen(`${status}\n  ↑/↓ Navigate · enter Confirm`)).toBe("blocked");
+    expect(classifyAgyScreen(`${status}\nTerms of Service & Data Use\n> [x] Yes, I agree to help improve Antigravity CLI`)).toBe("blocked");
+    expect(classifyAgyScreen(`Terms of Service & Data Use\n[Done]\n\n${status}`)).toBe("ready");
+  });
+});

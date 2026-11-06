@@ -40,7 +40,7 @@ Audit date: 2026-10-23, updated after Phase 4. ⚠ marks copies still known to c
 | URL fetch | `npm run jd:fetch` (`electron/jd-fetch.ts`, JSON-LD first) + pipeline skill step 1 | `antigravity-permissions.md` allow list |
 | Client names out of public files | Profile `truth.confidentialNames` → brief prohibited list, snapshot instruction, validator `CONFIDENTIAL_NAME_PUBLIC` | `AGENTS.md` pointer |
 | What Agy loads at run time | `syncWorkspaceAgentFiles` in `electron/workspace-init.ts` (at launch and before each terminal start; backs up differing copies) | `tests/workspace-agent-sync.test.ts` |
-| Cover-letter word limits | `buildCoverLetterBrief` (200–280, hard 330; ≤3 sentences per body paragraph) | `MIN/TARGET_MAX/MAX_COVER_LETTER_WORDS` in `application-artifacts.ts` (kept in sync) |
+| Cover-letter length and focus | The candidate's settings `preferences.coverLetter.length` (default 200–280, hard limit max + 50) and `.focus` (`career-story` default, or `examples`), turned into `coverLetterBrief` by `buildCoverLetterBrief` | Checks read the brief: hard limit in `validateApplicationArtifact` (`letterHardWordMax`), sentences per paragraph (4 story-led, 3 examples) and `COVER_LETTER_SCENARIO_HEAVY` (`scenarioParagraphs`) in `application-validation.ts`; the constants in `application-artifacts.ts` are defaults only |
 | Letter signature | `coverLetterSignatureName` in `canonical-resume.ts` (profile full name) | — |
 
 | Unchanged bullets in the bundle | `{ "baseline": N }` refs + omitted employers, expanded by `expandBundleBaselines` (`application-finalize.ts`) | Pipeline skill step 5 + contract example; `tests/pipeline-speed.test.ts` |

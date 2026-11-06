@@ -18,6 +18,8 @@ import {
   type ContextManifest,
   type EvidenceSnapshot,
   type EvidenceSnapshotRow,
+  COVER_LETTER_HARD_MARGIN,
+  DEFAULT_COVER_LETTER_LENGTH,
 } from "../src/shared/schemas";
 import { profileBaseResume } from "./resume-footprint";
 import { loadCanonicalResumeBaseline, summaryIsEditable } from "./canonical-resume";
@@ -465,25 +467,41 @@ export function buildCoverLetterBrief(
   // This brief is the single owner of cover-letter structure. Skills point here; do not
   // restate structure elsewhere. The JD is deliberately NOT summarized into the brief:
   // feeding JD responsibilities made letters lecture employers about their own business.
+  // The candidate sets the length and what carries the letter (Settings → Cover letter); defaults 200–280, career story.
+  const length = profile?.preferences?.coverLetter?.length ?? DEFAULT_COVER_LETTER_LENGTH;
+  const focus = profile?.preferences?.coverLetter?.focus ?? "career-story";
+  const opening = `Paragraph 1 (opening, 2-3 sentences): state plainly that you are applying for ${roleLabel} at ${companyLabel}, say who you are professionally, and give one genuine reason this role fits your own direction. Every sentence is about the candidate; at most one short clause about the company.`;
+  const close = "Close (1-2 sentences): thank the reader and invite a conversation. No separate 'why I fit' paragraph and no list of strengths.";
+  const structure = focus === "examples"
+    ? [
+      opening,
+      "Body (1-2 paragraphs, at most 3 sentences each): one or two concrete, evidence-backed examples told properly, not a list of several. Show how the candidate works: owning problems, handling friction, learning fast. Add detail the resume does not give; never restate resume bullets or claim an outcome the evidence doesn't show.",
+      close,
+    ]
+    : [
+      opening,
+      "Paragraph 2 (career story, 3-4 sentences): the heart of the letter. Where the candidate started, the move they made and why (use their own career story and turning points), and where they are heading. A person's path, told plainly; not a list of jobs.",
+      "Paragraph 3 (how they work now, 2-3 sentences): their current role in broad terms (what they are responsible for and who they work with) and how they operate when things get hard (their working style), with one concrete detail woven in: a kind of customer, a tool, or a result the evidence states. Never a narrated scene: no paragraph that tells a story such as 'When a partner was unsure…' or 'At <employer>, I ran discovery with…'.",
+      close,
+    ];
   return {
-    targetWordMin: 200,
-    targetWordMax: 280,
-    hardWordMax: 330,
+    targetWordMin: length.min,
+    targetWordMax: length.max,
+    hardWordMax: length.max + COVER_LETTER_HARD_MARGIN,
     company,
     role,
-    structure: [
-      `Paragraph 1 (opening, 2-3 sentences): state plainly that you are applying for ${roleLabel} at ${companyLabel}, say who you are professionally, and give one genuine reason this role fits your own direction. Every sentence is about the candidate; at most one short clause about the company.`,
-      "Body (1-2 paragraphs, at most 3 sentences each): one or two concrete, evidence-backed examples told properly, not a list of several. Show how the candidate works: owning problems, handling friction, learning fast. Add detail the resume does not give; never restate resume bullets or claim an outcome the evidence doesn't show.",
-      "Close (1-2 sentences): thank the reader and invite a conversation. No separate 'why I fit' paragraph and no list of strengths.",
-    ],
+    focus,
+    structure,
     introContract: [
-      "The letter is about the candidate: their career direction, why they made their key moves, and how they operate. The job description only decides which real examples to pick.",
+      focus === "examples"
+        ? "The letter is about the candidate: their career direction, why they made their key moves, and how they operate. The job description only decides which real examples to pick."
+        : "The letter is about the candidate as a person: their career story, why they made their key moves, and how they work. The job description only decides which parts of that story to bring forward.",
       `Never explain ${companyLabel}'s business, market, industry, or the role's responsibilities back to the reader.`,
       "Write in the candidate's voice from styleRules: warm, plain-spoken, confident without hype.",
     ],
     requiredElements: [
       "First-person throughout; most sentences start from I/my or the candidate's work.",
-      "Concrete examples come from evidenceRows; framing may be confident but every claim must be defensible in an interview.",
+      "Concrete details come from evidenceRows and the candidate's own story lines; framing may be confident but every claim must be defensible in an interview.",
       "Never name clients or partners; describe them by industry instead (e.g. 'a global professional-services firm', 'a biotech research company'). Naming the industry is fine.",
       "No mini-resume tool inventories and no lists of matching requirements.",
       "Use common spoken words; avoid AI filler (delve, leverage, tapestry, realm, pivotal, rule-of-three corporate lists).",
@@ -515,7 +533,9 @@ export function profileInstructionLines(profile?: CandidateProfile | null): stri
   const boundaries = (profile?.truth.boundaries ?? []).map((line) => line.trim()).filter(Boolean);
   const confidentialNames = profile?.truth.confidentialNames ?? [];
   const relaxed = profile?.preferences.voice.antiSlopStrictness === "standard";
+  const letter = profile?.preferences?.coverLetter;
   return [
+    ...(letter?.length ? [`Cover letters: ${letter.length.min}–${letter.length.max} words, ${letter.focus === "examples" ? "led by one or two real examples" : "led by the career story (where I started, why I moved, how I work now)"}; coverLetterBrief has the full structure.`] : []),
     ...(boundaries.length ? [`The candidate's own truth boundaries (never cross them): ${boundaries.join(" ")}`] : []),
     confidentialNames.length
       ? `Never name these clients or partners in the resume or cover letter; describe them by industry instead (naming the industry is fine): ${confidentialNames.join(", ")}.`

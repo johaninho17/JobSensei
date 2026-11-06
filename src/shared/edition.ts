@@ -17,13 +17,15 @@ export type Features = {
   interviewProfile: boolean;
   /** Follow-up dates, stale-application nudges, "N new career files". */
   nudges: boolean;
+  /** Job Search: finding postings on boards, watched companies, and scheduled searches. */
+  jobSearch: boolean;
   /** Several candidates in one folder (recruiter plan R1). */
   candidates: boolean;
 };
 
 const FEATURES: Record<Edition, Features> = {
-  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, candidates: false },
-  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, candidates: true },
+  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false },
+  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true },
 };
 
 export type EditionInfo = {
@@ -85,6 +87,11 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   "application-questions": "applicationQuestions",
   "content-ipc": "contentRefresh",
   "content-refresh": "contentRefresh",
+  "search-ipc": "jobSearch",
+  "job-search": "jobSearch",
+  "job-search-runner": "jobSearch",
+  "job-boards": "jobSearch",
+  "search-schedule": "jobSearch",
 };
 
 export function includedAgentEntry(features: Features, entry: string): boolean {
