@@ -18,7 +18,7 @@ Do not create `resume_change_plan.md`, `resume_audit.json`, `resume_audit.md`, R
 Requirements:
 
 - Scope (same as the pipeline): keep earlier, less relevant roles word for word from `baselineBullets`; at the current employer, rework the 3–4 bullets that matter most for the JD and keep the rest as anchors; curate the skills lines. Rewriting the whole resume is not the goal; clearly fitting the target job category is.
-- Unchanged base-resume bullets are the candidate's own approved claims and keep the `evidenceIds` listed in `baselineBullets` (often none). Every rewritten or new claim must trace to evidence rows. Never borrow an unrelated evidence ID.
+- Unchanged base-resume bullets are the candidate's own approved claims and keep the `evidenceIds` listed in `baselineBullets` (often none). Every rewritten or new claim must trace to evidence rows; the base resume's own lines count as evidence (`base:` rows; the snapshot instructions own this rule). Never borrow an unrelated evidence ID.
 - Frame rewritten bullets with the base resume's confidence: describe the kind of work strongly, without numbers that imply volume, and never add an event, metric, tool, or ownership that did not happen.
 - Never name clients or partners; describe them by industry instead (naming the industry is fine).
 - Follow `.sensei/application_context.json.resumePlan` as the run's deterministic allocation. Length, bullet counts, and keeping the base resume's skills are owned by the snapshot `instructions` ("Length and skills follow the base resume").

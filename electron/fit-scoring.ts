@@ -1,3 +1,4 @@
+import { isBaseResumeRow } from "./candidate-evidence";
 import { splitApplicationForm, stripInvisible } from "./posting-clean";
 import { FIT_CLASSIFICATION_CREDIT, FIT_GATE } from "../src/shared/fit-credit";
 export const FIT_CATEGORIES = ["core", "technical", "scope", "outcomes", "domain", "learning"] as const;
@@ -343,15 +344,18 @@ function classificationCeiling(row: FitRequirement, snapshot: EvidenceSnapshot):
   if (!ids.length || rows.length !== ids.length || rows.some((candidate) => candidate.evidenceId.startsWith("job:"))) {
     return { classification: "gap", evidenceIds: ids, originalEvidenceIds: originalIds, evidenceChanged, reason: "No unique in-scope candidate-evidence mapping exists in the pinned snapshot." };
   }
+  if (ids.every(isBaseResumeRow)) {
+    return { classification: "gap", evidenceIds: ids, originalEvidenceIds: originalIds, evidenceChanged, reason: "The base resume's own lines earn no fit credit; cite the context evidence that shows this." };
+  }
   if (snapshot.applicationRouting && ids.some((id) => !snapshot.applicationRouting!.selectedEvidenceIds.includes(id))) {
     return { classification: "gap", evidenceIds: ids, originalEvidenceIds: originalIds, evidenceChanged, reason: "The cited evidence is outside the job-scoped application context." };
   }
-  const eligible = rows.filter((candidate) => candidate.eligibility === "eligible");
+  const eligible = rows.filter((candidate) => candidate.eligibility === "eligible" && !isBaseResumeRow(candidate.evidenceId));
   const needsCorroboration = rows.some((candidate) => candidate.eligibility === "corroboration-required");
   const selectedStructuredRows = rows.filter((candidate) => candidate.sourcePath.startsWith("context/structured/"));
   const families = new Set(rows.map((candidate) => candidate.sourceFamily ?? candidate.sourcePath));
   const requirementTokens = fitTokens(row.requirement);
-  const evidenceTokens = fitTokens(rows.map((candidate) => `${candidate.claim} ${candidate.scope} ${candidate.project}`).join(" "));
+  const evidenceTokens = fitTokens(rows.filter((candidate) => !isBaseResumeRow(candidate.evidenceId)).map((candidate) => `${candidate.claim} ${candidate.scope} ${candidate.project}`).join(" "));
   const overlap = [...requirementTokens].filter((token) => evidenceTokens.has(token)).length;
   const coverage = overlap / Math.max(1, requirementTokens.size);
   if (!eligible.length) {

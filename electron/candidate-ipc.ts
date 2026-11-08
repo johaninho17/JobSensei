@@ -2,7 +2,7 @@
 import { ipcMain } from "electron";
 import { artifactPrefixFor, candidateStatusSchema, type CandidatesState } from "../src/shared/candidates";
 import { createCandidateProfile } from "./candidate-profile";
-import { addCandidate, candidatePath, readRecruiterSettings, readRoster, renameCandidate, setActiveCandidate, setCandidateStatus } from "./candidates";
+import { addCandidate, candidatePath, readRecruiterNotes, saveRecruiterNotes, readRecruiterSettings, readRoster, renameCandidate, setActiveCandidate, setCandidateStatus } from "./candidates";
 import { SettingsStore } from "./settings";
 import { join } from "node:path";
 
@@ -52,6 +52,17 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
     await createCandidateProfile(folder, { fullName: displayName, artifactPrefix: artifactPrefixFor(displayName) }, await candidateSettingsStore(folder).get());
     await switchTo(entry.id);
     return entry;
+  });
+  const activeFolder = async () => {
+    const { activeId } = await state();
+    if (!activeId) throw new Error("Open a candidate first.");
+    return candidatePath(ctx.root(), activeId);
+  };
+  ipcMain.handle("candidates:notes", async () => readRecruiterNotes(await activeFolder()));
+  /** Saves the open candidate's recruiter notes; returns the context path so the renderer checks it for Agy. */
+  ipcMain.handle("candidates:save-notes", async (_event, notes: unknown) => {
+    if (typeof notes !== "string") throw new Error("Notes must be text.");
+    return saveRecruiterNotes(await activeFolder(), notes);
   });
   ipcMain.handle("candidates:switch", async (_event, id: unknown) => switchTo(String(id ?? "")));
   ipcMain.handle("candidates:rename", async (_event, id: unknown, name: unknown) => renameCandidate(ctx.root(), String(id ?? ""), text(name, "candidate's name")));

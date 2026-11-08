@@ -131,3 +131,31 @@ export function CandidateSwitcher({ state }: { state: CandidatesState }) {
     </div>
   </details>;
 }
+
+/** Recruiter plan R4: what the recruiter learned asking the candidate questions. Saved as a checked context file. */
+export function RecruiterNotes({ name, onSaved }: { name: string | null; onSaved: (path: string) => void }) {
+  const [notes, setNotes] = useState<string | null>(null);
+  const [saved, setSaved] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { void window.sensei.candidates.notes().then((text) => { setNotes(text); setSaved(text); }, (caught) => setError(message(caught))); }, []);
+  async function save() {
+    if (notes === null) return;
+    setBusy(true);
+    setError(null);
+    try { const path = await window.sensei.candidates.saveNotes(notes); setSaved(notes); onSaved(path); } catch (caught) { setError(message(caught)); } finally { setBusy(false); }
+  }
+  const who = name ?? "the candidate";
+  return <section className="context-block recruiter-notes" aria-labelledby="recruiter-notes-title">
+    <h2 id="recruiter-notes-title">Recruiter notes</h2>
+    <p>What you learned asking {who} questions: tools they use, work they did, results they told you about. Agy uses every line as evidence for {who}'s resume, as written, and never adds to it. One fact per line works best; name the employer when it belongs to one job.</p>
+    {notes === null && !error ? <p className="muted">Loading…</p> : <>
+      <textarea aria-label={`Recruiter notes for ${who}`} value={notes ?? ""} onChange={(event) => setNotes(event.target.value)} rows={14} maxLength={50_000} placeholder={"- At Northstar Labs, ran onboarding calls for new customer accounts.\n- Uses Excel and SQL for weekly reporting."} />
+      <div className="onboarding-actions">
+        <button className="btn-primary" onClick={() => void save()} disabled={busy || notes === saved}>{busy ? "Saving…" : "Save notes"}</button>
+        {notes === saved && saved.trim() !== "" && <span className="muted">Saved and checked for Agy</span>}
+      </div>
+    </>}
+    {error && <p className="inline-error" role="alert">{error}</p>}
+  </section>;
+}

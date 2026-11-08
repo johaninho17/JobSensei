@@ -1258,6 +1258,10 @@ export interface SenseiApi {
     switchTo(id: string): Promise<void>;
     rename(id: string, name: string): Promise<import("./candidates").CandidateEntry>;
     setStatus(id: string, status: import("./candidates").CandidateStatus): Promise<import("./candidates").CandidateEntry>;
+    /** The open candidate's recruiter notes (recruiter plan R4). */
+    notes(): Promise<string>;
+    /** Saves them as a context file and returns its path, to be checked for Agy. */
+    saveNotes(notes: string): Promise<string>;
   };
   setup: {
     readiness(): Promise<Readiness>;

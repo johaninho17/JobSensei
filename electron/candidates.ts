@@ -1,14 +1,14 @@
 // Recruiter Edition (recruiter plan R1): the candidate roster and the active candidate. Only the app writes these
 // files; each candidate's folder is a normal workspace, so the pipeline runs unchanged inside it.
 import { randomBytes } from "node:crypto";
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import {
   CANDIDATES_DIR, RECRUITER_DIR, RECRUITER_SETTINGS_PATH, ROSTER_PATH, candidateFolder, candidateIdFor,
   recruiterSettingsSchema, rosterSchema, type CandidateEntry, type CandidateStatus, type RecruiterSettings, type Roster,
 } from "../src/shared/candidates";
 import { featuresFor } from "../src/shared/edition";
-import { readJson, writeJsonAtomic } from "./persistence";
+import { readJson, writeJsonAtomic, writeTextAtomic } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
 import { initializeWorkspace } from "./workspace-init";
 
@@ -114,4 +114,22 @@ export async function activeCandidatePath(root: string): Promise<string | null> 
   const entry = (await readRoster(root)).candidates.find((candidate) => candidate.id === settings.activeCandidateId);
   if (!entry || entry.status === "archived") return null;
   return candidatePath(root, entry.id);
+}
+
+/** Recruiter plan R4: what the recruiter learned asking the candidate questions, saved as a checked context file. */
+export const RECRUITER_NOTES_PATH = "context/structured/recruiter-notes.md";
+const NOTES_HEADER = "# Recruiter notes\n\n- source_role: recruiter-notes\n\n";
+const MAX_NOTES = 50_000;
+
+export async function readRecruiterNotes(candidateFolder: string): Promise<string> {
+  const raw = await readFile(join(candidateFolder, ...RECRUITER_NOTES_PATH.split("/")), "utf8").catch(() => "");
+  return raw.startsWith(NOTES_HEADER) ? raw.slice(NOTES_HEADER.length) : raw;
+}
+
+export async function saveRecruiterNotes(candidateFolder: string, notes: string): Promise<string> {
+  if (notes.length > MAX_NOTES) throw new Error("Notes are limited to 50,000 characters.");
+  const path = join(candidateFolder, ...RECRUITER_NOTES_PATH.split("/"));
+  await mkdir(dirname(path), { recursive: true });
+  await writeTextAtomic(path, `${NOTES_HEADER}${notes.replaceAll("\r\n", "\n").trim()}\n`);
+  return RECRUITER_NOTES_PATH;
 }

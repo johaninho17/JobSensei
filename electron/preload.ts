@@ -26,6 +26,8 @@ const api: SenseiApi = {
     switchTo: (id) => ipcRenderer.invoke("candidates:switch", id),
     rename: (id, name) => ipcRenderer.invoke("candidates:rename", id, name),
     setStatus: (id, status) => ipcRenderer.invoke("candidates:set-status", id, status),
+    notes: () => ipcRenderer.invoke("candidates:notes"),
+    saveNotes: (notes) => ipcRenderer.invoke("candidates:save-notes", notes),
   },
   jobSearch: {
     get: () => ipcRenderer.invoke("search:get"),

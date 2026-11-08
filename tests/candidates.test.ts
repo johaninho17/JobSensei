@@ -124,3 +124,15 @@ describe("Agy home per candidate (recruiter plan R2)", () => {
     expect(await shareSignIn(fresh)).toBe(false); // already signed in: left alone
   });
 });
+
+describe("recruiter notes (recruiter plan R4)", () => {
+  it("saves notes as a context file Agy reads, and reads back only what the recruiter wrote", async () => {
+    const { readRecruiterNotes, saveRecruiterNotes, RECRUITER_NOTES_PATH } = await import("../electron/candidates");
+    const dir = await root();
+    expect(await readRecruiterNotes(dir)).toBe("");
+    expect(await saveRecruiterNotes(dir, "- Uses Excel for weekly reports.\r\n")).toBe(RECRUITER_NOTES_PATH);
+    expect(await readFile(join(dir, "context", "structured", "recruiter-notes.md"), "utf8")).toBe("# Recruiter notes\n\n- source_role: recruiter-notes\n\n- Uses Excel for weekly reports.\n");
+    expect(await readRecruiterNotes(dir)).toBe("- Uses Excel for weekly reports.\n");
+    await expect(saveRecruiterNotes(dir, "x".repeat(50_001))).rejects.toThrow("50,000");
+  });
+});

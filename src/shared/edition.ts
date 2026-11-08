@@ -21,11 +21,13 @@ export type Features = {
   jobSearch: boolean;
   /** Several candidates in one folder (recruiter plan R1). */
   candidates: boolean;
+  /** Every checked candidate file is eligible evidence on its own, including files without evidence tables (recruiter plan R4). */
+  candidateFilesEligible: boolean;
 };
 
 const FEATURES: Record<Edition, Features> = {
-  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false },
-  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true },
+  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false },
+  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true },
 };
 
 export type EditionInfo = {

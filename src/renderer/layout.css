@@ -775,3 +775,9 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .candidate-archived summary { color: var(--muted); font-size: var(--fs-13); cursor: pointer; }
 .candidate-archived ul { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .candidate-archived li { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--fs-13); }
+
+/* Recruiter notes (recruiter plan R4) */
+.recruiter-notes p { max-width: 70ch; color: var(--muted); }
+.recruiter-notes textarea { width: 100%; min-height: 240px; padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-s); color: var(--ink); background: var(--canvas); font: 400 var(--fs-15)/1.5 var(--font-ui); resize: vertical; }
+.recruiter-notes textarea:focus-visible { outline: none; box-shadow: var(--focus); }
+.recruiter-notes .onboarding-actions { margin-top: var(--space-2); align-items: center; }

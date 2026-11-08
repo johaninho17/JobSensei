@@ -25,7 +25,7 @@ import { SearchPalette, type PaletteAction } from "./SearchPalette";
 import { SettingsModal } from "./SettingsModal";
 import { InterviewView, LiveWindow } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
-import { CandidateGate, CandidateSwitcher } from "./Candidates";
+import { CandidateGate, CandidateSwitcher, RecruiterNotes } from "./Candidates";
 import type { CandidatesState } from "../shared/candidates";
 import { JobSearchView } from "./JobSearchView";
 import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
@@ -696,6 +696,15 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   }
 
   /** Files added from the app are copied into context, checked for Agy, and not flagged as "new" (the user just chose them). */
+  /** Ticks one context file for Agy (recruiter notes are saved as one). */
+  async function checkContextPath(path: string) {
+    const nextCareerPaths = [...new Set([...selectedCareerPaths, path])];
+    setSelectedCareerPaths(nextCareerPaths);
+    await refresh();
+    await updateContext(nextCareerPaths, selectedJobFiles);
+    void loadReadiness();
+  }
+
   async function addContextFiles(kind: "structured" | "broad", paths?: string[]) {
     setError(null);
     try {
@@ -923,6 +932,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
           : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome
             onOpen={(path) => void selectFile(path)}
+            notes={FEATURES.candidates ? <RecruiterNotes name={candidateProfile?.identity.fullName ?? null} onSaved={(path) => void checkContextPath(path)} /> : null}
             notice={FEATURES.nudges && newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">
               <h2 id="new-files-title">New since you last looked</h2>
               <p>Check each one, then tick it below if Agy should use it as evidence.</p>
@@ -1847,7 +1857,7 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
   </div>;
 }
 
-type ContextView = "sources" | "resumes" | "jobs" | "stories" | "voice";
+type ContextView = "sources" | "notes" | "resumes" | "jobs" | "stories" | "voice";
 
 /** Career context: subtabs for sources, resumes, job files, and the profile's story bank and interview voice. */
 /**
@@ -1880,7 +1890,7 @@ function ContextAdder({ onAdd, onReveal }: { onAdd: (kind: "structured" | "broad
   </div>;
 }
 
-function ContextHome({ notice, sources, resumes, jobFiles, onOpen }: { notice: React.ReactNode; sources: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
+function ContextHome({ notice, sources, notes, resumes, jobFiles, onOpen }: { notice: React.ReactNode; sources: React.ReactNode; notes: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
   const [view, setView] = useState<ContextView>("sources");
   return <section className="jobs-home context-home">
     <header className="page-head"><div><h1>Career context</h1><p>The sources Agy treats as facts about you. Source files are only read, never changed.</p></div></header>
@@ -1890,10 +1900,11 @@ function ContextHome({ notice, sources, resumes, jobFiles, onOpen }: { notice: R
       label="Career context sections"
       value={view}
       onChange={setView}
-      tabs={[{ id: "sources", label: "Sources" }, { id: "resumes", label: "Resumes" }, { id: "jobs", label: "Job files" }, ...(FEATURES.interviewProfile ? [{ id: "stories" as const, label: "Story bank" }, { id: "voice" as const, label: "Interview voice" }] : [])]}
+      tabs={[{ id: "sources", label: "Sources" }, ...(notes ? [{ id: "notes" as const, label: "Recruiter notes" }] : []), { id: "resumes", label: "Resumes" }, { id: "jobs", label: "Job files" }, ...(FEATURES.interviewProfile ? [{ id: "stories" as const, label: "Story bank" }, { id: "voice" as const, label: "Interview voice" }] : [])]}
     />
     <SubTabPanel idPrefix="ctx" value={view}>
       {view === "sources" && sources}
+      {view === "notes" && notes}
       {view === "resumes" && resumes}
       {view === "jobs" && jobFiles}
       {FEATURES.interviewProfile && view === "stories" && <DocInline path="profile/story_bank.md" label="story bank (it is made on your first interview prep)" />}
