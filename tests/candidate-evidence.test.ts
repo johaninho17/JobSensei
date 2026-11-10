@@ -103,7 +103,15 @@ describe("the base resume is evidence (both editions, ledger T8)", () => {
     expect(failures.map((failure) => failure.message).join(" ")).toMatch(/Juniper Analytics/);
   });
 
-  it("earns no fit credit (ledger T5)", async () => {
+  it("earns fit credit in the Recruiter Edition, where the resume is often all a candidate has", async () => {
+    process.env.JOBSENSEI_EDITION = "recruiter";
+    const snapshot = await createEvidenceSnapshot(await workspace({ structured: false }), "sample-role");
+    const table = "### Requirement Scoring\n| Requirement | Category | Weight | Material | Classification | Evidence |\n| --- | --- | ---: | --- | --- | --- |\n| REST API integration | core | 100% | yes | direct | base:r1:b1 |";
+    const { markdown } = normalizeEvidenceClassifications(table, snapshot);
+    expect(markdown).not.toMatch(/\| gap \|/);
+  });
+
+  it("earns no fit credit in the solo edition (ledger T5)", async () => {
     delete process.env.JOBSENSEI_EDITION;
     const snapshot = await createEvidenceSnapshot(await workspace({ structured: false }), "sample-role");
     const table = "### Requirement Scoring\n| Requirement | Category | Weight | Material | Classification | Evidence |\n| --- | --- | ---: | --- | --- | --- |\n| REST API integration | core | 100% | yes | direct | base:r1:b1 |";

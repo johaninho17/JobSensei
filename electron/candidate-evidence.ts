@@ -1,15 +1,22 @@
 // Evidence rows that come from the candidate's own files rather than from evidence tables (ledger T8, recruiter plan R4).
 // - The base resume's lines are rows in both editions (`base:` IDs), so a reworded base line can cite the line it rewords.
-//   They earn no fit credit (ledger T5; fit-scoring.ts reads isBaseResumeRow).
+//   They earn fit credit only in the Recruiter Edition, where the resume is often all a candidate has; the solo
+//   edition keeps ledger T5 (no fit credit). noFitCredit() owns this rule.
 // - With features.candidateFilesEligible (Recruiter Edition), checked files without evidence tables (other resumes,
 //   LinkedIn, notes, recruiter notes) become line rows (`file:` IDs) that may back a claim alone.
 import type { CanonicalResumeBaseline, EvidenceSnapshotRow } from "../src/shared/schemas";
+import { featuresFor } from "../src/shared/edition";
+import { currentEdition } from "./edition";
 
 export const BASE_ROW_PREFIX = "base:";
 export const FILE_ROW_PREFIX = "file:";
 export const BASE_RESUME_FAMILY = "base-resume";
 
 export const isBaseResumeRow = (evidenceId: string) => evidenceId.startsWith(BASE_ROW_PREFIX);
+
+/** Base-resume lines earn fit credit only when every candidate file counts as evidence (Recruiter Edition). */
+export const baseEarnsFitCredit = () => featuresFor(currentEdition()).candidateFilesEligible;
+export const noFitCredit = (evidenceId: string) => isBaseResumeRow(evidenceId) && !baseEarnsFitCredit();
 
 function recency(value: string): Pick<EvidenceSnapshotRow, "startYear" | "endYear" | "isOngoing" | "recencyBand"> {
   const years = [...value.matchAll(/\b(?:19|20)\d{2}\b/g)].map((match) => Number(match[0]));

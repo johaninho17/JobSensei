@@ -34,7 +34,7 @@ import { deriveVoicePresets } from "../src/shared/voice-presets";
 import { readBulletBank } from "./bullet-bank";
 import { FETCHED_FORM_PATH, readFetchedJobDescription } from "./jd-fetch";
 import { APPLICATION_FORM_FILE } from "./posting-clean";
-import { BASE_ROW_PREFIX, FILE_ROW_PREFIX, baseResumeRows, candidateFileRows } from "./candidate-evidence";
+import { BASE_ROW_PREFIX, FILE_ROW_PREFIX, baseEarnsFitCredit, baseResumeRows, candidateFileRows, noFitCredit } from "./candidate-evidence";
 import { currentEdition } from "./edition";
 import { featuresFor } from "../src/shared/edition";
 
@@ -828,8 +828,8 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
   })).sort((a, b) => a.evidenceId.localeCompare(b.evidenceId));
   // The best eligible row for each of the posting's requirements is always routed, so the run can cite
   // the closest real evidence even for a gap.
-  // Base-resume rows earn no fit credit (ledger T5), so they never stand in for a requirement.
-  const citableRows = normalizedRows.filter((row) => row.eligibility === "eligible" && !row.evidenceId.startsWith("job:") && !row.evidenceId.startsWith(BASE_ROW_PREFIX));
+  // Base-resume rows stand in for a requirement only where they earn fit credit (noFitCredit owns the rule).
+  const citableRows = normalizedRows.filter((row) => row.eligibility === "eligible" && !row.evidenceId.startsWith("job:") && !noFitCredit(row.evidenceId));
   const mustHaveEvidenceIds = postingRecordFor(jobDescriptionText).requirements
     .map((requirement) => bestEvidenceForRequirement(requirement.text, citableRows))
     .filter((id): id is string => Boolean(id));
@@ -1026,7 +1026,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
         "Resume scope: keep earlier, less relevant roles verbatim from resumeTemplate.employers[i].baselineBullets. At the current employer, rework the 3-4 bullets that matter most for this job and keep the rest of its baseline bullets as anchors.",
         "Length and skills follow the base resume (owner of this rule): every role keeps at least its baseline number of bullets (resumePlan.employerTargets); a weaker bullet may be replaced by a stronger supported one, never dropped. Keep every skills item from the base resume: lead with what this job needs, add supported items, and remove an item only when nothing supports it. Skills the posting does not ask for still show the candidate's range, so they stay. The resume keeps the base resume's page count.",
         "Unchanged baseline bullets are the candidate's own approved claims: copy them word for word with the evidenceIds listed in baselineBullets (often none). Never attach an unrelated evidence ID to make a bullet look supported.",
-        "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. The base resume is evidence too (owner of this rule): rows with `base:` IDs are its own lines, so a base line reworded for this job may cite its own `base:` row, and a candidate with only a base resume still gets a close tailoring. Whatever a line cites, it may not add an event, metric, tool, or ownership the cited rows do not state. `base:` rows earn no fit credit; rate requirements from the other rows.",
+        "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. The base resume is evidence too (owner of this rule): rows with `base:` IDs are its own lines, so a base line reworded for this job may cite its own `base:` row, and a candidate with only a base resume still gets a close tailoring. Whatever a line cites, it may not add an event, metric, tool, or ownership the cited rows do not state. " + (baseEarnsFitCredit() ? "`base:` rows also count when rating requirements." : "`base:` rows earn no fit credit; rate requirements from the other rows."),
         ...profileInstructionLines(candidateProfile),
         "Maintain natural bullet length (~16-20 words) matching the baseline footprint; no word-by-word arithmetic.",
         "Cover letter: follow coverLetterBrief exactly. It owns the structure, opening, word range, and banned phrases. Do not use any other cover-letter structure.",
