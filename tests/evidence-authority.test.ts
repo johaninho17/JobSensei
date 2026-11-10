@@ -6,6 +6,7 @@ import { ClaimValidationError, validateCoverLetterAuditJson, validateResumeAudit
 import { buildContextManifest } from "../electron/context";
 import { createEvidenceSnapshot } from "../electron/evidence-snapshot";
 import { finalizeApplication } from "../electron/application-finalize";
+import { readTextFile } from "../electron/persistence";
 import type { EvidenceSnapshot } from "../src/shared/schemas";
 
 async function fixtureWorkspace(): Promise<string> {
@@ -154,8 +155,12 @@ describe("context-authoritative evidence", () => {
     expect(snapshot.sourceFiles.some((source) => source.path === "context/structured/README.md")).toBe(false);
     expect(snapshot.evidenceRows.some((row) => row.evidenceId === "context:work:api" && row.eligibility === "eligible")).toBe(true);
     expect(snapshot.denylistRules).toHaveLength(2);
-    const hidden = await readFile(join(workspace, "jobs", "sample-role", ".sensei", "evidence_snapshot.json"), "utf8");
+    const hiddenPath = join(workspace, "jobs", "sample-role", ".sensei", "evidence_snapshot.json");
+    const stored = await readFile(hiddenPath);
+    expect([stored[0], stored[1]]).toEqual([0x1f, 0x8b]);
+    const hidden = await readTextFile(hiddenPath);
     expect(JSON.parse(hidden).snapshotId).toBe(snapshot.snapshotId);
+    expect(stored.length).toBeLessThan(Buffer.byteLength(hidden) / 2);
     const compactText = await readFile(join(workspace, "jobs", "sample-role", ".sensei", "application_context.json"), "utf8");
     const compact = JSON.parse(compactText);
     expect(compact.schemaVersion).toBe(2);

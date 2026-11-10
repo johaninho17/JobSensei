@@ -34,18 +34,6 @@ export interface ArtifactValidationOptions {
   letterHardWordMax?: number | null;
 }
 
-export interface AuditValidationOptions {
-  requireResumeTailoring?: boolean;
-  minimumResumeChanges?: number;
-  baseResumePath?: string | null;
-  selectedStructuredPaths?: string[];
-  selectedBroadPaths?: string[];
-  baselineMarkdown?: string | null;
-  publicMarkdown?: string | null;
-  jobMatchMarkdown?: string | null;
-  changePlanMarkdown?: string | null;
-}
-
 export class ClaimValidationError extends Error {
   constructor(
     message: string,
@@ -94,17 +82,11 @@ const RESUME_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*_[A-Za-z0-9][A-Za-z0-9_-]*_Resume
 const COVER_NAME = "cover_letter.md";
 const CHECKLIST_NAME = "submission_checklist.md";
 
-export const BASE_RESUME_WORDS = 342;
-export const MIN_RESUME_WORDS = Math.floor(BASE_RESUME_WORDS * 0.9);
-export const MAX_RESUME_WORDS = Math.floor(BASE_RESUME_WORDS * 1.1);
 export const MIN_RESUME_BULLETS = 10;
-export const TARGET_RESUME_BULLETS = 12;
 export const MAX_RESUME_BULLETS = 14;
 export const MIN_CURRENT_EMPLOYER_BULLETS = 5;
 // Defaults only: each candidate's letter length comes from their settings through coverLetterBrief
 // (buildCoverLetterBrief owns letter shape); the checks read the brief's hardWordMax when there is one.
-export const MIN_COVER_LETTER_WORDS = 160;
-export const TARGET_MAX_COVER_LETTER_WORDS = 280;
 export const MAX_COVER_LETTER_WORDS = 330;
 export const MIN_COVER_LETTER_PARAGRAPHS = 3;
 export const MAX_COVER_LETTER_PARAGRAPHS = 5;
@@ -120,12 +102,6 @@ export function classifyApplicationArtifact(path: string): ApplicationArtifactTy
   if (name === COVER_NAME) return "cover-letter";
   if (name === CHECKLIST_NAME) return "submission-checklist";
   throw new Error("Only the public resume, cover letter, and submission checklist can be exported.");
-}
-
-export function auditNameFor(type: ApplicationArtifactType): string | null {
-  if (type === "resume") return "resume_audit.md";
-  if (type === "cover-letter") return "cover_letter_audit.md";
-  return null;
 }
 
 export function validateApplicationArtifact(markdown: string, artifactType: ApplicationArtifactType, options: ArtifactValidationOptions = {}): ArtifactValidation {
@@ -163,42 +139,6 @@ export function validateApplicationArtifact(markdown: string, artifactType: Appl
   }
 
   return { artifactType, wordCount, paragraphCount: null, bulletCount: null, currentEmployerBulletCount: null, experienceBulletChanges: null, skillChanges: null };
-}
-
-export function validateAudit(markdown: string, publicArtifactName: string, options: AuditValidationOptions = {}): void {
-  if (!auditStatusPassed(markdown)) throw new Error("The private audit must declare `validation_status: passed` before export.");
-  const escapedName = publicArtifactName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const identifiesArtifact = new RegExp(`\\bpublic_artifact\\s*:\\s*["']?${escapedName}["']?`, "i").test(markdown)
-    || new RegExp(`\\bpublic\\s+artifact(?:\\s+target)?\\s*[:*]*\\s*[` + "\\`*_" + `]*${escapedName}[` + "\\`*_" + `]*`, "i").test(markdown)
-    || new RegExp(`\\bpublic\\s+target\\s+artifact\\s*[:*]*\\s*[` + "\\`*_" + `]*${escapedName}[` + "\\`*_" + `]*`, "i").test(markdown)
-    || new RegExp(`\\bpublic\\s+resume\\s*[:*]*\\s*[` + "\\`*_" + `]*${escapedName}[` + "\\`*_" + `]*`, "i").test(markdown);
-  if (!identifiesArtifact) {
-    throw new Error(`The private audit must identify \`public_artifact: ${publicArtifactName}\`.`);
-  }
-  if (!/\b(?:evidence|claim)[_\s-]*(?:map|mapping|provenance)\b|claim\s+grounding\s*&\s*provenance|provenance\s*&\s*evidence|claim\s*[-\s]+by\s*[-\s]+claim\s+evidence|claim\s+traceability\s+matrix/i.test(markdown)) {
-    throw new Error("The private audit must contain a claim evidence map or provenance section.");
-  }
-  if (publicArtifactName === COVER_NAME) validateCoverLetterAudit(markdown);
-  if (options.requireResumeTailoring) {
-    validateResumeAuditContract(markdown, options as AuditValidationOptions);
-    const changeCount = /\btailoring_change_count\s*:\s*(\d+)/i.exec(markdown)?.[1]
-      ?? /(\d+)\s+substantive\s+(?:experience-)?bullet\s+changes?/i.exec(markdown)?.[1]
-      ?? /(?:substantive changes|bullet changes)[^\n]*?(\d+)\s*(?:bullet|experience)/i.exec(markdown)?.[1]
-      ?? numberedAuditItems(markdown, /bullet changes/i);
-    const requiredChanges = options.minimumResumeChanges ?? 2;
-    if (!changeCount || Number(changeCount) < requiredChanges) throw new Error(`The resume audit must record at least ${requiredChanges} substantive tailoring changes.`);
-    const contextChangeCount = /\bcontext_evidence_change_count\s*:\s*(\d+)/i.exec(markdown)?.[1];
-    if (!contextChangeCount || Number(contextChangeCount) < 2) throw new Error("The resume audit must record at least two substantive context-evidence changes.");
-    const skillCount = /\bskill_change_count\s*:\s*(\d+)/i.exec(markdown)?.[1]
-      ?? /(?:substantive changes|skill keywords added)[^\n]*?(\d+)\s*skill/i.exec(markdown)?.[1]
-      ?? /(\d+)\s+skills?-section\s+keyword\s+changes?/i.exec(markdown)?.[1]
-      ?? addedKeywordCount(markdown);
-    if (!skillCount || Number(skillCount) < 1) throw new Error("The resume audit must record at least one substantive skills-section change.");
-    if (!/\bformatting_preservation_status\s*:\s*passed\b/i.test(markdown)) throw new Error("The resume audit must declare `formatting_preservation_status: passed`.");
-    if (!/\bside_by_side_status\s*:\s*passed\b/i.test(markdown)) throw new Error("The resume audit must declare `side_by_side_status: passed`.");
-    if (!/##\s+Side-by-side changes\b/i.test(markdown)) throw new Error("The resume audit must include the exact `## Side-by-side changes` section.");
-    if (!/##\s+(?:Requirement|Keyword) (?:coverage|mapping)|##\s+\d+\.\s+Before\s*\/\s*After\s+(?:Requirement\s+Coverage|Bullet\s+Diffs)/i.test(markdown)) throw new Error("The resume audit must include a requirement coverage or keyword mapping section.");
-  }
 }
 
 export function validateResumeAuditJson(input: unknown, options: MachineAuditValidationOptions): ResumeAuditJson {
@@ -716,12 +656,6 @@ function validateOwnership(publicText: string, evidenceIds: string[], snapshot: 
   }
 }
 
-function extractEmployerSection(markdown: string, employer: string): string | null {
-  const regex = new RegExp(`\\*\\*${employer}[^*]*\\*\\*[\\s\\S]*?(?=\\n\\*\\*[A-Z]|\\n##|$)`, "i");
-  const match = regex.exec(markdown);
-  return match ? match[0] : null;
-}
-
 function enforceDenylist(publicMarkdown: string, snapshot: EvidenceSnapshot): void {
   const normalized = normalizeResumeText(publicMarkdown);
   for (const rule of snapshot.denylistRules) {
@@ -737,65 +671,6 @@ function lexicalSimilarity(left: string, right: string): number {
   const union = new Set([...a, ...b]);
   if (union.size === 0) return 1;
   return [...a].filter((token) => b.has(token)).length / union.size;
-}
-
-function validateResumeAuditContract(markdown: string, options: AuditValidationOptions): void {
-  for (const field of ["base_resume_path", "selected_structured_paths", "selected_broad_paths", "relevant_employer_targets", "current_employer_change_count", "current_employer_change_target"]) {
-    if (!new RegExp(`^${field}\\s*:\\s*.+$`, "im").test(markdown)) throw new Error(`The resume audit must declare \`${field}: <value>\`.`);
-  }
-  if (!/##\s+Suggested additional bullets for user review\b/i.test(markdown)) throw new Error("The resume audit must include the suggested-bullets section.");
-  if (!/##\s+Employer targeting\b/i.test(markdown)) throw new Error("The resume audit must include the `## Employer targeting` section.");
-  const employerTargets = declaredPathList(markdown, "relevant_employer_targets");
-  const employerSection = /##\s+Employer targeting\b([\s\S]*?)(?=\n##\s+|$)/i.exec(markdown)?.[1] ?? "";
-  for (const employer of employerTargets) {
-    const employerPattern = new RegExp(`\\b${employer.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\b`, "i");
-    if (!employerPattern.test(employerSection) || !/(?:changed|excluded|not included|no change)/i.test(employerSection)) {
-      throw new Error(`The resume audit must document a change or explicit exclusion for targeted employer: ${employer}.`);
-    }
-  }
-  if (!options.changePlanMarkdown) throw new Error("The private resume_change_plan.md must exist before resume validation.");
-  if (!/(?:current employer|current-employer)/i.test(options.changePlanMarkdown) || !/direct|transferable|gap/i.test(options.changePlanMarkdown)) {
-    throw new Error("The resume change plan must identify current-employer requirements and evidence classes.");
-  }
-  const selected = new Set([...(options.selectedStructuredPaths ?? []), ...(options.selectedBroadPaths ?? [])]);
-  const declaredStructured = declaredPathList(markdown, "selected_structured_paths");
-  const declaredBroad = declaredPathList(markdown, "selected_broad_paths");
-  for (const path of [...declaredStructured, ...declaredBroad]) {
-    if (selected.size > 0 && !selected.has(path)) throw new Error(`The resume audit names context outside the active selection: ${path}.`);
-  }
-  if (options.baselineMarkdown && options.publicMarkdown) {
-    const employer = firstEmployerName(options.baselineMarkdown);
-    const actualChanges = employer ? changedEmployerBullets(options.baselineMarkdown, options.publicMarkdown, employer) : 0;
-    const declaredChanges = requiredAuditInteger(markdown, "current_employer_change_count");
-    if (declaredChanges !== actualChanges) throw new Error(`The resume audit declares ${declaredChanges} current-employer changes, but the public resume contains ${actualChanges}.`);
-    const target = requiredAuditInteger(markdown, "current_employer_change_target");
-    if (actualChanges < target) throw new Error(`The public resume contains ${actualChanges} current-employer changes; the required target is ${target}.`);
-    if (options.jobMatchMarkdown) {
-      const directTarget = requiredCurrentEmployerTarget(options.jobMatchMarkdown);
-      if (target !== directTarget) throw new Error("The resume audit current-employer target does not match job_match.md.");
-    }
-  }
-  const suggestions = suggestedBullets(markdown);
-  if (options.publicMarkdown && suggestions.some((suggestion) => normalizeResumeText(suggestion) && normalizeResumeText(options.publicMarkdown!).includes(normalizeResumeText(suggestion)))) {
-    throw new Error("Suggested additional bullets must remain outside the public resume.");
-  }
-}
-
-function declaredPathList(markdown: string, field: string): string[] {
-  const value = new RegExp(`^${field}\\s*:\\s*(.+)$`, "im").exec(markdown)?.[1]?.trim() ?? "";
-  return value === "none" || value === "" ? [] : value.split(/,\s*/).filter(Boolean);
-}
-
-function suggestedBullets(markdown: string): string[] {
-  const section = /##\s+Suggested additional bullets for user review\b([\s\S]*?)(?=\n##\s+|$)/i.exec(markdown)?.[1] ?? "";
-  return section.split("\n").map((line) => line.replace(/^\s*[-*+]\s+/, "").trim()).filter((line) => line.length > 20 && !/^evidence|^source|^requirement|^reason|^uncertainty/i.test(line));
-}
-
-function changedEmployerBullets(baseline: string, tailored: string, employer: string): number {
-  const before = employerBullets(baseline, employer).map(normalizeResumeText);
-  return employerBullets(tailored, employer)
-    .map(normalizeResumeText)
-    .filter((bullet) => bullet.length > 0 && !before.includes(bullet)).length;
 }
 
 function employerBullets(markdown: string, employer: string): string[] {
@@ -828,83 +703,6 @@ function firstEmployerName(markdown: string): string | null {
   return null;
 }
 
-function requiredCurrentEmployerTarget(jobMatchMarkdown: string): number {
-  const explicit = /\bcurrent_employer_change_target\s*:\s*(\d+)\b/i.exec(jobMatchMarkdown)?.[1];
-  if (explicit) return Number(explicit);
-  const currentSection = /current[ -]employer[\s\S]{0,1800}/i.exec(jobMatchMarkdown)?.[0] ?? jobMatchMarkdown;
-  const direct = (currentSection.match(/\bdirect\b/gi)?.length ?? 0);
-  return Math.min(3, Math.max(2, direct));
-}
-
-function validateCoverLetterAudit(markdown: string): void {
-  const normalized = markdown.replace(/[\u0060*]/g, "");
-  const wordCount = requiredAuditInteger(normalized, "word_count");
-  if (wordCount < MIN_COVER_LETTER_WORDS || wordCount > MAX_COVER_LETTER_WORDS) {
-    throw new Error(`The cover-letter audit must record a word count between ${MIN_COVER_LETTER_WORDS} and ${MAX_COVER_LETTER_WORDS}.`);
-  }
-  const paragraphCount = requiredAuditInteger(normalized, "body_paragraph_count");
-  if (paragraphCount < MIN_COVER_LETTER_PARAGRAPHS || paragraphCount > MAX_COVER_LETTER_PARAGRAPHS) {
-    throw new Error(`The cover-letter audit must record ${MIN_COVER_LETTER_PARAGRAPHS}-${MAX_COVER_LETTER_PARAGRAPHS} substantive body paragraphs.`);
-  }
-  const maxSentenceCount = requiredAuditInteger(normalized, "max_body_paragraph_sentence_count");
-  if (maxSentenceCount > MAX_COVER_LETTER_SENTENCES_PER_PARAGRAPH) {
-    throw new Error(`The cover-letter audit cannot pass with more than ${MAX_COVER_LETTER_SENTENCES_PER_PARAGRAPH} sentences in a body paragraph.`);
-  }
-  for (const field of [
-    "header_status",
-    "body_structure_status",
-    "opening_closing_status",
-    "argument_sequence_status",
-    "career_arc_status",
-    "timeline_tense_status",
-    "employer_need_connection_status",
-    "claim_evidence_status",
-    "banned_content_status",
-  ]) {
-    if (!new RegExp(`\\b${field}\\s*:\\s*passed\\b`, "i").test(normalized)) {
-      throw new Error(`The cover-letter audit must declare \`${field}: passed\`.`);
-    }
-  }
-  if (!/\btemplate_reference_status\s*:\s*layout_only\b/i.test(normalized)) {
-    throw new Error("The cover-letter audit must declare `template_reference_status: layout_only`.");
-  }
-  if (!/##\s+Career arc and timeline\b/i.test(markdown)) {
-    throw new Error("The cover-letter audit must include `## Career arc and timeline`.");
-  }
-  if (!/##\s+Claim evidence map\b/i.test(markdown)) {
-    throw new Error("The cover-letter audit must include the exact `## Claim evidence map` section.");
-  }
-}
-
-function requiredAuditInteger(markdown: string, field: string): number {
-  const value = new RegExp(`\\b${field}\\s*:\\s*(\\d+)\\b`, "i").exec(markdown)?.[1];
-  if (!value) throw new Error(`The cover-letter audit must declare \`${field}: <integer>\`.`);
-  return Number(value);
-}
-
-function numberedAuditItems(markdown: string, heading: RegExp): string | undefined {
-  const headingMatch = heading.exec(markdown);
-  if (!headingMatch || headingMatch.index === undefined) return undefined;
-  const section = (markdown.slice(headingMatch.index).split(/\n##\s+/i)[0] ?? "");
-  const count = section.match(/^\s*\d+\.\s+/gm)?.length ?? 0;
-  return count > 0 ? String(count) : undefined;
-}
-
-function addedKeywordCount(markdown: string): string | undefined {
-  const value = /(?:added keywords|skill keywords added)\s*:\s*([^\n]+)/i.exec(markdown)?.[1];
-  if (!value) return undefined;
-  const count = value.split(/,|;|\band\b/i).map((item) => item.trim()).filter(Boolean).length;
-  return count > 0 ? String(count) : undefined;
-}
-
-function auditStatusPassed(markdown: string): boolean {
-  // Audits are Markdown documents, so emphasis and code formatting may wrap
-  // either side of the machine-readable status field.
-  const normalized = markdown.replace(/[\u0060*]/g, "");
-  return /\bvalidation_status\s*:\s*passed\b/i.test(normalized)
-    || /\bvalidation\s+status\s*:\s*passed\b/i.test(normalized);
-}
-
 export function countWords(markdown: string): number {
   const plain = markdown
     .replace(/```[\s\S]*?```/g, " ")
@@ -927,33 +725,6 @@ export function coverLetterBodyParagraphs(markdown: string): string[] {
   });
 }
 
-function validateCoverLetterHeader(markdown: string): void {
-  const blocks = markdown.replaceAll("\r\n", "\n").split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
-  const greetingIndex = blocks.findIndex((block) => /^(?:dear|hello)\b/i.test(stripMarkdown(block)));
-  if (greetingIndex < 0) throw new Error("The cover letter must include a salutation.");
-  const header = stripMarkdown(blocks.slice(0, greetingIndex).join("\n"));
-  if (!header.trim()) throw new Error("The cover letter must include the candidate name in its compact header.");
-  if (!/(?:[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}|linkedin\.com)/i.test(header)) {
-    throw new Error("The cover letter must include a compact contact line before the salutation.");
-  }
-  if (!/(?:\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},\s+\d{4}\b|\b\d{4}-\d{2}-\d{2}\b)/i.test(header)) {
-    throw new Error("The cover letter must include a date in its compact header.");
-  }
-}
-
-function validateCoverLetterLanguage(markdown: string): void {
-  if (/!\[[^\]]*]\([^)]*\)|<img\b/i.test(markdown)) {
-    throw new Error("The cover letter cannot include an image or handwritten-signature imitation.");
-  }
-  const body = coverLetterBodyParagraphs(markdown).map(stripMarkdown).join("\n");
-  if (/\bI am writing to (?:express|convey|submit)\b/i.test(body)) {
-    throw new Error("The cover letter cannot use a generic `I am writing to express...` opening.");
-  }
-  if (/\b(?:I thrive in|dynamic environments?|fast[- ]paced environments?|culture fit|perfect fit for (?:your|the) culture|team player|hard[- ]working individual)\b/i.test(body)) {
-    throw new Error("The cover letter cannot use generic personality or vague culture-fit claims.");
-  }
-}
-
 function validateResumeStructure(markdown: string): void {
   const normalized = stripMarkdown(markdown).toLowerCase();
   const requiredInOrder = ["skills", "experience", "education"];
@@ -962,23 +733,6 @@ function validateResumeStructure(markdown: string): void {
     const next = normalized.indexOf(section, cursor + 1);
     if (next < 0) throw new Error(`The resume must preserve the canonical \`${section}\` section or employer.`);
     cursor = next;
-  }
-}
-
-function validateResumeEmphasis(markdown: string): void {
-  for (const required of [
-    "**SKILLS & Languages**",
-    "**PROFESSIONAL EXPERIENCE**",
-    "**EDUCATION**",
-  ]) {
-    if (!markdown.includes(required)) throw new Error(`The resume must preserve canonical bold emphasis for \`${required.replaceAll("*", "")}\`.`);
-  }
-  const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-  const skillsStart = lines.findIndex((line) => stripMarkdown(line).toLowerCase() === "skills & languages");
-  const experienceStart = lines.findIndex((line) => stripMarkdown(line).toLowerCase() === "professional experience");
-  const skillLines = lines.slice(skillsStart + 1, experienceStart).filter((line) => line.trim());
-  if (skillLines.length < 4 || skillLines.some((line) => !/^\s*\*\*[^*\n]+:\*\*/.test(line))) {
-    throw new Error("Every resume skills line must preserve a bold category label.");
   }
 }
 
@@ -1043,10 +797,6 @@ function hasSupportedJobEvidence(jobMatchMarkdown: string | null | undefined): b
 function supportedRequirementCount(jobMatchMarkdown: string | null | undefined): number {
   if (!jobMatchMarkdown) return 0;
   return (jobMatchMarkdown.match(/\bsupported\b/gi)?.length ?? 0);
-}
-
-function sentenceCount(value: string): number {
-  return stripMarkdown(value).split(/(?<=[.!?])(?:["')\]]*)\s+/).filter((sentence) => /[\p{L}\p{N}]/u.test(sentence)).length;
 }
 
 function splitSentences(value: string): string[] {

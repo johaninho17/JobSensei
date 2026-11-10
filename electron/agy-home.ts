@@ -201,3 +201,20 @@ export async function writeSenseiLauncher(home: string, options: { appRoot: stri
   }
   return bin;
 }
+
+/**
+ * Agy homes for background runs, prepared once per workspace (keyed by its resolved path, so switching workspaces
+ * never reuses another workspace's home). A failed preparation isn't kept, so the next run tries again.
+ */
+export function createAgyHomeCache(prepare: (workspace: string) => Promise<string>) {
+  const homes = new Map<string, Promise<string>>();
+  return {
+    get(workspace: string): Promise<string> {
+      const key = resolve(workspace);
+      if (!homes.has(key)) homes.set(key, prepare(workspace).catch((error) => { homes.delete(key); throw error; }));
+      return homes.get(key)!;
+    },
+    /** A home the terminal start just prepared for this workspace. */
+    set(workspace: string, home: string): void { homes.set(resolve(workspace), Promise.resolve(home)); },
+  };
+}

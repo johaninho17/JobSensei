@@ -299,4 +299,3 @@ async function pruneBackups(root: string): Promise<void> {
   for (const name of names.slice(0, Math.max(0, names.length - KEEP_BACKUPS))) await rm(join(root, BACKUP_ROOT, name), { recursive: true, force: true });
 }
 
-export const workspaceRelative = (root: string, path: string) => relative(root, path).replaceAll("\\", "/");

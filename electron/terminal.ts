@@ -178,4 +178,3 @@ export class TerminalSession {
   }
 }
 
-export function defaultTerminalCwd(projectRoot: string): string { return resolve(projectRoot); }

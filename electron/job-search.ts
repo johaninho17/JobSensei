@@ -11,7 +11,10 @@ import {
 import { readActiveContextManifest } from "./context";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
 import { fetchAndClean, postingFromBoard, stageCleanedPosting, suggestJobId } from "./jd-fetch";
-import { bestMatch, boardKey, boardPostingHtml, boardRef, fitsSearchTitles, listBoardJobs, type BoardJob, type BoardRef } from "./job-boards";
+import { bestMatch, boardPostingHtml, fitsSearchTitles, listBoardJobs, type BoardJob } from "./job-boards";
+import { boardKey, boardOf, boardRef, singlePosting, type BoardRef } from "../src/shared/boards";
+
+export { boardOf, singlePosting };
 import { assertInsideWorkspace } from "./files";
 import { readJson, writeJsonAtomic, writeTextAtomic } from "./persistence";
 import { buildPostingRecord } from "./posting-record";
@@ -289,26 +292,6 @@ export async function resolveLink(url: string, fetcher: typeof fetch): Promise<s
   return current;
 }
 
-/** False for a known board's list or company page (not one posting); unknown sites are given the benefit of the doubt. */
-export function singlePosting(url: string): boolean {
-  let parsed: URL;
-  try { parsed = new URL(url); } catch { return false; }
-  const host = parsed.hostname.toLowerCase();
-  const parts = parsed.pathname.split("/").filter(Boolean);
-  if (/lever\.co$/.test(host) || /ashbyhq\.com$/.test(host)) return parts.length >= 2 && !["apply", "application"].includes(parts[1]);
-  if (/greenhouse\.io$/.test(host)) return parts.includes("jobs") && /^\d+$/.test(parts[parts.indexOf("jobs") + 1] ?? "") || parsed.searchParams.has("gh_jid");
-  if (/workable\.com$/.test(host)) return parts.includes("j") || parts.includes("view");
-  if (/smartrecruiters\.com$/.test(host)) return parts.length >= 2;
-  return parsed.pathname.length > 1;
-}
-
-const BOARD_BY_HOST: Array<[RegExp, string]> = [[/greenhouse\.io$/, "greenhouse"], [/lever\.co$/, "lever"], [/ashbyhq\.com$/, "ashby"], [/workable\.com$/, "workable"], [/smartrecruiters\.com$/, "smartrecruiters"], [/myworkdayjobs\.com$/, "workday"], [/ycombinator\.com$/, "yc"], [/builtin\.com$/, "builtin"], [/wellfound\.com$/, "wellfound"]];
-export function boardOf(url: string): string | null {
-  try {
-    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
-    return BOARD_BY_HOST.find(([pattern]) => pattern.test(host))?.[1] ?? host;
-  } catch { return null; }
-}
 
 /** Title and company: what Agy saw on the page first, then the page; "Company - Title" page titles (Lever) are split. */
 export function nameJob(link: FoundLink, pageCompany: string | null, pageTitle: string | null): { company: string | null; title: string | null } {

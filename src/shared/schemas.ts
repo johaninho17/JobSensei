@@ -1136,35 +1136,6 @@ export const bulletBankSchema = z.object({
 });
 export type BulletBank = z.infer<typeof bulletBankSchema>;
 
-export const clarifyingQuestionOptionSchema = z.object({
-  id: z.string(),
-  label: z.string(),
-  description: z.string().optional(),
-});
-export type ClarifyingQuestionOption = z.infer<typeof clarifyingQuestionOptionSchema>;
-
-export const clarifyingQuestionSchema = z.object({
-  id: z.string(),
-  prompt: z.string(),
-  contextHint: z.string().optional(),
-  options: z.array(clarifyingQuestionOptionSchema),
-  allowWriteIn: z.boolean().default(true),
-});
-export type ClarifyingQuestion = z.infer<typeof clarifyingQuestionSchema>;
-
-export const clarifyingAnswerSchema = z.object({
-  questionId: z.string(),
-  selectedOptionId: z.string().nullable().default(null),
-  writeInText: z.string().nullable().default(null),
-});
-export type ClarifyingAnswer = z.infer<typeof clarifyingAnswerSchema>;
-
-export const clarifyingAnswersReportSchema = z.object({
-  jobId: z.string(),
-  answers: z.array(clarifyingAnswerSchema),
-  updatedAt: z.string(),
-});
-export type ClarifyingAnswersReport = z.infer<typeof clarifyingAnswersReportSchema>;
 
 /** Job links waiting to be sent to Agy one at a time: `.sensei/job_queue.json` in the workspace. */
 export const jobQueueItemSchema = z.object({
@@ -1303,10 +1274,6 @@ export interface SenseiApi {
     get(): Promise<BulletBank>;
     save(bank: BulletBank): Promise<BulletBank>;
   };
-  clarifications: {
-    getQuestions(jobId: string): Promise<ClarifyingQuestion[]>;
-    submitAnswers(jobId: string, answers: ClarifyingAnswer[]): Promise<void>;
-  };
   settings: {
     get(): Promise<Settings>;
     save(input: SettingsUpdate): Promise<Settings>;
@@ -1353,6 +1320,8 @@ export interface SenseiApi {
   };
   runs: {
     latest(): Promise<RunStatus | null>;
+    /** Pushed by the main process when the latest run changes (one watcher for the whole app). */
+    onChanged(callback: (run: RunStatus | null) => void): () => void;
   };
   /** Scenario questions answered by a background Agy (electron/question-agent.ts). */
   questions: {

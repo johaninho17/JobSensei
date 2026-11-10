@@ -2,7 +2,7 @@ import { lstat, mkdir, mkdtemp, readFile, readlink, realpath, rm, writeFile } fr
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { agentPathsAbove, boundaryDenyRules, linkKeychains, prepareAgyHome } from "../electron/agy-home";
+import { agentPathsAbove, boundaryDenyRules, createAgyHomeCache, linkKeychains, prepareAgyHome } from "../electron/agy-home";
 
 async function tree() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "sensei-agyhome-")));
@@ -179,5 +179,25 @@ describe("pipeline commands run without Electron", () => {
     for (const file of (await readdir("electron")).filter((name) => name.endsWith(".ts") && !allowed.has(name))) {
       expect(await readFile(join("electron", file), "utf8"), file).not.toMatch(/^import [^;]* from "electron";/m);
     }
+  });
+});
+
+describe("Agy home cache for background runs", () => {
+  it("prepares one home per workspace, never shares one across workspaces, and retries after a failure", async () => {
+    const calls: string[] = [];
+    let fail = true;
+    const cache = createAgyHomeCache(async (workspace) => {
+      calls.push(workspace);
+      if (workspace.endsWith("broken") && fail) { fail = false; throw new Error("no home"); }
+      return `${workspace}/.agy-home`;
+    });
+    expect(await cache.get("/w/alex")).toBe("/w/alex/.agy-home");
+    expect(await cache.get("/w/alex/")).toBe("/w/alex/.agy-home");
+    expect(await cache.get("/w/jordan")).toBe("/w/jordan/.agy-home");
+    expect(calls).toEqual(["/w/alex", "/w/jordan"]);
+    await expect(cache.get("/w/broken")).rejects.toThrow("no home");
+    expect(await cache.get("/w/broken")).toBe("/w/broken/.agy-home");
+    cache.set("/w/alex", "/fresh");
+    expect(await cache.get("/w/alex")).toBe("/fresh");
   });
 });

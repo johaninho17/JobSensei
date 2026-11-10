@@ -4,7 +4,7 @@ import { basename, join, resolve } from "node:path";
 import { candidateProfileSchema, type CandidateProfile, type EvidenceSnapshot, type InterviewLogistics } from "../src/shared/schemas";
 import { BANNED_PHRASES, narrativeStoryLines } from "./evidence-snapshot";
 import { bestEvidenceForRequirement, parseMustHaves } from "./fit-scoring";
-import { writeJsonAtomic } from "./persistence";
+import { writeJsonAtomic, readTextFile } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
 
 /** The four canonical rounds and their question limits. Single owner for round IDs and bounds. */
@@ -129,7 +129,7 @@ export function logisticsLines(logistics: InterviewLogistics | undefined): Recor
 }
 
 async function readText(workspace: string, relativePath: string): Promise<string> {
-  return readFile(assertInsideWorkspace(workspace, join(workspace, relativePath)), "utf8").catch(() => "");
+  return readTextFile(assertInsideWorkspace(workspace, join(workspace, relativePath))).catch(() => "");
 }
 
 async function readJsonFile<T>(workspace: string, relativePath: string): Promise<T | null> {

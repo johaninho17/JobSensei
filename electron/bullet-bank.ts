@@ -70,6 +70,3 @@ export async function saveBulletBank(workspacePath: string, bank: BulletBank): P
   return verified;
 }
 
-export function findThemeBullets(bank: BulletBank, themeId: string): BulletBankItem[] {
-  return bank.bullets.filter((bullet) => bullet.themeId === themeId);
-}

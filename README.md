@@ -12,6 +12,7 @@ I built JobSensei to solve a recurring problem in AI-assisted job searching: a r
 - Previews Markdown, text, JSON, PDF, DOCX, images, and other common career files.
 - Runs Agy from an embedded terminal with the repository's JobSensei skills available.
 - Screens job descriptions before creating an application workspace.
+- Finds jobs: reads the open jobs of watched companies straight from their Ashby, Greenhouse, and Lever boards (free), asks Agy to name more companies hiring for your titles, filters by your places and work setups, and ranks matches by fit. Can run on its own once a day.
 - Produces reviewable evaluations, tailored resume drafts, and cover letters.
 - Supports recruiter, hiring-manager, technical, and technical-challenge preparation.
 - Exports reviewed Markdown resumes and cover letters to PDF.

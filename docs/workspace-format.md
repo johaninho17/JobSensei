@@ -34,4 +34,8 @@ Career files added in the app (Career context → Sources → Add files, or drag
 
 The job queue lives in the workspace at `.sensei/job_queue.json`: `autoRun` and up to 50 `items` (`kind`: link or paste, `url` for a link, a display `label`, an optional `note`, `manual` for items sent from the chat, `status`: queued, running, done, needs_attention, plus sent and finished times and the resulting `jobId`). A pasted job description is saved as `.sensei/staged-jds/<item-id>.md` (with a `.json` of parsed company, title, and location) and removed once its item leaves the queue. The app sends one job at a time to Agy, only when Agy is idle; links and pastes from the chat join the same queue, so a new paste never replaces a running job.
 
+Job Search keeps its files in `.sensei/job-search/`: `settings.json` (titles, places, work setups, level, pay floor, keywords, boards, watched companies with how each was added, schedule, limits, ratings), `state.json` (every found job with its quick fit and any Agy light rating, every run with what it found and left out, links already seen, and drafts a scheduled search marked for the app to queue), `postings/<find-id>.md` (each found posting, cleaned like any other), `scheduled.log`, and `run.lock` (one search at a time between the app and the schedule). Nothing in `state.json` is ever trimmed.
+
+`.sensei/evidence_snapshot.json` in each job is stored gzip-compressed (about five times smaller); the app reads compressed and older uncompressed snapshots alike.
+
 Files outside `data/` are application source and public documentation. Never place private candidate data in `examples/`; examples must remain fictional.

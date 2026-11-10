@@ -1,12 +1,13 @@
 // Builds the posting record (src/shared/posting.ts) from a saved posting. This is the one place the app reads a
 // posting's structure: requirements, pay, work setup, and the rest. Screens and checks call `postingRecordFor`
 // (memoized by content) or `readPostingRecord` (also saves `.sensei/posting.json`), never their own regexes.
+import { boardOf } from "../src/shared/boards";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { extractRequiredItems, extractResponsibilityItems, isHeadingLike, isProse, isRequiredHeading, jobRequirements, NOT_REQUIRED_HEADING, postingBody, RESPONSIBILITY_HEADING, sectionHeadingText } from "./fit-scoring";
 import { parseJobDescriptionMetadata } from "./job-description";
-import { POSTING_EXPECTED_FIELDS, POSTING_SCHEMA_VERSION, postingRecordSchema, type PostingPay, type PostingRecord, type PostingWorkSetup } from "../src/shared/posting";
+import { POSTING_BOARDS, POSTING_EXPECTED_FIELDS, POSTING_SCHEMA_VERSION, postingRecordSchema, type PostingPay, type PostingRecord, type PostingWorkSetup } from "../src/shared/posting";
 
 /** Bump when any parsing rule changes: saved records with an older version are rebuilt. */
 export const POSTING_PARSER_VERSION = 4;
@@ -189,17 +190,11 @@ const COMMON_CAPITALIZED = new Set(("customer customers success sales product en
   + "generative technology technologies tools tooling systems system modern new series agentic risk legal email "
   + "growth revenue leadership knowledge expertise certification certifications certified fundamentals advanced intermediate basic level tier").split(/\s+/));
 
-function boardOf(url: string | null): PostingRecord["board"] {
-  if (!url) return null;
-  const host = (() => { try { return new URL(url).hostname; } catch { return ""; } })();
-  if (/greenhouse/.test(host)) return "greenhouse";
-  if (/lever\.co/.test(host)) return "lever";
-  if (/ashbyhq/.test(host)) return "ashby";
-  if (/myworkday|workday/.test(host)) return "workday";
-  if (/linkedin/.test(host)) return "linkedin";
-  if (/smartrecruiters/.test(host)) return "smartrecruiters";
-  if (/oraclecloud|oracle\.com/.test(host)) return "oracle";
-  return "other";
+/** The board a posting link comes from (src/shared/boards.ts owns detection); other sites are "other". */
+function postingBoard(url: string | null): PostingRecord["board"] {
+  const id = boardOf(url);
+  if (id === null) return null;
+  return (POSTING_BOARDS as readonly string[]).includes(id) ? id as PostingRecord["board"] : "other";
 }
 
 export const postingHash = (text: string) => createHash("sha256").update(text.replaceAll("\r\n", "\n")).digest("hex");
@@ -230,7 +225,7 @@ export function buildPostingRecord(posting: string): PostingRecord {
     company: companyName,
     location: metadata.location,
     url: metadata.url,
-    board: boardOf(metadata.url),
+    board: postingBoard(metadata.url),
     summary: rolePara.slice(0, 3).map(short),
     companyLine: companyPara ? firstSentence(companyPara) : null,
     requirements,

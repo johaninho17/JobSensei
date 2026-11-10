@@ -4,8 +4,9 @@
  * posted dates, and to check watched companies without Agy.
  */
 
-export type BoardId = "ashby" | "greenhouse" | "lever";
-export type BoardRef = { board: BoardId; slug: string };
+import { boardKey, boardRef, type BoardId, type BoardRef } from "../src/shared/boards";
+
+export { boardKey, boardRef, type BoardId, type BoardRef };
 export type BoardJob = {
   title: string;
   url: string;
@@ -26,26 +27,6 @@ const workplaceOf = (value: unknown): BoardJob["workplace"] => {
   return text.includes("remote") ? "remote" : text.includes("hybrid") ? "hybrid" : /on-?site|in.?office/.test(text) ? "onsite" : null;
 };
 const texts = (...values: unknown[]) => [...new Set(values.flat().filter((value): value is string => typeof value === "string" && value.trim() !== "").map((value) => value.trim()))];
-
-const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/;
-
-/** The board and company slug in a posting or board link, or null for other sites. */
-export function boardRef(url: string): BoardRef | null {
-  let parsed: URL;
-  try { parsed = new URL(url.includes("://") ? url : `https://${url}`); } catch { return null; }
-  const host = parsed.hostname.toLowerCase();
-  const [first, second] = parsed.pathname.split("/").filter(Boolean);
-  if (host === "jobs.ashbyhq.com" && first && SLUG.test(first)) return { board: "ashby", slug: first };
-  if (host === "jobs.lever.co" && first && SLUG.test(first)) return { board: "lever", slug: first };
-  if (/(?:^|\.)greenhouse\.io$/.test(host)) {
-    const slug = host.startsWith("boards-api.") && first === "v1" ? parsed.pathname.split("/")[3] : first === "embed" ? parsed.searchParams.get("for") : first;
-    if (slug && SLUG.test(slug)) return { board: "greenhouse", slug };
-  }
-  void second;
-  return null;
-}
-
-export const boardKey = (ref: BoardRef) => `${ref.board}:${ref.slug.toLowerCase()}`;
 
 const iso = (value: unknown): string | null => {
   const time = typeof value === "number" ? value : typeof value === "string" ? Date.parse(value) : NaN;

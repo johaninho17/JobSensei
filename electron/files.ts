@@ -196,8 +196,4 @@ export async function listResumePaths(workspacePath: string, configuredBase: str
   return { baseResumePath, secondaryResumePaths: [...new Set(secondaryResumePaths)] };
 }
 
-export function hashPath(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
 export { assertInsideWorkspace };

@@ -26,6 +26,8 @@ import { SettingsModal } from "./SettingsModal";
 import { InterviewView, LiveWindow } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { JobSearchView } from "./JobSearchView";
+import { logisticsUpdate, parseNames, readLogistics, readStoryFields, storyUpdate, type StoryFields } from "../shared/profile-fields";
+import type { InterviewLogistics } from "../shared/schemas";
 import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
 import { storyTitles } from "./interview-cards";
 
@@ -186,7 +188,8 @@ function WorkspaceApp() {
     if (!jobQueue.items.some((item) => item.status === "queued" || item.status === "running")) return;
     let cancelled = false;
     const tick = async () => {
-      const [latest, terminalState] = await Promise.all([window.sensei.runs.latest().catch(() => null), window.sensei.terminal.status().catch(() => null)]);
+      const terminalState = await window.sensei.terminal.status().catch(() => null);
+      const latest = lastRunRef.current;
       if (cancelled) return;
       const before = queueRef.current;
       const ready = terminalState ? agyReadiness(terminalState, Date.now()) : false;
@@ -207,32 +210,31 @@ function WorkspaceApp() {
     const timer = window.setInterval(() => void tick(), 5000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [jobQueue.autoRun, queueActivity]);
-  // Run watcher: notify when a pipeline run finishes, even with the Agy panel closed.
+  // Run watcher: the main process pushes the latest run when it changes (one watcher for the whole app). Here the app
+  // notifies when a run finishes and starts written answers, even with the Agy panel closed.
+  const [latestRun, setLatestRun] = useState<RunStatus | null>(null);
   const lastRunRef = useRef<RunStatus | null>(null);
   const askedQuestions = useRef(new Set<string>());
+  const onRunRef = useRef<(run: RunStatus | null) => void>(() => undefined);
+  onRunRef.current = (run) => {
+    const previous = lastRunRef.current;
+    lastRunRef.current = run;
+    setLatestRun(run);
+    // An application run starts the background answers for its posting's written questions as soon as the run's
+    // snapshot exists (the evidence the answers need). Once per job: main skips jobs that already have answers.
+    if (run?.kind === "application" && run.jobId && (run.state === "running" || Date.now() - Date.parse(run.at) < 15 * 60_000) && !askedQuestions.current.has(run.jobId)) {
+      askedQuestions.current.add(run.jobId);
+      void window.sensei.questions.auto(run.jobId).catch(() => undefined);
+    }
+    if (previous?.state === "running" && run && run.state !== "running" && previous.kind === run.kind && previous.jobId === run.jobId) {
+      notify(`${RUN_KIND_LABEL[run.kind]} finished`, `${run.label}: ${RUN_STATE_LABEL[run.state]}`);
+    }
+  };
   useEffect(() => {
     if (workspace.status !== "ready") return;
-    let cancelled = false;
-    const tick = async () => {
-      const run = await window.sensei.runs.latest().catch(() => null);
-      if (cancelled) return;
-      const previous = lastRunRef.current;
-      lastRunRef.current = run;
-      // An application run starts the background answers for its posting's written questions as soon as the run's
-      // snapshot exists (the evidence the answers need). It lives here, not in the Agy panel, so it also happens
-      // while the panel is hidden. Once per job: main skips jobs that already have answers.
-      if (run?.kind === "application" && run.jobId && (run.state === "running" || Date.now() - Date.parse(run.at) < 15 * 60_000) && !askedQuestions.current.has(run.jobId)) {
-        askedQuestions.current.add(run.jobId);
-        void window.sensei.questions.auto(run.jobId).catch(() => undefined);
-      }
-      if (previous?.state === "running" && run && run.state !== "running" && previous.kind === run.kind && previous.jobId === run.jobId) {
-        notify(`${RUN_KIND_LABEL[run.kind]} finished`, `${run.label}: ${RUN_STATE_LABEL[run.state]}`);
-      }
-    };
-    void tick();
-    const timer = window.setInterval(() => void tick(), 4000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [workspace.status, notificationsOn]);
+    void window.sensei.runs.latest().then((run) => onRunRef.current(run)).catch(() => undefined);
+    return window.sensei.runs.onChanged((run) => onRunRef.current(run));
+  }, [workspace.status]);
   // Once a day: follow-ups due. Once per launch: a newer release.
   useEffect(() => {
     if (!jobs.length) return;
@@ -933,7 +935,7 @@ function WorkspaceApp() {
     <ToastRegion toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
     {shortcutsOpen && <ShortcutsPanel onClose={() => setShortcutsOpen(false)} />}
     {companyAsk && <CompanyDialog title={companyAsk.title} onDone={(company) => { companyAsk.resolve(company); setCompanyAsk(null); }} />}
-    <TerminalPanel onQueueJob={queueJob} busyLabel={busyJobLabel} cwd={workspace.repositoryRoot || workspace.path} selectedJobFiles={selectedJobFiles} selectedCareerPaths={selectedCareerPaths} theme={theme} visible={rightPanelOpen && !needsSetup} onClose={() => setRightPanelOpen(false)} jobActions={jobActions} promptRequest={promptRequest} onPromptHandled={(id) => setPromptRequest((request) => request?.id === id ? null : request)} onInsertPrompt={insertJobPrompt} onOpenRun={(run) => { if (run.jobId && jobs.some((job) => job.id === run.jobId)) openJobView(run.jobId, run.kind === "interview" ? "interview" : "application", run.roundId ?? undefined); }} />
+    <TerminalPanel latestRun={latestRun} onQueueJob={queueJob} busyLabel={busyJobLabel} cwd={workspace.repositoryRoot || workspace.path} selectedJobFiles={selectedJobFiles} selectedCareerPaths={selectedCareerPaths} theme={theme} visible={rightPanelOpen && !needsSetup} onClose={() => setRightPanelOpen(false)} jobActions={jobActions} promptRequest={promptRequest} onPromptHandled={(id) => setPromptRequest((request) => request?.id === id ? null : request)} onInsertPrompt={insertJobPrompt} onOpenRun={(run) => { if (run.jobId && jobs.some((job) => job.id === run.jobId)) openJobView(run.jobId, run.kind === "interview" ? "interview" : "application", run.roundId ?? undefined); }} />
   </main>;
 }
 
@@ -1369,14 +1371,11 @@ const VOICE_TEMPLATE = [
  * used, so nothing is filled in without the user knowing why.
  */
 function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessItem["action"]; profile: CandidateProfile | null; onSaved: (profile: CandidateProfile | null) => void; onClose: () => void }) {
-  const pillars = profile?.preferences.coverLetter.narrativePillars;
-  const logistics = profile?.preferences.interview;
+  // The same reading and saving as Settings (src/shared/profile-fields.ts owns both).
+  const logistics = readLogistics(profile);
   const [values, setValues] = useState<Record<string, string>>(() => ({
-    transitionSummary: profile?.career.transitionSummary ?? "",
-    turningPoints: pillars?.turningPoints || profile?.career.narrativePillars.turningPoints || "",
-    workingStyle: pillars?.workingStyle || profile?.career.narrativePillars.workingStyle || "",
-    personalValues: pillars?.personalValues || profile?.career.narrativePillars.personalValues || "",
-    location: logistics?.location ?? "", workAuthorization: logistics?.workAuthorization ?? "", compensation: logistics?.compensation ?? "", noticePeriod: logistics?.noticePeriod ?? "", workArrangement: logistics?.workArrangement ?? "",
+    ...readStoryFields(profile),
+    ...logistics,
     names: (profile?.truth.confidentialNames ?? []).join("\n"),
     voice: "",
   }));
@@ -1395,13 +1394,13 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
     try {
       let next: CandidateProfile | null = profile;
       if (action === "story") {
-        next = await window.sensei.profile.updateDetails({ transitionSummary: values.transitionSummary!.trim() });
-        // Story pillars have one owner: preferences.coverLetter.narrativePillars (W13).
-        next = await window.sensei.profile.updatePreferences({ ...next.preferences, coverLetter: { ...next.preferences.coverLetter, narrativePillars: { turningPoints: values.turningPoints!.trim(), workingStyle: values.workingStyle!.trim(), personalValues: values.personalValues!.trim() } } });
+        const story = storyUpdate(values as unknown as StoryFields);
+        next = await window.sensei.profile.updateDetails({ transitionSummary: story.transitionSummary });
+        next = await window.sensei.profile.updatePreferences({ ...next.preferences, coverLetter: { ...next.preferences.coverLetter, narrativePillars: story.narrativePillars } });
       } else if (action === "logistics") {
-        next = await window.sensei.profile.updateDetails({ interviewLogistics: { location: values.location!.trim(), workAuthorization: values.workAuthorization!.trim(), compensation: values.compensation!.trim(), noticePeriod: values.noticePeriod!.trim(), workArrangement: values.workArrangement!.trim() } });
+        next = await window.sensei.profile.updateDetails({ interviewLogistics: logisticsUpdate(values as unknown as InterviewLogistics) });
       } else if (action === "private-names") {
-        next = await window.sensei.profile.updateDetails({ confidentialNames: [...new Set(values.names!.split(/\n|,/).map((name) => name.trim()).filter(Boolean))] });
+        next = await window.sensei.profile.updateDetails({ confidentialNames: parseNames(values.names!) });
       } else if (action === "voice") {
         await window.sensei.profile.saveVoice(values.voice!);
       }
@@ -3062,19 +3061,15 @@ const RUN_KIND_LABEL: Record<RunStatus["kind"], string> = { fetch: "Job posting 
 const RUN_STATE_LABEL: Record<RunStatus["state"], string> = { running: "Running", passed: "Passed", warnings: "Passed with warnings", failed: "Needs fixes" };
 
 /** The latest pipeline run, refreshed every few seconds while the Agy panel is open. */
-function RunStatusBar({ onOpen }: { onOpen: (run: RunStatus) => void }) {
-  const [run, setRun] = useState<RunStatus | null>(null);
+function RunStatusBar({ run, onOpen }: { run: RunStatus | null; onOpen: (run: RunStatus) => void }) {
+  // The run comes from the app's one run watcher; only the elapsed time ticks here, and only while a run is going.
   const [now, setNow] = useState(Date.now());
+  const running = run?.state === "running";
   useEffect(() => {
-    let cancelled = false;
-    const load = () => void window.sensei.runs.latest().then((next) => {
-      if (cancelled) return;
-      setRun(next);
-    }).catch(() => undefined);
-    load();
-    const timer = window.setInterval(() => { load(); setNow(Date.now()); }, 4000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, []);
+    if (!running) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
   if (!run) return null;
   const elapsed = Math.max(0, Math.round((now - Date.parse(run.at)) / 1000));
   const duration = run.state === "running" ? `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}` : run.durationSeconds !== null ? `${run.durationSeconds}s` : null;
@@ -3091,7 +3086,7 @@ function RunStatusBar({ onOpen }: { onOpen: (run: RunStatus) => void }) {
   </section>;
 }
 
-function TerminalPanel({ cwd, selectedJobFiles, selectedCareerPaths, theme, visible, onClose, jobActions, promptRequest, onPromptHandled, onInsertPrompt, onOpenRun, onQueueJob, busyLabel }: { onOpenRun: (run: RunStatus) => void; onQueueJob: QueueJob; busyLabel: string | null; cwd: string; selectedJobFiles: string[]; selectedCareerPaths: string[]; theme: "dark" | "light"; visible: boolean; onClose: () => void; jobActions: JobAction[]; promptRequest: PromptRequest | null; onPromptHandled: (id: number) => void; onInsertPrompt: (action: JobAction) => void }) {
+function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareerPaths, theme, visible, onClose, jobActions, promptRequest, onPromptHandled, onInsertPrompt, onOpenRun, onQueueJob, busyLabel }: { latestRun: RunStatus | null; onOpenRun: (run: RunStatus) => void; onQueueJob: QueueJob; busyLabel: string | null; cwd: string; selectedJobFiles: string[]; selectedCareerPaths: string[]; theme: "dark" | "light"; visible: boolean; onClose: () => void; jobActions: JobAction[]; promptRequest: PromptRequest | null; onPromptHandled: (id: number) => void; onInsertPrompt: (action: JobAction) => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -3477,7 +3472,7 @@ function TerminalPanel({ cwd, selectedJobFiles, selectedCareerPaths, theme, visi
         </div>
       </div>
 
-      {visible && <RunStatusBar onOpen={onOpenRun} />}
+      {visible && <RunStatusBar run={latestRun} onOpen={onOpenRun} />}
       <div className="terminal-body">
         {viewMode === "chat" ? (
           <div className="chat-container">

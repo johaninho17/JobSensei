@@ -15,7 +15,7 @@ import { countWords, validateNamedTermSupport } from "./application-artifacts";
 import { BANNED_PHRASES } from "./evidence-snapshot";
 import { postingBody } from "./fit-scoring";
 import { parseInterviewVoice, parseStoryBank, type Story } from "./interview-context";
-import { writeJsonAtomic, writeTextAtomic } from "./persistence";
+import { writeJsonAtomic, writeTextAtomic, readTextFile } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
 
 export const ANSWERS_FILE = "application_answers.md";
@@ -238,7 +238,7 @@ export function headlessAgy(options: { agyPath: string; agyHome: string; cwd: st
   });
 }
 
-const read = (path: string) => readFile(path, "utf8").catch(() => "");
+const read = (path: string) => readTextFile(path).catch(() => "");
 
 /** The letter's paragraphs from "Dear …" to the sign-off (no header or contact lines). */
 export function letterBody(letter: string): string {

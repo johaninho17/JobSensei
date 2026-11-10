@@ -6,12 +6,12 @@ import {
   type InboxItem, type JobSearchSettings, type JobSearchState, type ScheduleInfo, type SearchRun, type SearchStatus, type WatchedSuggestion,
 } from "../shared/job-search";
 import { SubTabs } from "./SubTabs";
+import { boardName, boardRef } from "../shared/boards";
 
 type Tab = "matches" | "settings" | "runs";
 type Sort = "fit" | "newest" | "company";
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : /(?:ch|sh|s|x)$/.test(word) ? "es" : "s"}`;
-const BOARD_NAMES: Record<string, string> = { greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby", workday: "Workday", smartrecruiters: "SmartRecruiters", oracle: "Oracle", linkedin: "LinkedIn" };
 const capital = (text: string | null) => text ? text[0].toUpperCase() + text.slice(1) : null;
 const fitClass = (score: number) => score >= 4 ? "is-high" : score >= 3 ? "is-mid" : "is-low";
 const SETUP_LABEL: Record<(typeof WORK_SETUPS)[number], string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
@@ -150,7 +150,7 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
 
   function renderItem(item: InboxItem) {
     const isSelected = selected.has(item.id);
-    const facts = [item.location, item.workSetup, item.pay, capital(item.level), item.postedAt ? `Posted ${item.postedAt}` : null, item.board ? BOARD_NAMES[item.board] ?? item.board : null].filter(Boolean);
+    const facts = [item.location, item.workSetup, item.pay, capital(item.level), item.postedAt ? `Posted ${item.postedAt}` : null, boardName(item.board)].filter(Boolean);
     return <li key={item.id} className={`find-row${isSelected ? " is-selected" : ""}`} onClick={selecting ? () => toggle(item.id) : undefined}>
       {selecting && <input type="checkbox" checked={isSelected} onChange={() => toggle(item.id)} onClick={(event) => event.stopPropagation()} aria-label={`Select ${item.company ?? ""} ${item.title ?? ""}`} />}
       <span className={`fit-badge ${fitClass(effectiveFit(item))}`} title={item.agyFit ? `Agy's light rating (quick fit ${item.fit.score.toFixed(1)}); the full rating runs when you draft` : "Quick fit: the app's own check of your files against the posting, not a full rating"}>{effectiveFit(item).toFixed(1)}{item.agyFit && <small className="fit-badge-source">Agy</small>}</span>
@@ -309,7 +309,6 @@ function SearchSettingsForm({ settings, onSaved }: { settings: JobSearchSettings
   </form>;
 }
 
-const BOARD_LABEL: Record<WatchedSuggestion["board"], string> = { ashby: "Ashby", greenhouse: "Greenhouse", lever: "Lever" };
 
 const SOURCE_LABEL: Record<JobSearchSettings["watched"][number]["source"], string> = { user: "added by you", jobs: "from your jobs", search: "found by search" };
 
@@ -322,7 +321,7 @@ function WatchedCompanies({ watched, onChange, autoWatch, onAutoWatch, watchFoun
   const has = (board: string, slug: string) => watched.some((company) => company.board === board && company.slug.toLowerCase() === slug.toLowerCase());
   function addLink() {
     setProblem("");
-    const ref = parseBoardLink(link);
+    const ref = boardRef(link);
     if (!ref) { setProblem("Use a company's Ashby, Greenhouse, or Lever jobs link, such as jobs.lever.co/acme."); return; }
     if (!has(ref.board, ref.slug)) onChange([...watched, { ...ref, name: ref.slug, source: "user" }]);
     setLink("");
@@ -338,7 +337,7 @@ function WatchedCompanies({ watched, onChange, autoWatch, onAutoWatch, watchFoun
       <summary>{watched.length} watched{counts.length ? ` (${counts.map(([source, count]) => `${count} ${SOURCE_LABEL[source]}`).join(", ")})` : ""}</summary>
       {watched.length > 12 && <input className="watched-filter" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Find a company" aria-label="Find a watched company" />}
       <ul className="watched-list">{shown.map((company) => <li key={`${company.board}:${company.slug}`}>
-        <span>{company.name || company.slug} <span className="muted">· {BOARD_LABEL[company.board]} · {SOURCE_LABEL[company.source]}</span></span>
+        <span>{company.name || company.slug} <span className="muted">· {boardName(company.board)} · {SOURCE_LABEL[company.source]}</span></span>
         <button type="button" className="btn-link" onClick={() => onChange(watched.filter((candidate) => candidate !== company))}>Remove</button>
       </li>)}</ul>
     </details>}
@@ -368,18 +367,6 @@ function ScheduleStatus({ settings, onTurnOn }: { settings: JobSearchSettings; o
   return <p className="find-schedule">Scheduled search is on: {when}.{info.repaired === "installed" ? " It was reinstalled when the app started, to match your settings." : ""}</p>;
 }
 
-/** The board and company in a jobs link the user pasted (same rules as electron/job-boards.ts boardRef). */
-function parseBoardLink(text: string): { board: WatchedSuggestion["board"]; slug: string } | null {
-  let parsed: URL;
-  try { parsed = new URL(text.trim().includes("://") ? text.trim() : `https://${text.trim()}`); } catch { return null; }
-  const host = parsed.hostname.toLowerCase();
-  const first = parsed.pathname.split("/").filter(Boolean)[0];
-  const slug = first && /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/.test(first) ? first : null;
-  if (host === "jobs.ashbyhq.com" && slug) return { board: "ashby", slug };
-  if (host === "jobs.lever.co" && slug) return { board: "lever", slug };
-  if (/(?:^|\.)greenhouse\.io$/.test(host)) { const ghSlug = first === "embed" ? parsed.searchParams.get("for") : slug; if (ghSlug) return { board: "greenhouse", slug: ghSlug }; }
-  return null;
-}
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 

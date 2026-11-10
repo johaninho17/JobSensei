@@ -58,3 +58,10 @@ Audit date: 2026-10-23, updated after Phase 4. ⚠ marks copies still known to c
 | How much to change a resume | `jobsensei-resume-tailor` SKILL ("Surgical, not maximal") | `workflow-contract.md` points to it; `RESUME_TAILORING_TOO_SIMILAR` is a floor only; `tests/resume-tailoring-similarity.test.ts` |
 | No personal data in tracked files | `tests/privacy-scan.test.ts` (+ gitignored `dev-notes/privacy-terms.txt`) | `CLAUDE.md` rule 9 |
 | Job status and queue | `src/shared/tracker.ts` (derived status), `src/shared/job-queue.ts` (`advanceQueue`) | `docs/workspace-format.md` describes the files |
+| Job Search instructions to Agy (companies hiring for the titles, sources, links copied exactly) | `buildSearchPrompt` in `electron/job-search.ts` | None (no Agy workflow file). Every user search field is tested to reach the prompt (`tests/job-search.test.ts`) |
+| Light rating instructions and candidate card | `buildRatingPrompt` / `profileCard` in `electron/job-search.ts` | None |
+| Job boards (which board a link is, slugs, single postings, names) | `src/shared/boards.ts` | Reading boards over the network: `electron/job-boards.ts`. No other detection copies (`posting-record`, `application-questions`, Job Search page use it) |
+| Where a job is vs the user's places and setups | `locationFits` / `placesFor` / `inUS` in `src/shared/job-search.ts` | None |
+| Scheduled search window (once a day after the set time, scheduled runs only) | `dailyRunDue` / `windowStart` in `src/shared/job-search.ts`; OS triggers in `electron/search-schedule.ts` (`ensureSchedule`) | Wording on the Schedule section |
+| Profile fields edited in Settings and Setup (story, pillars, private names, logistics) | `src/shared/profile-fields.ts` | Both screens read and save through it (`tests/profile-fields.test.ts`) |
+| Latest run status | `RunWatcher` in `electron/run-watcher.ts` (pushes `runs:changed`) | The app's queue, notifications, and status bar all use the pushed value |

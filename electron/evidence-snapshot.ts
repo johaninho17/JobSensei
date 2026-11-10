@@ -1,3 +1,4 @@
+import { readTextFile, writeCompressedJsonAtomic } from "./persistence";
 import { createHash } from "node:crypto";
 import { postingRecordFor, writePostingRecord } from "./posting-record";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
@@ -859,11 +860,12 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
   });
 
   const currentPath = assertInsideWorkspace(workspace, join(statePath, "evidence_snapshot.json"));
-  const existingVersion = await readFile(currentPath, "utf8")
+  const existingVersion = await readTextFile(currentPath)
     .then((value) => evidenceSnapshotSchema.parse(JSON.parse(value)))
     .catch(() => null);
   const snapshot = existingVersion?.snapshotId === snapshotId ? existingVersion : candidateSnapshot;
-  await writeJsonAtomic(currentPath, snapshot);
+  // The full record of what the model saw for this job (~250 KB as text) is kept compressed (~10x smaller).
+  await writeCompressedJsonAtomic(currentPath, snapshot);
   const hiddenJobPath = assertInsideWorkspace(jobPath, join(statePath, "job.json"));
   let canonicalJob: { title?: string | null; company?: string | null; location?: string | null } | null = await readFile(hiddenJobPath, "utf8")
     .catch(() => readFile(join(jobPath, "job.json"), "utf8"))

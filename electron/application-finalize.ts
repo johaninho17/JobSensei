@@ -29,7 +29,7 @@ import { contextManifestHash } from "./context-manifest-hash";
 import { mergeEvaluationAudit } from "./evaluation-audit";
 import { gateStatusFor, normalizeEvaluationScore, scoreEvaluation } from "./fit-scoring";
 import { validateJobApplication } from "./application-validation";
-import { writeJsonAtomic, writeTextAtomic } from "./persistence";
+import { writeJsonAtomic, writeTextAtomic, readTextFile } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
 import { companyArgument, recordJobCompany } from "./job-company";
 import { readCandidateProfile } from "./candidate-profile";
@@ -45,7 +45,7 @@ class ApplicationInputError extends Error {
 
 async function readJson<T>(path: string, artifact: string, schema: { parse(value: unknown): T }): Promise<T> {
   try {
-    return schema.parse(JSON.parse(await readFile(path, "utf8")));
+    return schema.parse(JSON.parse(await readTextFile(path)));
   } catch (error: unknown) {
     throw new ApplicationInputError(artifact, error);
   }

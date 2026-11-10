@@ -5,7 +5,8 @@ import { updateJobTracker } from "./tracker";
 import { latestRun } from "./run-status";
 import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription } from "./jd-fetch";
 import { readJobQueue, saveJobQueue } from "./job-queue";
-import { prepareAgyHome, writeSenseiLauncher } from "./agy-home";
+import { RunWatcher } from "./run-watcher";
+import { createAgyHomeCache, prepareAgyHome, writeSenseiLauncher } from "./agy-home";
 import { QuestionAgent, headlessAgy } from "./question-agent";
 import { ensureSchedule, scheduleInfo } from "./search-schedule";
 import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, jobsForSearch, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
@@ -36,7 +37,6 @@ import { createCandidateProfile, readCandidateProfile, updateCandidateProfileDet
 import { compactStyleRules, profileInstructionLines } from "./evidence-snapshot";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
 import { readBulletBank, saveBulletBank } from "./bullet-bank";
-import { generateJobClarifyingQuestions, saveJobClarificationAnswers } from "./clarifying-questions";
 
 // Tests and the new-user check run the app with a throwaway settings folder, so real settings are never touched.
 if (process.env.SENSEI_USER_DATA) app.setPath("userData", resolve(process.env.SENSEI_USER_DATA));
@@ -69,7 +69,8 @@ function createWindow(): void {
   mainWindow.webContents.on("will-navigate", (event, url) => {
     if (!url.startsWith("http://127.0.0.1:5173") && !url.startsWith("file://")) event.preventDefault();
   });
-  mainWindow.on("closed", () => { terminal.stop(); mainWindow = undefined; });
+  mainWindow.on("closed", () => { terminal.stop(); runWatcher.stop(); mainWindow = undefined; });
+  runWatcher.start();
   if (process.env.SENSEI_SMOKE_OUT) runSmokeCheck(mainWindow, process.env.SENSEI_SMOKE_OUT);
   if (process.env.VITE_DEV_SERVER_URL) void mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   else void mainWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"));
@@ -227,8 +228,6 @@ ipcMain.handle("profile:preview", async () => {
 });
 ipcMain.handle("bullet-bank:get", async () => readBulletBank(requireWorkspace()));
 ipcMain.handle("bullet-bank:save", async (_event, bank) => saveBulletBank(requireWorkspace(), bank));
-ipcMain.handle("clarifications:get-questions", async (_event, jobId: string) => generateJobClarifyingQuestions(requireWorkspace(), jobId));
-ipcMain.handle("clarifications:submit-answers", async (_event, { jobId, answers }: { jobId: string; answers: any[] }) => saveJobClarificationAnswers(requireWorkspace(), jobId, answers));
 
 ipcMain.handle("settings:get", async () => {
   const current = await settingsStore.get();
@@ -376,10 +375,17 @@ ipcMain.handle("app:open-release", async (_event, url: unknown) => {
   const repository = await releaseRepository();
   if (typeof url === "string" && repository && url.startsWith(`https://github.com/${repository}/releases/`)) await shell.openExternal(url);
 });
-ipcMain.handle("runs:latest", async () => latestRun(requireWorkspace()));
+// One watcher reads the latest run for the whole app and pushes "runs:changed" when it changes.
+const runWatcher = new RunWatcher({
+  read: async () => workspacePath ? latestRun(workspacePath) : null,
+  onChange: (run) => mainWindow?.webContents.send("runs:changed", run),
+});
+ipcMain.handle("runs:latest", async () => runWatcher.current());
 
 // Written application questions: answered by a separate headless Agy in the background (never the terminal Agy).
-let questionAgyHome: string | null = null;
+// The app-owned Agy home for background Agy runs (written answers, search, rating), one per workspace.
+const agyHomes = createAgyHomeCache((workspace) => prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath }));
+const agyHomeFor = (workspace: string) => agyHomes.get(workspace);
 const questionAgent = new QuestionAgent({
   workspace: requireWorkspace,
   runner: async () => {
@@ -387,8 +393,7 @@ const questionAgent = new QuestionAgent({
     if (!agyPath) throw new Error("Agy isn't installed, so questions can't be answered.");
     const workspace = requireWorkspace();
     // The same app-owned Agy home (and sign-in) as the terminal; prepared here when the terminal hasn't started yet.
-    questionAgyHome ??= await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath });
-    return headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace });
+    return headlessAgy({ agyPath, agyHome: await agyHomeFor(workspace), cwd: workspace });
   },
   onUpdate: (jobId, state) => mainWindow?.webContents.send("questions:updated", jobId, state),
 });
@@ -430,14 +435,14 @@ ipcMain.handle("search:run", async (_event, mode: unknown) => {
   void (async () => {
     let result: { run: SearchRun } | null = null;
     try {
-      if (agyPath) questionAgyHome ??= await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath });
+      const agyHome = agyPath ? await agyHomeFor(workspace) : null;
       const { existingKeys, companies } = await jobsForSearch(workspace, await searchJobs(workspace));
       result = await runSearch({
         jobCompanies: companies,
         workspace,
         profile: await readCandidateProfile(workspace).catch(() => null),
-        runner: agyPath && questionAgyHome ? headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }) : null,
-        rater: agyPath && questionAgyHome ? headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace, timeoutSeconds: 240, jsonSchema: RATING_SCHEMA }) : null,
+        runner: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }) : null,
+        rater: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 240, jsonSchema: RATING_SCHEMA }) : null,
         existingKeys,
         onUpdate: (state) => mainWindow?.webContents.send("search:updated", state),
         onProgress: (progress) => setSearchStatus({ ...searchStatus, progress }),
@@ -465,8 +470,8 @@ ipcMain.handle("search:rate", async (_event, ids: unknown) => {
   void (async () => {
     let message = "";
     try {
-      questionAgyHome ??= await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath });
-      const rated = await rateItems({ workspace, profile: await readCandidateProfile(workspace).catch(() => null), rater: headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace, timeoutSeconds: 240, jsonSchema: RATING_SCHEMA }), ids: chosen, onUpdate: (state) => mainWindow?.webContents.send("search:updated", state) });
+      const agyHome = await agyHomeFor(workspace);
+      const rated = await rateItems({ workspace, profile: await readCandidateProfile(workspace).catch(() => null), rater: headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 240, jsonSchema: RATING_SCHEMA }), ids: chosen, onUpdate: (state) => mainWindow?.webContents.send("search:updated", state) });
       message = `Agy rated ${rated} of ${chosen.length} match${chosen.length === 1 ? "" : "es"}.`;
     } catch (error) {
       message = `Agy couldn't rate them: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`;
@@ -555,7 +560,8 @@ ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
     .then(async (home) => { await writeSenseiLauncher(home, { appRoot: terminalAppRoot(), packaged: app.isPackaged, runtimePath: process.execPath }); return home; })
     .catch((error) => { console.error("Agy home setup failed:", error); return null; });
   terminal.setAgyHome(agyHome);
-  questionAgyHome = agyHome ?? questionAgyHome;
+  // The terminal start rewrote the home's settings; background runs reuse it for this workspace.
+  if (agyHome) agyHomes.set(workspace, agyHome);
   return terminal.start(cwd, workspace, manifest);
 });
 ipcMain.handle("terminal:set-context", async (_event, input) => {

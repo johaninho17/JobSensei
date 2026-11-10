@@ -34,7 +34,7 @@ import {
   ClaimValidationError,
 } from "./application-artifacts";
 import { contextManifestHash } from "./context-manifest-hash";
-import { writeJsonAtomic } from "./persistence";
+import { writeJsonAtomic, readTextFile } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
 import { normalizeEvidenceClassifications, scoreEvaluation } from "./fit-scoring";
 import { canonicalCoverLetterDrifts, canonicalResumeDrifts } from "./canonical-resume";
@@ -959,5 +959,5 @@ async function readOptionalText(path: string): Promise<string | null> {
 }
 
 async function readOptionalJson<T>(path: string, schema: { parse(value: unknown): T }): Promise<T | null> {
-  return readFile(path, "utf8").then((value) => schema.parse(JSON.parse(value))).catch(() => null);
+  return readTextFile(path).then((value) => schema.parse(JSON.parse(value))).catch(() => null);
 }

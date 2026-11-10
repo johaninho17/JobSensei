@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { SenseiApi } from "../src/shared/schemas";
+import type { RunStatus, SenseiApi } from "../src/shared/schemas";
 import type { JobSearchState, SearchRun, SearchStatus } from "../src/shared/job-search";
 
 const api: SenseiApi = {
@@ -53,10 +53,6 @@ const api: SenseiApi = {
     get: () => ipcRenderer.invoke("bullet-bank:get"),
     save: (bank) => ipcRenderer.invoke("bullet-bank:save", bank),
   },
-  clarifications: {
-    getQuestions: (jobId) => ipcRenderer.invoke("clarifications:get-questions", jobId),
-    submitAnswers: (jobId, answers) => ipcRenderer.invoke("clarifications:submit-answers", { jobId, answers }),
-  },
   settings: {
     get: () => ipcRenderer.invoke("settings:get"),
     save: (input) => ipcRenderer.invoke("settings:save", input),
@@ -104,6 +100,7 @@ const api: SenseiApi = {
   },
   runs: {
     latest: () => ipcRenderer.invoke("runs:latest"),
+    onChanged: (callback) => { const listener = (_event: Electron.IpcRendererEvent, run: RunStatus | null) => callback(run); ipcRenderer.on("runs:changed", listener); return () => ipcRenderer.removeListener("runs:changed", listener); },
   },
   queue: {
     get: () => ipcRenderer.invoke("queue:get"),

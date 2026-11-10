@@ -12,7 +12,7 @@ import {
   questionBankUsage,
   stageForRoundId,
 } from "./interview-context";
-import { writeJsonAtomic } from "./persistence";
+import { writeJsonAtomic, readTextFile } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
 
 export interface InterviewCheckIssue {
@@ -87,7 +87,7 @@ function noticeWeeks(text: string): string[] {
 }
 
 async function readText(workspace: string, relativePath: string): Promise<string> {
-  return readFile(assertInsideWorkspace(workspace, join(workspace, relativePath)), "utf8").catch(() => "");
+  return readTextFile(assertInsideWorkspace(workspace, join(workspace, relativePath))).catch(() => "");
 }
 
 async function exists(workspace: string, relativePath: string): Promise<boolean> {
