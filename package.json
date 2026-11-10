@@ -92,6 +92,14 @@
       {
         "from": "AGENTS.md",
         "to": "AGENTS.md"
+      },
+      {
+        "from": "PRIVACY.md",
+        "to": "PRIVACY.md"
+      },
+      {
+        "from": "TERMS.md",
+        "to": "TERMS.md"
       }
     ],
     "mac": {

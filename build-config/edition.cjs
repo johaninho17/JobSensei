@@ -7,14 +7,19 @@ const { join } = require("node:path");
 
 const root = join(__dirname, "..");
 const base = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).build;
-const { EDITION_INFO, FEATURE_AGENT_ENTRIES, FEATURE_MODULES, agentsMdFor, featuresFor, parseEdition } = require(join(root, "dist-electron", "src", "shared", "edition.js"));
+const { EDITION_INFO, FEATURE_AGENT_ENTRIES, FEATURE_MODULES, agentsMdFor, featureText, featuresFor, parseEdition } = require(join(root, "dist-electron", "src", "shared", "edition.js"));
 
 const edition = parseEdition(process.env.JOBSENSEI_EDITION);
 const features = featuresFor(edition);
 const info = EDITION_INFO[edition];
 const off = (map) => Object.entries(map).filter(([, feature]) => !features[feature]).map(([entry]) => entry);
 
-let config = base;
+// PRIVACY.md and TERMS.md ship in every edition with only that edition's lines (the app shows the same text).
+mkdirSync(join(root, "dist-electron"), { recursive: true });
+for (const name of ["PRIVACY.md", "TERMS.md"]) writeFileSync(join(root, "dist-electron", name), featureText(features, readFileSync(join(root, name), "utf8")));
+const editionDocs = (resource) => (resource.from === "PRIVACY.md" || resource.from === "TERMS.md" ? { ...resource, from: `dist-electron/${resource.from}` } : resource);
+
+let config = { ...base, extraResources: base.extraResources.map(editionDocs) };
 if (edition !== "solo") {
   // AGENTS.md ships with only this edition's sections.
   const agentsMd = join(root, "dist-electron", "AGENTS.md");
@@ -30,7 +35,7 @@ if (edition !== "solo") {
     extraResources: base.extraResources.map((resource) => {
       if (resource.from === ".agents") return { ...resource, filter: [...resource.filter, ...off(FEATURE_AGENT_ENTRIES).flatMap((entry) => [`!${entry}`, `!${entry}/**/*`])] };
       if (resource.from === "AGENTS.md") return { ...resource, from: "dist-electron/AGENTS.md" };
-      return resource;
+      return editionDocs(resource);
     }),
   };
 }

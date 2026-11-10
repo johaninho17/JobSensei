@@ -1,8 +1,9 @@
+import { PrivacyAndTerms } from "./Privacy";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { EMPTY_INTERVIEW_LOGISTICS, type BulletBank, type BulletBankItem, type CandidateProfile, type InterviewLogistics, type Settings, type VoiceSettings } from "../shared/schemas";
 import { deriveVoicePresets } from "../shared/voice-presets";
 
-type SettingsTab = "voice" | "story" | "truth" | "interview" | "resume" | "bullets" | "identity" | "preview";
+type SettingsTab = "voice" | "story" | "truth" | "interview" | "resume" | "bullets" | "identity" | "preview" | "privacy";
 // Interview prep settings exist only where the edition has interviews (src/shared/edition.ts).
 const SETTINGS_TABS: SettingsTab[] = ["voice", "story", "truth", ...(FEATURES.interviews ? ["interview" as const] : []), "resume", "bullets", "identity", "preview"];
 
@@ -304,6 +305,18 @@ export function SettingsModal({
           >
             What Agy sees
           </button>
+          <button
+            type="button"
+            role="tab"
+            id="settings-tab-privacy"
+            aria-controls="settings-panel"
+            tabIndex={activeTab === "privacy" ? 0 : -1}
+            aria-selected={activeTab === "privacy"}
+            className={activeTab === "privacy" ? "is-active" : ""}
+            onClick={() => setActiveTab("privacy")}
+          >
+            Privacy and data
+          </button>
         </nav>
 
         <div className="settings-body" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${activeTab}`}>
@@ -590,6 +603,7 @@ export function SettingsModal({
             </div>
           )}
 
+          {activeTab === "privacy" && <div className="settings-section"><PrivacyAndTerms /></div>}
           {activeTab === "preview" && (
             <div className="settings-section">
               <div className="settings-group">

@@ -127,3 +127,22 @@ describe("setup per edition", () => {
     expect(soloIds).toEqual(expect.arrayContaining(["logistics", "story-bank"]));
   });
 });
+
+describe("privacy and terms per edition (recruiter plan R6)", () => {
+  it("shows each edition only what it does, with no markers left", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { featureText, featuresFor } = await import("../src/shared/edition");
+    const read = (name: string) => readFileSync(new URL(`../${name}`, import.meta.url), "utf8");
+    const solo = featureText(featuresFor("solo"), read("PRIVACY.md"));
+    const recruiter = featureText(featuresFor("recruiter"), read("PRIVACY.md"));
+    expect(solo).toContain("Job Search");
+    expect(solo).not.toMatch(/candidate/i);
+    expect(recruiter).toContain("Delete a candidate");
+    expect(recruiter).toContain("permission");
+    expect(recruiter).not.toContain("Job Search");
+    expect(recruiter).not.toContain("Application questions");
+    for (const text of [solo, recruiter, featureText(featuresFor("recruiter"), read("TERMS.md")), featureText(featuresFor("solo"), read("TERMS.md"))]) expect(text).not.toContain("<!--");
+    expect(featureText(featuresFor("recruiter"), read("TERMS.md"))).toContain("Your candidates");
+    expect(featureText(featuresFor("solo"), read("TERMS.md"))).not.toContain("Your candidates");
+  });
+});

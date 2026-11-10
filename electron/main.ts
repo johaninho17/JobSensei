@@ -444,6 +444,11 @@ async function registerFeatureIpc(): Promise<void> {
     busyReason: candidateBusyReason,
     openCandidate: async (_id, folder) => { await closeCandidateFolder(); await openCandidateFolder(folder); },
     closeCandidate: closeCandidateFolder,
+    userDataPath: () => app.getPath("userData"),
+    chooseSavePath: async (defaultName) => {
+      const result = mainWindow ? await dialog.showSaveDialog(mainWindow, { title: "Export candidate", defaultPath: join(app.getPath("downloads"), defaultName), filters: [{ name: "Zip archive", extensions: ["zip"] }] }) : { canceled: true, filePath: undefined };
+      return result.canceled || !result.filePath ? null : result.filePath;
+    },
   });
 }
 

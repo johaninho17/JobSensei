@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { CandidateEntry, CandidatesState } from "../shared/candidates";
 import type { CandidateSuggestion, LibraryPosting } from "../shared/candidate-match";
+import { PrivacyDialog } from "./Privacy";
 
 const message = (caught: unknown) => (caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "Something went wrong.");
 
@@ -49,14 +50,16 @@ function AddCandidateForm({ autoFocus = false, onCancel }: { autoFocus?: boolean
 
 /** Shown when no candidate is open: the first run, or after the open candidate was archived. */
 function CandidateStart({ state }: { state: CandidatesState }) {
+  const [privacy, setPrivacy] = useState(false);
   const others = state.candidates.filter((candidate) => candidate.status !== "archived");
   const archived = state.candidates.filter((candidate) => candidate.status === "archived");
   return <main className="candidate-start" aria-labelledby="candidate-start-title">
     <header>
       <p className="candidate-start-edition">{EDITION.productName}</p>
       <h1 id="candidate-start-title">{state.candidates.length ? "Choose a candidate" : "Add your first candidate"}</h1>
-      <p>Each candidate gets their own folder for their resume, career files, and jobs. Agy only ever sees the candidate you have open.</p>
+      <p>Each candidate gets their own folder for their resume, career files, and jobs. Agy only ever sees the candidate you have open. <button className="btn-link" onClick={() => setPrivacy(true)}>How candidates' information is handled</button></p>
     </header>
+    {privacy && <PrivacyDialog onClose={() => setPrivacy(false)} />}
     {others.length > 0 && <ul className="candidate-list">{others.map((candidate) => <li key={candidate.id}><CandidateOpenButton candidate={candidate} /></li>)}</ul>}
     <section className="onboarding-card"><h2>{state.candidates.length ? "Add a candidate" : "Who are you working for?"}</h2><AddCandidateForm autoFocus /></section>
     {archived.length > 0 && <ArchivedList candidates={archived} />}
@@ -88,7 +91,8 @@ export function CandidateSwitcher({ state }: { state: CandidatesState }) {
   const others = state.candidates.filter((candidate) => candidate.id !== active.id && candidate.status !== "archived");
   const archived = state.candidates.filter((candidate) => candidate.status === "archived");
   const listed = state.candidates.filter((candidate) => candidate.status !== "archived");
-  const [mode, setMode] = useState<"menu" | "add" | "rename">("menu");
+  const [mode, setMode] = useState<"menu" | "add" | "rename" | "delete">("menu");
+  const [notice, setNotice] = useState<string | null>(null);
   const [rename, setRename] = useState(active.displayName);
   const [error, setError] = useState<string | null>(null);
   const details = useRef<HTMLDetailsElement>(null);
@@ -121,9 +125,13 @@ export function CandidateSwitcher({ state }: { state: CandidatesState }) {
         {(["paused", "placed"] as const).filter((status) => status !== active.status).map((status) => <button key={status} role="menuitem" className="menu-item" onClick={() => void window.sensei.candidates.setStatus(active.id, status).then(reloadForCandidate, (caught) => setError(message(caught)))}>Mark as {STATUS_LABEL[status].toLowerCase()}</button>)}
         {active.status !== "active" && <button role="menuitem" className="menu-item" onClick={() => void run(window.sensei.candidates.setStatus(active.id, "active"))}>Mark as active</button>}
         <button role="menuitem" className="menu-item" onClick={() => { if (window.confirm(`Archive ${active.displayName}? Their folder stays on this computer and you can restore them later.`)) void run(window.sensei.candidates.setStatus(active.id, "archived")); }}>Archive {active.displayName}</button>
+        <button role="menuitem" className="menu-item" onClick={() => void window.sensei.candidates.exportCandidate(active.id).then((result) => setNotice(result ? `Saved ${result.files} files to ${result.path.split(/[\\/]/).pop()}` : null), (caught) => setError(message(caught)))}>Export {active.displayName} (.zip)</button>
+        <button role="menuitem" className="menu-item is-danger" onClick={() => setMode("delete")}>Delete {active.displayName}…</button>
+        {notice && <p className="muted" role="status">{notice}</p>}
         {archived.length > 0 && <ArchivedList candidates={archived} />}
       </>}
       {mode === "add" && <AddCandidateForm autoFocus onCancel={() => setMode("menu")} />}
+      {mode === "delete" && <DeleteCandidateForm candidate={active} onCancel={() => setMode("menu")} />}
       {mode === "rename" && <form className="candidate-add" onSubmit={(event) => { event.preventDefault(); void run(window.sensei.candidates.rename(active.id, rename)); }}>
         <label><span>Name</span><input value={rename} onChange={(event) => setRename(event.target.value)} autoFocus maxLength={120} /></label>
         <div className="onboarding-actions"><button className="btn-primary" type="submit" disabled={!rename.trim()}>Save</button><button className="btn-quiet" type="button" onClick={() => setMode("menu")}>Cancel</button></div>
@@ -196,4 +204,34 @@ export function WhoIsThisFor({ posting, activeId, onDone }: { posting: LibraryPo
       </div>
     </form>
   </div>;
+}
+
+/** Deleting is permanent: the recruiter types the name, and is offered an export first (recruiter plan R6). */
+function DeleteCandidateForm({ candidate, onCancel }: { candidate: CandidateEntry; onCancel: () => void }) {
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [exported, setExported] = useState<string | null>(null);
+  const [removed, setRemoved] = useState<string[] | null>(null);
+  async function remove(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try { setRemoved((await window.sensei.candidates.deleteCandidate(candidate.id, typed)).removed); } catch (caught) { setError(message(caught)); } finally { setBusy(false); }
+  }
+  if (removed) return <div className="candidate-add" role="status">
+    <p><strong>{candidate.displayName} was deleted.</strong> Removed:</p>
+    <ul>{removed.map((line) => <li key={line}>{line}</li>)}</ul>
+    <div className="onboarding-actions"><button className="btn-primary" onClick={reloadForCandidate}>Done</button></div>
+  </div>;
+  return <form className="candidate-add" onSubmit={(event) => void remove(event)}>
+    <p>This removes {candidate.displayName}'s folder (resume, career files, notes, jobs, and drafts), their Agy history, and their place on the list. It can't be undone.</p>
+    <div className="onboarding-actions"><button type="button" className="btn-quiet" onClick={() => void window.sensei.candidates.exportCandidate(candidate.id).then((result) => setExported(result ? `Exported to ${result.path.split(/[\\/]/).pop()}` : null), (caught) => setError(message(caught)))}>Export first (.zip)</button>{exported && <span className="muted">{exported}</span>}</div>
+    <label><span>Type <strong>{candidate.displayName}</strong> to confirm</span><input value={typed} onChange={(event) => setTyped(event.target.value)} autoFocus /></label>
+    <div className="onboarding-actions">
+      <button className="btn-primary is-danger" type="submit" disabled={typed.trim() !== candidate.displayName || busy}>{busy ? "Deleting…" : "Delete for good"}</button>
+      <button className="btn-quiet" type="button" onClick={onCancel}>Cancel</button>
+    </div>
+    {error && <p className="inline-error" role="alert">{error}</p>}
+  </form>;
 }

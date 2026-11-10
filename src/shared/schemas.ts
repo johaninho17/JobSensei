@@ -1284,6 +1284,10 @@ export interface SenseiApi {
     saveNotes(notes: string): Promise<string>;
     /** Another candidate with jobs waiting, so the queue can move on to them (recruiter plan R5). */
     nextQueued(): Promise<{ id: string; name: string; waiting: number } | null>;
+    /** Saves a .zip of the candidate's folder where the recruiter chooses; null when cancelled (recruiter plan R6). */
+    exportCandidate(candidateId: string): Promise<{ path: string; files: number } | null>;
+    /** Deletes a candidate for good; the typed name must match. Returns what was removed. */
+    deleteCandidate(candidateId: string, typedName: string): Promise<{ name: string; removed: string[] }>;
     /** Every job across candidates (recruiter plan R5). */
     pipeline(): Promise<import("./candidate-match").PipelineRow[]>;
     /** Sets one status on several jobs; returns each job's status before, for Undo. */

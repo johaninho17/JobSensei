@@ -136,3 +136,51 @@ describe("recruiter notes (recruiter plan R4)", () => {
     await expect(saveRecruiterNotes(dir, "x".repeat(50_001))).rejects.toThrow("50,000");
   });
 });
+
+describe("export and delete (recruiter plan R6)", () => {
+  it("exports a candidate's folder as a .zip that lists every file", async () => {
+    const { zipFolder } = await import("../electron/zip-folder");
+    const { writeFile, mkdir } = await import("node:fs/promises");
+    const dir = await root();
+    const alex = await addCandidate(dir, "Alex Morgan", { suffix: "7k2f", seed: false });
+    const folder = join(dir, "candidates", alex.id);
+    await mkdir(join(folder, "resumes"), { recursive: true });
+    await writeFile(join(folder, "resumes", "base.md"), "# Alex Morgan\n- Supported REST API integrations.\n");
+    const target = join(dir, "alex.zip");
+    const count = await zipFolder(folder, target, "Alex_Morgan");
+    const zip = await readFile(target);
+    expect(count).toBeGreaterThan(0);
+    expect(zip.readUInt32LE(0)).toBe(0x04034b50);
+    expect(zip.includes(Buffer.from("Alex_Morgan/resumes/base.md"))).toBe(true);
+    const end = zip.subarray(zip.length - 22);
+    expect(end.readUInt32LE(0)).toBe(0x06054b50);
+    expect(end.readUInt16LE(10)).toBe(count);
+    const { execFileSync } = await import("node:child_process");
+    if (process.platform !== "win32") expect(execFileSync("unzip", ["-p", target, "Alex_Morgan/resumes/base.md"]).toString()).toContain("REST API");
+  });
+
+  it("deletes a candidate's folder, Agy home, and list entry, and never follows the keychain link out of the home", async () => {
+    const { deleteCandidate } = await import("../electron/candidates");
+    const { mkdir, writeFile, symlink } = await import("node:fs/promises");
+    const dir = await root();
+    const alex = await addCandidate(dir, "Alex Morgan", { suffix: "7k2f", seed: false });
+    const jordan = await addCandidate(dir, "Jordan Lee", { suffix: "q9w3", seed: false });
+    await setActiveCandidate(dir, alex.id);
+    const outside = join(dir, "keychains");
+    await mkdir(outside);
+    await writeFile(join(outside, "login.keychain-db"), "keep me");
+    const home = join(dir, "user-data", "agy-home", "candidates", alex.id);
+    await mkdir(join(home, "Library"), { recursive: true });
+    await symlink(outside, join(home, "Library", "Keychains"), "dir");
+    const result = await deleteCandidate(dir, alex.id, home);
+    expect(result.name).toBe("Alex Morgan");
+    expect(await exists(join(dir, "candidates", alex.id))).toBe(false);
+    expect(await exists(home)).toBe(false);
+    expect(await readFile(join(outside, "login.keychain-db"), "utf8")).toBe("keep me");
+    expect((await readRoster(dir)).candidates.map((candidate) => candidate.id)).toEqual([jordan.id]);
+    expect(await activeCandidatePath(dir)).toBeNull();
+    const leftovers = JSON.stringify([await readFile(join(dir, "recruiter", "candidates.json"), "utf8"), await readFile(join(dir, "recruiter", "settings.json"), "utf8")]);
+    expect(leftovers).not.toContain("Alex");
+    expect(await exists(join(dir, "candidates", jordan.id))).toBe(true);
+  });
+});

@@ -1,7 +1,7 @@
 // Recruiter Edition (recruiter plan R1): the candidate roster and the active candidate. Only the app writes these
 // files; each candidate's folder is a normal workspace, so the pipeline runs unchanged inside it.
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   CANDIDATES_DIR, RECRUITER_DIR, RECRUITER_SETTINGS_PATH, ROSTER_PATH, candidateFolder, candidateIdFor,
@@ -132,4 +132,24 @@ export async function saveRecruiterNotes(candidateFolder: string, notes: string)
   await mkdir(dirname(path), { recursive: true });
   await writeTextAtomic(path, `${NOTES_HEADER}${notes.replaceAll("\r\n", "\n").trim()}\n`);
   return RECRUITER_NOTES_PATH;
+}
+
+/**
+ * Deletes a candidate for good (recruiter plan R6): their folder, their Agy home (sign-in copy and history), and their
+ * place on the list. Returns what was removed. The caller confirms first and offers an export.
+ */
+export async function deleteCandidate(root: string, id: string, agyHome: string | null): Promise<{ name: string; removed: string[] }> {
+  const roster = await readRoster(root);
+  const entry = roster.candidates.find((candidate) => candidate.id === id);
+  if (!entry) throw new Error("That candidate isn't on the list.");
+  const folder = await candidatePath(root, id);
+  const removed: string[] = [];
+  await rm(folder, { recursive: true, force: true });
+  removed.push(`Their folder (${candidateFolder(id)})`);
+  if (agyHome) { await rm(agyHome, { recursive: true, force: true }); removed.push("Their Agy history and sign-in copy"); }
+  await saveRoster(root, { ...roster, candidates: roster.candidates.filter((candidate) => candidate.id !== id) });
+  removed.push("Their place on the candidate list");
+  const settings = await readRecruiterSettings(root);
+  if (settings.activeCandidateId === id) await writeJsonAtomic(join(root, RECRUITER_SETTINGS_PATH), recruiterSettingsSchema.parse({ ...settings, activeCandidateId: null, updatedAt: now() }));
+  return { name: entry.displayName, removed };
 }

@@ -808,3 +808,10 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .pipeline-table thead th { font-size: var(--fs-13); color: var(--muted); font-weight: 600; }
 .pipeline-table tr.is-selected td { background: var(--hover); }
 .pipeline-table .pipeline-group th { padding-top: var(--space-3); font-weight: 600; color: var(--ink); background: var(--sunken); }
+
+/* Privacy and terms (recruiter plan R6, both editions) */
+.privacy-page { max-width: 72ch; }
+.privacy-page hr { border: 0; border-top: 1px solid var(--line); margin: var(--space-4) 0; }
+.privacy-dialog { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 64px); overflow: auto; }
+.menu-item.is-danger { color: var(--risk); }
+.btn-primary.is-danger { background: var(--risk); border-color: var(--risk); color: var(--on-accent); }

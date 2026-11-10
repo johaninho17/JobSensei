@@ -2,10 +2,12 @@
 import { ipcMain } from "electron";
 import { artifactPrefixFor, candidateStatusSchema, type CandidatesState } from "../src/shared/candidates";
 import { createCandidateProfile } from "./candidate-profile";
-import { addCandidate, candidatePath, readRecruiterNotes, saveRecruiterNotes, readRecruiterSettings, readRoster, renameCandidate, setActiveCandidate, setCandidateStatus } from "./candidates";
+import { addCandidate, candidatePath, deleteCandidate, readRecruiterNotes, saveRecruiterNotes, readRecruiterSettings, readRoster, renameCandidate, setActiveCandidate, setCandidateStatus } from "./candidates";
 import { SettingsStore } from "./settings";
 import { readJobQueue } from "./job-queue";
 import { listPipeline, setPipelineStatus } from "./pipeline";
+import { zipFolder } from "./zip-folder";
+import { candidateAgyHomePath } from "./agy-home";
 import { nextQueuedCandidate, sendPosting, setLibraryCompany, stageLibraryLink, stageLibraryPaste, suggestCandidates } from "./posting-library";
 import { join } from "node:path";
 
@@ -18,6 +20,10 @@ export type CandidateContext = {
   openCandidate: (id: string, folder: string) => Promise<void>;
   /** Leaves no candidate open (after archiving the active one). */
   closeCandidate: () => Promise<void>;
+  /** The app's data folder, which holds each candidate's Agy home. */
+  userDataPath: () => string;
+  /** Asks where to save a file; null when the user cancels. */
+  chooseSavePath: (defaultName: string) => Promise<string | null>;
 };
 
 /** Settings for one candidate live in their own folder, never in the recruiter's app settings. */
@@ -82,6 +88,30 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
   ipcMain.handle("library:send", async (_event, postingId: unknown, candidateIds: unknown) => {
     if (!Array.isArray(candidateIds) || !candidateIds.length || candidateIds.length > 100) throw new Error("Choose at least one candidate.");
     return sendPosting(ctx.root(), id(postingId), candidateIds.map(id), (await state()).activeId);
+  });
+  // Export and delete (recruiter plan R6).
+  ipcMain.handle("candidates:export", async (_event, candidateId: unknown) => {
+    const roster = await readRoster(ctx.root());
+    const entry = roster.candidates.find((candidate) => candidate.id === id(candidateId));
+    if (!entry) throw new Error("That candidate isn't on the list.");
+    const stamp = new Date().toISOString().slice(0, 10);
+    const target = await ctx.chooseSavePath(`${artifactPrefixFor(entry.displayName)}_${stamp}.zip`);
+    if (!target) return null;
+    const files = await zipFolder(await candidatePath(ctx.root(), entry.id), target, artifactPrefixFor(entry.displayName));
+    return { path: target, files };
+  });
+  ipcMain.handle("candidates:delete", async (_event, candidateId: unknown, typedName: unknown) => {
+    const roster = await readRoster(ctx.root());
+    const entry = roster.candidates.find((candidate) => candidate.id === id(candidateId));
+    if (!entry) throw new Error("That candidate isn't on the list.");
+    if (typeof typedName !== "string" || typedName.trim() !== entry.displayName) throw new Error(`Type ${entry.displayName} exactly to delete them.`);
+    const current = await state();
+    if (current.activeId === entry.id) {
+      const busy = await ctx.busyReason();
+      if (busy) throw new Error(busy);
+      await ctx.closeCandidate();
+    }
+    return deleteCandidate(ctx.root(), entry.id, candidateAgyHomePath(ctx.userDataPath(), entry.id));
   });
   ipcMain.handle("pipeline:list", async () => listPipeline(ctx.root()));
   ipcMain.handle("pipeline:set-status", async (_event, entries: unknown, status: unknown) => {

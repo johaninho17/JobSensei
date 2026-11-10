@@ -97,6 +97,7 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   "candidate-ipc": "candidates",
   "posting-library": "candidates",
   pipeline: "candidates",
+  "zip-folder": "candidates",
 };
 
 export function includedAgentEntry(features: Features, entry: string): boolean {
@@ -110,14 +111,15 @@ export function includedCommand(features: Features, name: string): boolean {
 }
 
 /**
- * AGENTS.md marks feature-only sections with `<!-- feature:<name> -->` … `<!-- /feature -->`.
- * Sections whose feature is off are removed from the workspace copy; the markers themselves stay out of every copy.
+ * AGENTS.md, PRIVACY.md, and TERMS.md mark feature-only text with `<!-- feature:<name> -->` … `<!-- /feature -->`
+ * (whole sections or a few words). Text whose feature is off is removed; the markers stay out of every copy.
  */
-export function agentsMdFor(features: Features, text: string): string {
+export function featureText(features: Features, text: string): string {
   return text
     .replace(/<!-- feature:(\w+) -->\n?([\s\S]*?)<!-- \/feature -->\n?/g, (_match, name: string, body: string) => (features[name as keyof Features] === false ? "" : body))
     .replace(/\n{3,}/g, "\n\n");
 }
+export const agentsMdFor = featureText;
 
 /** Marker written into a workspace so each edition can tell its own folders apart (`.sensei/edition.json`). */
 export const EDITION_MARKER = ".sensei/edition.json";

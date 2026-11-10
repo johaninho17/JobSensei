@@ -15,5 +15,7 @@ describe.skipIf(!recruiterBuild)("recruiter renderer bundle", () => {
     const code = readdirSync(assets).filter((name) => name.endsWith(".js")).map((name) => readFileSync(join(assets, name), "utf8")).join("\n");
     for (const text of LEFT_OUT) expect(code, text).not.toContain(text);
     expect(code).toContain("Recruiter Edition");
+    // Only FEATURES.<name> is replaced at build time; a bare FEATURES left in the bundle crashes the page that uses it.
+    expect(code).not.toMatch(/\bFEATURES\b/);
   });
 });

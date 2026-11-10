@@ -27,6 +27,7 @@ import { InterviewView, LiveWindow } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { CandidateGate, CandidateSwitcher, RecruiterNotes, WhoIsThisFor } from "./Candidates";
 import { PipelineView } from "./Pipeline";
+import { PrivacyDialog } from "./Privacy";
 import type { LibraryPosting } from "../shared/candidate-match";
 import type { CandidatesState } from "../shared/candidates";
 import { JobSearchView } from "./JobSearchView";
@@ -1134,6 +1135,7 @@ const ONBOARDING_STEPS: Array<{ id: OnboardingStep; label: string }> = [
  * when each step is done; this screen never keeps its own copy of those rules.
  */
 function Onboarding({ workspace, profile, readiness, onProfileCreated, onProfileSaved, onChooseBase, onOpenAgy, onRefresh, onAction, onFinish }: { workspace: WorkspaceSummary; profile: CandidateProfile | null; readiness: Readiness | null; onProfileCreated: (profile: CandidateProfile) => Promise<void>; onProfileSaved: (profile: CandidateProfile | null) => void; onChooseBase: () => Promise<void>; onOpenAgy: () => void; onRefresh: () => void; onAction: (action: ReadinessItem["action"]) => void; onFinish: (destination: "jobs" | "context") => void }) {
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const [editing, setEditing] = useState<ReadinessItem["action"] | null>(null);
   const item = (id: string) => readiness?.items.find((entry) => entry.id === id) ?? null;
   const resume = item("resume");
@@ -1182,7 +1184,8 @@ function Onboarding({ workspace, profile, readiness, onProfileCreated, onProfile
   return <section className="get-started onboarding" aria-labelledby="onboarding-title">
     <div className="get-started-copy">
       <h1 id="onboarding-title">Get JobSensei ready</h1>
-      <p>A few steps, all inside the app. Your files stay on this computer, in your workspace folder; nothing is uploaded except what Agy reads to draft for you.</p>
+      <p>A few steps, all inside the app. Your files stay on this computer, in your workspace folder; nothing is uploaded except what Agy reads to draft for you. <button className="btn-link" onClick={() => setPrivacyOpen(true)}>Privacy and terms</button></p>
+      {privacyOpen && <PrivacyDialog onClose={() => setPrivacyOpen(false)} />}
     </div>
     <ol className="onboarding-steps" aria-label="Setup steps">{ONBOARDING_STEPS.map((entry, index) => <li key={entry.id} className={index < current ? "is-complete" : index === current ? "is-current" : ""} aria-current={index === current ? "step" : undefined}><span>{index < current ? "✓" : index + 1}</span>{entry.label}</li>)}</ol>
     <div className="setup-card onboarding-card">
