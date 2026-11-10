@@ -13,8 +13,8 @@ import { autoDraftPicks, dailyRunDue } from "../src/shared/job-search";
 import { prepareAgyHome } from "./agy-home";
 import { readCandidateProfile } from "./candidate-profile";
 import { listJobFolders } from "./job-folders";
-import { JOB_SEARCH_DIR, RATING_SCHEMA, SEARCH_SCHEMA, readSearchSettings, readSearchState, releaseSearchLock, runSearch, saveSearchState, takeSearchLock } from "./job-search";
-import { jobKey } from "../src/shared/job-search";
+import { JOB_SEARCH_DIR, RATING_SCHEMA, jobsForSearch, SEARCH_SCHEMA, readSearchSettings, readSearchState, releaseSearchLock, runSearch, saveSearchState, takeSearchLock } from "./job-search";
+import { reachedInterview } from "../src/shared/tracker";
 import { headlessAgy } from "./question-agent";
 import { appRoot, resolveAgyExecutable } from "./terminal";
 
@@ -67,13 +67,14 @@ async function main(): Promise<number> {
   try {
     const agyPath = resolveAgyExecutable();
     const agyHome = agyPath ? await prepareAgyHome(userData, workspace, [], { appRoot: appRoot(), runtimePath: process.execPath }) : null;
-    const jobs = await listJobFolders(workspace).catch(() => []);
-    const existingKeys = new Set(jobs.map((job) => jobKey(job.company, job.title)).filter((key): key is string => Boolean(key)));
+    const jobs = (await listJobFolders(workspace).catch(() => [])).map((job) => ({ id: job.id, company: job.company, title: job.title, reachedInterview: reachedInterview(job) }));
+    const { existingKeys, companies } = await jobsForSearch(workspace, jobs);
     const { run } = await runSearch({
       workspace,
       profile,
       scheduled: true,
       existingKeys,
+      jobCompanies: companies,
       runner: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }) : null,
       rater: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 240, jsonSchema: RATING_SCHEMA }) : null,
     });

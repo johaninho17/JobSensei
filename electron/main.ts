@@ -7,8 +7,8 @@ import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription } 
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { prepareAgyHome, writeSenseiLauncher } from "./agy-home";
 import { QuestionAgent, headlessAgy } from "./question-agent";
-import { installSchedule, removeSchedule, scheduleInfo } from "./search-schedule";
-import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
+import { ensureSchedule, scheduleInfo } from "./search-schedule";
+import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, jobsForSearch, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
 import { jobKey, type SearchRun, type SearchStatus } from "../src/shared/job-search";
 import { boardRef } from "./job-boards";
 import { readPostingRecord } from "./posting-record";
@@ -393,6 +393,8 @@ const questionAgent = new QuestionAgent({
   onUpdate: (jobId, state) => mainWindow?.webContents.send("questions:updated", jobId, state),
 });
 // Job Search: one headless Agy run finds links; the app opens, saves, and rates each one (electron/job-search.ts).
+/** The user's jobs as the search needs them (company, title, whether one reached an interview). */
+const searchJobs = async (workspace: string) => (await listJobFolders(workspace)).map((job) => ({ id: job.id, company: job.company, title: job.title, reachedInterview: reachedInterview(job) }));
 // The run lives here, not in the page: leaving Job Search never stops it, and every page hears its progress.
 let searchStatus: SearchStatus = { running: false, source: null, progress: null, startedAt: null };
 const setSearchStatus = (next: SearchStatus) => { searchStatus = next; mainWindow?.webContents.send("search:status", next); };
@@ -409,12 +411,11 @@ const scheduleTarget = (workspace: string) => ({ runtime: process.execPath, runn
 ipcMain.handle("search:save-settings", async (_event, input: unknown) => {
   const workspace = requireWorkspace();
   const settings = await saveSearchSettings(workspace, input);
-  const info = await scheduleInfo(app.getPath("userData"));
-  if (settings.schedule.enabled) await installSchedule(scheduleTarget(workspace), settings.schedule);
-  else if (info.installed) await removeSchedule(app.getPath("userData"));
+  await ensureSchedule(scheduleTarget(workspace), settings.schedule);
   return settings;
 });
-ipcMain.handle("search:schedule-info", async () => scheduleInfo(app.getPath("userData")));
+let scheduleRepaired: "installed" | "removed" | null = null;
+ipcMain.handle("search:schedule-info", async () => ({ ...(await scheduleInfo(app.getPath("userData"))), repaired: scheduleRepaired }));
 ipcMain.handle("search:clear-pending", async (_event, ids: unknown) => clearPendingDrafts(requireWorkspace(), foundIds(ids)));
 /** Starts a run and returns at once; "watched" checks watched companies only (no Agy, no quota). */
 ipcMain.handle("search:run", async (_event, mode: unknown) => {
@@ -430,9 +431,9 @@ ipcMain.handle("search:run", async (_event, mode: unknown) => {
     let result: { run: SearchRun } | null = null;
     try {
       if (agyPath) questionAgyHome ??= await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath });
-      const jobs = await listJobFolders(workspace);
-      const existingKeys = new Set(jobs.map((job) => jobKey(job.company, job.title)).filter((key): key is string => Boolean(key)));
+      const { existingKeys, companies } = await jobsForSearch(workspace, await searchJobs(workspace));
       result = await runSearch({
+        jobCompanies: companies,
         workspace,
         profile: await readCandidateProfile(workspace).catch(() => null),
         runner: agyPath && questionAgyHome ? headlessAgy({ agyPath, agyHome: questionAgyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }) : null,
@@ -477,21 +478,10 @@ ipcMain.handle("search:rate", async (_event, ids: unknown) => {
   })();
 });
 /** Companies from your jobs whose postings are on Ashby, Greenhouse, or Lever, for the watched list. */
+/** Companies from your jobs whose postings are on Ashby, Greenhouse, or Lever, for the watched list. */
 ipcMain.handle("search:suggest-watched", async () => {
   const workspace = requireWorkspace();
-  const jobs = await listJobFolders(workspace);
-  const found = new Map<string, { board: "ashby" | "greenhouse" | "lever"; slug: string; name: string; jobs: number; interviewed: boolean }>();
-  for (const job of jobs) {
-    const url = (await readPostingRecord(join(workspace, "jobs", job.id)).catch(() => null))?.url;
-    const ref = url ? boardRef(url) : null;
-    if (!ref) continue;
-    const key = `${ref.board}:${ref.slug.toLowerCase()}`;
-    const current = found.get(key) ?? { ...ref, name: job.company ?? ref.slug, jobs: 0, interviewed: false };
-    current.jobs += 1;
-    current.interviewed ||= reachedInterview(job);
-    found.set(key, current);
-  }
-  return [...found.values()].sort((a, b) => Number(b.interviewed) - Number(a.interviewed) || b.jobs - a.jobs || a.name.localeCompare(b.name));
+  return (await jobsForSearch(workspace, await searchJobs(workspace))).companies;
 });
 ipcMain.handle("search:set-status", async (_event, ids: unknown, status: unknown) => {
   if (status !== "new" && status !== "dismissed") throw new Error("Use Save or Add to queue for those.");
@@ -683,6 +673,14 @@ app.whenReady().then(async () => {
       await settingsStore.save({ baseResumePath: profileResume, secondaryResumePaths: savedSettings.secondaryResumePaths, linkedinProfilePath: savedSettings.linkedinProfilePath });
       console.info(`Base resume restored from the profile: ${profileResume}`);
     }
+    // The scheduled search follows its settings: reinstalled if it went missing or is out of date (moved app or
+    // workspace), never changed when it already matches. Reported to the Job Search page.
+    void (async () => {
+      const searchSettings = await readSearchSettings(workspacePath, await readCandidateProfile(workspacePath).catch(() => null));
+      const result = await ensureSchedule(scheduleTarget(workspacePath), searchSettings.schedule).catch((error) => { console.error("Scheduled search could not be checked:", error); return null; });
+      if (result?.changed) console.info(`Scheduled search ${result.changed} to match Search settings.`);
+      if (result?.changed) scheduleRepaired = result.changed;
+    })();
     startWorkspaceWatcher(workspacePath);
   } catch (error) {
     console.error("Sensei startup initialization error:", error);

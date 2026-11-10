@@ -5,7 +5,7 @@
  */
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import type { JobSearchSettings } from "../src/shared/job-search";
@@ -150,6 +150,33 @@ export async function installSchedule(target: ScheduleTarget, schedule: JobSearc
     throw new Error("Scheduled searches work on macOS and Windows.");
   }
   return scheduleInfo(target.userData);
+}
+
+/**
+ * Makes the OS schedule match the settings: installs it when on and missing or out of date (a moved workspace or
+ * app, changed times), removes it when off, and leaves a matching one alone (reinstalling would start a check).
+ * Called when Search settings are saved and when the app starts.
+ */
+export async function ensureSchedule(target: ScheduleTarget, schedule: JobSearchSettings["schedule"]): Promise<{ info: ScheduleInfo; changed: "installed" | "removed" | null }> {
+  const current = await scheduleInfo(target.userData);
+  if (!schedule.enabled) {
+    if (!current.installed) return { info: current, changed: null };
+    return { info: await removeSchedule(target.userData), changed: "removed" };
+  }
+  const label = scheduleLabel(target.userData);
+  const sameDay = (text: string) => text.replace(/<StartBoundary>\d{4}-\d{2}-\d{2}T/g, "<StartBoundary>T").replace(/^﻿/, "");
+  let existing: string | null = null;
+  let expected = "";
+  if (process.platform === "darwin") {
+    existing = await readFile(plistPath(label), "utf8").catch(() => null);
+    expected = launchdPlist(label, target, schedule);
+  } else if (process.platform === "win32") {
+    existing = await readFile(join(target.userData, "job-search-task.xml"), "utf16le").then(sameDay).catch(() => null);
+    const user = [process.env.USERDOMAIN, process.env.USERNAME ?? userInfo().username].filter(Boolean).join("\\");
+    expected = sameDay(windowsTaskXml(target, schedule, new Date(), user));
+  }
+  if (current.installed && existing === expected) return { info: current, changed: null };
+  return { info: await installSchedule(target, schedule), changed: "installed" };
 }
 
 export async function removeSchedule(userData: string): Promise<ScheduleInfo> {
