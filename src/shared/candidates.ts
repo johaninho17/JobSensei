@@ -52,7 +52,8 @@ export function candidateIdFor(displayName: string, suffix: string): string {
 }
 
 /** What the renderer gets: the roster and who is active. */
-export type CandidatesState = { candidates: CandidateEntry[]; activeId: string | null };
+/** `waiting`: jobs queued for each candidate (recruiter plan R5), so work waiting for others is visible. */
+export type CandidatesState = { candidates: CandidateEntry[]; activeId: string | null; waiting?: Record<string, number> };
 
 /** File prefix for a new candidate's documents: `Alex_Morgan` (accents dropped; "Candidate" when nothing is left). */
 export function artifactPrefixFor(displayName: string): string {

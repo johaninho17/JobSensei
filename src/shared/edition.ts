@@ -95,6 +95,8 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   "job-boards": "jobSearch",
   "search-schedule": "jobSearch",
   "candidate-ipc": "candidates",
+  "posting-library": "candidates",
+  pipeline: "candidates",
 };
 
 export function includedAgentEntry(features: Features, entry: string): boolean {

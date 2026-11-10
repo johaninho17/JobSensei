@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SENIORITY_LEVELS, WORK_MODES } from "./posting";
 import { jobHealthSchema } from "./job-record";
 import type { Readiness } from "./readiness";
 import type { JobSearchSettings, JobSearchState, ScheduleInfo, SearchRun, SearchStatus, WatchedSuggestion } from "./job-search";
@@ -80,6 +81,24 @@ export const interviewLogisticsSchema = z.object({
 export type InterviewLogistics = z.infer<typeof interviewLogisticsSchema>;
 export const EMPTY_INTERVIEW_LOGISTICS: InterviewLogistics = { location: "", workAuthorization: "", compensation: "", noticePeriod: "", workArrangement: "" };
 
+/**
+ * The jobs a candidate is looking for (Recruiter Edition, plan R5): used to suggest who a posting suits. Every field
+ * is optional; an empty one is never held against a posting.
+ */
+export const candidateTargetsSchema = z.object({
+  /** Role titles, e.g. "Support Engineer", "Customer Success Manager". */
+  roles: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
+  /** Places they can work from, e.g. "Denver", "Colorado", "United States". Ignored for remote postings. */
+  locations: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
+  workModes: z.array(z.enum(WORK_MODES)).default([]),
+  level: z.enum(SENIORITY_LEVELS).nullable().default(null),
+  /** Lowest yearly pay they'd take, in US dollars. */
+  salaryFloor: z.number().int().nonnegative().max(10_000_000).nullable().default(null),
+  needsSponsorship: z.boolean().default(false),
+});
+export type CandidateTargets = z.infer<typeof candidateTargetsSchema>;
+export const EMPTY_CANDIDATE_TARGETS: CandidateTargets = { roles: [], locations: [], workModes: [], level: null, salaryFloor: null, needsSponsorship: false };
+
 export const candidateProfileSchema = z.object({
   schemaVersion: z.literal(1),
   identity: z.object({
@@ -138,6 +157,7 @@ export const candidateProfileSchema = z.object({
       narrativeDepth: "journey_first",
     }),
     interview: interviewLogisticsSchema.default(EMPTY_INTERVIEW_LOGISTICS),
+    targets: candidateTargetsSchema.default(EMPTY_CANDIDATE_TARGETS),
   }),
   truth: z.object({
     factualAuthority: z.string().default("Selected structured career evidence"),
@@ -1262,6 +1282,19 @@ export interface SenseiApi {
     notes(): Promise<string>;
     /** Saves them as a context file and returns its path, to be checked for Agy. */
     saveNotes(notes: string): Promise<string>;
+    /** Another candidate with jobs waiting, so the queue can move on to them (recruiter plan R5). */
+    nextQueued(): Promise<{ id: string; name: string; waiting: number } | null>;
+    /** Every job across candidates (recruiter plan R5). */
+    pipeline(): Promise<import("./candidate-match").PipelineRow[]>;
+    /** Sets one status on several jobs; returns each job's status before, for Undo. */
+    setPipelineStatus(entries: Array<{ candidateId: string; jobId: string }>, status: TrackerStatus): Promise<Array<{ candidateId: string; jobId: string; previous: TrackerStatus }>>;
+    /** Posting library: fetch or save a posting once, then send it to one or more candidates. */
+    stageLink(url: string, postingId: string): Promise<import("./candidate-match").LibraryPosting>;
+    stagePaste(text: string, postingId: string): Promise<import("./candidate-match").LibraryPosting>;
+    setPostingCompany(postingId: string, company: string): Promise<import("./candidate-match").LibraryPosting>;
+    suggest(postingId: string): Promise<import("./candidate-match").CandidateSuggestion[]>;
+    /** Returns the open candidate's queue item (the window adds it) and who else got it. */
+    send(postingId: string, candidateIds: string[]): Promise<{ active: { pasteId: string; label: string | null } | null; queued: string[] }>;
   };
   setup: {
     readiness(): Promise<Readiness>;

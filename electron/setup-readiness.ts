@@ -124,6 +124,17 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
     });
   }
 
+  if (features.candidates) {
+    const targets = profile?.preferences.targets;
+    const set = targets ? [targets.roles.length && "roles", targets.workModes.length && "work setup", targets.locations.length && "locations", targets.level && "level", targets.salaryFloor && "pay floor"].filter(Boolean) as string[] : [];
+    add({
+      id: "targets", level: "recommended", state: set.length ? "done" : "missing", action: "targets", path: null,
+      title: "Job targets",
+      detail: set.length ? `Set: ${set.join(", ")}.` : "Not set yet: roles, work setup, locations, level, pay floor.",
+      improves: "\"Who is this for?\" suggests this candidate for postings that fit, and says why.",
+    });
+  }
+
   const names = profile?.truth.confidentialNames ?? [];
   add({
     id: "private-names", level: "recommended", state: names.length ? "done" : "missing", action: "private-names", path: null,

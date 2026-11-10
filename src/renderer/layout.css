@@ -781,3 +781,30 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .recruiter-notes textarea { width: 100%; min-height: 240px; padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-s); color: var(--ink); background: var(--canvas); font: 400 var(--fs-15)/1.5 var(--font-ui); resize: vertical; }
 .recruiter-notes textarea:focus-visible { outline: none; box-shadow: var(--focus); }
 .recruiter-notes .onboarding-actions { margin-top: var(--space-2); align-items: center; }
+
+/* Who is this for? (recruiter plan R5) */
+.who-dialog { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 64px); overflow: auto; }
+.who-list { list-style: none; margin: var(--space-2) 0; padding: 0; display: grid; gap: var(--space-2); }
+.who-list > li { padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--canvas); }
+.who-list > li.is-good { border-color: var(--accent); }
+.who-list > li.is-warn { border-style: dashed; }
+.who-list label { display: flex; gap: var(--space-2); align-items: center; cursor: pointer; }
+.who-name { display: flex; gap: var(--space-2); align-items: baseline; flex-wrap: wrap; }
+.who-name small { color: var(--muted); font-size: var(--fs-13); }
+.who-name .who-tag { color: var(--accent); font-weight: 600; }
+.who-reasons { list-style: none; margin: var(--space-1) 0 0 26px; padding: 0; font-size: var(--fs-13); color: var(--muted); }
+.who-reasons .bad { color: var(--ink); }
+.setup-choices { display: flex; flex-wrap: wrap; gap: var(--space-3); border: 0; padding: 0; margin: 0; }
+.setup-choices legend { width: 100%; padding: 0; margin-bottom: var(--space-1); }
+.setup-choices label, .setup-check { display: inline-flex; gap: var(--space-1); align-items: center; font-size: var(--fs-15); }
+.setup-field select { padding: 4px var(--space-2); border: 1px solid var(--line-strong); border-radius: var(--radius-s); color: var(--ink); background: var(--canvas); font: inherit; }
+
+/* Pipeline (recruiter plan R5) */
+.pipeline-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: end; margin: var(--space-3) 0; }
+.pipeline-toolbar label:not(.setup-check) { display: grid; gap: var(--space-1); font-size: var(--fs-13); color: var(--muted); }
+.pipeline-toolbar select { padding: 4px var(--space-2); border: 1px solid var(--line-strong); border-radius: var(--radius-s); color: var(--ink); background: var(--canvas); font: inherit; font-size: var(--fs-15); }
+.pipeline-table { width: 100%; border-collapse: collapse; font-size: var(--fs-15); }
+.pipeline-table th, .pipeline-table td { text-align: left; padding: var(--space-2); border-bottom: 1px solid var(--line); }
+.pipeline-table thead th { font-size: var(--fs-13); color: var(--muted); font-weight: 600; }
+.pipeline-table tr.is-selected td { background: var(--hover); }
+.pipeline-table .pipeline-group th { padding-top: var(--space-3); font-weight: 600; color: var(--ink); background: var(--sunken); }

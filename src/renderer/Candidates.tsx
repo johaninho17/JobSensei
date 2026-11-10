@@ -2,6 +2,7 @@
 // Rendered only when FEATURES.candidates is on, so the solo build leaves this file out.
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { CandidateEntry, CandidatesState } from "../shared/candidates";
+import type { CandidateSuggestion, LibraryPosting } from "../shared/candidate-match";
 
 const message = (caught: unknown) => (caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "Something went wrong.");
 
@@ -111,7 +112,7 @@ export function CandidateSwitcher({ state }: { state: CandidatesState }) {
         {others.map((candidate) => {
           const position = listed.findIndex((entry) => entry.id === candidate.id) + 1;
           return <button key={candidate.id} role="menuitem" className="menu-item" onClick={() => void run(window.sensei.candidates.switchTo(candidate.id))}>
-            {candidate.displayName}<small>{STATUS_LABEL[candidate.status]}{position <= 9 ? ` · ${SHORTCUT}${position}` : ""}</small>
+            {candidate.displayName}<small>{STATUS_LABEL[candidate.status]}{state.waiting?.[candidate.id] ? ` · ${state.waiting[candidate.id]} waiting` : ""}{position <= 9 ? ` · ${SHORTCUT}${position}` : ""}</small>
           </button>;
         })}
         {others.length > 0 && <hr />}
@@ -158,4 +159,41 @@ export function RecruiterNotes({ name, onSaved }: { name: string | null; onSaved
     </>}
     {error && <p className="inline-error" role="alert">{error}</p>}
   </section>;
+}
+
+/**
+ * "Who is this for?" (recruiter plan R5): every candidate, best match first, each with why they are or aren't
+ * suggested. The open candidate and the suggested ones start ticked; nothing is queued until the recruiter confirms.
+ */
+export function WhoIsThisFor({ posting, activeId, onDone }: { posting: LibraryPosting; activeId: string | null; onDone: (ids: string[] | null) => void }) {
+  const [rows, setRows] = useState<CandidateSuggestion[] | null>(null);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    void window.sensei.candidates.suggest(posting.id).then((list) => {
+      setRows(list);
+      setChosen(new Set(list.filter((row) => !row.duplicate && !row.blocker && (row.suggested || row.id === activeId)).map((row) => row.id)));
+    }, (caught) => setError(message(caught)));
+  }, [posting.id]);
+  const toggle = (id: string) => setChosen((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const label = [posting.company, posting.title].filter(Boolean).join(", ") || posting.url || "this posting";
+  return <div className="search-overlay" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") onDone(null); }}>
+    <form className="company-dialog who-dialog" role="dialog" aria-modal="true" aria-labelledby="who-title" onSubmit={(event) => { event.preventDefault(); if (chosen.size) onDone([...chosen]); }}>
+      <h2 id="who-title">Who is this for?</h2>
+      <p>{label}{posting.location ? ` · ${posting.location}` : ""}. Each candidate gets their own copy of the posting, tailored in their own folder.</p>
+      {error && <p className="inline-error" role="alert">{error}</p>}
+      {!rows && !error && <p className="muted">Checking candidates…</p>}
+      {rows && <ul className="who-list">{rows.map((row) => <li key={row.id} className={row.duplicate || row.blocker ? "is-warn" : row.suggested ? "is-good" : ""}>
+        <label>
+          <input type="checkbox" checked={chosen.has(row.id)} onChange={() => toggle(row.id)} />
+          <span className="who-name"><strong>{row.name}</strong>{row.id === activeId && <small>Open now</small>}{row.status !== "active" && <small>{STATUS_LABEL[row.status as CandidateEntry["status"]] ?? row.status}</small>}{row.suggested && <small className="who-tag">Suggested</small>}</span>
+        </label>
+        {row.reasons.length > 0 && <ul className="who-reasons">{row.reasons.map((reason) => <li key={reason.text} className={reason.good ? "good" : "bad"}><span aria-hidden="true">{reason.good ? "✓" : "–"}</span> {reason.text}</li>)}</ul>}
+      </li>)}</ul>}
+      <div className="company-dialog-actions">
+        <button type="button" className="btn-quiet" onClick={() => onDone(null)}>Cancel</button>
+        <button className="btn-primary" disabled={!chosen.size}>{chosen.size > 1 ? `Tailor for ${chosen.size} candidates` : "Tailor for 1 candidate"}</button>
+      </div>
+    </form>
+  </div>;
 }

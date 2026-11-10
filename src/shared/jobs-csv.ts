@@ -12,7 +12,20 @@ export function csvCell(value: string | number | null | undefined): string {
 
 /** The jobs as CSV with a UTF-8 BOM, so Excel, Numbers, and Google Sheets read accents correctly. */
 export function jobsToCsv(jobs: JobFolderSummary[]): string {
-  const rows = jobs.map((job) => [
+  return toCsv(COLUMNS, jobs.map(jobRow));
+}
+
+/** The cross-candidate pipeline as CSV (Recruiter Edition): the same columns with the candidate first. */
+export function pipelineToCsv(rows: Array<JobFolderSummary & { candidateName: string }>): string {
+  return toCsv(["Candidate", ...COLUMNS], rows.map((row) => [row.candidateName, ...jobRow(row)]));
+}
+
+function toCsv(columns: readonly string[], rows: Array<Array<string | number | null>>): string {
+  return `\uFEFF${[columns, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
+}
+
+function jobRow(job: JobFolderSummary): Array<string | number | null> {
+  return [
     job.company ?? job.name,
     job.title ?? "",
     TRACKER_LABELS[effectiveStatus(job)],
@@ -24,6 +37,6 @@ export function jobsToCsv(jobs: JobFolderSummary[]): string {
     job.createdAt.slice(0, 10),
     job.tracker?.notes ?? "",
     job.id,
-  ]);
-  return `﻿${[COLUMNS as readonly string[], ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
+  ];
 }
+

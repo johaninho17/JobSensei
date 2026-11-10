@@ -4,6 +4,9 @@ import { artifactPrefixFor, candidateStatusSchema, type CandidatesState } from "
 import { createCandidateProfile } from "./candidate-profile";
 import { addCandidate, candidatePath, readRecruiterNotes, saveRecruiterNotes, readRecruiterSettings, readRoster, renameCandidate, setActiveCandidate, setCandidateStatus } from "./candidates";
 import { SettingsStore } from "./settings";
+import { readJobQueue } from "./job-queue";
+import { listPipeline, setPipelineStatus } from "./pipeline";
+import { nextQueuedCandidate, sendPosting, setLibraryCompany, stageLibraryLink, stageLibraryPaste, suggestCandidates } from "./posting-library";
 import { join } from "node:path";
 
 export type CandidateContext = {
@@ -32,7 +35,13 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
     const root = ctx.root();
     const [roster, settings] = await Promise.all([readRoster(root), readRecruiterSettings(root)]);
     const active = roster.candidates.find((candidate) => candidate.id === settings.activeCandidateId && candidate.status !== "archived");
-    return { candidates: roster.candidates, activeId: active?.id ?? null };
+    const waiting: Record<string, number> = {};
+    await Promise.all(roster.candidates.filter((candidate) => candidate.status !== "archived").map(async (candidate) => {
+      const queue = await readJobQueue(await candidatePath(root, candidate.id)).catch(() => null);
+      const count = queue?.items.filter((item) => item.status === "queued").length ?? 0;
+      if (count) waiting[candidate.id] = count;
+    }));
+    return { candidates: roster.candidates, activeId: active?.id ?? null, waiting };
   };
   const switchTo = async (id: string) => {
     const busy = await ctx.busyReason();
@@ -64,6 +73,22 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
     if (typeof notes !== "string") throw new Error("Notes must be text.");
     return saveRecruiterNotes(await activeFolder(), notes);
   });
+  // Posting library and "Who is this for?" (recruiter plan R5).
+  const id = (value: unknown) => String(value ?? "");
+  ipcMain.handle("library:stage-link", async (_event, url: unknown, postingId: unknown) => stageLibraryLink(ctx.root(), id(url), id(postingId)));
+  ipcMain.handle("library:stage-paste", async (_event, text: unknown, postingId: unknown) => stageLibraryPaste(ctx.root(), text, id(postingId)));
+  ipcMain.handle("library:set-company", async (_event, postingId: unknown, company: unknown) => setLibraryCompany(ctx.root(), id(postingId), id(company)));
+  ipcMain.handle("library:suggest", async (_event, postingId: unknown) => suggestCandidates(ctx.root(), id(postingId)));
+  ipcMain.handle("library:send", async (_event, postingId: unknown, candidateIds: unknown) => {
+    if (!Array.isArray(candidateIds) || !candidateIds.length || candidateIds.length > 100) throw new Error("Choose at least one candidate.");
+    return sendPosting(ctx.root(), id(postingId), candidateIds.map(id), (await state()).activeId);
+  });
+  ipcMain.handle("pipeline:list", async () => listPipeline(ctx.root()));
+  ipcMain.handle("pipeline:set-status", async (_event, entries: unknown, status: unknown) => {
+    if (!Array.isArray(entries)) throw new Error("Choose the jobs to change.");
+    return setPipelineStatus(ctx.root(), entries.map((entry) => ({ candidateId: id((entry as { candidateId?: unknown }).candidateId), jobId: id((entry as { jobId?: unknown }).jobId) })), status);
+  });
+  ipcMain.handle("candidates:next-queued", async () => nextQueuedCandidate(ctx.root(), (await state()).activeId));
   ipcMain.handle("candidates:switch", async (_event, id: unknown) => switchTo(String(id ?? "")));
   ipcMain.handle("candidates:rename", async (_event, id: unknown, name: unknown) => renameCandidate(ctx.root(), String(id ?? ""), text(name, "candidate's name")));
   ipcMain.handle("candidates:set-status", async (_event, id: unknown, status: unknown) => {

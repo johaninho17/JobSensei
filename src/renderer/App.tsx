@@ -25,7 +25,9 @@ import { SearchPalette, type PaletteAction } from "./SearchPalette";
 import { SettingsModal } from "./SettingsModal";
 import { InterviewView, LiveWindow } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
-import { CandidateGate, CandidateSwitcher, RecruiterNotes } from "./Candidates";
+import { CandidateGate, CandidateSwitcher, RecruiterNotes, WhoIsThisFor } from "./Candidates";
+import { PipelineView } from "./Pipeline";
+import type { LibraryPosting } from "../shared/candidate-match";
 import type { CandidatesState } from "../shared/candidates";
 import { JobSearchView } from "./JobSearchView";
 import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
@@ -45,7 +47,7 @@ const VIEWER_PANEL_MIN = 320;
 type PromptRequest = { id: number; text: string; label: string };
 type JobWorkspaceTab = "overview" | "application" | "interview" | "files";
 type JobLocation = { kind: "job"; jobId: string; tab: JobWorkspaceTab; roundId?: string };
-type PageLocation = { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" };
+type PageLocation = { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" };
 type WorkspaceLocation =
   | PageLocation
   | JobLocation
@@ -131,6 +133,9 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const [companyAsk, setCompanyAsk] = useState<{ title: string | null; resolve: (company: string | null) => void } | null>(null);
   /** Asks which company a pasted posting is for; null when the user skips. */
   const askCompany = (title: string | null) => new Promise<string | null>((resolve) => setCompanyAsk({ title, resolve }));
+  // Recruiter Edition: which candidates a new posting is for (recruiter plan R5).
+  const [whoAsk, setWhoAsk] = useState<{ posting: LibraryPosting; resolve: (ids: string[] | null) => void } | null>(null);
+  const askWho = (posting: LibraryPosting) => new Promise<string[] | null>((resolve) => setWhoAsk({ posting, resolve }));
   const runningItem = jobQueue.items.find((item) => item.status === "running");
   const busyJobLabel = runningItem ? runningItem.label ?? runningItem.url ?? "a queued job" : null;
   /**
@@ -153,7 +158,23 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     // Links are fetched here, by the app: Agy's sandbox has no network. The saved posting is queued like a paste,
     // and a page that can't be read is reported now instead of stalling the queue.
     const item = newQueueItem({ kind: "paste", label: null, note: input.kind === "paste" ? input.note : null }, new Date(), manual);
-    if (input.kind === "found") {
+    if (FEATURES.candidates && input.kind !== "found") {
+      // Recruiter Edition: the posting is saved once in the library, then copied to each candidate chosen for it.
+      let posting = input.kind === "link" ? await window.sensei.candidates.stageLink(input.url, item.id) : await window.sensei.candidates.stagePaste(input.text, item.id);
+      if (!posting.company) {
+        const firstLine = input.kind === "paste" ? input.text.split("\n").map((line) => line.replace(/^#+\s*/, "").trim()).find(Boolean)?.slice(0, 80) ?? null : null;
+        const company = await askCompany(posting.title ?? firstLine);
+        if (company) posting = await window.sensei.candidates.setPostingCompany(item.id, company);
+      }
+      const chosen = await askWho(posting);
+      if (!chosen) { const stop = new Error("No candidate chosen, so nothing was queued."); stop.name = "NotQueued"; throw stop; }
+      const sent = await window.sensei.candidates.send(item.id, chosen);
+      if (sent.queued.length) showToast(`Queued for ${plural(sent.queued.length, "other candidate")}; their jobs run after this candidate's queue`);
+      if (!sent.active) return 0;
+      item.id = sent.active.pasteId;
+      item.label = sent.active.label;
+      item.url = input.kind === "link" ? input.url : null;
+    } else if (input.kind === "found") {
       // A Job Search match: its posting is already saved and cleaned, so it is copied to the queue without a fetch.
       item.label = await window.sensei.jobSearch.stage(input.id, item.id, input.auto === true);
     } else if (input.kind === "link") {
@@ -202,6 +223,16 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         if (was === "running" && item.status === "needs_attention") notify("A queued job needs attention", item.label ?? item.url ?? "");
       }
       if (before.items.some((item) => item.status === "running") && !queue.items.some((item) => item.status === "queued" || item.status === "running")) {
+        // Recruiter Edition: move on to the next candidate with jobs waiting. Switching reloads the window, so their
+        // jobs run in their own folder with their own Agy.
+        if (FEATURES.candidates && !queue.items.some((item) => item.status === "needs_attention")) {
+          const next = await window.sensei.candidates.nextQueued().catch(() => null);
+          if (next) {
+            await saveQueue(queue);
+            notify("Moving to the next candidate", `${next.name}: ${plural(next.waiting, "job")} waiting`);
+            try { await window.sensei.candidates.switchTo(next.id); window.location.reload(); return; } catch { /* stays on this candidate */ }
+          }
+        }
         notify("Job queue finished", `${queue.items.filter((item) => item.status === "done").length} drafted, ${queue.items.filter((item) => item.status === "needs_attention").length} need attention`);
       }
       if (JSON.stringify(queue) !== JSON.stringify(queueRef.current)) await saveQueue(queue);
@@ -490,7 +521,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
 
   function currentReturnLocation(jobId: string | null): JobLocation | PageLocation {
     const current = navigationHistory[navigationIndex];
-    if (current?.kind === "job" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home") return current;
+    if (current?.kind === "job" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home") return current;
     if (current?.kind === "document") return current.returnTo;
     return jobId ? { kind: "job", jobId, tab: "overview" } : { kind: "jobs-home" };
   }
@@ -530,6 +561,14 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     setTreeRevealPath(result.relativePath);
     void selectFile(result.relativePath);
   }
+
+  // Recruiter Edition: a job picked in the Pipeline for another candidate opens once that candidate has loaded.
+  useEffect(() => {
+    if (!FEATURES.candidates || !jobs.length) return;
+    let pending: string | null = null;
+    try { pending = window.sessionStorage.getItem("sensei-open-job"); window.sessionStorage.removeItem("sensei-open-job"); } catch { pending = null; }
+    if (pending && jobs.some((job) => job.id === pending)) openJob(pending);
+  }, [jobs.length > 0]);
 
   function openJob(jobId: string) {
     if (editorDirty && !window.confirm("Discard your unsaved Markdown changes?")) return;
@@ -875,6 +914,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       {FEATURES.candidates && candidates && <CandidateSwitcher state={candidates} />}
       <ul className="side-nav">
         <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
+        {FEATURES.candidates && <li><button aria-current={activePage === "pipeline-home" ? "page" : undefined} onClick={() => showPage("pipeline-home")}><NavIcon name="pipeline" />Pipeline</button></li>}
         {FEATURES.jobSearch && <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" />Job Search{searchStatus.running ? <span className="side-due" title={searchProgressText(searchStatus)}>Searching…</span> : searchNew > 0 && <span className="side-count" title={`${searchNew} new match${searchNew === 1 ? "" : "es"}`}>{searchNew}</span>}</button></li>}
         {FEATURES.interviews && <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{interviewingJobs.length > 0 && <span className="side-count">{interviewingJobs.length}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>}
         <li><button aria-current={activePage === "setup-home" ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />Setup{readiness && <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>}</button></li>
@@ -929,6 +969,12 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
           : FEATURES.jobSearch && currentLocation.kind === "search-home" ? <JobSearchView status={searchStatus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onOpenJob={openJob} onToast={showToast} />
           : FEATURES.interviews && currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
+          : FEATURES.candidates && currentLocation.kind === "pipeline-home" ? <PipelineView activeId={candidates?.activeId ?? null} onToast={showToast} onOpenJob={(candidateId, jobId) => {
+            if (candidateId === candidates?.activeId) { openJob(jobId); return; }
+            // Another candidate's job: open that candidate (the window reloads), then the job.
+            try { window.sessionStorage.setItem("sensei-open-job", jobId); } catch { /* storage unavailable */ }
+            void window.sensei.candidates.switchTo(candidateId).then(() => window.location.reload(), (caught) => setError(messageOf(caught, "Couldn't open that candidate.")));
+          }} />
           : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome
             onOpen={(path) => void selectFile(path)}
@@ -951,12 +997,13 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     <div className={`panel-resizer is-right ${rightPanelOpen ? "" : "is-collapsed"}`} role="separator" aria-label="Resize terminal panel" aria-orientation="vertical" aria-valuemin={RIGHT_PANEL_MIN} aria-valuemax={panelMaximum("right")} aria-valuenow={rightPanelWidth} tabIndex={rightPanelOpen ? 0 : -1} onPointerDown={(event) => beginPanelResize("right", event)} onKeyDown={(event) => resizePanelWithKeyboard("right", event)} />
     <ToastRegion toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
     {shortcutsOpen && <ShortcutsPanel onClose={() => setShortcutsOpen(false)} />}
+    {FEATURES.candidates && whoAsk && <WhoIsThisFor posting={whoAsk.posting} activeId={candidates?.activeId ?? null} onDone={(ids) => { whoAsk.resolve(ids); setWhoAsk(null); }} />}
     {companyAsk && <CompanyDialog title={companyAsk.title} onDone={(company) => { companyAsk.resolve(company); setCompanyAsk(null); }} />}
     <TerminalPanel onQueueJob={queueJob} busyLabel={busyJobLabel} cwd={workspace.repositoryRoot || workspace.path} selectedJobFiles={selectedJobFiles} selectedCareerPaths={selectedCareerPaths} theme={theme} visible={rightPanelOpen && !needsSetup} onClose={() => setRightPanelOpen(false)} jobActions={jobActions} promptRequest={promptRequest} onPromptHandled={(id) => setPromptRequest((request) => request?.id === id ? null : request)} onInsertPrompt={insertJobPrompt} onOpenRun={(run) => { if (run.jobId && jobs.some((job) => job.id === run.jobId)) openJobView(run.jobId, run.kind === "interview" ? "interview" : "application", run.roundId ?? undefined); }} />
   </main>;
 }
 
-function NavIcon({ name }: { name: "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" }) {
+function NavIcon({ name }: { name: "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" | "pipeline" }) {
   const paths: Record<typeof name, string> = {
     jobs: "M4 8h16v11H4zM9 8V5h6v3M4 13h16",
     search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z M15.5 15.5L20 20",
@@ -965,6 +1012,7 @@ function NavIcon({ name }: { name: "jobs" | "search" | "interviews" | "context" 
     settings: "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1",
     sidebar: "M4 5h16v14H4z M9 5v14",
     setup: "M5 6h14 M5 12h14 M5 18h14 M8 4v4 M15 10v4 M10 16v4",
+    pipeline: "M4 6h16 M4 12h16 M4 18h16 M7 6v12",
   };
   return <svg className="nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d={paths[name]} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
@@ -1373,7 +1421,7 @@ function SetupLine({ readiness, onOpen }: { readiness: Readiness | null; onOpen:
 }
 
 /** Setup items that are filled in right in the row instead of in Settings. */
-const INLINE_SETUP: ReadonlySet<ReadinessItem["action"]> = new Set(["story", "logistics", "private-names", "voice"]);
+const INLINE_SETUP: ReadonlySet<ReadinessItem["action"]> = new Set(["story", "logistics", "private-names", "voice", "targets"]);
 const VOICE_TEMPLATE = [
   "# Application voice profile",
   "- Plain words and short sentences; no buzzwords.",
@@ -1398,7 +1446,13 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
     location: logistics?.location ?? "", workAuthorization: logistics?.workAuthorization ?? "", compensation: logistics?.compensation ?? "", noticePeriod: logistics?.noticePeriod ?? "", workArrangement: logistics?.workArrangement ?? "",
     names: (profile?.truth.confidentialNames ?? []).join("\n"),
     voice: "",
+    roles: (profile?.preferences.targets.roles ?? []).join("\n"),
+    locations: (profile?.preferences.targets.locations ?? []).join("\n"),
+    level: profile?.preferences.targets.level ?? "",
+    salaryFloor: profile?.preferences.targets.salaryFloor ? String(profile.preferences.targets.salaryFloor) : "",
   }));
+  const [modes, setModes] = useState<string[]>(() => profile?.preferences.targets.workModes ?? []);
+  const [sponsorship, setSponsorship] = useState(() => profile?.preferences.targets.needsSponsorship ?? false);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState("");
   const voicePath = profile?.sources.applicationVoicePath ?? "context/application_voice_profile.md";
@@ -1423,6 +1477,10 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
         next = await window.sensei.profile.updateDetails({ confidentialNames: [...new Set(values.names!.split(/\n|,/).map((name) => name.trim()).filter(Boolean))] });
       } else if (action === "voice") {
         await window.sensei.profile.saveVoice(values.voice!);
+      } else if (action === "targets" && profile) {
+        const lines = (value: string) => [...new Set(value.split(/\n|,/).map((line) => line.trim()).filter(Boolean))].slice(0, 12);
+        const floor = Number(values.salaryFloor!.replace(/[^0-9.]/g, ""));
+        next = await window.sensei.profile.updatePreferences({ ...profile.preferences, targets: { roles: lines(values.roles!), locations: lines(values.locations!), workModes: modes as CandidateProfile["preferences"]["targets"]["workModes"], level: (values.level || null) as CandidateProfile["preferences"]["targets"]["level"], salaryFloor: values.salaryFloor!.trim() && floor > 0 ? Math.round(floor) : null, needsSponsorship: sponsorship } });
       }
       onSaved(next);
       onClose();
@@ -1456,6 +1514,15 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
     {action === "voice" && <>
       <p className="muted">A few lines about how you sound. Agy reads them before every letter and answer. Edit the starting lines so they sound like you.</p>
       <label className="setup-field"><span>{voicePath}</span><textarea rows={8} value={values.voice} onChange={set("voice")} /></label>
+    </>}
+    {action === "targets" && <>
+      <p className="muted">Used by "Who is this for?" to suggest this candidate for a posting, with the reasons shown. Leave anything empty that doesn't matter; empty fields never count against a posting.</p>
+      <label className="setup-field"><span>Roles they want (one per line)</span><textarea rows={3} value={values.roles} onChange={set("roles")} placeholder={"Support Engineer\nCustomer Success Manager"} /></label>
+      <fieldset className="setup-field setup-choices"><legend>Work setup they'd take</legend>{(["remote", "hybrid", "onsite"] as const).map((mode) => <label key={mode}><input type="checkbox" checked={modes.includes(mode)} onChange={() => setModes((current) => current.includes(mode) ? current.filter((value) => value !== mode) : [...current, mode])} /> {mode === "onsite" ? "On-site" : mode[0]!.toUpperCase() + mode.slice(1)}</label>)}</fieldset>
+      <label className="setup-field"><span>Places they can work (one per line; ignored for remote jobs)</span><textarea rows={2} value={values.locations} onChange={set("locations")} placeholder={"Denver\nColorado"} /></label>
+      <label className="setup-field"><span>Level</span><select value={values.level} onChange={(event) => setValues((current) => ({ ...current, level: event.target.value }))}><option value="">Any</option>{["intern", "junior", "mid", "senior", "staff", "lead", "manager", "director", "executive"].map((level) => <option key={level} value={level}>{level[0]!.toUpperCase() + level.slice(1)}</option>)}</select></label>
+      {field("salaryFloor", "Lowest yearly pay (US dollars)", "e.g. 90000")}
+      <label className="setup-check"><input type="checkbox" checked={sponsorship} onChange={(event) => setSponsorship(event.target.checked)} /> Needs visa sponsorship</label>
     </>}
     {problem && <p className="inline-error" role="alert">{problem}</p>}
     <div className="onboarding-actions"><button className="btn-primary" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</button><button className="btn-quiet" onClick={onClose}>Cancel</button></div>
@@ -3219,6 +3286,7 @@ function TerminalPanel({ cwd, selectedJobFiles, selectedCareerPaths, theme, visi
     try {
       ahead = await onQueueJob(attachedPaste ? { kind: "paste", text: attachedPaste.content, note: text } : { kind: "link", url: text }, true);
     } catch (caught) {
+      if (caught instanceof Error && caught.name === "NotQueued") return;
       // A link the app couldn't read: say why and ask for a paste (Agy can't fetch it either).
       if (!attachedPaste) {
         const now = Date.now();
