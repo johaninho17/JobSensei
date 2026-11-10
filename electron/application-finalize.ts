@@ -182,7 +182,12 @@ function materializeBundle(
       ownership: ids.length ? "supported" : "",
     };
   };
-  const coverItems = bundle.coverLetter.bodyParagraphs.flatMap((paragraph) => paragraph.sentences);
+  // A run whose snapshot says no letter (src/shared/cover-letter-policy.ts) ignores any letter in the bundle.
+  const letter = snapshot.coverLetterPlan?.write === false ? null : bundle.coverLetter ?? null;
+  if (snapshot.coverLetterPlan?.write !== false && !letter) {
+    throw new ApplicationInputError(".sensei/application_bundle.json", new Error("coverLetter is missing; this run writes a cover letter (follow coverLetterBrief)."));
+  }
+  const coverItems = letter ? letter.bodyParagraphs.flatMap((paragraph) => paragraph.sentences) : [];
   // Letter sentences retell real work in the candidate voice: framed, never a new fact (ledger T4).
   const coverClaims = coverItems.map((item) => {
     const mapping = claim(item);
@@ -213,13 +218,13 @@ function materializeBundle(
           bullets: employer.bullets.map((item) => item.text),
         })),
       },
-      coverLetter: {
-        date: bundle.coverLetter.date,
-        recipientLines: bundle.coverLetter.recipientLines,
-        salutation: bundle.coverLetter.salutation,
-        bodyParagraphs: bundle.coverLetter.bodyParagraphs.map((paragraph) => paragraph.sentences.map((item) => item.text).join(" ")),
-        closing: bundle.coverLetter.closing,
-      },
+      coverLetter: letter ? {
+        date: letter.date,
+        recipientLines: letter.recipientLines,
+        salutation: letter.salutation,
+        bodyParagraphs: letter.bodyParagraphs.map((paragraph) => paragraph.sentences.map((item) => item.text).join(" ")),
+        closing: letter.closing,
+      } : null,
     }),
     evidence: applicationEvidenceSchema.parse({
       schemaVersion: 1,
@@ -235,11 +240,11 @@ function materializeBundle(
           ...bundle.resume.employers.flatMap((employer) => employer.bullets.map((item) => claim(item, true, employer.name))),
         ],
       },
-      coverLetter: {
+      coverLetter: letter ? {
         publicArtifact: "cover_letter.md",
         claimMappings: coverClaims,
         careerArc,
-      },
+      } : null,
       excludedClaims: bundle.excludedClaims,
       warnings: [...bundle.warnings, ...summaryWarnings],
     }),
@@ -344,7 +349,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
   }
 
   const resumeMarkdown = composeCanonicalResume(snapshot.canonicalResume, draft.resume, { includeSummary: summaryEditable });
-  const coverMarkdown = composeCanonicalCoverLetter(snapshot.canonicalResume, draft.coverLetter, { fullName: candidateProfile?.identity.fullName });
+  const coverMarkdown = draft.coverLetter ? composeCanonicalCoverLetter(snapshot.canonicalResume, draft.coverLetter, { fullName: candidateProfile?.identity.fullName }) : null;
   const resumeName = evidence.resume.publicArtifact;
   const escapedPrefix = (candidateProfile?.identity.artifactPrefix ?? "Candidate").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (!new RegExp(`^${escapedPrefix}_[A-Za-z0-9][A-Za-z0-9_-]*_Resume\\.md$`).test(resumeName)) {
@@ -353,7 +358,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
   const resumePath = assertInsideWorkspace(jobPath, join(jobPath, resumeName));
   const coverPath = assertInsideWorkspace(jobPath, join(jobPath, "cover_letter.md"));
   const resumeDrifts = canonicalResumeDrifts(resumeMarkdown, snapshot.canonicalResume);
-  const coverDrifts = canonicalCoverLetterDrifts(coverMarkdown, snapshot.canonicalResume);
+  const coverDrifts = coverMarkdown ? canonicalCoverLetterDrifts(coverMarkdown, snapshot.canonicalResume) : [];
   if (resumeDrifts.length || coverDrifts.length) {
     throw new Error(`Canonical composition failed: ${[...resumeDrifts, ...coverDrifts].map((drift) => drift.code).join(", ")}.`);
   }
@@ -368,7 +373,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
   // content checks annotate the persisted drafts for review; they do not suppress them.
   await Promise.all([
     writeTextAtomic(resumePath, resumeMarkdown),
-    writeTextAtomic(coverPath, coverMarkdown),
+    ...(coverMarkdown ? [writeTextAtomic(coverPath, coverMarkdown)] : []),
     writeTextAtomic(evaluationPath, normalizedEvaluation),
     ...(bundle ? [
       writeJsonAtomic(join(statePath, "application_draft.json"), draft),
@@ -382,6 +387,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
     fitScore: fit?.score ?? null,
     fitConfidence: fit?.confidence ?? null,
     gateStatus: fit ? gateStatusFor(fit) : null,
+    coverLetterSkipped: draft.coverLetter ? null : snapshot.coverLetterPlan?.reason ?? null,
   });
   if (persistRunState) await writeJsonAtomic(join(statePath, "validation_report.json"), finalReport);
   await writeTextAtomic(evaluationPath, mergeEvaluationAudit(normalizedEvaluation, {
@@ -413,6 +419,7 @@ export async function finalizeApplication(workspacePath: string, jobId: string, 
       fitScore: null,
       fitConfidence: null,
       gateStatus: null,
+      coverLetterSkipped: null,
       ats: null,
       keywordClasses: [],
       issues: inputValidationIssues(error),

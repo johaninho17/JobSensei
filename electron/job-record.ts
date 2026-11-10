@@ -26,6 +26,8 @@ export type JobRecordInput = {
   tracker: JobTracker | null;
   /** The status shown in the app (the user's, or derived). */
   status: TrackerStatus;
+  /** The last run wrote no cover letter on purpose (src/shared/cover-letter-policy.ts), so a resume alone is complete. */
+  letterSkipped?: boolean;
 };
 
 const WEAK = new Set(["gap", "unclear", "adjacent_transferable"]);
@@ -102,7 +104,8 @@ function health(input: JobRecordInput, record: JobRecord): JobRecord["health"] {
   // Drafts are expected once a job is rated at or above the gate.
   const belowGate = record.fit.score !== null && record.fit.score < FIT_GATE;
   const drafts = Number(record.documents.resume) + Number(record.documents.coverLetter);
-  const documents: HealthState = !record.documents.evaluation || belowGate ? (drafts ? "complete" : "not_needed") : drafts === 2 ? "complete" : drafts ? "partial" : "missing";
+  const expected = input.letterSkipped ? 1 : 2;
+  const documents: HealthState = !record.documents.evaluation || belowGate ? (drafts ? "complete" : "not_needed") : drafts >= expected && (record.documents.resume || !input.letterSkipped) ? "complete" : drafts ? "partial" : "missing";
   if (documents === "missing") notes.push("Rated above the gate, but no resume or cover letter yet.");
   if (documents === "partial") notes.push(record.documents.resume ? "No cover letter yet." : "No tailored resume yet.");
 

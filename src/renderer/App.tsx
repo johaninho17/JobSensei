@@ -1424,7 +1424,7 @@ function SetupLine({ readiness, onOpen }: { readiness: Readiness | null; onOpen:
 }
 
 /** Setup items that are filled in right in the row instead of in Settings. */
-const INLINE_SETUP: ReadonlySet<ReadinessItem["action"]> = new Set(["story", "logistics", "private-names", "voice", "targets"]);
+const INLINE_SETUP: ReadonlySet<ReadinessItem["action"]> = new Set(["story", "logistics", "private-names", "voice", "targets", "cover-letter"]);
 const VOICE_TEMPLATE = [
   "# Application voice profile",
   "- Plain words and short sentences; no buzzwords.",
@@ -1456,6 +1456,7 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
   }));
   const [modes, setModes] = useState<string[]>(() => profile?.preferences.targets.workModes ?? []);
   const [sponsorship, setSponsorship] = useState(() => profile?.preferences.targets.needsSponsorship ?? false);
+  const [lettersOn, setLettersOn] = useState(() => profile?.preferences.coverLetter.enabled ?? !FEATURES.coverLetterOptIn);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState("");
   const voicePath = profile?.sources.applicationVoicePath ?? "context/application_voice_profile.md";
@@ -1480,6 +1481,8 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
         next = await window.sensei.profile.updateDetails({ confidentialNames: [...new Set(values.names!.split(/\n|,/).map((name) => name.trim()).filter(Boolean))] });
       } else if (action === "voice") {
         await window.sensei.profile.saveVoice(values.voice!);
+      } else if (action === "cover-letter" && profile) {
+        next = await window.sensei.profile.updatePreferences({ ...profile.preferences, coverLetter: { ...profile.preferences.coverLetter, enabled: lettersOn } });
       } else if (action === "targets" && profile) {
         const lines = (value: string) => [...new Set(value.split(/\n|,/).map((line) => line.trim()).filter(Boolean))].slice(0, 12);
         const floor = Number(values.salaryFloor!.replace(/[^0-9.]/g, ""));
@@ -1517,6 +1520,10 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
     {action === "voice" && <>
       <p className="muted">A few lines about how you sound. Agy reads them before every letter and answer. Edit the starting lines so they sound like you.</p>
       <label className="setup-field"><span>{voicePath}</span><textarea rows={8} value={values.voice} onChange={set("voice")} /></label>
+    </>}
+    {action === "cover-letter" && <>
+      <p className="muted">When on, each application also gets a cover letter about {profile?.identity.fullName ?? "the candidate"}: their career story, how they work, in their voice. A letter is written only when there is enough real material: the career story (direction plus two of the three questions), a writing voice, and at least two checked career files besides the base resume. Otherwise the job page says what's missing.</p>
+      <label className="setup-check"><input type="checkbox" checked={lettersOn} onChange={(event) => setLettersOn(event.target.checked)} /> Write cover letters</label>
     </>}
     {action === "targets" && <>
       <p className="muted">Used by "Who is this for?" to suggest this candidate for a posting, with the reasons shown. Leave anything empty that doesn't matter; empty fields never count against a posting.</p>
@@ -1992,6 +1999,8 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
   const applicationFiles = files.filter((file) => /evaluation|resume|cover_letter|original_jd/i.test(file.name));
   const resumeMarkdown = files.find((file) => /_Resume\.md$/i.test(file.name)) ?? files.find((file) => /resume\.md$/i.test(file.name));
   const coverLetterMarkdown = files.find((file) => file.name.toLowerCase() === "cover_letter.md");
+  // Recruiter plan R7: why this run wrote no letter (src/shared/cover-letter-policy.ts), from the validation report.
+  const letterSkipped = status?.validation?.coverLetterSkipped ?? null;
   const evaluation = files.find((file) => file.name.toLowerCase() === "evaluation.md");
   const jobDescription = files.find((file) => /^original_jd\./i.test(file.name));
   const rounds = overview?.rounds ?? [];
@@ -2073,7 +2082,7 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
         onChange={setAppView}
         tabs={[
           { id: "resume", label: "Resume", disabled: !resumeMarkdown },
-          { id: "letter", label: "Cover letter", disabled: !coverLetterMarkdown },
+          { id: "letter", label: "Cover letter", disabled: !coverLetterMarkdown && !letterSkipped },
           ...(FEATURES.applicationQuestions ? [{ id: "questions" as const, label: "Questions" }] : []),
           { id: "evaluation", label: "Evaluation", disabled: !evaluation },
           { id: "checks", label: "Checks" },
@@ -2081,7 +2090,7 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
       />
       <SubTabPanel idPrefix="app" value={appView}>
         {appView === "resume" && <DocInline path={resumeMarkdown?.relativePath ?? null} label="resume" />}
-        {appView === "letter" && <DocInline path={coverLetterMarkdown?.relativePath ?? null} label="cover letter" />}
+        {appView === "letter" && (letterSkipped ? <p className="muted doc-skipped">No cover letter: {letterSkipped}</p> : <DocInline path={coverLetterMarkdown?.relativePath ?? null} label="cover letter" />)}
         {FEATURES.applicationQuestions && appView === "questions" && <QuestionsPanel jobId={job.id} />}
         {appView === "evaluation" && <DocInline path={evaluation?.relativePath ?? null} label="evaluation" />}
         {appView === "checks" && <div className="dashboard-stack"><ApplicationHealth job={job} files={applicationFiles} status={status} loading={applicationLoading} onStatus={onStatus} /><section className="context-block"><h2>Application files</h2><ArtifactTable files={applicationFiles} onSelect={onSelect} empty="No application documents found." /></section></div>}
@@ -2394,24 +2403,26 @@ function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: strin
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
   const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
-  const missing = !resumePath || !coverLetterPath;
+  // A job may have no cover letter (recruiter plan R7); the resume alone is then exported.
+  const missing = !resumePath;
   async function exportApplicationPdfs() {
-    if (missing || !resumePath || !coverLetterPath) return;
+    if (!resumePath) return;
     setState("working");
     setMessage("");
     try {
       await window.sensei.files.exportMarkdownPdf(resumePath, textSize);
-      await window.sensei.files.exportMarkdownPdf(coverLetterPath, textSize);
+      if (coverLetterPath) await window.sensei.files.exportMarkdownPdf(coverLetterPath, textSize);
+      const saved = coverLetterPath ? "Resume and cover letter PDFs saved" : "Resume PDF saved";
       setState("done");
-      setMessage("Resume and cover letter PDFs saved");
-      announce(`Resume and cover letter PDFs saved (${resumePath.split("/")[1] ?? "job"}).`);
+      setMessage(saved);
+      announce(`${saved} (${resumePath.split("/")[1] ?? "job"}).`);
     } catch (caught) {
       setState("error");
       setMessage(messageOf(caught, "PDF creation failed."));
       announce(`PDF creation failed: ${messageOf(caught, "unknown error")}`);
     }
   }
-  return <span className="job-pdf-export"><PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} /><button className="export-button" disabled={missing || state === "working"} title={missing ? "Both a resume Markdown file and cover_letter.md are required" : "Create PDFs for this job's resume and cover letter"} onClick={() => void exportApplicationPdfs()}>{state === "working" ? "Creating PDFs…" : "Create PDFs"}</button>{message && <small className={`export-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</small>}</span>;
+  return <span className="job-pdf-export"><PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} /><button className="export-button" disabled={missing || state === "working"} title={missing ? "A tailored resume is required" : coverLetterPath ? "Create PDFs for this job's resume and cover letter" : "Create a PDF of this job's resume"} onClick={() => void exportApplicationPdfs()}>{state === "working" ? "Creating PDFs…" : "Create PDFs"}</button>{message && <small className={`export-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</small>}</span>;
 }
 
 

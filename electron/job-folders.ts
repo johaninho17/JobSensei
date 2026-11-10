@@ -263,6 +263,7 @@ async function readJobSummary(path: string, name: string): Promise<JobFolderSumm
     preparedRounds: interviewRoundCount,
     tracker,
     status: effectiveStatus({ tracker, hasApplicationMaterials, interviewRoundLabel }),
+    letterSkipped: Boolean(await readJson(join(path, ".sensei", "validation_report.json")).then((report) => report.coverLetterSkipped)),
   });
   await saveJobRecord(path, record).catch(() => undefined);
   return {

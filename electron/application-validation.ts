@@ -306,6 +306,7 @@ export async function validateJobApplication(workspacePath: string, jobId: strin
     ats,
     stretch,
     keywordClasses: keywordClasses(loaded),
+    coverLetterSkipped: loaded.snapshot?.coverLetterPlan?.write === false ? loaded.snapshot.coverLetterPlan.reason : null,
     issues,
   });
 
@@ -646,7 +647,9 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
       issues.push(issue("RESUME_DENSITY_HIGH", loaded.resumeName, "wordCount", `The resume has ${stats.wordCount} words; the preferred maximum is ${footprint.targetWordMax}.`, "Review density and the PDF page count (the base resume's) without deleting relevant truthful content automatically.", "warning"));
     }
   }
-  if (!loaded.coverMarkdown) {
+  if (loaded.snapshot?.coverLetterPlan?.write === false) {
+    // No letter for this run: nothing to check, and nothing missing.
+  } else if (!loaded.coverMarkdown) {
     issues.push(issue("COVER_LETTER_MISSING", "cover_letter.md", null, "The cover letter is missing.", "Create one concise employer-focused cover letter.", "error"));
   } else {
     let result: ReturnType<typeof validateApplicationArtifact> | null = null;
@@ -773,7 +776,8 @@ function validateEvidenceMap(loaded: LoadedApplication, issues: ValidationIssue[
     issues.push(issue("EVIDENCE_MAP_INCOMPLETE", ".sensei/application_evidence.json", null, "The compact evidence map is missing or malformed.", "The drafts remain reviewable, but their claim grounding is not fully machine-verified.", "warning"));
     return null;
   }
-  if (!loaded.run || !loaded.snapshot || !loaded.resumeName || !loaded.resumeMarkdown || !loaded.coverMarkdown) return null;
+  const letter = loaded.evidence.coverLetter && loaded.coverMarkdown ? loaded.evidence.coverLetter : null;
+  if (!loaded.run || !loaded.snapshot || !loaded.resumeName || !loaded.resumeMarkdown || (!letter && loaded.snapshot.coverLetterPlan?.write !== false)) return null;
   for (const [field, expected, actual] of [
     ["applicationRunId", loaded.run.runId, loaded.evidence.applicationRunId],
     ["evidenceSnapshotId", loaded.snapshot.snapshotId, loaded.evidence.evidenceSnapshotId],
@@ -796,8 +800,8 @@ function validateEvidenceMap(loaded: LoadedApplication, issues: ValidationIssue[
       claimFailures,
     },
   ));
-  const coverFailures = collectClaimIssues(issues, "COVER_GROUNDING_INVALID", (claimFailures) => validateCoverLetterAuditJson(
-    coverAuditFromEvidence(loaded.evidence!),
+  const coverFailures = !letter ? [] : collectClaimIssues(issues, "COVER_GROUNDING_INVALID", (claimFailures) => validateCoverLetterAuditJson(
+    coverAuditFromEvidence(loaded.evidence!, letter),
     {
       publicMarkdown: loaded.coverMarkdown!,
       publicArtifactName: "cover_letter.md",
@@ -810,7 +814,7 @@ function validateEvidenceMap(loaded: LoadedApplication, issues: ValidationIssue[
   return scoreStretch({
     lines: [
       ...loaded.evidence.resume.claimMappings.map((mapping) => ({ text: mapping.publicText, claimType: mapping.claimType, evidenceIds: mapping.evidenceIds, artifact: "resume" as const })),
-      ...loaded.evidence.coverLetter.claimMappings.map((mapping) => ({ text: mapping.publicText, claimType: mapping.claimType, evidenceIds: mapping.evidenceIds, artifact: "cover-letter" as const })),
+      ...(letter?.claimMappings ?? []).map((mapping) => ({ text: mapping.publicText, claimType: mapping.claimType, evidenceIds: mapping.evidenceIds, artifact: "cover-letter" as const })),
     ],
     baselineLines: [
       ...(snapshot.canonicalResume?.employers.flatMap((employer) => employer.originalBullets) ?? []),
@@ -843,7 +847,7 @@ function resumeAuditFromEvidence(evidence: ApplicationEvidence) {
   };
 }
 
-function coverAuditFromEvidence(evidence: ApplicationEvidence) {
+function coverAuditFromEvidence(evidence: ApplicationEvidence, letter: NonNullable<ApplicationEvidence["coverLetter"]>) {
   return {
     schemaVersion: 1 as const,
     artifactType: "cover-letter" as const,
@@ -853,8 +857,8 @@ function coverAuditFromEvidence(evidence: ApplicationEvidence) {
     evidenceSnapshotId: evidence.evidenceSnapshotId,
     manifestHash: evidence.manifestHash,
     baseResumePath: evidence.baseResumePath,
-    claimMappings: evidence.coverLetter.claimMappings,
-    careerArc: evidence.coverLetter.careerArc,
+    claimMappings: letter.claimMappings,
+    careerArc: letter.careerArc,
   };
 }
 
@@ -874,7 +878,7 @@ async function loadApplication(workspacePath: string, jobId: string): Promise<Lo
   const manifest = await readOptionalJson(join(workspace, ".sensei", "active-context.json"), contextManifestSchema);
   const evidenceResult = await readJsonState(join(statePath, "application_evidence.json"), applicationEvidenceSchema);
   const applicationContext = await readOptionalJson(join(statePath, "application_context.json"), applicationContextSchema);
-  return {
+  const loaded: LoadedApplication = {
     jobPath,
     statePath,
     run: await readStateWithLegacy(statePath, jobPath, "application_run.json", applicationRunSchema),
@@ -890,6 +894,9 @@ async function loadApplication(workspacePath: string, jobId: string): Promise<Lo
     candidateProfile,
     jobDescriptionText: await readOptionalText(join(jobPath, "original_jd.md")) ?? await readOptionalText(join(jobPath, "original_jd.txt")),
   };
+  // A run that writes no letter (src/shared/cover-letter-policy.ts) ignores any cover_letter.md left from an older run.
+  if (loaded.snapshot?.coverLetterPlan?.write === false) loaded.coverMarkdown = null;
+  return loaded;
 }
 
 async function readStateWithLegacy<T>(statePath: string, jobPath: string, name: string, schema: { parse(value: unknown): T }): Promise<T | null> {

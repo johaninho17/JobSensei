@@ -23,11 +23,13 @@ export type Features = {
   candidates: boolean;
   /** Every checked candidate file is eligible evidence on its own, including files without evidence tables (recruiter plan R4). */
   candidateFilesEligible: boolean;
+  /** Cover letters are off until turned on per candidate, and need enough material (recruiter plan R7). */
+  coverLetterOptIn: boolean;
 };
 
 const FEATURES: Record<Edition, Features> = {
-  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false },
-  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true },
+  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false },
+  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true },
 };
 
 export type EditionInfo = {

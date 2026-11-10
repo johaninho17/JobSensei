@@ -148,6 +148,8 @@ export const candidateProfileSchema = z.object({
       length: coverLetterLengthSchema.default(DEFAULT_COVER_LETTER_LENGTH),
       /** What carries the letter: the career story (default) or one or two worked examples. */
       focus: z.enum(COVER_LETTER_FOCUS).default("career-story"),
+      /** Write cover letters at all; null = the edition's default (on in solo, off in the Recruiter Edition). */
+      enabled: z.boolean().nullable().default(null),
     }),
     voice: voiceSettingsSchema.default({
       tonePreset: "direct_outcomes",
@@ -666,7 +668,7 @@ export const applicationDraftSchema = z.object({
     salutation: z.string().min(1),
     bodyParagraphs: z.array(z.string().min(1)).min(1),
     closing: z.string().min(1).default("Sincerely,"),
-  }).strict(),
+  }).strict().nullable().default(null),
 }).strict();
 export type ApplicationDraft = z.infer<typeof applicationDraftSchema>;
 
@@ -718,6 +720,8 @@ export const evidenceSnapshotSchema = z.object({
   manifestHash: z.string().min(1),
   baseResumePath: z.string().min(1),
   baseResumeFootprint: resumeFootprintSchema.optional(),
+  /** Whether this run writes a cover letter (src/shared/cover-letter-policy.ts); old snapshots always did. */
+  coverLetterPlan: z.object({ write: z.boolean(), reason: z.string().nullable(), missing: z.array(z.string()).default([]), off: z.boolean().default(false) }).optional(),
   canonicalResume: canonicalResumeBaselineSchema.nullable().optional(),
   canonicalResumeWarnings: z.array(z.string()).default([]),
   secondaryResumePaths: z.array(z.string()),
@@ -987,7 +991,7 @@ export const applicationEvidenceSchema = z.object({
       timeline: careerArcTimelineSchema,
       evidenceIds: z.array(z.string().min(1)).min(1),
     })).min(2),
-  }),
+  }).nullable().default(null),
   excludedClaims: z.array(z.string()).default([]),
   warnings: z.array(z.string()).default([]),
 });
@@ -1026,7 +1030,7 @@ export const applicationBundleSchema = z.object({
       sentences: z.array(evidenceLinkedTextSchema).min(1),
     }).strict()).min(1),
     closing: z.string().min(1).default("Sincerely,"),
-  }).strict(),
+  }).strict().nullable().optional(),
   excludedClaims: z.array(z.string()).default([]),
   warnings: z.array(z.string()).default([]),
 }).strict();
@@ -1090,6 +1094,8 @@ export const applicationValidationReportSchema = z.object({
   fitScore: z.number().min(0).max(5).nullable().default(null),
   fitConfidence: z.enum(["high", "medium", "low"]).nullable().default(null),
   gateStatus: z.string().nullable().default(null),
+  /** Why no cover letter was written for this run (null when one was); shown on the job page. */
+  coverLetterSkipped: z.string().nullable().default(null),
   ats: z.object({
     status: z.enum(["passed", "warning", "not_exported", "unavailable"]),
     pdfPath: z.string().nullable(),

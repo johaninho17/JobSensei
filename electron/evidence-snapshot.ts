@@ -37,6 +37,7 @@ import { APPLICATION_FORM_FILE } from "./posting-clean";
 import { BASE_ROW_PREFIX, FILE_ROW_PREFIX, baseEarnsFitCredit, baseResumeRows, candidateFileRows, noFitCredit } from "./candidate-evidence";
 import { currentEdition } from "./edition";
 import { featuresFor } from "../src/shared/edition";
+import { countCareerFiles, coverLetterPlanFor } from "../src/shared/cover-letter-policy";
 
 const MANIFEST_PATH = ".sensei/active-context.json";
 const DENYLIST_PATH = "context/denylist.md";
@@ -521,13 +522,13 @@ export function narrativeStoryLines(profile?: CandidateProfile | null): string[]
 }
 
 /** Profile-driven run instructions (truth boundaries, anti-slop strictness, confidential names). */
-export function profileInstructionLines(profile?: CandidateProfile | null): string[] {
+export function profileInstructionLines(profile?: CandidateProfile | null, writeLetter = true): string[] {
   const boundaries = (profile?.truth.boundaries ?? []).map((line) => line.trim()).filter(Boolean);
   const confidentialNames = profile?.truth.confidentialNames ?? [];
   const relaxed = profile?.preferences.voice.antiSlopStrictness === "standard";
   const letter = profile?.preferences?.coverLetter;
   return [
-    ...(letter?.length ? [`Cover letters: ${letter.length.min}–${letter.length.max} words, ${letter.focus === "examples" ? "led by one or two real examples" : "led by the career story (where I started, why I moved, how I work now)"}; coverLetterBrief has the full structure.`] : []),
+    ...(writeLetter && letter?.length ? [`Cover letters: ${letter.length.min}–${letter.length.max} words, ${letter.focus === "examples" ? "led by one or two real examples" : "led by the career story (where I started, why I moved, how I work now)"}; coverLetterBrief has the full structure.`] : []),
     ...(boundaries.length ? [`The candidate's own truth boundaries (never cross them): ${boundaries.join(" ")}`] : []),
     confidentialNames.length
       ? `Never name these clients or partners in the resume or cover letter; describe them by industry instead (naming the industry is fine): ${confidentialNames.join(", ")}.`
@@ -834,10 +835,19 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
     .map((requirement) => bestEvidenceForRequirement(requirement.text, citableRows))
     .filter((id): id is string => Boolean(id));
   const applicationRouting = buildApplicationRouting(normalizedRows, jobDescriptionText, mustHaveEvidenceIds, canonicalEmployers);
+  // Recruiter plan R7: whether this run writes a cover letter (src/shared/cover-letter-policy.ts owns the rule).
+  const voicePath = candidateProfile?.sources.applicationVoicePath ?? APPLICATION_VOICE_PROFILE_PATH;
+  const hasVoice = Boolean((await readFile(assertInsideWorkspace(workspace, join(workspace, voicePath)), "utf8").catch(() => "")).trim());
+  const coverLetterPlan = coverLetterPlanFor(candidateProfile, {
+    hasVoice,
+    careerFiles: countCareerFiles(manifest.selectedCareerPaths ?? [], manifest.secondaryResumePaths.length, Boolean(manifest.linkedinProfilePath)),
+    optIn: featuresFor(currentEdition()).coverLetterOptIn,
+  });
   const snapshotCore = {
     schemaVersion: 1 as const,
     jobId,
     manifestHash,
+    coverLetterPlan,
     baseResumePath: manifest.baseResumePath,
     baseResumeFootprint,
     canonicalResume: canonicalResult.canonicalResume,
@@ -1020,16 +1030,18 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       denylistRules: snapshot.denylistRules,
       styleRules: compactStyleRules(stylePolicy, candidateProfile),
       resumePlan,
-      coverLetterBrief: buildCoverLetterBrief(jobDescriptionText, canonicalJob, candidateProfile),
+      ...(snapshot.coverLetterPlan?.write === false ? {} : { coverLetterBrief: buildCoverLetterBrief(jobDescriptionText, canonicalJob, candidateProfile) }),
       instructions: [
         "Use only evidenceRows for candidate facts; preserve employer, timeline, scope, eligibility, and classification ceilings.",
         "Resume scope: keep earlier, less relevant roles verbatim from resumeTemplate.employers[i].baselineBullets. At the current employer, rework the 3-4 bullets that matter most for this job and keep the rest of its baseline bullets as anchors.",
         "Length and skills follow the base resume (owner of this rule): every role keeps at least its baseline number of bullets (resumePlan.employerTargets); a weaker bullet may be replaced by a stronger supported one, never dropped. Keep every skills item from the base resume: lead with what this job needs, add supported items, and remove an item only when nothing supports it. Skills the posting does not ask for still show the candidate's range, so they stay. The resume keeps the base resume's page count.",
         "Unchanged baseline bullets are the candidate's own approved claims: copy them word for word with the evidenceIds listed in baselineBullets (often none). Never attach an unrelated evidence ID to make a bullet look supported.",
         "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. The base resume is evidence too (owner of this rule): rows with `base:` IDs are its own lines, so a base line reworded for this job may cite its own `base:` row, and a candidate with only a base resume still gets a close tailoring. Whatever a line cites, it may not add an event, metric, tool, or ownership the cited rows do not state. " + (baseEarnsFitCredit() ? "`base:` rows also count when rating requirements." : "`base:` rows earn no fit credit; rate requirements from the other rows."),
-        ...profileInstructionLines(candidateProfile),
+        ...profileInstructionLines(candidateProfile, snapshot.coverLetterPlan?.write !== false),
         "Maintain natural bullet length (~16-20 words) matching the baseline footprint; no word-by-word arithmetic.",
-        "Cover letter: follow coverLetterBrief exactly. It owns the structure, opening, word range, and banned phrases. Do not use any other cover-letter structure.",
+        snapshot.coverLetterPlan?.write === false
+          ? `No cover letter for this job (owner of this rule): ${snapshot.coverLetterPlan.reason} Leave coverLetter out of the bundle; never write a generic letter.`
+          : "Cover letter: follow coverLetterBrief exactly. It owns the structure, opening, word range, and banned phrases. Do not use any other cover-letter structure.",
         ...(candidateFilesEligible
           ? ["Every checked candidate file is evidence on its own: rows from other resumes, LinkedIn, notes, and recruiter notes (`file:` IDs among them) are eligible and may back a claim alone, as written."]
           : ["Only cite eligible evidence rows for standalone claims; do not cite a single corroboration-required row alone."]),

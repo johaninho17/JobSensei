@@ -316,7 +316,7 @@ export function coverLetterSignatureName(headerLine: string, fullName?: string |
   return name;
 }
 
-export function composeCanonicalCoverLetter(baseline: CanonicalResumeBaseline, draft: ApplicationDraft["coverLetter"], options: { fullName?: string | null } = {}): string {
+export function composeCanonicalCoverLetter(baseline: CanonicalResumeBaseline, draft: NonNullable<ApplicationDraft["coverLetter"]>, options: { fullName?: string | null } = {}): string {
   const header = sanitizeHeaderLines(baseline.headerLines);
   return `${[
     header.join("\n"),

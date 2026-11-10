@@ -23,8 +23,8 @@ afterEach(async () => { await Promise.all(temps.splice(0).map((dir) => rm(dir, {
 
 describe("edition features", () => {
   it("leaves every single-user area out of the recruiter edition and keeps all of them in solo", () => {
-    expect(recruiter).toEqual({ interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true });
-    expect(Object.entries(solo).filter(([name, on]) => name !== "candidates" && name !== "candidateFilesEligible" && !on)).toEqual([]);
+    expect(recruiter).toEqual({ interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true });
+    expect(Object.entries(solo).filter(([name, on]) => name !== "candidates" && name !== "candidateFilesEligible" && name !== "coverLetterOptIn" && !on)).toEqual([]);
   });
 
   it("names the recruiter edition so users can tell the builds apart", () => {

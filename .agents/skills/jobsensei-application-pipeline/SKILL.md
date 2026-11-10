@@ -29,7 +29,7 @@ For a JD pasted in the app ("Evaluate the job description I pasted (paste ID <id
    - For the current employer, write the 3–4 reworked bullets as text, and keep each remaining bullet as `{ "baseline": N }` (N = its position in `baselineBullets`, starting at 1), in the order you want.
    - Skills lines: start from `resumeTemplate.editableSkillCategories` and follow the snapshot `instructions` (keep the base resume's items).
    - `evaluationMarkdown`: the scoring table, the must-have table, and at most three one-line bullets (top strength, main gap, apply recommendation).
-   - Draft the cover letter exactly as `coverLetterBrief` specifies.
+   - Draft the cover letter exactly as `coverLetterBrief` specifies. If the application context has no `coverLetterBrief`, its instructions say why: leave `coverLetter` out of the bundle.
 6. Run `sensei application:finalize <job-id>` exactly once. Report its `fitScore`, `fitConfidence`, `gateStatus`, `durationSeconds`, and warnings, then stop. Never inspect code, patch output, or retry after finalization.
 
 For an explicit regeneration, the saved JD is the only job-specific input. Existing generated files are stale outputs, not references. Never read them before replacement.

@@ -1,5 +1,6 @@
 // Computes setup readiness (src/shared/readiness.ts): the single owner of what JobSensei needs before it runs and
 // what improves its drafts. Read by Get Started, the Setup page, the job queue, and the evidence snapshot.
+import { countCareerFiles, coverLetterPlanFor } from "../src/shared/cover-letter-policy";
 import { readdir, stat } from "node:fs/promises";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { readinessSchema, RESUME_FORMAT_HELP, RESUME_PDF_ONLY, type Readiness, type ReadinessItem } from "../src/shared/readiness";
@@ -159,6 +160,19 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
     detail: others ? `${others} added.` : "None added yet.",
     improves: "Cross-checks your dates, titles, and wording.",
   });
+
+  // Recruiter plan R7: cover letters are off until turned on, and need enough real material (one owner: the policy).
+  if (features.coverLetterOptIn) {
+    const secondary = (profile?.sources.secondaryResumePaths ?? settings?.secondaryResumePaths ?? []).length;
+    const linkedin = Boolean(profile?.sources.linkedinProfilePath ?? settings?.linkedinProfilePath);
+    const plan = coverLetterPlanFor(profile, { hasVoice, careerFiles: countCareerFiles(manifest?.selectedCareerPaths ?? [], secondary, linkedin), optIn: true });
+    add({
+      id: "cover-letter", level: "recommended", state: plan.write || plan.off ? "done" : "problem", action: "cover-letter", path: null,
+      title: "Cover letters",
+      detail: plan.off ? "Off: applications get a tailored resume only." : plan.write ? "On: each application also gets a cover letter." : plan.reason ?? "",
+      improves: "Letters are written only with enough real material about the person; never a thin, generic letter.",
+    });
+  }
 
   if (features.interviewProfile) {
     const hasStoryBank = await exists(join(root, "profile", "story_bank.md"));
