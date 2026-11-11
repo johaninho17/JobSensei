@@ -6,12 +6,17 @@ import type { PipelineRow } from "../src/shared/candidate-match";
 import { candidatePath, readRoster } from "./candidates";
 import { listJobFolders } from "./job-folders";
 import { updateJobTracker } from "./tracker";
+import { readSubmission } from "./submission";
 
 export async function listPipeline(root: string): Promise<PipelineRow[]> {
   const roster = await readRoster(root);
   const rows = await Promise.all(roster.candidates.filter((candidate) => candidate.status !== "archived").map(async (candidate) => {
-    const jobs: JobFolderSummary[] = await listJobFolders(await candidatePath(root, candidate.id)).catch(() => []);
-    return jobs.map((job) => ({ ...job, candidateId: candidate.id, candidateName: candidate.displayName }));
+    const folder = await candidatePath(root, candidate.id);
+    const jobs: JobFolderSummary[] = await listJobFolders(folder).catch(() => []);
+    return Promise.all(jobs.map(async (job) => {
+      const sent = await readSubmission(folder, job.id).catch(() => null);
+      return { ...job, candidateId: candidate.id, candidateName: candidate.displayName, submission: sent ? { platform: sent.platform, resumeVersion: sent.resumeVersion, date: sent.date } : null };
+    }));
   }));
   return rows.flat().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

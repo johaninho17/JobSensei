@@ -1293,7 +1293,7 @@ export interface SenseiApi {
     /** Adds a candidate with their base resume, extra files, and notes, then opens them; reload the window afterwards. */
     add(name: string, intake?: { resumePath?: string | null; files?: string[]; notes?: string | null }): Promise<{ entry: import("./candidates").CandidateEntry; resume: { ok: true; lines: string[] } | { ok: false; message: string } | null; files: string[]; skipped: Array<{ name: string; reason: string }> }>;
     /** Absolute paths of a chosen resume or extra files; empty when cancelled. */
-    chooseFiles(kind: "resume" | "files"): Promise<string[]>;
+    chooseFiles(kind: "resume" | "files" | "image"): Promise<string[]>;
     /** Opens another candidate; reload the window afterwards. */
     switchTo(id: string): Promise<void>;
     /** Closes the open candidate; reload to show the Candidates page. */
@@ -1312,6 +1312,12 @@ export interface SenseiApi {
     deleteCandidate(candidateId: string, typedName: string): Promise<{ name: string; removed: string[] }>;
     /** A drafted job's resume lines, what changed from the base, and the evidence behind each change (recruiter plan R8). */
     review(jobId: string): Promise<import("./review").ApplicationReview>;
+    /** Proof of what was sent (recruiter plan R8 P4): read, record (Mark applied), undo, add a confirmation. */
+    submission(jobId: string): Promise<import("./submission").Submission | null>;
+    markApplied(jobId: string): Promise<import("./submission").Submission>;
+    undoApplied(jobId: string): Promise<void>;
+    /** `path` from a drop; without one the app asks for the file. */
+    addConfirmation(jobId: string, path?: string): Promise<import("./submission").Submission | null>;
     /** Saves the open candidate's application facts sheet (recruiter plan R8 P3). */
     saveFacts(input: { email?: string; phone?: string; location?: string; links?: string[]; workAuthorization?: string; compensation?: string; noticePeriod?: string; workArrangement?: string; extra?: Array<{ label: string; value: string }> }): Promise<CandidateProfile>;
     /** Every job across candidates (recruiter plan R5). */

@@ -101,4 +101,4 @@ export function matchCandidate(posting: PostingFacts, targets: CandidateTargets,
 export type CandidateSuggestion = CandidateMatch & { id: string; name: string; status: string };
 
 /** A job in the cross-candidate pipeline. */
-export type PipelineRow = import("./schemas").JobFolderSummary & { candidateId: string; candidateName: string };
+export type PipelineRow = import("./schemas").JobFolderSummary & { candidateId: string; candidateName: string; submission?: { platform: string | null; resumeVersion: string; date: string } | null };

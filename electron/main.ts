@@ -453,6 +453,7 @@ async function registerFeatureIpc(): Promise<void> {
       if (!mainWindow) return [];
       const result = await dialog.showOpenDialog(mainWindow, kind === "resume"
         ? { title: "Choose the candidate's resume", properties: ["openFile"], filters: [{ name: "Resume", extensions: ["docx", "md"] }] }
+        : kind === "image" ? { title: "Add the confirmation", properties: ["openFile"], filters: [{ name: "Screenshot or PDF", extensions: ["png", "jpg", "jpeg", "webp", "gif", "pdf"] }] }
         : { title: "Add the candidate's files", properties: ["openFile", "multiSelections"], filters: [{ name: "Candidate files", extensions: ["md", "txt", "pdf", "docx", "rtf", "json", "csv"] }] });
       return result.canceled ? [] : result.filePaths;
     },

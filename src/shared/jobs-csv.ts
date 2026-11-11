@@ -20,9 +20,9 @@ export function jobsToCsv(jobs: JobFolderSummary[], options: CsvColumns = {}): s
 }
 
 /** The cross-candidate pipeline as CSV (Recruiter Edition): the same columns with the candidate first. */
-export function pipelineToCsv(rows: Array<JobFolderSummary & { candidateName: string }>, options: CsvColumns = {}): string {
+export function pipelineToCsv(rows: Array<JobFolderSummary & { candidateName: string; submission?: { platform: string | null; resumeVersion: string } | null }>, options: CsvColumns = {}): string {
   const keep = keepFor(options);
-  return toCsv(["Candidate", ...ALL_COLUMNS.filter((_, index) => keep[index])], rows.map((row) => [row.candidateName, ...fullRow(row).filter((_, index) => keep[index])]));
+  return toCsv(["Candidate", ...ALL_COLUMNS.filter((_, index) => keep[index]), "Sent via", "Resume version sent"], rows.map((row) => [row.candidateName, ...fullRow(row).filter((_, index) => keep[index]), row.submission?.platform ?? "", row.submission?.resumeVersion ?? ""]));
 }
 
 function toCsv(columns: readonly string[], rows: Array<Array<string | number | null>>): string {

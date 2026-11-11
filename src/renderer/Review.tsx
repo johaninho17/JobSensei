@@ -5,6 +5,7 @@ import type { JobFolderSummary, JobTrackerUpdate } from "../shared/schemas";
 import type { ApplicationReview } from "../shared/review";
 import { effectiveAppliedAt, effectiveStatus, statusLabel } from "../shared/tracker";
 import { applicationFacts, type ApplicationFact } from "../shared/application-facts";
+import type { Submission } from "../shared/submission";
 
 const MUST_LABEL = { met: "Met", learnable: "To learn", blocker: "Blocker" } as const;
 
@@ -15,21 +16,35 @@ export function ReviewPanel({ job, onUpdateTracker, onOpenResume }: { job: JobFo
   const [facts, setFacts] = useState<ApplicationFact[] | null>(null);
   useEffect(() => { void window.sensei.profile.get().then((profile) => setFacts(applicationFacts(profile)), () => setFacts([])); }, [job.id]);
   useEffect(() => { setReview(undefined); void window.sensei.candidates.review(job.id).then(setReview, (caught: unknown) => setError(caught instanceof Error ? caught.message : "Couldn't read the drafts.")); }, [job.id, job.modifiedAt]);
+  const [submission, setSubmission] = useState<Submission | null | undefined>(undefined);
+  const [working, setWorking] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  useEffect(() => { void window.sensei.candidates.submission(job.id).then(setSubmission, () => setSubmission(null)); }, [job.id]);
   const status = effectiveStatus(job);
-  const applied = status !== "saved";
+  const applied = Boolean(submission) || status !== "saved";
+  async function act(task: () => Promise<unknown>) {
+    setWorking(true);
+    setActionError(null);
+    try { await task(); setSubmission(await window.sensei.candidates.submission(job.id)); } catch (caught) { setActionError(caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "That didn't work."); } finally { setWorking(false); }
+  }
   if (error) return <p className="inline-error" role="alert">{error}</p>;
   if (review === undefined) return <p className="muted">Reading the drafts…</p>;
   if (review === null) return <p className="muted">No tailored resume yet. It appears here once Agy finishes this job.</p>;
   return <section className="review-panel" aria-label="Review before sending">
     <div className="review-bar">
-      <span><strong>{statusLabel(job)}</strong>{applied && effectiveAppliedAt(job) ? ` on ${effectiveAppliedAt(job)}` : ""} · {review.changed} of {review.total} resume lines changed from the base{review.letter ? " · cover letter written" : ""}</span>
+      {submission
+        ? <span><strong>Sent {submission.date}</strong>{submission.platform ? ` via ${submission.platform}` : ""} · resume version {submission.resumeVersion} · {submission.files.length} PDF{submission.files.length === 1 ? "" : "s"} kept{submission.screenshot ? " · confirmation saved" : ""}</span>
+        : <span><strong>{statusLabel(job)}</strong>{applied && effectiveAppliedAt(job) ? ` on ${effectiveAppliedAt(job)}` : ""} · {review.changed} of {review.total} resume lines changed from the base{review.letter ? " · cover letter written" : ""}</span>}
       <span className="review-actions">
         <button className="btn-link" onClick={onOpenResume}>Open to edit</button>
+        {submission && <button className="btn-link" onClick={() => void window.sensei.files.reveal(submission.files[0]?.split("/").slice(0, -1).join("/") ?? `jobs/${job.id}/submitted`).catch(() => undefined)}>Show sent files</button>}
+        {submission && !submission.screenshot && <button className="btn-link" disabled={working} onClick={() => void act(() => window.sensei.candidates.addConfirmation(job.id))}>Add confirmation</button>}
         {applied
-          ? <button className="btn-quiet" onClick={() => void onUpdateTracker({ status: "saved", appliedAt: null })}>Undo applied</button>
-          : <button className="btn-primary" onClick={() => void onUpdateTracker({ status: "applied" })}>Mark applied</button>}
+          ? <button className="btn-quiet" disabled={working} onClick={() => void act(async () => { if (submission) await window.sensei.candidates.undoApplied(job.id); else await onUpdateTracker({ status: "saved", appliedAt: null }); })}>Undo applied</button>
+          : <button className="btn-primary" disabled={working} onClick={() => void act(() => window.sensei.candidates.markApplied(job.id))}>{working ? "Saving the PDFs…" : "Mark applied"}</button>}
       </span>
     </div>
+    {actionError && <p className="inline-error" role="alert">{actionError}</p>}
     <div className="review-cols">
       <div className="review-job">
         <h3>The job</h3>

@@ -138,7 +138,7 @@ describe("pipeline across candidates (recruiter plan R5)", () => {
     const after = await listPipeline(root);
     expect(after.every((row) => row.tracker?.status === "applied")).toBe(true);
     const csv = pipelineToCsv(after);
-    expect(csv.split("\r\n")[0]).toBe("﻿Candidate,Company,Title,Status,Applied,Follow up,Fit,Interview,Location,Added,Notes,Job ID");
+    expect(csv.split("\r\n")[0]).toBe("﻿Candidate,Company,Title,Status,Applied,Follow up,Fit,Interview,Location,Added,Notes,Job ID,Sent via,Resume version sent");
     expect(csv).toContain("Jordan Lee,");
     await expect(setPipelineStatus(root, [{ candidateId: alex.id, jobId: "northstar-support" }], "hired")).rejects.toThrow();
   });

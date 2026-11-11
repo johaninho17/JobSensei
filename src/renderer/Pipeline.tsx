@@ -83,9 +83,9 @@ export function PipelineView({ activeId, onOpenJob, onToast }: { activeId: strin
     {!rows && !error && <p className="muted">Reading every candidate's jobs…</p>}
     {rows && !shown.length && <p className="muted">No jobs match. Add a job and choose who it is for.</p>}
     {shown.length > 0 && <table className="pipeline-table">
-      <thead><tr><th scope="col"><input type="checkbox" aria-label="Select all jobs shown" checked={shown.every((row) => selected.has(keyOf(row)))} onChange={(event) => setSelected(event.target.checked ? new Set(shown.map(keyOf)) : new Set())} /></th><th scope="col">Candidate</th><th scope="col">Company</th><th scope="col">Title</th><th scope="col">Fit</th><th scope="col">Status</th><th scope="col">Applied</th></tr></thead>
+      <thead><tr><th scope="col"><input type="checkbox" aria-label="Select all jobs shown" checked={shown.every((row) => selected.has(keyOf(row)))} onChange={(event) => setSelected(event.target.checked ? new Set(shown.map(keyOf)) : new Set())} /></th><th scope="col">Candidate</th><th scope="col">Company</th><th scope="col">Title</th><th scope="col">Fit</th><th scope="col">Status</th><th scope="col">Applied</th><th scope="col">Sent via</th></tr></thead>
       <tbody>{shown.flatMap((row) => {
-        const header = grouped && postingKey(row) !== lastPosting ? <tr key={`g-${postingKey(row)}`} className="pipeline-group"><th colSpan={7} scope="rowgroup">{[row.company ?? row.name, row.title].filter(Boolean).join(", ")}</th></tr> : null;
+        const header = grouped && postingKey(row) !== lastPosting ? <tr key={`g-${postingKey(row)}`} className="pipeline-group"><th colSpan={8} scope="rowgroup">{[row.company ?? row.name, row.title].filter(Boolean).join(", ")}</th></tr> : null;
         lastPosting = postingKey(row);
         const key = keyOf(row);
         return [header, <tr key={key} className={selected.has(key) ? "is-selected" : undefined}>
@@ -96,6 +96,7 @@ export function PipelineView({ activeId, onOpenJob, onToast }: { activeId: strin
           <td>{row.rating === null ? "—" : row.rating.toFixed(1)}</td>
           <td>{statusLabel(row)}</td>
           <td>{effectiveAppliedAt(row) ?? ""}</td>
+          <td>{row.submission ? <span title={`Resume version ${row.submission.resumeVersion}`}>{row.submission.platform ?? "Recorded"}</span> : ""}</td>
         </tr>].filter(Boolean);
       })}</tbody>
     </table>}

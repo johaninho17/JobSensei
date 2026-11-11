@@ -12,6 +12,8 @@ import { zipFolder } from "./zip-folder";
 import { applyIntake, type CandidateIntake } from "./candidate-intake";
 import { applicationReview } from "./application-review";
 import { saveApplicationFacts, type FactsInput } from "./candidate-facts";
+import { attachConfirmation, readSubmission, recordSubmission, undoSubmission } from "./submission";
+import { exportMarkdownPdf } from "./pdf-export";
 import { candidateAgyHomePath } from "./agy-home";
 import { nextQueuedCandidate, sendPosting, setLibraryCompany, stageLibraryLink, stageLibraryPaste, suggestCandidates } from "./posting-library";
 import { join } from "node:path";
@@ -30,7 +32,7 @@ export type CandidateContext = {
   /** Asks where to save a file; null when the user cancels. */
   chooseSavePath: (defaultName: string) => Promise<string | null>;
   /** Asks for a resume (one file) or extra candidate files (several); empty when cancelled. */
-  chooseFiles: (kind: "resume" | "files") => Promise<string[]>;
+  chooseFiles: (kind: "resume" | "files" | "image") => Promise<string[]>;
 };
 
 /** Settings for one candidate live in their own folder, never in the recruiter's app settings. */
@@ -77,7 +79,7 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
 
   ipcMain.handle("candidates:state", state);
   /** Adds a candidate (their folder and profile with name and file prefix), then opens them. */
-  ipcMain.handle("candidates:choose-files", async (_event, kind: unknown) => ctx.chooseFiles(kind === "resume" ? "resume" : "files"));
+  ipcMain.handle("candidates:choose-files", async (_event, kind: unknown) => ctx.chooseFiles(kind === "resume" ? "resume" : kind === "image" ? "image" : "files"));
   /** Adds a candidate with everything the recruiter has (name, base resume, extra files, notes), then opens them. */
   ipcMain.handle("candidates:add", async (_event, name: unknown, intake: unknown) => {
     const busy = await ctx.busyReason();
@@ -101,6 +103,14 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
     return candidatePath(ctx.root(), activeId);
   };
   ipcMain.handle("candidates:save-facts", async (_event, input: unknown) => saveApplicationFacts(await activeFolder(), (input && typeof input === "object" ? input : {}) as FactsInput));
+  // Proof of what was sent (recruiter plan R8 P4).
+  ipcMain.handle("submission:get", async (_event, jobId: unknown) => readSubmission(await activeFolder(), id(jobId)));
+  ipcMain.handle("submission:mark", async (_event, jobId: unknown) => { const folder = await activeFolder(); return recordSubmission(folder, id(jobId), (path) => exportMarkdownPdf(folder, path)); });
+  ipcMain.handle("submission:undo", async (_event, jobId: unknown) => undoSubmission(await activeFolder(), id(jobId)));
+  ipcMain.handle("submission:confirmation", async (_event, jobId: unknown, path: unknown) => {
+    const source = typeof path === "string" && path ? path : (await ctx.chooseFiles("image"))[0];
+    return source ? attachConfirmation(await activeFolder(), id(jobId), source) : readSubmission(await activeFolder(), id(jobId));
+  });
   ipcMain.handle("review:get", async (_event, jobId: unknown) => applicationReview(await activeFolder(), id(jobId)));
   ipcMain.handle("candidates:notes", async () => readRecruiterNotes(await activeFolder()));
   /** Saves the open candidate's recruiter notes; returns the context path so the renderer checks it for Agy. */
