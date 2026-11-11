@@ -3,6 +3,7 @@ import { ipcMain } from "electron";
 import { artifactPrefixFor, candidateStatusSchema, type CandidateOverview, type CandidatesState } from "../src/shared/candidates";
 import { effectiveStatus, readyToSend } from "../src/shared/tracker";
 import { listJobFolders } from "./job-folders";
+import { readCandidateProfile } from "./candidate-profile";
 import { createCandidateProfile } from "./candidate-profile";
 import { addCandidate, candidatePath, clearActiveCandidate, deleteCandidate, readRecruiterNotes, saveRecruiterNotes, readRecruiterSettings, readRoster, renameCandidate, setActiveCandidate, setCandidateStatus } from "./candidates";
 import { SettingsStore } from "./settings";
@@ -14,6 +15,9 @@ import { applicationReview } from "./application-review";
 import { saveApplicationFacts, type FactsInput } from "./candidate-facts";
 import { attachConfirmation, readSubmission, recordSubmission, undoSubmission } from "./submission";
 import { exportMarkdownPdf } from "./pdf-export";
+import { approveProposal, declineProposal, readProposals } from "./proposals";
+import { candidateInsight, reportRows } from "../src/shared/recruiter-insight";
+import { statusLabel } from "../src/shared/tracker";
 import { candidateAgyHomePath } from "./agy-home";
 import { nextQueuedCandidate, sendPosting, setLibraryCompany, stageLibraryLink, stageLibraryPaste, suggestCandidates } from "./posting-library";
 import { join } from "node:path";
@@ -61,11 +65,15 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
       ]);
       const count = queue?.items.filter((item) => item.status === "queued").length ?? 0;
       if (count) waiting[candidate.id] = count;
+      const profile = await readCandidateProfile(folder).catch(() => null);
       overview[candidate.id] = {
         resume: Boolean(settings?.baseResumePath),
         jobs: jobs.length,
         applied: jobs.filter((job) => effectiveStatus(job) === "applied").length,
         ready: jobs.filter((job) => readyToSend(job)).length,
+        toApprove: (await readProposals(folder)).length,
+        weeklyTarget: profile?.preferences.targets.weeklyTarget ?? null,
+        insight: candidateInsight(jobs),
       };
     }));
     return { candidates: roster.candidates, activeId: active?.id ?? null, waiting, overview };
@@ -110,6 +118,20 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
   ipcMain.handle("submission:confirmation", async (_event, jobId: unknown, path: unknown) => {
     const source = typeof path === "string" && path ? path : (await ctx.chooseFiles("image"))[0];
     return source ? attachConfirmation(await activeFolder(), id(jobId), source) : readSubmission(await activeFolder(), id(jobId));
+  });
+  // Approval shortlist and weekly report (recruiter plan R8 P5). Approving writes the candidate's queue, so it is
+  // done from the Candidates page, while no candidate is open in the window.
+  const closedFolder = async (candidateId: string) => {
+    if ((await state()).activeId === candidateId) throw new Error("Go to All candidates to approve jobs for this candidate.");
+    return candidatePath(ctx.root(), candidateId);
+  };
+  ipcMain.handle("proposals:list", async (_event, candidateId: unknown) => readProposals(await candidatePath(ctx.root(), id(candidateId))));
+  ipcMain.handle("proposals:approve", async (_event, candidateId: unknown, proposalId: unknown) => approveProposal(await closedFolder(id(candidateId)), id(proposalId)));
+  ipcMain.handle("proposals:decline", async (_event, candidateId: unknown, proposalId: unknown) => declineProposal(await candidatePath(ctx.root(), id(candidateId)), id(proposalId)));
+  ipcMain.handle("report:candidate", async (_event, candidateId: unknown, from: unknown, to: unknown) => {
+    const day = (value: unknown) => { if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("Choose the report's dates."); return value; };
+    const rows = (await listPipeline(ctx.root())).filter((row) => row.candidateId === id(candidateId));
+    return reportRows(rows.map((row) => ({ ...row, postingUrl: row.role?.source && /^https?:/i.test(row.role.source) ? row.role.source : null, statusText: statusLabel(row) })), day(from), day(to));
   });
   ipcMain.handle("review:get", async (_event, jobId: unknown) => applicationReview(await activeFolder(), id(jobId)));
   ipcMain.handle("candidates:notes", async () => readRecruiterNotes(await activeFolder()));

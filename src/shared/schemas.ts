@@ -98,9 +98,13 @@ export const candidateTargetsSchema = z.object({
   needsSponsorship: z.boolean().default(false),
   /** Companies never to apply to (the current employer is added from the resume automatically). */
   skipCompanies: z.array(z.string().trim().min(1).max(120)).max(40).default([]),
+  /** Applications the recruiter aims to send per week (the candidate's package); null when there is none. */
+  weeklyTarget: z.number().int().min(1).max(500).nullable().default(null),
+  /** Jobs wait for the candidate's approval before they are tailored (recruiter plan R8 P5). */
+  approval: z.boolean().default(false),
 });
 export type CandidateTargets = z.infer<typeof candidateTargetsSchema>;
-export const EMPTY_CANDIDATE_TARGETS: CandidateTargets = { roles: [], locations: [], workModes: [], level: null, salaryFloor: null, needsSponsorship: false, skipCompanies: [] };
+export const EMPTY_CANDIDATE_TARGETS: CandidateTargets = { roles: [], locations: [], workModes: [], level: null, salaryFloor: null, needsSponsorship: false, skipCompanies: [], weeklyTarget: null, approval: false };
 
 /**
  * Answers the employer's form asks for that the profile doesn't already hold (Recruiter Edition, plan R8 P3): the
@@ -1287,6 +1291,11 @@ export interface SenseiApi {
     deleteCandidate(candidateId: string, typedName: string): Promise<{ name: string; removed: string[] }>;
     /** A drafted job's resume lines, what changed from the base, and the evidence behind each change (recruiter plan R8). */
     review(jobId: string): Promise<import("./review").ApplicationReview>;
+    /** Jobs waiting for a candidate's approval, and the weekly report (recruiter plan R8 P5). */
+    proposals(candidateId: string): Promise<import("./recruiter-insight").Proposal[]>;
+    approveProposal(candidateId: string, proposalId: string): Promise<void>;
+    declineProposal(candidateId: string, proposalId: string): Promise<void>;
+    report(candidateId: string, from: string, to: string): Promise<import("./recruiter-insight").ReportRow[]>;
     /** Proof of what was sent (recruiter plan R8 P4): read, record (Mark applied), undo, add a confirmation. */
     submission(jobId: string): Promise<import("./submission").Submission | null>;
     markApplied(jobId: string): Promise<import("./submission").Submission>;
@@ -1305,7 +1314,7 @@ export interface SenseiApi {
     setPostingCompany(postingId: string, company: string): Promise<import("./candidate-match").LibraryPosting>;
     suggest(postingId: string): Promise<import("./candidate-match").CandidateSuggestion[]>;
     /** Returns the open candidate's queue item (the window adds it) and who else got it. */
-    send(postingId: string, candidateIds: string[]): Promise<{ active: { pasteId: string; label: string | null } | null; queued: string[] }>;
+    send(postingId: string, candidateIds: string[]): Promise<{ active: { pasteId: string; label: string | null } | null; queued: string[]; proposed: string[] }>;
   };
   setup: {
     readiness(): Promise<Readiness>;

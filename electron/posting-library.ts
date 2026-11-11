@@ -11,6 +11,7 @@ import { candidatePath, readRoster } from "./candidates";
 import { STAGED_JDS_DIR, setStagedCompany, stageLinkJobDescription, stagePastedJobDescription } from "./jd-fetch";
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { postingRecordFor } from "./posting-record";
+import { addProposal, readProposals } from "./proposals";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
 
 /** The library is laid out like a workspace, so the posting cleanup and staging code run on it unchanged. */
@@ -57,7 +58,8 @@ async function existingPostings(folder: string): Promise<ExistingPosting[]> {
     const meta = await readFile(stagedFile(folder, item.id, ".json"), "utf8").then((raw) => JSON.parse(raw) as { url?: string; company?: string | null; title?: string | null }, () => null);
     return { jobId: null, url: item.url ?? (meta?.url && meta.url !== "pasted" ? meta.url : null), company: meta?.company ?? null, title: meta?.title ?? null };
   }));
-  return [...fromJobs, ...waiting];
+  const proposals = (await readProposals(folder)).map((proposal) => ({ jobId: null, url: proposal.url, company: proposal.company, title: proposal.title }));
+  return [...fromJobs, ...waiting, ...proposals];
 }
 
 async function candidateTargets(folder: string): Promise<CandidateTargets> {
@@ -100,16 +102,26 @@ export async function suggestCandidates(root: string, id: string): Promise<Candi
  * candidate's queue belongs to the window (it saves the whole queue), so their item is returned for the window to
  * add instead of being written here.
  */
-export async function sendPosting(root: string, id: string, candidateIds: string[], activeId: string | null, now = new Date()): Promise<{ active: { pasteId: string; label: string | null } | null; queued: string[] }> {
+export async function sendPosting(root: string, id: string, candidateIds: string[], activeId: string | null, now = new Date()): Promise<{ active: { pasteId: string; label: string | null } | null; queued: string[]; proposed: string[] }> {
   const library = libraryPath(root);
   const meta = await libraryMeta(root, checkId(id));
   const roster = await readRoster(root);
   let active: { pasteId: string; label: string | null } | null = null;
   const queued: string[] = [];
+  const proposed: string[] = [];
+  let suggestions: CandidateSuggestion[] | null = null;
   for (const candidateId of [...new Set(candidateIds)]) {
     const entry = roster.candidates.find((candidate) => candidate.id === candidateId);
     if (!entry || entry.status === "archived") continue;
     const folder = await candidatePath(root, candidateId);
+    // A candidate who approves jobs first gets a proposal, not a queue item (recruiter plan R8 P5).
+    if ((await candidateTargets(folder)).approval) {
+      suggestions ??= await suggestCandidates(root, id);
+      const reasons = suggestions.find((row) => row.id === candidateId)?.reasons.filter((reason) => reason.good).map((reason) => reason.text) ?? [];
+      await addProposal(folder, join(library, ...STAGED_JDS_DIR.split("/")), id, { company: meta.company, title: meta.title, url: meta.url, reasons }, now);
+      proposed.push(candidateId);
+      continue;
+    }
     const item = newQueueItem({ kind: "paste", label: postingLabel(meta) }, now, false);
     if (meta.url) item.url = meta.url;
     for (const ext of [".md", ".json", ".form.md"]) {
@@ -125,7 +137,7 @@ export async function sendPosting(root: string, id: string, candidateIds: string
     await saveJobQueue(folder, { ...queue, items: [...queue.items.filter((existing) => existing.status !== "done").slice(-49), item] });
     queued.push(candidateId);
   }
-  return { active, queued };
+  return { active, queued, proposed };
 }
 
 /** The first other candidate with jobs waiting to run, so the queue can move on to them. */

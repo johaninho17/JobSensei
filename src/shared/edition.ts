@@ -110,6 +110,7 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   "application-review": "candidates",
   "candidate-facts": "candidates",
   submission: "candidates",
+  proposals: "candidates",
 };
 
 export function includedAgentEntry(features: Features, entry: string): boolean {

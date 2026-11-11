@@ -197,6 +197,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       if (!chosen) { const stop = new Error("No candidate chosen, so nothing was queued."); stop.name = "NotQueued"; throw stop; }
       const sent = await window.sensei.candidates.send(item.id, chosen);
       if (sent.queued.length) showToast(`Queued for ${plural(sent.queued.length, "other candidate")}; their jobs run after this candidate's queue`);
+      if (sent.proposed.length) showToast(`Waiting for approval from ${plural(sent.proposed.length, "candidate")}; send them the shortlist from All candidates`);
       if (!sent.active) return 0;
       item.id = sent.active.pasteId;
       item.label = sent.active.label;
@@ -1502,12 +1503,14 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
     level: profile?.preferences.targets.level ?? "",
     salaryFloor: profile?.preferences.targets.salaryFloor ? String(profile.preferences.targets.salaryFloor) : "",
     skip: (profile?.preferences.targets.skipCompanies ?? []).join("\n"),
+    weeklyTarget: profile?.preferences.targets.weeklyTarget ? String(profile.preferences.targets.weeklyTarget) : "",
     email: profile?.identity.email ?? "", phone: profile?.identity.phone ?? "", links: (profile?.identity.links ?? []).join("\n"),
     factLocation: profile?.identity.location ?? profile?.preferences.interview.location ?? "",
     extra: (profile?.preferences.applicationFacts.extra ?? []).map((fact) => `${fact.label}: ${fact.value}`).join("\n"),
   }));
   const [modes, setModes] = useState<string[]>(() => profile?.preferences.targets.workModes ?? []);
   const [sponsorship, setSponsorship] = useState(() => profile?.preferences.targets.needsSponsorship ?? false);
+  const [approval, setApproval] = useState(() => profile?.preferences.targets.approval ?? false);
   const [lettersOn, setLettersOn] = useState(() => profile?.preferences.coverLetter.enabled ?? !FEATURES.coverLetterOptIn);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState("");
@@ -1545,7 +1548,7 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
       } else if (action === "targets" && profile) {
         const lines = (value: string) => [...new Set(value.split(/\n|,/).map((line) => line.trim()).filter(Boolean))].slice(0, 12);
         const floor = Number(values.salaryFloor!.replace(/[^0-9.]/g, ""));
-        next = await window.sensei.profile.updatePreferences({ ...profile.preferences, targets: { roles: lines(values.roles!), locations: lines(values.locations!), workModes: modes as CandidateProfile["preferences"]["targets"]["workModes"], level: (values.level || null) as CandidateProfile["preferences"]["targets"]["level"], salaryFloor: values.salaryFloor!.trim() && floor > 0 ? Math.round(floor) : null, needsSponsorship: sponsorship, skipCompanies: lines(values.skip!).slice(0, 40) } });
+        next = await window.sensei.profile.updatePreferences({ ...profile.preferences, targets: { roles: lines(values.roles!), locations: lines(values.locations!), workModes: modes as CandidateProfile["preferences"]["targets"]["workModes"], level: (values.level || null) as CandidateProfile["preferences"]["targets"]["level"], salaryFloor: values.salaryFloor!.trim() && floor > 0 ? Math.round(floor) : null, needsSponsorship: sponsorship, skipCompanies: lines(values.skip!).slice(0, 40), weeklyTarget: Number(values.weeklyTarget) >= 1 ? Math.min(500, Math.round(Number(values.weeklyTarget))) : null, approval } });
       }
       onSaved(next);
       onClose();
@@ -1604,6 +1607,8 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
       <label className="setup-field"><span>Level</span><select value={values.level} onChange={(event) => setValues((current) => ({ ...current, level: event.target.value }))}><option value="">Any</option>{["intern", "junior", "mid", "senior", "staff", "lead", "manager", "director", "executive"].map((level) => <option key={level} value={level}>{level[0]!.toUpperCase() + level.slice(1)}</option>)}</select></label>
       {field("salaryFloor", "Lowest yearly pay (US dollars)", "e.g. 90000")}
       <label className="setup-check"><input type="checkbox" checked={sponsorship} onChange={(event) => setSponsorship(event.target.checked)} /> Needs visa sponsorship</label>
+      {field("weeklyTarget", "Applications per week (their package; optional)", "e.g. 10")}
+      <label className="setup-check"><input type="checkbox" checked={approval} onChange={(event) => setApproval(event.target.checked)} /> The candidate approves each job before it is tailored</label>
       <label className="setup-field"><span>Companies to skip (one per line; the current employer on the resume is always skipped)</span><textarea rows={2} value={values.skip} onChange={set("skip")} placeholder={"A former employer\nA company they've already applied to"} /></label>
     </>}
     {problem && <p className="inline-error" role="alert">{problem}</p>}

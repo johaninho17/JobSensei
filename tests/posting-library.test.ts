@@ -143,3 +143,67 @@ describe("pipeline across candidates (recruiter plan R5)", () => {
     await expect(setPipelineStatus(root, [{ candidateId: alex.id, jobId: "northstar-support" }], "hired")).rejects.toThrow();
   });
 });
+
+describe("candidate approval, weekly report, insight (recruiter plan R8 P5)", () => {
+  it("proposes a job to a candidate who approves first, then queues it on approval or drops it on decline", async () => {
+    const { readProposals, approveProposal, declineProposal } = await import("../electron/proposals");
+    const { root, alex, jordan } = await recruiterRoot();
+    // Jordan approves jobs first.
+    const jordanFolder = await candidatePath(root, jordan.id);
+    const profilePath = join(jordanFolder, "profile", "candidate.json");
+    const profile = JSON.parse(await readFile(profilePath, "utf8"));
+    profile.preferences.targets.approval = true;
+    await writeFile(profilePath, JSON.stringify(profile));
+    await stageLibraryPaste(root, JD, "paste-abc123");
+    const sent = await sendPosting(root, "paste-abc123", [jordan.id], alex.id);
+    expect(sent).toMatchObject({ queued: [], proposed: [jordan.id] });
+    const [proposal] = await readProposals(jordanFolder);
+    expect(proposal).toMatchObject({ company: "Northstar Labs", title: "Support Engineer" });
+    expect((await readJobQueue(jordanFolder)).items).toEqual([]);
+    expect((await suggestCandidates(root, "paste-abc123")).find((row) => row.id === jordan.id)?.duplicate).toBe("Already queued for this posting");
+    await approveProposal(jordanFolder, proposal!.id);
+    const queue = await readJobQueue(jordanFolder);
+    expect(queue.items.map((item) => [item.id, item.label])).toEqual([[proposal!.id, "Northstar Labs, Support Engineer"]]);
+    expect(await exists(join(jordanFolder, ".sensei", "staged-jds", `${proposal!.id}.md`))).toBe(true);
+    expect(await readProposals(jordanFolder)).toEqual([]);
+    await stageLibraryPaste(root, JD.replace("Northstar Labs", "Juniper Analytics"), "paste-def456");
+    await sendPosting(root, "paste-def456", [jordan.id], alex.id);
+    const [second] = await readProposals(jordanFolder);
+    await declineProposal(jordanFolder, second!.id);
+    expect(await readProposals(jordanFolder)).toEqual([]);
+    expect(await exists(join(jordanFolder, ".sensei", "proposals", `${second!.id}.md`))).toBe(false);
+  });
+
+  it("counts applications this week, replies, and interviews, and writes the report and shortlist as plain text", async () => {
+    const { candidateInsight, reportRows, reportText, shortlistText } = await import("../src/shared/recruiter-insight");
+    const { setDraftsMarkApplied } = await import("../src/shared/tracker");
+    setDraftsMarkApplied(false); // the Recruiter Edition's rule: drafts are not sent until marked applied
+    const job = (status: string | null, appliedAt: string | null, company = "Northstar Labs") => ({ tracker: status ? { status, appliedAt, nextFollowUpAt: null, notes: "", history: [] } : null, hasApplicationMaterials: true, interviewRoundLabel: null, createdAt: "2026-11-01T10:00:00.000Z", company, name: company.toLowerCase(), title: "Support Engineer", rating: 3.6, statusText: status === "interviewing" ? "Interviewing" : "Applied" }) as never;
+    const now = new Date(2026, 10, 11, 12);
+    const jobs = [job("applied", "2026-11-10"), job("interviewing", "2026-11-03"), job("rejected", "2026-10-20"), job(null, null)];
+    expect(candidateInsight(jobs, now)).toEqual({ applied: 3, appliedThisWeek: 1, responses: 2, interviews: 1, offers: 0, responseRate: 2 / 3 });
+    const rows = reportRows(jobs, "2026-11-01", "2026-11-11");
+    expect(rows.map((row) => row.date)).toEqual(["2026-11-10", "2026-11-03"]);
+    const text = reportText("Alex Morgan", "2026-11-01", "2026-11-11", rows, 5);
+    expect(text).toContain("Hi Alex,");
+    expect(text).toContain("from 2026-11-01 to 2026-11-11: 2 (weekly goal: 5)");
+    expect(text).toContain("now interviewing");
+    expect(shortlistText("Alex Morgan", [{ id: "paste-x1y2", company: "Juniper Analytics", title: "Analyst", url: "https://example.com/j", reasons: ["Title matches"], proposedAt: "" }])).toContain("1. Juniper Analytics: Analyst (Title matches)\n   https://example.com/j");
+    setDraftsMarkApplied(true);
+  });
+});
+
+describe("approving a proposal with a very long title", () => {
+  it("queues it with a clipped label and only then removes the proposal", async () => {
+    const { approveProposal, readProposals } = await import("../electron/proposals");
+    const { root, jordan } = await recruiterRoot();
+    const folder = await candidatePath(root, jordan.id);
+    await mkdir(join(folder, ".sensei", "proposals"), { recursive: true });
+    await writeFile(join(folder, ".sensei", "proposals", "paste-long0001.md"), JD);
+    await writeFile(join(folder, ".sensei", "proposals.json"), JSON.stringify([{ id: "paste-long0001", company: "Northstar Labs", title: "Support Engineer ".repeat(30), url: null, reasons: [], proposedAt: "2026-11-11T00:00:00.000Z" }]));
+    await approveProposal(folder, "paste-long0001");
+    const queue = await readJobQueue(folder);
+    expect(queue.items[0]?.label?.length).toBeLessThanOrEqual(200);
+    expect(await readProposals(folder)).toEqual([]);
+  });
+});

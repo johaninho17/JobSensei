@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import type { CandidateEntry, CandidatesState } from "../shared/candidates";
 import type { CandidateSuggestion, LibraryPosting } from "../shared/candidate-match";
 import { PrivacyDialog } from "./Privacy";
+import { daysAgo, reportText, shortlistText, type Proposal, type ReportRow } from "../shared/recruiter-insight";
 
 const message = (caught: unknown) => (caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "Something went wrong.");
 
@@ -87,6 +88,8 @@ function AddCandidateForm({ autoFocus = false, onCancel }: { autoFocus?: boolean
 function CandidatesHome({ state }: { state: CandidatesState }) {
   const [privacy, setPrivacy] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [approving, setApproving] = useState<CandidateEntry | null>(null);
+  const [reporting, setReporting] = useState<CandidateEntry | null>(null);
   const [error, setError] = useState<string | null>(null);
   const listed = state.candidates.filter((candidate) => candidate.status !== "archived");
   const archived = state.candidates.filter((candidate) => candidate.status === "archived");
@@ -103,19 +106,22 @@ function CandidatesHome({ state }: { state: CandidatesState }) {
       </div>
       {error && <p className="inline-error" role="alert">{error}</p>}
       <table className="pipeline-table candidates-table">
-        <thead><tr><th scope="col">Candidate</th><th scope="col">Status</th><th scope="col">Resume</th><th scope="col">Jobs</th><th scope="col">Ready to send</th><th scope="col">Applied</th><th scope="col">Waiting</th><th scope="col">Last opened</th></tr></thead>
+        <thead><tr><th scope="col">Candidate</th><th scope="col">Status</th><th scope="col">Resume</th><th scope="col">Jobs</th><th scope="col">To approve</th><th scope="col">Ready to send</th><th scope="col">This week</th><th scope="col">Responses</th><th scope="col">Waiting</th><th scope="col">Last opened</th><th scope="col"><span className="sr-only">Report</span></th></tr></thead>
         <tbody>
           {listed.map((candidate) => { const info = state.overview?.[candidate.id]; return <tr key={candidate.id}>
             <td><button className="btn-link" onClick={() => open(candidate.id)}>{candidate.displayName}</button></td>
             <td>{STATUS_LABEL[candidate.status]}</td>
             <td>{info?.resume ? "Ready" : <span className="side-due">Needs a resume</span>}</td>
             <td>{info?.jobs ?? 0}</td>
+            <td>{info?.toApprove ? <button className="btn-link" onClick={() => setApproving(candidate)}>{info.toApprove}</button> : 0}</td>
             <td>{info?.ready ?? 0}</td>
-            <td>{info?.applied ?? 0}</td>
+            <td title="Applications sent in the last 7 days">{info?.insight?.appliedThisWeek ?? 0}{info?.weeklyTarget ? ` of ${info.weeklyTarget}` : ""}</td>
+            <td title={info?.insight ? `${info.insight.responses} of ${info.insight.applied} applications got a reply; ${info.insight.interviews} interview${info.insight.interviews === 1 ? "" : "s"}, ${info.insight.offers} offer${info.insight.offers === 1 ? "" : "s"}` : undefined}>{info?.insight?.responseRate === null || info?.insight?.responseRate === undefined ? "—" : `${Math.round(info.insight.responseRate * 100)}%`}{info?.insight?.interviews ? ` · ${info.insight.interviews} int.` : ""}</td>
             <td>{state.waiting?.[candidate.id] ?? 0}</td>
             <td>{candidate.lastUsedAt ? new Date(candidate.lastUsedAt).toLocaleDateString() : "Never"}</td>
+            <td><button className="btn-link" onClick={() => setReporting(candidate)}>Report</button></td>
           </tr>; })}
-          {!listed.length && <tr><td colSpan={8} className="muted">Add a candidate with their resume and anything else you have for them.</td></tr>}
+          {!listed.length && <tr><td colSpan={11} className="muted">Add a candidate with their resume and anything else you have for them.</td></tr>}
         </tbody>
       </table>
       {archived.length > 0 && <ArchivedList candidates={archived} />}
@@ -124,6 +130,8 @@ function CandidatesHome({ state }: { state: CandidatesState }) {
       <div className="company-dialog intake-dialog" role="dialog" aria-modal="true" aria-labelledby="intake-home-title"><h2 id="intake-home-title">Add a candidate</h2><AddCandidateForm autoFocus onCancel={() => setAdding(false)} /></div>
     </div>}
     {privacy && <PrivacyDialog onClose={() => setPrivacy(false)} />}
+    {approving && <ApprovalDialog candidate={approving} onClose={() => { setApproving(null); reloadForCandidate(); }} />}
+    {reporting && <ReportDialog candidate={reporting} target={state.overview?.[reporting.id]?.weeklyTarget ?? null} onClose={() => setReporting(null)} />}
   </main>;
 }
 
@@ -304,4 +312,57 @@ export function CandidateResumeCard({ name, problem, onChoose }: { name: string 
       <div className="onboarding-actions"><button className="btn-primary" disabled={busy} onClick={() => { setBusy(true); void onChoose().finally(() => setBusy(false)); }}>{busy ? "Reading…" : "Choose resume"}</button></div>
     </section>
   </main>;
+}
+
+/** Copies text and says so for a moment. */
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [done, setDone] = useState(false);
+  return <button className="btn-quiet" type="button" onClick={() => void navigator.clipboard.writeText(text).then(() => { setDone(true); window.setTimeout(() => setDone(false), 1500); })}>{done ? "Copied" : label}</button>;
+}
+
+/** Jobs waiting for the candidate's approval: send them the shortlist, then record each answer (plan R8 P5). */
+function ApprovalDialog({ candidate, onClose }: { candidate: CandidateEntry; onClose: () => void }) {
+  const [items, setItems] = useState<Proposal[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = () => void window.sensei.candidates.proposals(candidate.id).then(setItems, (caught) => setError(message(caught)));
+  useEffect(load, [candidate.id]);
+  const decide = (proposal: Proposal, approve: boolean) => void (approve ? window.sensei.candidates.approveProposal(candidate.id, proposal.id) : window.sensei.candidates.declineProposal(candidate.id, proposal.id)).then(load, (caught) => setError(message(caught)));
+  return <div className="search-overlay" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
+    <div className="company-dialog intake-dialog" role="dialog" aria-modal="true" aria-labelledby="approval-title">
+      <h2 id="approval-title">Waiting for {candidate.displayName}'s approval</h2>
+      <p>Send {candidate.displayName} the shortlist, then mark what they approved. Approved jobs join their queue and are tailored when you open them.</p>
+      {error && <p className="inline-error" role="alert">{error}</p>}
+      {!items ? <p className="muted">Reading…</p> : items.length ? <>
+        <ol className="approval-list">{items.map((item) => <li key={item.id}>
+          <span><strong>{[item.company, item.title].filter(Boolean).join(": ") || "Job"}</strong>{item.reasons.length > 0 && <small>{item.reasons.slice(0, 3).join(" · ")}</small>}{item.url && <small>{item.url}</small>}</span>
+          <span className="review-actions"><button className="btn-primary" onClick={() => decide(item, true)}>Approved</button><button className="btn-quiet" onClick={() => decide(item, false)}>Declined</button></span>
+        </li>)}</ol>
+        <div className="onboarding-actions"><CopyButton text={shortlistText(candidate.displayName, items)} label="Copy shortlist to send" /><button className="btn-quiet" onClick={onClose}>Done</button></div>
+      </> : <><p className="muted">Nothing is waiting.</p><div className="onboarding-actions"><button className="btn-quiet" onClick={onClose}>Done</button></div></>}
+    </div>
+  </div>;
+}
+
+/** The weekly report for one candidate: applications sent in a date range, ready to paste into an email (plan R8 P5). */
+function ReportDialog({ candidate, target, onClose }: { candidate: CandidateEntry; target: number | null; onClose: () => void }) {
+  const now = new Date();
+  const [from, setFrom] = useState(daysAgo(now, 6));
+  const [to, setTo] = useState(daysAgo(now, 0));
+  const [rows, setRows] = useState<ReportRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setRows(null); void window.sensei.candidates.report(candidate.id, from, to).then(setRows, (caught) => setError(message(caught))); }, [candidate.id, from, to]);
+  const csv = rows ? ["Company,Title,Sent,Via,Fit,Status,Link", ...rows.map((row) => [row.company, row.title, row.date, row.via, row.fit, row.status, row.link].map((cell) => /[",\n]/.test(cell) ? `"${cell.replaceAll('"', '""')}"` : cell).join(","))].join("\n") : "";
+  return <div className="search-overlay" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
+    <div className="company-dialog intake-dialog" role="dialog" aria-modal="true" aria-labelledby="report-title">
+      <h2 id="report-title">Report for {candidate.displayName}</h2>
+      <div className="report-dates"><label><span>From</span><input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label><span>To</span><input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label></div>
+      {error && <p className="inline-error" role="alert">{error}</p>}
+      {!rows ? <p className="muted">Reading…</p> : <>
+        <p>{rows.length} application{rows.length === 1 ? "" : "s"} sent{target ? ` (weekly goal: ${target})` : ""}.</p>
+        {rows.length > 0 && <table className="pipeline-table"><thead><tr><th scope="col">Company</th><th scope="col">Title</th><th scope="col">Sent</th><th scope="col">Via</th><th scope="col">Status</th></tr></thead>
+          <tbody>{rows.map((row, index) => <tr key={`${index}-${row.company}`}><td>{row.company}</td><td>{row.title}</td><td>{row.date}</td><td>{row.via}</td><td>{row.status}</td></tr>)}</tbody></table>}
+        <div className="onboarding-actions"><CopyButton text={reportText(candidate.displayName, from, to, rows, target)} label="Copy as email" />{rows.length > 0 && <CopyButton text={csv} label="Copy as CSV" />}<button className="btn-quiet" onClick={onClose}>Done</button></div>
+      </>}
+    </div>
+  </div>;
 }
