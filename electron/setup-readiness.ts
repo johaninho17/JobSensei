@@ -184,6 +184,26 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
     });
   }
 
+  // Recruiter Edition (plan R8): candidates are records the recruiter fills in, not users describing themselves.
+  // The name comes from adding the candidate, Agy is signed in once for the app, and the career story and voice are
+  // asked for only by the Cover letters row when letters are turned on.
+  if (features.candidates) {
+    const lettersOn = profile?.preferences.coverLetter.enabled === true;
+    const leftOut = new Set(["profile", "other-resumes", ...(lettersOn ? [] : ["story", "voice"])]);
+    for (let index = items.length - 1; index >= 0; index -= 1) if (leftOut.has(items[index]!.id)) items.splice(index, 1);
+    const reword = (id: string, change: Partial<ReadinessItem>) => { const item = items.find((entry) => entry.id === id); if (item) Object.assign(item, change); };
+    reword("resume", { title: "Base resume", improves: "Every tailored resume keeps this resume's layout, section order, dates, and length." });
+    reword("agy", { title: "Agy signed in (once for all candidates)", improves: "Agy writes the tailored drafts." });
+    reword("story", { title: "Career story (for cover letters)", improves: "Cover letters about the candidate's path, in their words." });
+    reword("voice", { title: "Writing voice (for cover letters)", improves: "Letters sound like the candidate." });
+    const context = items.find((entry) => entry.id === "context");
+    if (context) Object.assign(context, {
+      title: "Candidate files and notes",
+      detail: careerPaths.length ? `${careerPaths.length} file${careerPaths.length === 1 ? "" : "s"} used for tailoring.` : "None yet. Add older resumes, a LinkedIn export, notes, or recruiter notes in Career context.",
+      improves: "Everything here counts as the candidate's evidence; with only a resume, drafts reword the resume's own lines.",
+    });
+  }
+
   const required = items.filter((item) => item.level === "required");
   // Jobs may be added once Agy is installed: the queue itself waits until Agy is signed in and idle.
   const firstMissing = required.find((item) => item.state !== "done" && !(item.id === "agy" && input.agy.installed));

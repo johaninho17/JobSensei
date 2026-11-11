@@ -815,3 +815,14 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .privacy-dialog { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 64px); overflow: auto; }
 .menu-item.is-danger { color: var(--risk); }
 .btn-primary.is-danger { background: var(--risk); border-color: var(--risk); color: var(--on-accent); }
+
+/* Candidate intake (recruiter plan R8) */
+.intake-dialog { width: min(600px, calc(100vw - 32px)); max-height: calc(100vh - 64px); overflow: auto; }
+.candidate-intake { display: grid; gap: var(--space-3); }
+.candidate-intake label small, .intake-label small { display: block; color: var(--muted); font-size: var(--fs-13); font-weight: 400; }
+.candidate-intake textarea { width: 100%; padding: var(--space-2); border: 1px solid var(--line-strong); border-radius: var(--radius-s); color: var(--ink); background: var(--canvas); font: inherit; resize: vertical; }
+.intake-drop { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px dashed var(--line-strong); border-radius: var(--radius-m); background: var(--raised); }
+.intake-drop.is-over { border-color: var(--accent); background: var(--hover); }
+.intake-label { font-weight: 600; }
+.intake-actions, .intake-file { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+.intake-files { margin: 0; padding-left: var(--space-4); }

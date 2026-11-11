@@ -2,7 +2,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { EDITION_MARKER, folderMismatchMessage, parseEdition, type Edition } from "../src/shared/edition";
+import { EDITION_MARKER, featuresFor, folderMismatchMessage, parseEdition, type Edition } from "../src/shared/edition";
+import { setDraftsMarkApplied } from "../src/shared/tracker";
 import { writeJsonAtomic } from "./persistence";
 
 let cached: Edition | null = null;
@@ -12,6 +13,12 @@ let cached: Edition | null = null;
  * build stamps into its package.json. Anything else is the solo edition.
  */
 export function currentEdition(): Edition {
+  const edition = readEdition();
+  setDraftsMarkApplied(featuresFor(edition).draftsMarkApplied);
+  return edition;
+}
+
+function readEdition(): Edition {
   if (process.env.JOBSENSEI_EDITION) return parseEdition(process.env.JOBSENSEI_EDITION);
   if (cached) return cached;
   const packagePath = join(__dirname, "..", "..", "package.json");

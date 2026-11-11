@@ -1278,8 +1278,10 @@ export interface SenseiApi {
   /** Recruiter Edition only: the candidate list and switching (electron/candidate-ipc.ts). */
   candidates: {
     state(): Promise<import("./candidates").CandidatesState>;
-    /** Adds a candidate and opens them; reload the window afterwards. */
-    add(name: string): Promise<import("./candidates").CandidateEntry>;
+    /** Adds a candidate with their base resume, extra files, and notes, then opens them; reload the window afterwards. */
+    add(name: string, intake?: { resumePath?: string | null; files?: string[]; notes?: string | null }): Promise<{ entry: import("./candidates").CandidateEntry; resume: { ok: true; lines: string[] } | { ok: false; message: string } | null; files: string[]; skipped: Array<{ name: string; reason: string }> }>;
+    /** Absolute paths of a chosen resume or extra files; empty when cancelled. */
+    chooseFiles(kind: "resume" | "files"): Promise<string[]>;
     /** Opens another candidate; reload the window afterwards. */
     switchTo(id: string): Promise<void>;
     rename(id: string, name: string): Promise<import("./candidates").CandidateEntry>;

@@ -5,13 +5,31 @@ export const TRACKER_LABELS: Record<TrackerStatus, string> = { saved: "Saved", a
 type TrackedJob = { tracker: Pick<JobTracker, "status" | "appliedAt"> | null; hasApplicationMaterials: boolean; interviewRoundLabel: string | null; createdAt: string };
 
 /**
+ * Whether drafts count as applied. In the solo edition a job sent through Sensei is assumed applied (U7); in the
+ * Recruiter Edition drafts are only ready to send until the recruiter marks the job applied. Set once at start by
+ * each process from `features.draftsMarkApplied`.
+ */
+let draftsMarkApplied = true;
+export function setDraftsMarkApplied(value: boolean): void { draftsMarkApplied = value; }
+
+/**
  * The status shown for a job. A status the user set always wins. Otherwise it is derived:
- * interview prep exists -> interviewing; application drafts exist (the job was sent through Sensei) -> applied; else saved.
+ * interview prep exists -> interviewing; application drafts exist -> applied (solo) or still saved (recruiter); else saved.
  */
 export function effectiveStatus(job: Pick<TrackedJob, "tracker" | "hasApplicationMaterials" | "interviewRoundLabel">): TrackerStatus {
   if (job.tracker) return job.tracker.status;
   if (job.interviewRoundLabel) return "interviewing";
-  return job.hasApplicationMaterials ? "applied" : "saved";
+  return job.hasApplicationMaterials && draftsMarkApplied ? "applied" : "saved";
+}
+
+/** Drafts are done but the job isn't marked applied yet (Recruiter Edition). */
+export function readyToSend(job: Pick<TrackedJob, "tracker" | "hasApplicationMaterials" | "interviewRoundLabel">): boolean {
+  return !draftsMarkApplied && job.hasApplicationMaterials && effectiveStatus(job) === "saved";
+}
+
+/** The status as shown on a job: "Ready to send" for drafted, unsent jobs in the Recruiter Edition. */
+export function statusLabel(job: Pick<TrackedJob, "tracker" | "hasApplicationMaterials" | "interviewRoundLabel">): string {
+  return readyToSend(job) ? "Ready to send" : TRACKER_LABELS[effectiveStatus(job)];
 }
 
 /** The applied date: the user's date, else the local day the job was added when its status counts as applied or later. */

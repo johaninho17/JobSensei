@@ -22,7 +22,8 @@ const api: SenseiApi = {
   // Recruiter Edition only (registered when the edition has candidates).
   candidates: {
     state: () => ipcRenderer.invoke("candidates:state"),
-    add: (name) => ipcRenderer.invoke("candidates:add", name),
+    add: (name, intake) => ipcRenderer.invoke("candidates:add", name, intake),
+    chooseFiles: (kind) => ipcRenderer.invoke("candidates:choose-files", kind),
     switchTo: (id) => ipcRenderer.invoke("candidates:switch", id),
     rename: (id, name) => ipcRenderer.invoke("candidates:rename", id, name),
     setStatus: (id, status) => ipcRenderer.invoke("candidates:set-status", id, status),

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PipelineRow } from "../shared/candidate-match";
 import { pipelineToCsv } from "../shared/jobs-csv";
 import { TRACKER_STATUSES, type TrackerStatus } from "../shared/schemas";
-import { TRACKER_LABELS, effectiveAppliedAt, effectiveStatus } from "../shared/tracker";
+import { TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, statusLabel } from "../shared/tracker";
 
 const keyOf = (row: Pick<PipelineRow, "candidateId" | "id">) => `${row.candidateId}/${row.id}`;
 const postingKey = (row: PipelineRow) => `${(row.company ?? row.name).toLowerCase()}|${(row.title ?? "").toLowerCase()}`;
@@ -60,7 +60,7 @@ export function PipelineView({ activeId, onOpenJob, onToast }: { activeId: strin
   }
 
   async function exportCsv() {
-    const path = await window.sensei.jobs.exportCsv(pipelineToCsv(shown)).catch(() => null);
+    const path = await window.sensei.jobs.exportCsv(pipelineToCsv(shown, { followUps: FEATURES.nudges, interviews: FEATURES.interviews })).catch(() => null);
     if (path) onToast(`Saved ${shown.length} job${shown.length === 1 ? "" : "s"} to ${path.split(/[\\/]/).pop()}`);
   }
 
@@ -94,7 +94,7 @@ export function PipelineView({ activeId, onOpenJob, onToast }: { activeId: strin
           <td><button className="btn-link" onClick={() => onOpenJob(row.candidateId, row.id)}>{row.company ?? row.name}</button></td>
           <td>{row.title ?? ""}</td>
           <td>{row.rating === null ? "—" : row.rating.toFixed(1)}</td>
-          <td>{TRACKER_LABELS[effectiveStatus(row)]}</td>
+          <td>{statusLabel(row)}</td>
           <td>{effectiveAppliedAt(row) ?? ""}</td>
         </tr>].filter(Boolean);
       })}</tbody>

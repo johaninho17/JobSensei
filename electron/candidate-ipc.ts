@@ -7,6 +7,7 @@ import { SettingsStore } from "./settings";
 import { readJobQueue } from "./job-queue";
 import { listPipeline, setPipelineStatus } from "./pipeline";
 import { zipFolder } from "./zip-folder";
+import { applyIntake, type CandidateIntake } from "./candidate-intake";
 import { candidateAgyHomePath } from "./agy-home";
 import { nextQueuedCandidate, sendPosting, setLibraryCompany, stageLibraryLink, stageLibraryPaste, suggestCandidates } from "./posting-library";
 import { join } from "node:path";
@@ -24,6 +25,8 @@ export type CandidateContext = {
   userDataPath: () => string;
   /** Asks where to save a file; null when the user cancels. */
   chooseSavePath: (defaultName: string) => Promise<string | null>;
+  /** Asks for a resume (one file) or extra candidate files (several); empty when cancelled. */
+  chooseFiles: (kind: "resume" | "files") => Promise<string[]>;
 };
 
 /** Settings for one candidate live in their own folder, never in the recruiter's app settings. */
@@ -58,15 +61,23 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
 
   ipcMain.handle("candidates:state", state);
   /** Adds a candidate (their folder and profile with name and file prefix), then opens them. */
-  ipcMain.handle("candidates:add", async (_event, name: unknown) => {
+  ipcMain.handle("candidates:choose-files", async (_event, kind: unknown) => ctx.chooseFiles(kind === "resume" ? "resume" : "files"));
+  /** Adds a candidate with everything the recruiter has (name, base resume, extra files, notes), then opens them. */
+  ipcMain.handle("candidates:add", async (_event, name: unknown, intake: unknown) => {
     const busy = await ctx.busyReason();
     if (busy) throw new Error(busy);
     const displayName = text(name, "candidate's name");
+    const input = (intake && typeof intake === "object" ? intake : {}) as CandidateIntake;
+    const files = Array.isArray(input.files) ? input.files.filter((path): path is string => typeof path === "string").slice(0, 50) : [];
+    const resumePath = typeof input.resumePath === "string" && input.resumePath ? input.resumePath : null;
+    const notes = typeof input.notes === "string" ? input.notes.slice(0, 50_000) : null;
     const entry = await addCandidate(ctx.root(), displayName);
     const folder = await candidatePath(ctx.root(), entry.id);
-    await createCandidateProfile(folder, { fullName: displayName, artifactPrefix: artifactPrefixFor(displayName) }, await candidateSettingsStore(folder).get());
+    const store = candidateSettingsStore(folder);
+    await createCandidateProfile(folder, { fullName: displayName, artifactPrefix: artifactPrefixFor(displayName) }, await store.get());
+    const result = await applyIntake(folder, store, { resumePath, files, notes });
     await switchTo(entry.id);
-    return entry;
+    return { entry, ...result };
   });
   const activeFolder = async () => {
     const { activeId } = await state();

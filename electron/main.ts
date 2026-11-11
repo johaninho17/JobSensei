@@ -449,6 +449,13 @@ async function registerFeatureIpc(): Promise<void> {
       const result = mainWindow ? await dialog.showSaveDialog(mainWindow, { title: "Export candidate", defaultPath: join(app.getPath("downloads"), defaultName), filters: [{ name: "Zip archive", extensions: ["zip"] }] }) : { canceled: true, filePath: undefined };
       return result.canceled || !result.filePath ? null : result.filePath;
     },
+    chooseFiles: async (kind) => {
+      if (!mainWindow) return [];
+      const result = await dialog.showOpenDialog(mainWindow, kind === "resume"
+        ? { title: "Choose the candidate's resume", properties: ["openFile"], filters: [{ name: "Resume", extensions: ["docx", "md"] }] }
+        : { title: "Add the candidate's files", properties: ["openFile", "multiSelections"], filters: [{ name: "Candidate files", extensions: ["md", "txt", "pdf", "docx", "rtf", "json", "csv"] }] });
+      return result.canceled ? [] : result.filePaths;
+    },
   });
 }
 

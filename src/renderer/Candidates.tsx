@@ -27,22 +27,54 @@ export function CandidateGate({ children }: { children: (state: CandidatesState)
   return <>{children(state)}</>;
 }
 
+/**
+ * Adding a candidate is the whole setup (recruiter plan R8): name, base resume, and anything else the recruiter has.
+ * Files can be chosen or dropped; nothing here asks the candidate to describe themselves.
+ */
 function AddCandidateForm({ autoFocus = false, onCancel }: { autoFocus?: boolean; onCancel?: () => void }) {
   const [name, setName] = useState("");
+  const [resume, setResume] = useState<string | null>(null);
+  const [files, setFiles] = useState<string[]>([]);
+  const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [over, setOver] = useState<"resume" | "files" | null>(null);
+  const fileName = (path: string) => path.split(/[\\/]/).pop() ?? path;
+  const dropped = (event: React.DragEvent) => [...event.dataTransfer.files].map((file) => window.sensei.files.pathForFile(file)).filter(Boolean);
+  const dropZone = (kind: "resume" | "files") => ({
+    onDragOver: (event: React.DragEvent) => { event.preventDefault(); event.stopPropagation(); setOver(kind); },
+    onDragLeave: () => setOver(null),
+    onDrop: (event: React.DragEvent) => {
+      event.preventDefault(); event.stopPropagation(); setOver(null);
+      const paths = dropped(event);
+      if (kind === "resume") { if (paths[0]) setResume(paths[0]); if (paths.length > 1) setFiles((current) => [...new Set([...current, ...paths.slice(1)])]); }
+      else setFiles((current) => [...new Set([...current, ...paths])]);
+    },
+  });
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!name.trim()) return;
     setBusy(true);
     setError(null);
-    try { await window.sensei.candidates.add(name.trim()); reloadForCandidate(); } catch (caught) { setError(message(caught)); setBusy(false); }
+    try { await window.sensei.candidates.add(name.trim(), { resumePath: resume, files, notes: notes.trim() || null }); reloadForCandidate(); } catch (caught) { setError(message(caught)); setBusy(false); }
   }
-  return <form className="candidate-add" onSubmit={(event) => void submit(event)}>
+  return <form className="candidate-add candidate-intake" onSubmit={(event) => void submit(event)}>
     <label><span>Candidate's full name</span><input value={name} onChange={(event) => setName(event.target.value)} autoFocus={autoFocus} maxLength={120} placeholder="Alex Morgan" /></label>
+    <div className={`intake-drop${over === "resume" ? " is-over" : ""}`} {...dropZone("resume")}>
+      <span className="intake-label">Base resume <small>Word or Markdown; its layout is kept for every tailored resume</small></span>
+      {resume ? <span className="intake-file">{fileName(resume)} <button type="button" className="btn-link" onClick={() => setResume(null)}>Remove</button></span>
+        : <span className="intake-actions"><button type="button" className="btn-quiet" onClick={() => void window.sensei.candidates.chooseFiles("resume").then((paths) => { if (paths[0]) setResume(paths[0]); })}>Choose resume</button><small>or drop it here</small></span>}
+    </div>
+    <div className={`intake-drop${over === "files" ? " is-over" : ""}`} {...dropZone("files")}>
+      <span className="intake-label">Other files <small>optional: older resumes, LinkedIn export, notes, work samples</small></span>
+      {files.length > 0 && <ul className="intake-files">{files.map((path) => <li key={path}>{fileName(path)} <button type="button" className="btn-link" onClick={() => setFiles((current) => current.filter((value) => value !== path))}>Remove</button></li>)}</ul>}
+      <span className="intake-actions"><button type="button" className="btn-quiet" onClick={() => void window.sensei.candidates.chooseFiles("files").then((paths) => setFiles((current) => [...new Set([...current, ...paths])]))}>Add files</button><small>or drop them here</small></span>
+    </div>
+    <label><span>Recruiter notes <small>optional: what you learned from the candidate, one fact per line</small></span><textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={50_000} placeholder={"- At Northstar Labs, ran onboarding calls for new accounts.\n- Uses Excel for weekly reporting."} /></label>
     <div className="onboarding-actions">
       <button className="btn-primary" type="submit" disabled={!name.trim() || busy}>{busy ? "Adding…" : "Add candidate"}</button>
       {onCancel && <button className="btn-quiet" type="button" onClick={onCancel}>Cancel</button>}
+      {!resume && name.trim() && <small className="muted">You can add the resume later; tailoring starts once it's there.</small>}
     </div>
     {error && <p className="inline-error" role="alert">{error}</p>}
   </form>;
@@ -130,7 +162,9 @@ export function CandidateSwitcher({ state }: { state: CandidatesState }) {
         {notice && <p className="muted" role="status">{notice}</p>}
         {archived.length > 0 && <ArchivedList candidates={archived} />}
       </>}
-      {mode === "add" && <AddCandidateForm autoFocus onCancel={() => setMode("menu")} />}
+      {mode === "add" && <div className="search-overlay" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") setMode("menu"); }}>
+        <div className="company-dialog intake-dialog" role="dialog" aria-modal="true" aria-labelledby="intake-title"><h2 id="intake-title">Add a candidate</h2><AddCandidateForm autoFocus onCancel={() => setMode("menu")} /></div>
+      </div>}
       {mode === "delete" && <DeleteCandidateForm candidate={active} onCancel={() => setMode("menu")} />}
       {mode === "rename" && <form className="candidate-add" onSubmit={(event) => { event.preventDefault(); void run(window.sensei.candidates.rename(active.id, rename)); }}>
         <label><span>Name</span><input value={rename} onChange={(event) => setRename(event.target.value)} autoFocus maxLength={120} /></label>
@@ -234,4 +268,18 @@ function DeleteCandidateForm({ candidate, onCancel }: { candidate: CandidateEntr
     </div>
     {error && <p className="inline-error" role="alert">{error}</p>}
   </form>;
+}
+
+/** A candidate without a readable base resume (recruiter plan R8): one card, no setup steps. */
+export function CandidateResumeCard({ name, problem, onChoose }: { name: string | null; problem: string | null; onChoose: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const who = name ?? "the candidate";
+  return <main className="candidate-start" aria-labelledby="resume-card-title">
+    <section className="onboarding-card">
+      <h1 id="resume-card-title">Add {name ? `${name}'s` : "the"} base resume</h1>
+      <p>Tailoring starts once {who}'s resume is in. Use a Word (.docx) or Markdown (.md) file; every tailored resume keeps its layout, section order, dates, and length.</p>
+      {problem && <p className="inline-error" role="alert">{problem}</p>}
+      <div className="onboarding-actions"><button className="btn-primary" disabled={busy} onClick={() => { setBusy(true); void onChoose().finally(() => setBusy(false)); }}>{busy ? "Reading…" : "Choose resume"}</button></div>
+    </section>
+  </main>;
 }

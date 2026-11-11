@@ -25,11 +25,13 @@ export type Features = {
   candidateFilesEligible: boolean;
   /** Cover letters are off until turned on per candidate, and need enough material (recruiter plan R7). */
   coverLetterOptIn: boolean;
+  /** Drafts mark a job applied (solo: sent through Sensei); off where a recruiter sends and marks it (recruiter plan R8). */
+  draftsMarkApplied: boolean;
 };
 
 const FEATURES: Record<Edition, Features> = {
-  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false },
-  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true },
+  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, draftsMarkApplied: true },
+  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, draftsMarkApplied: false },
 };
 
 export type EditionInfo = {
@@ -100,6 +102,7 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   "posting-library": "candidates",
   pipeline: "candidates",
   "zip-folder": "candidates",
+  "candidate-intake": "candidates",
 };
 
 export function includedAgentEntry(features: Features, entry: string): boolean {

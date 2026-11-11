@@ -32,7 +32,8 @@ export function SettingsModal({
   onProfileUpdated: (updated: CandidateProfile) => void;
   onSettingsUpdated: (updated: Settings) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("voice");
+  // The Recruiter Edition keeps only candidate details, tailoring, what Agy sees, and privacy (recruiter plan R8).
+  const [activeTab, setActiveTab] = useState<SettingsTab>(FEATURES.candidates ? "identity" : "voice");
   const derivedPresets = deriveVoicePresets(profile);
   const [voice, setVoice] = useState<VoiceSettings>({
     tonePreset: "direct_outcomes",
@@ -214,7 +215,7 @@ export function SettingsModal({
         </div>
 
         <nav className="settings-nav" role="tablist" aria-label="Settings sections" aria-orientation="vertical" onKeyDown={onTabKeyDown}>
-          <button
+          {!FEATURES.candidates && (          <button
             role="tab"
             id="settings-tab-voice"
             aria-controls="settings-panel"
@@ -225,7 +226,8 @@ export function SettingsModal({
           >
             Tone and voice
           </button>
-          <button
+          )}
+          {!FEATURES.candidates && (          <button
             role="tab"
             id="settings-tab-story"
             aria-controls="settings-panel"
@@ -236,7 +238,8 @@ export function SettingsModal({
           >
             Career story and pillars
           </button>
-          <button
+          )}
+          {!FEATURES.candidates && (          <button
             type="button"
             role="tab"
             id="settings-tab-truth"
@@ -248,6 +251,7 @@ export function SettingsModal({
           >
             Truth and privacy
           </button>
+          )}
           {FEATURES.interviews && <button
             type="button"
             role="tab"
@@ -271,7 +275,7 @@ export function SettingsModal({
           >
             Resume tailoring
           </button>
-          <button
+          {!FEATURES.candidates && (          <button
             role="tab"
             id="settings-tab-bullets"
             aria-controls="settings-panel"
@@ -282,6 +286,7 @@ export function SettingsModal({
           >
             Reusable bullet bank
           </button>
+          )}
           <button
             role="tab"
             id="settings-tab-identity"
@@ -291,7 +296,7 @@ export function SettingsModal({
             className={activeTab === "identity" ? "is-active" : ""}
             onClick={() => setActiveTab("identity")}
           >
-            Identity and sources
+            {FEATURES.candidates ? "Candidate details" : "Identity and sources"}
           </button>
           <button
             type="button"
@@ -320,7 +325,7 @@ export function SettingsModal({
         </nav>
 
         <div className="settings-body" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${activeTab}`}>
-          {activeTab === "voice" && (
+          {!FEATURES.candidates && activeTab === "voice" && (
             <div className="settings-section">
               <div className="settings-group">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -455,7 +460,7 @@ export function SettingsModal({
             </div>
           )}
 
-          {activeTab === "story" && (
+          {!FEATURES.candidates && activeTab === "story" && (
             <div className="settings-section">
               <div className="settings-group">
                 <h3 className="settings-group-title" id="settings-career-story-and-narrative-pillars">Career story and narrative pillars</h3>
@@ -537,7 +542,7 @@ export function SettingsModal({
             </div>
           )}
 
-          {activeTab === "truth" && (
+          {!FEATURES.candidates && activeTab === "truth" && (
             <div className="settings-section">
               <div className="settings-group">
                 <h3 className="settings-group-title" id="settings-clients-and-partners-never-to-name">Clients and partners never to name</h3>
@@ -650,7 +655,7 @@ export function SettingsModal({
             </div>
           )}
 
-          {activeTab === "bullets" && (
+          {!FEATURES.candidates && activeTab === "bullets" && (
             <div className="settings-section">
               <div className="settings-group">
                 <h3 className="settings-group-title" id="settings-role-themes-and-reusable-bullets">Role themes and reusable bullets</h3>
@@ -721,7 +726,7 @@ export function SettingsModal({
             <div className="settings-section">
               <div className="settings-group">
                 <h3 className="settings-group-title" id="settings-candidate-identity">Candidate identity</h3>
-                <p className="settings-group-desc">Read dynamically from your local workspace. Never checked into Git.</p>
+                <p className="settings-group-desc">{FEATURES.candidates ? "From the candidate's folder on this computer." : "Read dynamically from your local workspace. Never checked into Git."}</p>
                 <div className="identity-summary-card">
                   <div><span>Full Name:</span> <strong>{profile?.identity.fullName ?? "Not set"}</strong></div>
                   <div><span>Artifact Prefix:</span> <strong>{profile?.identity.artifactPrefix ?? "Candidate"}</strong></div>

@@ -55,27 +55,30 @@ export function buildJobActions(job: JobFolderSummary | null, interview: Intervi
     ?? interview?.knownProcess.find((step) => !interview?.rounds.some((round) => round.stage === step.stage || ("roundId" in step && step.roundId && round.id === step.roundId)))
     ?? null;
 
-  if (current?.debriefSourcePaths.length && !current.artifactPaths.debriefAnalysis) {
-    add("analyze-debrief", `Analyze ${company} debrief`, `${named} debrief`, "Recommended", true);
-  } else if (next) {
-    const words = stageWords(next.stage);
-    add("prepare-next-round", `Prepare ${words}`, `Prepare ${named} ${words}`, "Recommended", true);
-  } else if (current?.stage === "technical_challenge" && !current.artifactPaths.practiceLabs) {
-    add("prepare-current-challenge", `Prepare ${company} technical challenge`, `${named} technical challenge`, "Recommended", true);
-  } else if (current?.status === "prep_ready") {
-    const words = stageWords(current.stage);
-    add("start-current-mock", `Start ${words} mock`, `Start ${named} ${words} mock`, "Recommended", true);
-  } else {
-    add("prepare-recruiter", `Prepare ${company} recruiter interview`, `Prepare ${named} recruiter interview`, "Recommended", true);
-  }
+  // Interview prep, mocks, and debriefs exist only where interviews do (the Recruiter Edition stops at applying).
+  if (FEATURES.interviews) {
+    if (current?.debriefSourcePaths.length && !current.artifactPaths.debriefAnalysis) {
+      add("analyze-debrief", `Analyze ${company} debrief`, `${named} debrief`, "Recommended", true);
+    } else if (next) {
+      const words = stageWords(next.stage);
+      add("prepare-next-round", `Prepare ${words}`, `Prepare ${named} ${words}`, "Recommended", true);
+    } else if (current?.stage === "technical_challenge" && !current.artifactPaths.practiceLabs) {
+      add("prepare-current-challenge", `Prepare ${company} technical challenge`, `${named} technical challenge`, "Recommended", true);
+    } else if (current?.status === "prep_ready") {
+      const words = stageWords(current.stage);
+      add("start-current-mock", `Start ${words} mock`, `Start ${named} ${words} mock`, "Recommended", true);
+    } else {
+      add("prepare-recruiter", `Prepare ${company} recruiter interview`, `Prepare ${named} recruiter interview`, "Recommended", true);
+    }
 
-  add("recruiter-interview", "Prepare recruiter interview", `Prepare ${named} recruiter interview`, "Interview");
-  add("hiring-manager-interview", "Prepare hiring manager interview", `Prepare ${named} hiring manager interview`, "Interview");
-  add("technical-interview", "Prepare technical interview", `Prepare ${named} technical interview`, "Interview");
-  add("technical-challenge", "Prepare technical challenge", `${named} technical challenge`, "Interview");
-  add("team-panel-interview", "Prepare team panel interview", `Prepare ${named} team panel interview`, "Interview");
-  if (current) add("mock-interview", "Start current-round mock", `Start ${named} ${stageWords(current.stage)} mock`, "Interview");
-  if (current?.debriefSourcePaths.length) add("debrief", "Analyze latest debrief", `${named} debrief`, "Interview");
+    add("recruiter-interview", "Prepare recruiter interview", `Prepare ${named} recruiter interview`, "Interview");
+    add("hiring-manager-interview", "Prepare hiring manager interview", `Prepare ${named} hiring manager interview`, "Interview");
+    add("technical-interview", "Prepare technical interview", `Prepare ${named} technical interview`, "Interview");
+    add("technical-challenge", "Prepare technical challenge", `${named} technical challenge`, "Interview");
+    add("team-panel-interview", "Prepare team panel interview", `Prepare ${named} team panel interview`, "Interview");
+    if (current) add("mock-interview", "Start current-round mock", `Start ${named} ${stageWords(current.stage)} mock`, "Interview");
+    if (current?.debriefSourcePaths.length) add("debrief", "Analyze latest debrief", `${named} debrief`, "Interview");
+  }
 
   if (application?.publicResumePath) add("review-resume", "Review tailored resume", `${named} resume`, "Application");
   add("review-cover-letter", "Review cover letter", `${named} cover letter`, "Application");
