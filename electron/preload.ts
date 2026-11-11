@@ -25,6 +25,7 @@ const api: SenseiApi = {
     add: (name, intake) => ipcRenderer.invoke("candidates:add", name, intake),
     chooseFiles: (kind) => ipcRenderer.invoke("candidates:choose-files", kind),
     switchTo: (id) => ipcRenderer.invoke("candidates:switch", id),
+    showAll: () => ipcRenderer.invoke("candidates:show-all"),
     rename: (id, name) => ipcRenderer.invoke("candidates:rename", id, name),
     setStatus: (id, status) => ipcRenderer.invoke("candidates:set-status", id, status),
     notes: () => ipcRenderer.invoke("candidates:notes"),

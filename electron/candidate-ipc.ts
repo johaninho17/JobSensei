@@ -1,8 +1,10 @@
 // Candidate list IPC (Recruiter Edition, recruiter plan R1). Loaded only when the edition has `features.candidates`.
 import { ipcMain } from "electron";
-import { artifactPrefixFor, candidateStatusSchema, type CandidatesState } from "../src/shared/candidates";
+import { artifactPrefixFor, candidateStatusSchema, type CandidateOverview, type CandidatesState } from "../src/shared/candidates";
+import { effectiveStatus, readyToSend } from "../src/shared/tracker";
+import { listJobFolders } from "./job-folders";
 import { createCandidateProfile } from "./candidate-profile";
-import { addCandidate, candidatePath, deleteCandidate, readRecruiterNotes, saveRecruiterNotes, readRecruiterSettings, readRoster, renameCandidate, setActiveCandidate, setCandidateStatus } from "./candidates";
+import { addCandidate, candidatePath, clearActiveCandidate, deleteCandidate, readRecruiterNotes, saveRecruiterNotes, readRecruiterSettings, readRoster, renameCandidate, setActiveCandidate, setCandidateStatus } from "./candidates";
 import { SettingsStore } from "./settings";
 import { readJobQueue } from "./job-queue";
 import { listPipeline, setPipelineStatus } from "./pipeline";
@@ -45,12 +47,24 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
     const [roster, settings] = await Promise.all([readRoster(root), readRecruiterSettings(root)]);
     const active = roster.candidates.find((candidate) => candidate.id === settings.activeCandidateId && candidate.status !== "archived");
     const waiting: Record<string, number> = {};
+    const overview: Record<string, CandidateOverview> = {};
     await Promise.all(roster.candidates.filter((candidate) => candidate.status !== "archived").map(async (candidate) => {
-      const queue = await readJobQueue(await candidatePath(root, candidate.id)).catch(() => null);
+      const folder = await candidatePath(root, candidate.id);
+      const [queue, settings, jobs] = await Promise.all([
+        readJobQueue(folder).catch(() => null),
+        candidateSettingsStore(folder).get().catch(() => null),
+        listJobFolders(folder).catch(() => []),
+      ]);
       const count = queue?.items.filter((item) => item.status === "queued").length ?? 0;
       if (count) waiting[candidate.id] = count;
+      overview[candidate.id] = {
+        resume: Boolean(settings?.baseResumePath),
+        jobs: jobs.length,
+        applied: jobs.filter((job) => effectiveStatus(job) === "applied").length,
+        ready: jobs.filter((job) => readyToSend(job)).length,
+      };
     }));
-    return { candidates: roster.candidates, activeId: active?.id ?? null, waiting };
+    return { candidates: roster.candidates, activeId: active?.id ?? null, waiting, overview };
   };
   const switchTo = async (id: string) => {
     const busy = await ctx.busyReason();
@@ -130,6 +144,13 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
     return setPipelineStatus(ctx.root(), entries.map((entry) => ({ candidateId: id((entry as { candidateId?: unknown }).candidateId), jobId: id((entry as { jobId?: unknown }).jobId) })), status);
   });
   ipcMain.handle("candidates:next-queued", async () => nextQueuedCandidate(ctx.root(), (await state()).activeId));
+  /** Closes the open candidate so the Candidates page shows (the recruiter's home). */
+  ipcMain.handle("candidates:show-all", async () => {
+    const busy = await ctx.busyReason();
+    if (busy) throw new Error(busy);
+    await clearActiveCandidate(ctx.root());
+    await ctx.closeCandidate();
+  });
   ipcMain.handle("candidates:switch", async (_event, id: unknown) => switchTo(String(id ?? "")));
   ipcMain.handle("candidates:rename", async (_event, id: unknown, name: unknown) => renameCandidate(ctx.root(), String(id ?? ""), text(name, "candidate's name")));
   ipcMain.handle("candidates:set-status", async (_event, id: unknown, status: unknown) => {

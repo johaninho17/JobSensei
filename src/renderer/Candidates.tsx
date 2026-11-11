@@ -21,9 +21,9 @@ export function CandidateGate({ children }: { children: (state: CandidatesState)
   useEffect(() => { void window.sensei.candidates.state().then(setState, (caught) => setError(message(caught))); }, []);
   const active = state?.candidates.find((candidate) => candidate.id === state.activeId) ?? null;
   useEffect(() => { document.title = active ? `${active.displayName} · ${EDITION.productName}` : EDITION.productName; }, [active?.displayName]);
-  if (error) return <main className="candidate-start"><p className="inline-error" role="alert">{error}</p></main>;
+  if (error) return <main className="candidates-home"><p className="inline-error" role="alert">{error}</p></main>;
   if (!state) return null;
-  if (!active) return <CandidateStart state={state} />;
+  if (!active) return <CandidatesHome state={state} />;
   return <>{children(state)}</>;
 }
 
@@ -80,32 +80,51 @@ function AddCandidateForm({ autoFocus = false, onCancel }: { autoFocus?: boolean
   </form>;
 }
 
-/** Shown when no candidate is open: the first run, or after the open candidate was archived. */
-function CandidateStart({ state }: { state: CandidatesState }) {
+/**
+ * The recruiter's home when no candidate is open (recruiter plan R8): every candidate in one table, with their resume,
+ * jobs, and queue at a glance, and Add candidate. An empty list is just an empty table, not an onboarding screen.
+ */
+function CandidatesHome({ state }: { state: CandidatesState }) {
   const [privacy, setPrivacy] = useState(false);
-  const others = state.candidates.filter((candidate) => candidate.status !== "archived");
-  const archived = state.candidates.filter((candidate) => candidate.status === "archived");
-  return <main className="candidate-start" aria-labelledby="candidate-start-title">
-    <header>
-      <p className="candidate-start-edition">{EDITION.productName}</p>
-      <h1 id="candidate-start-title">{state.candidates.length ? "Choose a candidate" : "Add your first candidate"}</h1>
-      <p>Each candidate gets their own folder for their resume, career files, and jobs. Agy only ever sees the candidate you have open. <button className="btn-link" onClick={() => setPrivacy(true)}>How candidates' information is handled</button></p>
-    </header>
-    {privacy && <PrivacyDialog onClose={() => setPrivacy(false)} />}
-    {others.length > 0 && <ul className="candidate-list">{others.map((candidate) => <li key={candidate.id}><CandidateOpenButton candidate={candidate} /></li>)}</ul>}
-    <section className="onboarding-card"><h2>{state.candidates.length ? "Add a candidate" : "Who are you working for?"}</h2><AddCandidateForm autoFocus /></section>
-    {archived.length > 0 && <ArchivedList candidates={archived} />}
-  </main>;
-}
-
-function CandidateOpenButton({ candidate }: { candidate: CandidateEntry }) {
+  const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  return <>
-    <button className="candidate-open" onClick={() => void window.sensei.candidates.switchTo(candidate.id).then(reloadForCandidate, (caught) => setError(message(caught)))}>
-      <strong>{candidate.displayName}</strong><small>{STATUS_LABEL[candidate.status]}</small>
-    </button>
-    {error && <p className="inline-error" role="alert">{error}</p>}
-  </>;
+  const listed = state.candidates.filter((candidate) => candidate.status !== "archived");
+  const archived = state.candidates.filter((candidate) => candidate.status === "archived");
+  const open = (id: string) => void window.sensei.candidates.switchTo(id).then(reloadForCandidate, (caught) => setError(message(caught)));
+  return <main className="candidates-home" aria-labelledby="candidates-title">
+    <header className="candidates-top">
+      <span className="candidates-brand">{EDITION.productName}</span>
+      <button className="btn-link" onClick={() => setPrivacy(true)}>Privacy and terms</button>
+    </header>
+    <section className="candidates-page">
+      <div className="page-head candidates-head">
+        <div><h1 id="candidates-title">Candidates</h1><p>{listed.length ? `${listed.length} candidate${listed.length === 1 ? "" : "s"}. Open one to add jobs and review tailored resumes.` : "No candidates yet."}</p></div>
+        <button className="btn-primary" onClick={() => setAdding(true)}>Add candidate</button>
+      </div>
+      {error && <p className="inline-error" role="alert">{error}</p>}
+      <table className="pipeline-table candidates-table">
+        <thead><tr><th scope="col">Candidate</th><th scope="col">Status</th><th scope="col">Resume</th><th scope="col">Jobs</th><th scope="col">Ready to send</th><th scope="col">Applied</th><th scope="col">Waiting</th><th scope="col">Last opened</th></tr></thead>
+        <tbody>
+          {listed.map((candidate) => { const info = state.overview?.[candidate.id]; return <tr key={candidate.id}>
+            <td><button className="btn-link" onClick={() => open(candidate.id)}>{candidate.displayName}</button></td>
+            <td>{STATUS_LABEL[candidate.status]}</td>
+            <td>{info?.resume ? "Ready" : <span className="side-due">Needs a resume</span>}</td>
+            <td>{info?.jobs ?? 0}</td>
+            <td>{info?.ready ?? 0}</td>
+            <td>{info?.applied ?? 0}</td>
+            <td>{state.waiting?.[candidate.id] ?? 0}</td>
+            <td>{candidate.lastUsedAt ? new Date(candidate.lastUsedAt).toLocaleDateString() : "Never"}</td>
+          </tr>; })}
+          {!listed.length && <tr><td colSpan={8} className="muted">Add a candidate with their resume and anything else you have for them.</td></tr>}
+        </tbody>
+      </table>
+      {archived.length > 0 && <ArchivedList candidates={archived} />}
+    </section>
+    {adding && <div className="search-overlay" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") setAdding(false); }}>
+      <div className="company-dialog intake-dialog" role="dialog" aria-modal="true" aria-labelledby="intake-home-title"><h2 id="intake-home-title">Add a candidate</h2><AddCandidateForm autoFocus onCancel={() => setAdding(false)} /></div>
+    </div>}
+    {privacy && <PrivacyDialog onClose={() => setPrivacy(false)} />}
+  </main>;
 }
 
 const SHORTCUT = /mac/i.test(navigator.platform) ? "⌘" : "Ctrl+";
@@ -152,6 +171,7 @@ export function CandidateSwitcher({ state }: { state: CandidatesState }) {
           </button>;
         })}
         {others.length > 0 && <hr />}
+        <button role="menuitem" className="menu-item" onClick={() => void run(window.sensei.candidates.showAll())}>All candidates</button>
         <button role="menuitem" className="menu-item" onClick={() => setMode("add")}>Add a candidate</button>
         <button role="menuitem" className="menu-item" onClick={() => setMode("rename")}>Rename {active.displayName}</button>
         {(["paused", "placed"] as const).filter((status) => status !== active.status).map((status) => <button key={status} role="menuitem" className="menu-item" onClick={() => void window.sensei.candidates.setStatus(active.id, status).then(reloadForCandidate, (caught) => setError(message(caught)))}>Mark as {STATUS_LABEL[status].toLowerCase()}</button>)}

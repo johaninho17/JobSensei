@@ -153,3 +153,9 @@ export async function deleteCandidate(root: string, id: string, agyHome: string 
   if (settings.activeCandidateId === id) await writeJsonAtomic(join(root, RECRUITER_SETTINGS_PATH), recruiterSettingsSchema.parse({ ...settings, activeCandidateId: null, updatedAt: now() }));
   return { name: entry.displayName, removed };
 }
+
+/** No candidate open: the app shows the Candidates page. */
+export async function clearActiveCandidate(root: string): Promise<void> {
+  const settings = await readRecruiterSettings(root);
+  if (settings.activeCandidateId) await writeJsonAtomic(join(root, RECRUITER_SETTINGS_PATH), recruiterSettingsSchema.parse({ ...settings, activeCandidateId: null, updatedAt: now() }));
+}

@@ -1284,6 +1284,8 @@ export interface SenseiApi {
     chooseFiles(kind: "resume" | "files"): Promise<string[]>;
     /** Opens another candidate; reload the window afterwards. */
     switchTo(id: string): Promise<void>;
+    /** Closes the open candidate; reload to show the Candidates page. */
+    showAll(): Promise<void>;
     rename(id: string, name: string): Promise<import("./candidates").CandidateEntry>;
     setStatus(id: string, status: import("./candidates").CandidateStatus): Promise<import("./candidates").CandidateEntry>;
     /** The open candidate's recruiter notes (recruiter plan R4). */

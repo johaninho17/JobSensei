@@ -91,7 +91,7 @@ function runSmokeCheck(window: BrowserWindow, outPath: string): void {
         const root = document.getElementById("root");
         const workspace = await window.sensei.workspace.getSummary().then((value) => value.status).catch((error) => "error: " + error.message);
         // A new, empty workspace must open on the first-run steps.
-        return { rendered: Boolean(root && root.childElementCount > 0 && document.body.innerText.trim().length > 20), firstRun: Boolean(document.querySelector(${JSON.stringify(features.candidates ? ".candidate-start" : ".onboarding [aria-current=step]")})), workspace, text: document.body.innerText.slice(0, 120) };
+        return { rendered: Boolean(root && root.childElementCount > 0 && document.body.innerText.trim().length > 20), firstRun: Boolean(document.querySelector(${JSON.stringify(features.candidates ? ".candidates-home" : ".onboarding [aria-current=step]")})), workspace, text: document.body.innerText.slice(0, 120) };
       })()`).then((check: { rendered: boolean; firstRun: boolean; workspace: string; text: string }) => {
         clearTimeout(timer);
         finish({ ok: check.rendered && check.firstRun && !String(check.workspace).startsWith("error"), detail: JSON.stringify(check) });
