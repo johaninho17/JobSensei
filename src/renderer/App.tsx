@@ -3296,6 +3296,25 @@ function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareerPaths, 
   const [promptNotice, setPromptNotice] = useState("");
   const handledPromptId = useRef(0);
   const [viewMode, setViewMode] = useState<"chat" | "console">("chat");
+  // Agy's own screens (first-run colour scheme and terms, sign-in, trust, file approvals) only show in Console; when
+  // Agy is waiting on one, the panel switches there and says why, so nobody answers a screen they can't see.
+  const [consoleNote, setConsoleNote] = useState<string | null>(null);
+  // Once per waiting screen: switching back to Chat while it waits keeps Chat.
+  const switchedForBlock = useRef(false);
+  useEffect(() => {
+    if (viewMode !== "chat") return;
+    const timer = window.setInterval(() => {
+      void window.sensei.terminal.status().then((state) => {
+        if (!state.running || state.screen !== "blocked") { switchedForBlock.current = false; return; }
+        if (switchedForBlock.current) return;
+        switchedForBlock.current = true;
+        setViewMode("console");
+        setConsoleNote("Agy is waiting for you on its own screen (setup, sign-in, or an approval). Answer it here, then switch back to Chat.");
+        window.setTimeout(() => fitRef.current?.fit(), 60);
+      }).catch(() => undefined);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [viewMode]);
   const [chatInput, setChatInput] = useState("");
   const [pastedAttachment, setPastedAttachment] = useState<PastedBlock | null>(null);
   const [expandedPastes, setExpandedPastes] = useState<Record<string, boolean>>({});
@@ -3829,6 +3848,7 @@ function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareerPaths, 
           </div>
         ) : null}
 
+        {viewMode === "console" && consoleNote && <p className="console-note" role="status">{consoleNote} <button className="btn-link" onClick={() => setConsoleNote(null)}>OK</button></p>}
         <div
           className="terminal-host"
           ref={hostRef}

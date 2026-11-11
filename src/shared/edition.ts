@@ -102,6 +102,7 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   "job-search-runner": "jobSearch",
   "job-boards": "jobSearch",
   "search-schedule": "jobSearch",
+  "scheduled-search": "jobSearch",
   "candidate-ipc": "candidates",
   "posting-library": "candidates",
   pipeline: "candidates",

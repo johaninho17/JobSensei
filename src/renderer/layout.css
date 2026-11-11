@@ -989,3 +989,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .approval-list small { display: block; color: var(--muted); font-size: var(--fs-13); overflow-wrap: anywhere; }
 .report-dates { display: flex; gap: var(--space-3); }
 .report-dates label { display: grid; gap: var(--space-1); font-size: var(--fs-13); color: var(--muted); }
+
+/* Agy panel: why it switched to Console */
+.console-note { margin: 0; padding: var(--space-2) var(--space-3); font-size: var(--fs-13); color: #f3f1e8; background: color-mix(in srgb, var(--accent) 35%, #10201a); }
+.console-note .btn-link { color: inherit; }

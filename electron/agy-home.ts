@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, realpathSync } from "node:fs";
-import { chmod, copyFile, lstat, mkdir, readFile, readlink, symlink, writeFile } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import { writeJsonAtomic } from "./persistence";
@@ -256,4 +256,47 @@ export function createAgyHomeCache(prepare: (workspace: string) => Promise<strin
     /** A home the terminal start just prepared for this workspace. */
     set(workspace: string, home: string): void { homes.set(resolve(workspace), Promise.resolve(home)); },
   };
+}
+
+// ---------- Conversations the app starts (written answers, search, rating) ----------
+
+const HEADLESS_LEDGER = ".sensei-headless.json";
+type HeadlessLedger = { conversations: Record<string, string> };
+
+async function readHeadlessLedger(agyHome: string): Promise<HeadlessLedger> {
+  try {
+    const parsed = JSON.parse(await readFile(join(agyHome, HEADLESS_LEDGER), "utf8")) as Partial<HeadlessLedger>;
+    return { conversations: parsed.conversations && typeof parsed.conversations === "object" ? parsed.conversations : {} };
+  } catch { return { conversations: {} }; }
+}
+
+/** Notes a conversation a headless run used, with when it was last used (the question agent reuses one per job). */
+export async function recordHeadlessConversation(agyHome: string, id: string, now = new Date()): Promise<void> {
+  if (!/^[A-Za-z0-9-]{8,80}$/.test(id)) return;
+  const ledger = await readHeadlessLedger(agyHome);
+  ledger.conversations[id] = now.toISOString();
+  await writeFile(join(agyHome, HEADLESS_LEDGER), JSON.stringify(ledger), "utf8");
+}
+
+const conversationFiles = (agyHome: string, id: string) => {
+  const cli = join(agyHome, ".gemini", "antigravity-cli");
+  return [join(cli, "conversations", `${id}.db`), join(cli, "conversations", `${id}.db-shm`), join(cli, "conversations", `${id}.db-wal`), join(cli, "annotations", `${id}.pbtxt`), join(cli, "brain", id)];
+};
+
+/**
+ * Deletes conversations the app's headless runs started, once they are older than `olderThanDays` and beyond the
+ * newest `keep`. Only recorded IDs are touched, so the terminal's own conversations stay. Returns the IDs removed.
+ */
+export async function pruneHeadlessConversations(agyHome: string, options: { olderThanDays?: number; keep?: number; now?: Date } = {}): Promise<string[]> {
+  const { olderThanDays = 14, keep = 20, now = new Date() } = options;
+  const ledger = await readHeadlessLedger(agyHome);
+  const byNewest = Object.entries(ledger.conversations).sort((a, b) => b[1].localeCompare(a[1]));
+  const cutoff = now.getTime() - olderThanDays * 86_400_000;
+  const old = byNewest.slice(keep).filter(([, usedAt]) => Date.parse(usedAt) < cutoff).map(([id]) => id);
+  for (const id of old) {
+    for (const path of conversationFiles(agyHome, id)) await rm(path, { recursive: true, force: true });
+    delete ledger.conversations[id];
+  }
+  if (old.length) await writeFile(join(agyHome, HEADLESS_LEDGER), JSON.stringify(ledger), "utf8");
+  return old;
 }

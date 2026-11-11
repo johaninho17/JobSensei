@@ -5,6 +5,7 @@
  */
 
 import { boardKey, boardRef, type BoardId, type BoardRef } from "../src/shared/boards";
+import { formatPay } from "../src/shared/pay";
 
 export { boardKey, boardRef, type BoardId, type BoardRef };
 export type BoardJob = {
@@ -19,6 +20,8 @@ export type BoardJob = {
   company: string | null;
   /** The posting's text, when the list includes it (Ashby, Lever); Greenhouse is read per job (`postingId`). */
   descriptionHtml: string | null;
+  /** Pay as the board states it outside the description (Ashby's compensation panel, Lever's salary range). */
+  pay?: string | null;
   postingId: string | null;
 };
 
@@ -33,6 +36,20 @@ const iso = (value: unknown): string | null => {
   return Number.isFinite(time) ? new Date(time).toISOString().slice(0, 10) : null;
 };
 
+/** Ashby's compensation panel ("$145K – $175K • Offers Equity"): the salary summary, else the tier summary. */
+export function ashbyPay(value: unknown): string | null {
+  const record = (value ?? {}) as { scrapeableCompensationSalarySummary?: unknown; compensationTierSummary?: unknown };
+  const text = [record.scrapeableCompensationSalarySummary, record.compensationTierSummary].find((entry): entry is string => typeof entry === "string" && /\d/.test(entry));
+  return text ? text.replace(/\s+/g, " ").trim() : null;
+}
+
+/** Lever's salary range ({ min, max, currency, interval }) as one line. */
+export function leverPay(value: unknown): string | null {
+  const range = (value ?? {}) as { min?: unknown; max?: unknown; currency?: unknown; interval?: unknown };
+  if (typeof range.min !== "number" && typeof range.max !== "number") return null;
+  return formatPay(typeof range.min === "number" ? range.min : null, typeof range.max === "number" ? range.max : null, typeof range.currency === "string" ? range.currency : "USD", typeof range.interval === "string" ? range.interval : null);
+}
+
 /** Every live posting on one company's board. Throws when the board can't be read. */
 export async function listBoardJobs(ref: BoardRef, fetcher: typeof fetch = fetch): Promise<BoardJob[]> {
   const get = async (url: string) => {
@@ -42,7 +59,7 @@ export async function listBoardJobs(ref: BoardRef, fetcher: typeof fetch = fetch
   };
   const slug = encodeURIComponent(ref.slug);
   if (ref.board === "ashby") {
-    const data = await get(`https://api.ashbyhq.com/posting-api/job-board/${slug}`) as { jobs?: Array<Record<string, unknown>> };
+    const data = await get(`https://api.ashbyhq.com/posting-api/job-board/${slug}?includeCompensation=true`) as { jobs?: Array<Record<string, unknown>> };
     return (data.jobs ?? []).filter((job) => job.isListed !== false && typeof job.title === "string" && typeof job.jobUrl === "string").map((job) => ({
       title: String(job.title).trim(), url: String(job.jobUrl), location: typeof job.location === "string" ? job.location : null,
       locations: texts(job.location, ((job.secondaryLocations as Array<{ location?: string }> | undefined) ?? []).map((place) => place.location)),
@@ -50,6 +67,7 @@ export async function listBoardJobs(ref: BoardRef, fetcher: typeof fetch = fetch
       postedAt: iso(job.publishedAt), company: null,
       descriptionHtml: typeof job.descriptionHtml === "string" ? job.descriptionHtml : typeof job.descriptionPlain === "string" ? String(job.descriptionPlain).replace(/\n/g, "<br>") : null,
       postingId: null,
+      pay: ashbyPay(job.compensation),
     }));
   }
   if (ref.board === "greenhouse") {
@@ -71,7 +89,7 @@ export async function listBoardJobs(ref: BoardRef, fetcher: typeof fetch = fetch
     return {
       title: String(job.text).trim(), url: String(job.hostedUrl), location: categories.location ?? null, locations: texts(categories.location, categories.allLocations ?? []),
       workplace: workplaceOf(job.workplaceType), postedAt: iso(job.createdAt), company: null,
-      descriptionHtml: `${job.description ?? ""}${lists}${job.additional ?? ""}${pay}` || null, postingId: null,
+      descriptionHtml: `${job.description ?? ""}${lists}${job.additional ?? ""}${pay}` || null, postingId: null, pay: leverPay(job.salaryRange),
     };
   });
 }

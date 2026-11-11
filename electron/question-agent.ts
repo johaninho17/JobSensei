@@ -3,6 +3,7 @@
 // job's evidence rows, stories, voice, the cover letter, the truth rules), so Agy reads no files. Agy decides per
 // question whether to answer, skip, or give notes, and answers by question kind; the answers are checked here before
 // they are saved. Owner of the answer rules (application-questions.ts only drops form fields and plain logistics).
+import { recordHeadlessConversation } from "./agy-home";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -217,7 +218,11 @@ export function answersMarkdown(state: Pick<QuestionsState, "questions" | "answe
 export type AgyRunner = (prompt: string, options: { conversationId: string | null }) => Promise<{ response: string; conversationId: string | null }>;
 
 /** Runs `agy -p` with the app's Agy home; stdin closed, no terminal. */
-export function headlessAgy(options: { agyPath: string; agyHome: string; cwd: string; timeoutSeconds?: number; jsonSchema?: string }): AgyRunner {
+/** How often the wall-clock deadline is checked. Timers pause while the computer sleeps; the clock doesn't. */
+const DEADLINE_CHECK_MS = 15_000;
+
+export function headlessAgy(options: { agyPath: string; agyHome: string; cwd: string; timeoutSeconds?: number; jsonSchema?: string; clock?: () => number; checkMs?: number }): AgyRunner {
+  const clock = options.clock ?? Date.now;
   return (prompt, { conversationId }) => new Promise((resolve, reject) => {
     const args = ["--sandbox", "-p", prompt, "--output-format", "json", "--json-schema", options.jsonSchema ?? ANSWER_SCHEMA, "--print-timeout", `${options.timeoutSeconds ?? 240}s`, ...(conversationId ? ["--conversation", conversationId] : [])];
     const child = spawn(options.agyPath, args, { cwd: options.cwd, env: { ...process.env, HOME: options.agyHome, ...(process.platform === "win32" ? { USERPROFILE: options.agyHome } : {}) }, stdio: ["ignore", "pipe", "pipe"] });
@@ -225,11 +230,27 @@ export function headlessAgy(options: { agyPath: string; agyHome: string; cwd: st
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
     child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
-    child.on("error", reject);
+    // Agy's own --print-timeout counts time it is awake; after a sleep or a dropped network it can hang far longer.
+    // This deadline uses the wall clock (a minute past Agy's own limit) and ends the run.
+    const deadline = clock() + ((options.timeoutSeconds ?? 240) + 60) * 1000;
+    let timedOut = false;
+    const watch = setInterval(() => {
+      if (clock() < deadline) return;
+      timedOut = true;
+      clearInterval(watch);
+      child.kill("SIGKILL");
+      // Settle now: a child process Agy started can keep the output open after Agy itself is gone.
+      reject(new Error("print_timeout: Agy didn't finish in time (the computer may have slept or lost its connection)."));
+    }, options.checkMs ?? DEADLINE_CHECK_MS);
+    child.on("error", (error) => { clearInterval(watch); reject(error); });
     child.on("close", (code) => {
+      clearInterval(watch);
+      if (timedOut) return;
       try {
         const result = JSON.parse(stdout) as { status?: string; response?: string; conversation_id?: string; error?: string };
         if (result.status && result.status !== "SUCCESS") throw new Error(result.error ?? `Agy finished with ${result.status}.`);
+        // Conversations the app starts are recorded so old ones can be cleaned up (never the terminal's own).
+        if (result.conversation_id) void recordHeadlessConversation(options.agyHome, result.conversation_id).catch(() => undefined);
         resolve({ response: result.response ?? "", conversationId: result.conversation_id ?? null });
       } catch {
         reject(new Error((stderr.trim().split("\n").pop() || `Agy exited with code ${code}.`).slice(0, 300)));

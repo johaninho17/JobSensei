@@ -13,7 +13,7 @@ import { loadCanonicalResumeBaseline } from "./canonical-resume";
 import { fetchAndClean, postingFromBoard, stageCleanedPosting, suggestJobId } from "./jd-fetch";
 import { bestMatch, boardPostingHtml, fitsSearchTitles, listBoardJobs, titleSimilarity, type BoardJob } from "./job-boards";
 import { computeLearnings, furthestRecordedStage } from "../src/shared/learnings";
-import { boardKey, boardOf, boardRef, singlePosting, type BoardRef } from "../src/shared/boards";
+import { boardKey, boardOf, boardRef, boardUrl, postingRef, singlePosting, type BoardRef } from "../src/shared/boards";
 
 export { boardOf, singlePosting };
 import { assertInsideWorkspace } from "./files";
@@ -42,7 +42,8 @@ export const SEARCH_SCHEMA = JSON.stringify({
       type: "array",
       items: {
         type: "object",
-        required: ["name"],
+        // The link is required: without it Agy returned names only (2026-11-11 run: 12 of 12).
+        required: ["name", "jobsUrl"],
         properties: { name: { type: "string" }, jobsUrl: { type: "string" } },
       },
     },
@@ -101,6 +102,14 @@ export async function saveSearchState(workspace: string, state: JobSearchState):
 
 // ---------- The search prompt (owner of what Agy is told) ----------
 
+/** Agy's own time limit for one web search run (a minute's grace on the wall clock is added in headlessAgy). */
+export const SEARCH_TIMEOUT_SECONDS = 330;
+
+/** Agy's web search budget per run: each search adds about 15 seconds and the run has a few minutes. */
+export const MAX_WEB_SEARCHES = 5;
+/** Every watched company fits (names only); above this the prompt grows without helping. */
+export const KNOWN_COMPANIES_MAX = 250;
+
 export function buildSearchPrompt(settings: JobSearchSettings, recent: string[], today: Date = new Date(), knownCompanies: string[] = []): string {
   const boards = SEARCH_BOARDS.filter((board) => !settings.boardsOff.includes(board.id));
   const list = (items: string[], empty: string) => items.length ? items.join("; ") : empty;
@@ -117,7 +126,7 @@ export function buildSearchPrompt(settings: JobSearchSettings, recent: string[],
     settings.excludeKeywords.length ? `- Leave out roles about: ${settings.excludeKeywords.join(", ")}` : "",
     settings.excludeTitleWords.length ? `- Leave out roles whose title includes: ${settings.excludeTitleWords.join(", ")}` : "",
     settings.skipCompanies.length ? `- Never these companies: ${settings.skipCompanies.join(", ")}` : "",
-    knownCompanies.length ? `- Already known, find others: ${knownCompanies.slice(0, 60).join(", ")}` : "",
+    knownCompanies.length ? `- Already known (the app checks these itself), find others: ${knownCompanies.slice(0, KNOWN_COMPANIES_MAX).join(", ")}` : "",
     "",
     "Where to look:",
     `- Search these sources (site: searches work well): ${boards.map((board) => `${board.name} (${board.domain})`).join(", ")}${settings.extraSites.length ? `; also: ${settings.extraSites.join(", ")}` : ""}.`,
@@ -126,6 +135,8 @@ export function buildSearchPrompt(settings: JobSearchSettings, recent: string[],
     "Return:",
     "- companies: each company's name and the link to its jobs page as you saw it, ideally its applicant system (jobs.ashbyhq.com/<company>, job-boards.greenhouse.io/<company>, jobs.lever.co/<company>) or its careers page. The app reads every company's open jobs itself, so return companies, not single postings.",
     "- jobs (optional): a single posting you saw on a site that isn't an applicant system, with its title, company, location, and posted date (YYYY-MM-DD) if shown.",
+    `- Run at most ${MAX_WEB_SEARCHES} web searches in total: combine titles in one query and search the applicant-system sites broadly, never one query per title.`,
+    "- Every company needs a link. Prefer its applicant-system or careers address when a result shows it; otherwise return the search result's link exactly as given, even a redirect (the app follows redirects).",
     "- Copy links exactly as they appear in results. Never type, shorten, or assemble a link; a made-up link is worse than none. Don't rate or describe anything.",
     recent.length ? `- Postings already seen: ${recent.slice(-30).join("; ")}` : "",
   ].filter((line) => line !== "").join("\n");
@@ -156,7 +167,12 @@ export function parseSearchResult(response: string): { jobs: FoundLink[]; compan
   const companies = (Array.isArray(record.companies) ? record.companies : []).flatMap((company) => {
     const item = company as Record<string, unknown>;
     const name = str(item?.name);
-    return name ? [{ name, jobsUrl: str(item.jobsUrl) }] : [];
+    if (!name) return [];
+    const jobsUrl = str(item.jobsUrl);
+    // A single posting given as the jobs page: the company is read from its board, and the posting is checked too.
+    const posting = jobsUrl ? postingRef(jobsUrl) : null;
+    if (posting && jobsUrl && !jobs.some((job) => job.url === jobsUrl)) jobs.push({ url: jobsUrl, title: undefined, company: name, location: undefined, postedDate: undefined });
+    return [{ name, jobsUrl: posting ? boardUrl(posting) : jobsUrl }];
   });
   return { jobs, companies };
 }
@@ -323,12 +339,45 @@ export type SearchDeps = {
   onProgress?: (progress: SearchProgress) => void;
   /** Set by the scheduled runner. */
   scheduled?: boolean;
+  /** A scheduled retry of only Agy's search: watched companies were checked earlier in the window. */
+  agyOnly?: boolean;
 };
 
 const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
 
 const agyError = (message: string) => /print_timeout|DEADLINE_EXCEEDED/.test(message) ? "Agy took too long to search. Try fewer companies per search or fewer titles."
   : /quota|RESOURCE_EXHAUSTED/i.test(message) ? "Agy's quota is used up for now. Try again later." : message.slice(0, 200);
+
+/** Board slugs a company's name may use ("Together AI" → togetherai, together-ai). Never a single word of a longer name. */
+export function slugGuesses(name: string): string[] {
+  const words = name.toLowerCase().replace(/&/g, " and ").replace(/\b(?:inc|llc|ltd|corp|co)\b\.?/g, " ").split(/[^a-z0-9]+/).filter(Boolean);
+  if (!words.length) return [];
+  return [...new Set([words.join(""), words.join("-")])];
+}
+
+/** The company's board when Agy gave no usable link: the first board with open jobs under a slug from its name. */
+export async function findBoardByName(name: string, read: (ref: BoardRef) => Promise<BoardJob[] | null>): Promise<BoardRef | null> {
+  for (const slug of slugGuesses(name)) {
+    for (const board of ["ashby", "greenhouse", "lever"] as const) {
+      const jobs = await read({ board, slug });
+      if (jobs?.length) return { board, slug };
+    }
+  }
+  return null;
+}
+
+/** Watched boards read at once: fast, and gentle on each board's public API. */
+const BOARD_READS_AT_ONCE = 8;
+
+/** Maps with at most `limit` calls running at once, keeping the input order. */
+export async function mapLimit<T, R>(items: T[], limit: number, map: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) { const index = next++; out[index] = await map(items[index]!); }
+  }));
+  return out;
+}
 
 /** A link to check, with the board job behind it when it came from a company's live list. */
 type Candidate = { link: FoundLink; source: "watched" | "search"; board: { ref: BoardRef; job: BoardJob } | null };
@@ -338,7 +387,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   const fetcher = deps.fetcher ?? fetch;
   let settings = await readSearchSettings(deps.workspace, deps.profile);
   let state = await readSearchState(deps.workspace);
-  const run: SearchRun = { id: newId("run"), startedAt: now().toISOString(), finishedAt: null, status: "running", found: 0, added: 0, leftOut: {}, autoQueued: 0, replaced: 0, rated: 0, companies: 0, error: null, source: deps.runner ? "search" : "watched", scheduled: deps.scheduled === true };
+  const run: SearchRun = { id: newId("run"), startedAt: now().toISOString(), finishedAt: null, status: "running", found: 0, added: 0, leftOut: {}, autoQueued: 0, replaced: 0, rated: 0, companies: 0, error: null, source: deps.runner ? "search" : "watched", scheduled: deps.scheduled === true, agyFailed: false, agyOnly: deps.agyOnly === true };
   state = await saveSearchState(deps.workspace, { ...state, runs: [...state.runs, run] });
   deps.onUpdate?.(state);
   const finish = async (patch: Partial<SearchRun>) => {
@@ -372,19 +421,30 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   const fromBoard = (ref: BoardRef, job: BoardJob, name: string | undefined, source: Candidate["source"]) => {
     if (!fitsSearchTitles(job.title, settings.titles)) return;
     if (titleExcluded(job.title, settings.excludeTitleWords)) { skip("title has a word you left out"); return; }
+    // Old postings are left out here, before they become candidates (never marked seen, so a wider age setting brings them back).
+    const age = postingAgeDays(job.postedAt, now());
+    if (age !== null && age > settings.postedWithinDays) { skip("too old"); return; }
     candidates.push({ link: { url: job.url, title: job.title, company: name || job.company || undefined, location: job.location ?? undefined, postedDate: job.postedAt ?? undefined }, source, board: { ref, job } });
   };
 
-  // 1. Watched companies (free): their live postings whose titles fit the search.
-  for (const [index, company] of settings.watched.entries()) {
-    deps.onProgress?.({ phase: "watched", checked: index, total: settings.watched.length });
+  // 1. Watched companies (free): their live postings whose titles fit the search (already done on an Agy-only retry).
+  // Boards are read a few at a time (each is one small public request); results are used in watched-list order.
+  const watched = deps.agyOnly ? [] : settings.watched;
+  let read = 0;
+  const lists = await mapLimit(watched, BOARD_READS_AT_ONCE, async (company) => {
     const jobs = await boardJobs(company);
+    deps.onProgress?.({ phase: "watched", checked: (read += 1) - 1, total: watched.length });
+    return jobs;
+  });
+  for (const [index, company] of watched.entries()) {
+    const jobs = lists[index];
     if (!jobs) { skip("watched board unreadable"); continue; }
     for (const job of jobs) fromBoard(company, job, company.name, "watched");
   }
 
   // 2. Agy's search (one run): companies hiring for the titles, read from their own boards; plus postings seen elsewhere.
   let agyFailure: string | null = null;
+  let searchFailed = false;
   let companiesFound = 0;
   if (deps.runner) {
     deps.onProgress?.({ phase: "agy", checked: 0, total: 0 });
@@ -393,8 +453,11 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
       const reply = parseSearchResult((await deps.runner(buildSearchPrompt(settings, recent, now(), settings.watched.map((company) => company.name || company.slug)), { conversationId: null })).response);
       const found: JobSearchSettings["watched"] = [];
       for (const company of reply.companies) {
-        const ref = company.jobsUrl ? boardRef(company.jobsUrl) : null;
+        // Agy's link (search redirects resolved), else the company's board found by its name on Ashby, Greenhouse, Lever.
+        const ref = (company.jobsUrl ? boardRef(await resolveLink(company.jobsUrl, fetcher)) : null) ?? await findBoardByName(company.name, boardJobs);
         if (!ref) { skip("company not on a readable board"); continue; }
+        // Watched companies were read in step 1; reading them again only repeats their postings.
+        if (watchedKeys().has(boardKey(ref))) { skip("already watched"); continue; }
         const jobs = await boardJobs(ref);
         if (!jobs) { skip("company board not found"); continue; }
         companiesFound += 1;
@@ -406,7 +469,8 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
       for (const link of reply.jobs) candidates.push({ link, source: "search", board: null });
     } catch (error) {
       agyFailure = agyError(error instanceof Error ? error.message : String(error));
-      if (!candidates.length) return finish({ status: "failed", error: agyFailure, leftOut });
+      searchFailed = true;
+      if (!candidates.length) return finish({ status: "failed", error: agyFailure, leftOut, agyFailed: true });
     }
   }
 
@@ -462,7 +526,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
     try {
       const html = board ? await boardPostingHtml(board.ref, board.job, fetcher) : null;
       const { extracted } = html && board
-        ? postingFromBoard({ url, title: board.job.title, company: company(link, board), location: board.job.locations.join("; ") || board.job.location, html })
+        ? postingFromBoard({ url, title: board.job.title, company: company(link, board), location: board.job.locations.join("; ") || board.job.location, html, pay: board.job.pay ?? null })
         : await fetchAndClean(url, fetcher);
       markdown = extracted.markdown;
       meta = extracted;
@@ -535,7 +599,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
       }
     }
   }
-  return finish({ status: "done", found: candidates.length, added, replaced, rated, companies: companiesFound, leftOut, error: agyFailure });
+  return finish({ status: "done", found: candidates.length, added, replaced, rated, companies: companiesFound, leftOut, error: agyFailure, agyFailed: searchFailed });
 }
 
 const company = (link: FoundLink, board: Candidate["board"]) => link.company ?? board?.job.company ?? null;
@@ -588,7 +652,8 @@ function learnedFit(fit: QuickFit, learned: SearchLearning | undefined): QuickFi
 // ---------- One search at a time (the app and the scheduled runner share this lock) ----------
 
 const LOCK_FILE = `${JOB_SEARCH_DIR}/run.lock`;
-const LOCK_STALE_MS = 30 * 60_000;
+/** Longer than the slowest run (search 6 min + rating 4 min + link checks), so a lock left by a stalled process clears soon. */
+const LOCK_STALE_MS = 20 * 60_000;
 
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; } };
 

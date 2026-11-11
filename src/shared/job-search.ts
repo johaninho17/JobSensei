@@ -90,7 +90,13 @@ export const jobSearchSettingsSchema = z.object({
     times: z.array(z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/)).min(1).max(4).default(["08:00"]),
     /** Windows only: wake a sleeping PC for the search (Task Scheduler WakeToRun, no admin rights). */
     wake: z.boolean().default(false),
-  }).default({ enabled: false, mode: "daily", after: "08:00", days: [1, 2, 3, 4, 5], times: ["08:00"], wake: false }),
+    /**
+     * What a scheduled search does: "every" = watched companies and one Agy web search (a few minutes, uses quota);
+     * "never" = watched companies only (free, seconds); "days" = watched every time, Agy only on `agyDays`.
+     */
+    agy: z.enum(["every", "never", "days"]).default("every"),
+    agyDays: z.array(z.number().int().min(0).max(6)).default([1]),
+  }).default({ enabled: false, mode: "daily", after: "08:00", days: [1, 2, 3, 4, 5], times: ["08:00"], wake: false, agy: "every", agyDays: [1] }),
   /** How many postings one search asks Agy for. */
   /** How many companies one Agy search asks for. */
   resultsPerRun: z.number().int().min(5).max(40).default(20),
@@ -173,6 +179,10 @@ export const searchRunSchema = z.object({
   source: z.enum(["search", "watched"]).default("search"),
   /** True when the OS schedule started it (app closed or in the background). */
   scheduled: z.boolean().default(false),
+  /** Agy's web search failed (timed out, quota) while watched companies finished. */
+  agyFailed: z.boolean().default(false),
+  /** A scheduled retry of only Agy's part, after `agyFailed` earlier in the same window. */
+  agyOnly: z.boolean().default(false),
   /** A failure message; on a finished run, Agy's failure while watched companies still ran. */
   error: z.string().nullable(),
 });
@@ -197,11 +207,22 @@ export function windowStart(after: string, now = new Date()): Date {
  * a Monday 8:30 search) don't. Only a finished scheduled search counts: searches the user runs add jobs but never use
  * up the window; failed and watched-only runs don't count either. `days` are the days a window may start on.
  */
-export function dailyRunDue(runs: SearchRun[], schedule: Pick<JobSearchSettings["schedule"], "after" | "days">, now = new Date()): { due: boolean; reason: string } {
+export function dailyRunDue(runs: SearchRun[], schedule: Pick<JobSearchSettings["schedule"], "after" | "days">, now = new Date()): { due: boolean; reason: string; agyOnly: boolean } {
   const start = windowStart(schedule.after, now);
-  if (schedule.days.length && !schedule.days.includes(start.getDay())) return { due: false, reason: "not a search day" };
-  const done = runs.some((run) => run.scheduled && run.status === "done" && run.source === "search" && Date.parse(run.startedAt) >= start.getTime());
-  return done ? { due: false, reason: "already searched in this window" } : { due: true, reason: "first time on in this window" };
+  if (schedule.days.length && !schedule.days.includes(start.getDay())) return { due: false, reason: "not a search day", agyOnly: false };
+  const inWindow = runs.filter((run) => run.scheduled && Date.parse(run.startedAt) >= start.getTime());
+  const done = inWindow.filter((run) => run.status === "done" && !run.agyOnly);
+  if (!done.length) return { due: true, reason: "first time on in this window", agyOnly: false };
+  // Agy timed out while watched companies finished: one more try of only Agy's part, on a later wake in the window.
+  if (done.some((run) => run.agyFailed) && !inWindow.some((run) => run.agyOnly)) return { due: true, reason: "retrying Agy's search once", agyOnly: true };
+  return { due: false, reason: "already searched in this window", agyOnly: false };
+}
+
+/** Whether a scheduled search today includes Agy's web search (the user's setting; the day is the window's start). */
+export function scheduledAgyToday(schedule: Pick<JobSearchSettings["schedule"], "after" | "agy" | "agyDays">, now = new Date()): boolean {
+  if (schedule.agy === "never") return false;
+  if (schedule.agy === "every") return true;
+  return schedule.agyDays.includes(windowStart(schedule.after, now).getDay());
 }
 
 /** One line for the progress of a run, shown on any page. */

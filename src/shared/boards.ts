@@ -12,6 +12,8 @@ const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/;
 
 const parse = (url: string): URL | null => { try { return new URL(url.trim().includes("://") ? url.trim() : `https://${url.trim()}`); } catch { return null; } };
 const LEVER_HOST = /^jobs\.(?:eu\.)?lever\.co$/;
+/** Ashby boards live on jobs.ashbyhq.com; links copied from search results often use app.ashbyhq.com (same slug and ID). */
+const ASHBY_HOST = /^(?:jobs|app)\.ashbyhq\.com$/;
 
 /** The readable board and company slug in a posting or jobs-page link, or null for other sites. */
 export function boardRef(url: string): BoardRef | null {
@@ -19,7 +21,7 @@ export function boardRef(url: string): BoardRef | null {
   if (!parsed) return null;
   const host = parsed.hostname.toLowerCase();
   const [first] = parsed.pathname.split("/").filter(Boolean);
-  if (host === "jobs.ashbyhq.com" && first && SLUG.test(first)) return { board: "ashby", slug: first };
+  if (ASHBY_HOST.test(host) && first && SLUG.test(first)) return { board: "ashby", slug: first };
   if (LEVER_HOST.test(host) && first && SLUG.test(first)) return { board: "lever", slug: first };
   if (/(?:^|\.)greenhouse\.io$/.test(host)) {
     const slug = host.startsWith("boards-api.") && first === "v1" ? parsed.pathname.split("/")[3] : first === "embed" ? parsed.searchParams.get("for") : first;
@@ -42,9 +44,14 @@ export function postingRef(url: string): { board: BoardId; slug: string; id: str
     const id = jobIndex >= 0 ? path[jobIndex + 1] : parsed.searchParams.get("gh_jid");
     return slug && id ? { board: "greenhouse", slug, id, origin: parsed.origin } : null;
   }
-  if (host === "jobs.ashbyhq.com" && path.length >= 2 && !["apply", "application"].includes(path[1]!)) return { board: "ashby", slug: path[0]!, id: path[1]!, origin: parsed.origin };
+  if (ASHBY_HOST.test(host) && path.length >= 2 && !["apply", "application"].includes(path[1]!)) return { board: "ashby", slug: path[0]!, id: path[1]!, origin: "https://jobs.ashbyhq.com" };
   if (LEVER_HOST.test(host) && path.length >= 2 && path[1] !== "apply") return { board: "lever", slug: path[0]!, id: path[1]!, origin: parsed.origin };
   return null;
+}
+
+/** The public jobs page of a company on a readable board. */
+export function boardUrl(ref: BoardRef): string {
+  return ref.board === "ashby" ? `https://jobs.ashbyhq.com/${ref.slug}` : ref.board === "lever" ? `https://jobs.lever.co/${ref.slug}` : `https://job-boards.greenhouse.io/${ref.slug}`;
 }
 
 /** False for a known board's list or company page (not one posting); unknown sites get the benefit of the doubt. */
@@ -53,7 +60,7 @@ export function singlePosting(url: string): boolean {
   if (!parsed) return false;
   const host = parsed.hostname.toLowerCase();
   const parts = parsed.pathname.split("/").filter(Boolean);
-  if (LEVER_HOST.test(host) || host === "jobs.ashbyhq.com") return parts.length >= 2 && !["apply", "application"].includes(parts[1]!);
+  if (LEVER_HOST.test(host) || ASHBY_HOST.test(host)) return parts.length >= 2 && !["apply", "application"].includes(parts[1]!);
   if (/greenhouse\.io$/.test(host)) return (parts.includes("jobs") && /^\d+$/.test(parts[parts.indexOf("jobs") + 1] ?? "")) || parsed.searchParams.has("gh_jid");
   if (/workable\.com$/.test(host)) return parts.includes("j") || parts.includes("view");
   if (/smartrecruiters\.com$/.test(host)) return parts.length >= 2;

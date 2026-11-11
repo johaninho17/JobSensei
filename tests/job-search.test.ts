@@ -196,7 +196,7 @@ describe("public job boards", () => {
   const page = `<html><head><title>Solutions Engineer</title></head><body><main>${POSTING.replace(/\n/g, "<br>")}</main></body></html>`;
   const fetcher = (async (url: string | URL) => {
     const target = String(url);
-    if (target === "https://api.ashbyhq.com/posting-api/job-board/northstar") return Response.json(ashbyJobs);
+    if (target === "https://api.ashbyhq.com/posting-api/job-board/northstar?includeCompensation=true") return Response.json(ashbyJobs);
     if (target === "https://jobs.ashbyhq.com/northstar/live-1") return new Response(page, { status: 200, headers: { "content-type": "text/html" } });
     return new Response("", { status: 404 });
   }) as typeof fetch;
@@ -279,7 +279,7 @@ describe("left-out postings can come back", () => {
     const page = `<html><head><title>Northstar Labs - Solutions Engineer</title></head><body><main>${POSTING.replace(/\n/g, "<br>")}</main></body></html>`;
     const fetcher = (async (url: string | URL) => {
       const target = String(url);
-      if (target === "https://api.ashbyhq.com/posting-api/job-board/northstar") return Response.json({ jobs: [{ title: "Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/Northstar/live-1", publishedAt: "2026-09-20T10:00:00Z", isListed: true }] });
+      if (target === "https://api.ashbyhq.com/posting-api/job-board/northstar?includeCompensation=true") return Response.json({ jobs: [{ title: "Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/Northstar/live-1", publishedAt: "2026-09-20T10:00:00Z", isListed: true }] });
       if (target.toLowerCase() === "https://jobs.ashbyhq.com/northstar/live-1") return new Response(page, { status: 200, headers: { "content-type": "text/html" } });
       return new Response("", { status: 404 });
     }) as typeof fetch;
@@ -323,7 +323,7 @@ describe("job search: places, companies, and board postings", () => {
     const pageLoads: string[] = [];
     const fetcher = (async (url: string | URL) => {
       const target = String(url);
-      if (target === "https://api.ashbyhq.com/posting-api/job-board/northstar") return ashby([
+      if (target === "https://api.ashbyhq.com/posting-api/job-board/northstar?includeCompensation=true") return ashby([
         { title: "Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/northstar/se-1", location: "San Francisco", workplaceType: "Hybrid", publishedAt: "2026-11-05T10:00:00Z" },
         { title: "Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/northstar/se-2", location: "London", workplaceType: "OnSite", publishedAt: "2026-11-05T10:00:00Z" },
         { title: "Account Executive", jobUrl: "https://jobs.ashbyhq.com/northstar/ae-1", location: "Remote - US", workplaceType: "Remote", publishedAt: "2026-11-05T10:00:00Z" },

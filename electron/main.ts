@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, session, shell } from "electron";
 import { textContextMenu } from "./context-menu";
 import { EDITION_INFO, featuresFor } from "../src/shared/edition";
 import { currentEdition, prepareEditionFolder } from "./edition";
@@ -10,7 +10,7 @@ import { latestRun } from "./run-status";
 import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription } from "./jd-fetch";
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { RunWatcher } from "./run-watcher";
-import { createAgyHomeCache, prepareAgyHome, writeSenseiLauncher } from "./agy-home";
+import { createAgyHomeCache, prepareAgyHome, pruneHeadlessConversations, writeSenseiLauncher } from "./agy-home";
 import { reachedInterview } from "../src/shared/tracker";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -581,6 +581,17 @@ async function resolveInitialWorkspacePath(store: SettingsStore): Promise<string
 }
 
 app.whenReady().then(async () => {
+  // A morning search the computer slept through runs when it wakes or unlocks (the check decides if it's due).
+  if (features.jobSearch) {
+    let wakeTimer: NodeJS.Timeout | null = null;
+    const onWake = () => {
+      if (wakeTimer) clearTimeout(wakeTimer);
+      // A minute for the network to come back after a wake.
+      wakeTimer = setTimeout(() => { if (workspacePath) void import("./search-ipc.js").then((module) => module.runScheduledIfDue(featureContext, workspacePath)).catch(() => undefined); }, 60_000);
+    };
+    powerMonitor.on("resume", onWake);
+    powerMonitor.on("unlock-screen", onWake);
+  }
   try {
     await registerFeatureIpc();
     settingsStore = new SettingsStore(app.getPath("userData"));
@@ -595,7 +606,16 @@ app.whenReady().then(async () => {
     } else {
       await openWorkspace(chosen);
     }
-    if (features.jobSearch) void import("./search-ipc.js").then((module) => module.repairSchedule(featureContext, workspacePath)).catch(() => undefined);
+    {
+      // Background Agy conversations the app started and no longer needs (older than 14 days, beyond the newest 20).
+      const opened = workspacePath;
+      void agyHomes.get(opened).then((home) => pruneHeadlessConversations(home)).then((removed) => { if (removed.length) console.info(`Removed ${removed.length} old background Agy conversations.`); }).catch(() => undefined);
+    }
+    if (features.jobSearch) {
+      const opened = workspacePath;
+      // The schedule follows its settings; then a morning search the computer slept through runs now.
+      void import("./search-ipc.js").then(async (module) => { await module.repairSchedule(featureContext, opened); await module.runScheduledIfDue(featureContext, opened); }).catch(() => undefined);
+    }
     startWorkspaceWatcher(workspacePath);
   } catch (error) {
     console.error("Sensei startup initialization error:", error);

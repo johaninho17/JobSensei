@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { launchdPlist, scheduleLabel, windowsTaskXml } from "../electron/search-schedule";
 import { runnerArgs, waitForNetwork } from "../electron/job-search-runner";
 import { clearPendingDrafts, readSearchState, releaseSearchLock, saveSearchState, searchLockHolder, takeSearchLock } from "../electron/job-search";
-import { EMPTY_JOB_SEARCH_STATE, dailyRunDue, windowStart, type SearchRun } from "../src/shared/job-search";
+import { EMPTY_JOB_SEARCH_STATE, dailyRunDue, windowStart, type SearchRun, scheduledAgyToday } from "../src/shared/job-search";
 
 const target = { runtime: "/Apps/Job Sensei.app/Contents/MacOS/JobSensei", runner: "/Apps/app.asar/dist-electron/electron/job-search-runner.js", workspace: "/workspaces/JobSensei & co", userData: "/app-data/JobSensei" };
 const schedule = { enabled: true, mode: "times" as const, after: "08:00", days: [1, 3, 5], times: ["08:00", "17:30"], wake: false };
@@ -96,10 +96,31 @@ describe("once per window, from the set time to the same time next day", () => {
     expect(dailyRunDue([run(at(8, 9))], daily, at(10, 1)).due).toBe(true);
   });
 
-  it("counts only a finished scheduled search: the user's own searches, failed, and watched-only runs don't", () => {
+  it("counts only a finished scheduled search: the user's own searches and failed runs don't", () => {
     expect(dailyRunDue([run(at(9, 9), { scheduled: false })], daily, at(9, 10)).due).toBe(true);
     expect(dailyRunDue([run(at(9, 9), { status: "failed" })], daily, at(9, 10)).due).toBe(true);
-    expect(dailyRunDue([run(at(9, 9), { source: "watched" })], daily, at(9, 10)).due).toBe(true);
+    // A scheduled watched-only search (the user's "watched companies only" setting) is the day's search.
+    expect(dailyRunDue([run(at(9, 9), { source: "watched" })], daily, at(9, 10)).due).toBe(false);
+  });
+
+  it("retries only Agy's part once when it failed while watched companies finished", () => {
+    const partial = run(at(9, 9), { agyFailed: true });
+    expect(dailyRunDue([partial], daily, at(9, 12))).toMatchObject({ due: true, agyOnly: true });
+    expect(dailyRunDue([partial, run(at(9, 12), { agyOnly: true, status: "failed" })], daily, at(9, 15)).due).toBe(false);
+    expect(dailyRunDue([partial, run(at(9, 12), { agyOnly: true })], daily, at(9, 15)).due).toBe(false);
+    // A new window starts fresh.
+    expect(dailyRunDue([partial], daily, at(10, 9))).toMatchObject({ due: true, agyOnly: false });
+  });
+
+  it("runs Agy's search on the days the user chose", () => {
+    const schedule = { after: "08:00", agy: "days" as const, agyDays: [1] };
+    expect(scheduledAgyToday({ ...schedule, agy: "every" }, at(10, 9))).toBe(true);
+    expect(scheduledAgyToday({ ...schedule, agy: "never" }, at(10, 9))).toBe(false);
+    const monday = [8, 9, 10, 11, 12, 13, 14].find((day) => at(day, 9).getDay() === 1)!;
+    expect(scheduledAgyToday(schedule, at(monday, 9))).toBe(true);
+    expect(scheduledAgyToday(schedule, at(monday + 1, 9))).toBe(false);
+    // Before the set time, the window (and its day) is yesterday's.
+    expect(scheduledAgyToday(schedule, at(monday + 1, 7))).toBe(true);
   });
 
   it("uses the day the window starts on for the chosen days", () => {

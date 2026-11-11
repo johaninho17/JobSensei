@@ -9,15 +9,10 @@
 import { execFile } from "node:child_process";
 import { appendFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { autoDraftPicks, dailyRunDue } from "../src/shared/job-search";
 import { prepareAgyHome } from "./agy-home";
-import { readCandidateProfile } from "./candidate-profile";
-import { listJobFolders } from "./job-folders";
-import { writeMorningSummary } from "./today";
-import { JOB_SEARCH_DIR, RATING_SCHEMA, jobsForSearch, searchLearning, SEARCH_SCHEMA, readSearchSettings, readSearchState, releaseSearchLock, runSearch, saveSearchState, takeSearchLock } from "./job-search";
-import { reachedInterview } from "../src/shared/tracker";
-import { headlessAgy } from "./question-agent";
-import { appRoot, resolveAgyExecutable } from "./terminal";
+import { JOB_SEARCH_DIR } from "./job-search";
+import { runScheduledSearch } from "./scheduled-search";
+import { appRoot } from "./terminal";
 
 export function runnerArgs(argv: string[]): { workspace: string; userData: string } | null {
   const value = (flag: string) => { const index = argv.indexOf(flag); return index >= 0 ? argv[index + 1] ?? null : null; };
@@ -52,50 +47,25 @@ async function main(): Promise<number> {
   const logFile = join(workspace, JOB_SEARCH_DIR, "scheduled.log");
   await mkdir(join(workspace, JOB_SEARCH_DIR), { recursive: true });
   const log = (line: string) => appendFile(logFile, `${new Date().toISOString()} ${line}\n`).catch(() => undefined);
-
-  const profile = await readCandidateProfile(workspace).catch(() => null);
-  const settings = await readSearchSettings(workspace, profile);
-  if (!settings.schedule.enabled) { await log("Schedule is off in Search settings; nothing to do."); return 0; }
-  if (!settings.titles.length) { await log("No job titles in Search settings; skipped."); return 0; }
-  // Daily mode: the OS checks often (hourly, at login, on wake); only the day's first chance after the start time runs.
-  if (settings.schedule.mode === "daily") {
-    const due = dailyRunDue((await readSearchState(workspace)).runs, settings.schedule);
-    if (!due.due) return 0;
-  }
-  if (!(await waitForNetwork())) { await log("No network after waiting 10 minutes; the search will try again at the next login, wake, or set time."); return 0; }
-  const lock = await takeSearchLock(workspace, "schedule");
-  if (!lock.ok) { await log(`A search started from the ${lock.by} is already running; skipped.`); return 0; }
   try {
-    const agyPath = resolveAgyExecutable();
-    const agyHome = agyPath ? await prepareAgyHome(userData, workspace, [], { appRoot: appRoot(), runtimePath: process.execPath }) : null;
-    const allJobs = await listJobFolders(workspace).catch(() => []);
-    const jobs = allJobs.map((job) => ({ id: job.id, company: job.company, title: job.title, reachedInterview: reachedInterview(job) }));
-    const { existingKeys, companies } = await jobsForSearch(workspace, jobs);
-    const { run } = await runSearch({
+    const outcome = await runScheduledSearch({
       workspace,
-      profile,
-      scheduled: true,
-      existingKeys,
-      jobCompanies: companies,
-      learned: searchLearning(allJobs),
-      runner: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }) : null,
-      rater: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 240, jsonSchema: RATING_SCHEMA }) : null,
+      agyHome: () => prepareAgyHome(userData, workspace, [], { appRoot: appRoot(), runtimePath: process.execPath }),
+      log,
+      waitForNetwork: () => waitForNetwork(),
     });
-    // Strong matches are marked for drafts; the app queues them (within the daily cap) when it next runs.
-    const state = await readSearchState(workspace);
-    const picks = run.status === "done" ? autoDraftPicks({ ...state, items: state.items.filter((item) => item.runId === run.id) }, settings) : [];
-    if (picks.length) await saveSearchState(workspace, { ...state, pendingDrafts: [...new Set([...state.pendingDrafts, ...picks.map((item) => item.id)])] });
-    await log(`${run.status}: ${run.found} links, ${run.added} new, ${run.rated} rated, ${picks.length} marked for drafts${run.error ? `; ${run.error}` : ""}${agyPath ? "" : "; Agy not found, watched companies only"}`);
-    // Second step, after the search: the morning summary (closed postings, what's due, questions), no Agy.
-    const summary = await writeMorningSummary(workspace, { jobs: allJobs, profile }).catch((error) => { void log(`summary error: ${error instanceof Error ? error.message : String(error)}`); return null; });
+    if (!outcome.ran) {
+      // "Already searched" is the usual answer on later wakes; only unusual reasons go to the log.
+      if (!/already searched|not a search day/.test(outcome.reason)) await log(outcome.reason);
+      return 0;
+    }
+    const { run, picks, summaryLine } = outcome;
     if (run.status === "failed") notify("JobSensei search didn't finish", run.error ?? "Open Job Search for details.");
-    else notify("JobSensei: your day", `${summary?.line ?? `${run.added} new match${run.added === 1 ? "" : "es"}.`}${picks.length ? ` ${picks.length} will be drafted when you open the app.` : ""}`);
+    else notify("JobSensei: your day", `${summaryLine ?? `${run.added} new match${run.added === 1 ? "" : "es"}.`}${picks ? ` ${picks} will be drafted when you open the app.` : ""}${run.agyFailed ? " Agy's search will try once more later today." : ""}`);
     return 0;
   } catch (error) {
     await log(`error: ${error instanceof Error ? error.message : String(error)}`);
     return 1;
-  } finally {
-    await releaseSearchLock(workspace);
   }
 }
 

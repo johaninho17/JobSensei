@@ -4,8 +4,9 @@ import { join } from "node:path";
 import { readCandidateProfile } from "./candidate-profile";
 import type { FeatureContext } from "./feature-context";
 import { invalidateJobCache, listJobFolders } from "./job-folders";
-import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, jobsForSearch, searchLearning, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
+import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, jobsForSearch, searchLearning, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob, SEARCH_TIMEOUT_SECONDS } from "./job-search";
 import { headlessAgy } from "./question-agent";
+import { runScheduledSearch } from "./scheduled-search";
 import { ensureSchedule, scheduleInfo } from "./search-schedule";
 import { resolveAgyExecutable } from "./terminal";
 import type { SearchRun, SearchStatus } from "../src/shared/job-search";
@@ -27,13 +28,38 @@ export async function repairSchedule(ctx: FeatureContext, workspace: string): Pr
   if (result?.changed) { console.info(`Scheduled search ${result.changed} to match Search settings.`); scheduleRepaired = result.changed; }
 }
 
+// The run's status lives at module level: Run now, rating, and a missed scheduled search share it.
+let searchStatus: SearchStatus = { running: false, source: null, progress: null, startedAt: null };
+let statusCtx: FeatureContext | null = null;
+const setSearchStatus = (next: SearchStatus) => { searchStatus = next; statusCtx?.mainWindow()?.webContents.send("search:status", next); };
+
+/**
+ * The day's scheduled search when it hasn't run yet: the Mac slept through the set time, or the OS schedule missed
+ * it. Called when a workspace opens and when the computer wakes or unlocks; `runScheduledSearch` decides whether it's
+ * due (one per window, U45), so calling it often is safe.
+ */
+export async function runScheduledIfDue(ctx: FeatureContext, workspace: string): Promise<void> {
+  if (searchStatus.running) return;
+  statusCtx ??= ctx;
+  setSearchStatus({ running: true, source: "search", progress: null, startedAt: new Date().toISOString(), scheduled: true });
+  let run: SearchRun | null = null;
+  try {
+    const outcome = await runScheduledSearch({ workspace, agyHome: () => ctx.agyHomeFor(workspace), onUpdate: (state) => ctx.mainWindow()?.webContents.send("search:updated", state) });
+    if (outcome.ran) run = outcome.run;
+  } catch (error) {
+    console.error("Scheduled search (from the app) failed:", error);
+  } finally {
+    setSearchStatus({ running: false, source: null, progress: null, startedAt: null });
+    if (run) ctx.mainWindow()?.webContents.send("search:finished", run);
+  }
+}
+
 export function registerSearchIpc(ctx: FeatureContext): void {
   // The same app-owned Agy home (and sign-in) as the terminal; prepared here when the terminal hasn't started yet.
   const home = (workspace: string) => ctx.agyHomeFor(workspace);
   // Job Search: one headless Agy run finds links; the app opens, saves, and rates each one (electron/job-search.ts).
   // The run lives here, not in the page: leaving Job Search never stops it, and every page hears its progress.
-  let searchStatus: SearchStatus = { running: false, source: null, progress: null, startedAt: null };
-  const setSearchStatus = (next: SearchStatus) => { searchStatus = next; ctx.mainWindow()?.webContents.send("search:status", next); };
+  statusCtx = ctx;
   const foundIds = (value: unknown) => (Array.isArray(value) ? value : [value]).map(String).filter((id) => /^find-[a-z0-9-]{4,40}$/.test(id));
   ipcMain.handle("search:get", async () => {
     const workspace = ctx.requireWorkspace();
@@ -72,7 +98,7 @@ export function registerSearchIpc(ctx: FeatureContext): void {
           learned: searchLearning(allJobs),
           workspace,
           profile: await readCandidateProfile(workspace).catch(() => null),
-          runner: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }) : null,
+          runner: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: SEARCH_TIMEOUT_SECONDS, jsonSchema: SEARCH_SCHEMA }) : null,
           rater: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 240, jsonSchema: RATING_SCHEMA }) : null,
           existingKeys,
           onUpdate: (state) => ctx.mainWindow()?.webContents.send("search:updated", state),

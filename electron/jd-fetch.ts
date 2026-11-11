@@ -1,4 +1,5 @@
 import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
+import { formatPay } from "../src/shared/pay";
 import { basename, join, resolve } from "node:path";
 import { writeJsonAtomic, writeTextAtomic } from "./persistence";
 import { parseJobDescriptionMetadata } from "./job-description";
@@ -59,6 +60,21 @@ interface JobPostingLd {
   description?: string;
   hiringOrganization?: { name?: string } | string;
   jobLocation?: unknown;
+  baseSalary?: { currency?: string; value?: { minValue?: number; maxValue?: number; value?: number; unitText?: string } | number };
+}
+
+/** Pay from the posting's structured data, else Ashby's embedded compensation summary (shown beside the text, not in it). */
+export function pagePay(posting: JobPostingLd | null, html: string): string | null {
+  const salary = posting?.baseSalary;
+  if (salary) {
+    const value = typeof salary.value === "number" ? { value: salary.value } : salary.value ?? {};
+    const min = typeof value.minValue === "number" ? value.minValue : typeof value.value === "number" ? value.value : null;
+    const max = typeof value.maxValue === "number" && value.maxValue !== min ? value.maxValue : null;
+    const text = formatPay(min, max, salary.currency ?? "USD", value.unitText ?? null);
+    if (text) return text;
+  }
+  const embedded = html.match(/"(?:scrapeableCompensationSalarySummary|compensationTierSummary)"\s*:\s*"([^"]*\d[^"]*)"/);
+  return embedded ? embedded[1]!.replace(/\\u([0-9a-f]{4})/gi, (_match, code: string) => String.fromCharCode(parseInt(code, 16))).trim() : null;
 }
 
 function findJobPosting(value: unknown): JobPostingLd | null {
@@ -115,12 +131,14 @@ export function extractJobDescription(html: string, url: string): Omit<FetchedJo
   const title = posting?.title?.trim() || pageTitle?.title || null;
   const company = (typeof posting?.hiringOrganization === "string" ? posting.hiringOrganization : posting?.hiringOrganization?.name)?.trim() || pageTitle?.company || null;
   const location = locationText(posting?.jobLocation);
+  const pay = pagePay(posting, html);
   const body = posting?.description ? htmlToText(decodeEntities(posting.description)) : htmlToText(html);
   const header = [
     `# ${title ?? "Job Description"}`,
     "",
     ...(company ? [`**Company:** ${company}  `] : []),
     ...(location ? [`**Location:** ${location}  `] : []),
+    ...(pay ? [`**Compensation:** ${pay}  `] : []),
     `**Source:** ${url}`,
     "",
   ];
@@ -133,12 +151,13 @@ type Extracted = Omit<FetchedJobDescription, "fetchedAt">;
  * A posting built from a job board's own data (Ashby/Lever lists, Greenhouse's per-job API) instead of loading its
  * page: the same header, text conversion, and cleanup as a fetched page, so everything downstream reads it the same.
  */
-export function postingFromBoard(input: { url: string; title: string; company: string | null; location: string | null; html: string }): { extracted: Extracted; form: string | null } {
+export function postingFromBoard(input: { url: string; title: string; company: string | null; location: string | null; html: string; pay?: string | null }): { extracted: Extracted; form: string | null } {
   const header = [
     `# ${input.title}`,
     "",
     ...(input.company ? [`**Company:** ${input.company}  `] : []),
     ...(input.location ? [`**Location:** ${input.location}  `] : []),
+    ...(input.pay ? [`**Compensation:** ${input.pay}  `] : []),
     `**Source:** ${input.url}`,
     "",
   ];

@@ -411,7 +411,15 @@ function ScheduleFields({ schedule, onChange }: { schedule: JobSearchSettings["s
         </div>
         {schedule.mode === "times" && <label className="search-field"><span>Times (24-hour, up to 4, e.g. 08:00, 17:30)</span><input value={times} onChange={(event) => updateTimes(event.target.value)} /></label>}
         {schedule.mode === "times" && info?.platform === "win32" && <label className="search-check"><input type="checkbox" checked={schedule.wake} onChange={(event) => onChange({ ...schedule, wake: event.target.checked })} />Wake the computer from sleep to search (plugged in works best)</label>}
-        <p className="muted">Each scheduled search is one Agy run plus the light rating. {schedule.mode === "daily"
+        <div className="search-field"><span>What each scheduled search does</span>
+          <div className="search-checks">
+            <label><input type="radio" name="schedule-agy" checked={schedule.agy === "never"} onChange={() => onChange({ ...schedule, agy: "never" })} />Watched companies only (free, seconds)</label>
+            <label><input type="radio" name="schedule-agy" checked={schedule.agy === "every"} onChange={() => onChange({ ...schedule, agy: "every" })} />Watched companies and an Agy web search (uses Agy, a few minutes)</label>
+            <label><input type="radio" name="schedule-agy" checked={schedule.agy === "days"} onChange={() => onChange({ ...schedule, agy: "days" })} />Watched companies every time, Agy on some days</label>
+          </div>
+          {schedule.agy === "days" && <div className="search-checks" aria-label="Days with an Agy web search">{DAY_LABELS.map((label, day) => <label key={label}><input type="checkbox" checked={schedule.agyDays.includes(day)} onChange={() => onChange({ ...schedule, agyDays: schedule.agyDays.includes(day) ? schedule.agyDays.filter((value) => value !== day) : [...schedule.agyDays, day].sort() })} />{label}</label>)}</div>}
+        </div>
+        <p className="muted">{schedule.agy === "never" ? "Each scheduled search reads your watched companies' job boards; Agy's web search runs only when you press Run now." : "With Agy, a search finds new companies too and takes a few minutes. If Agy's part doesn't finish (sleep, quota), the watched matches are kept and Agy tries once more later that day."} {schedule.mode === "daily"
           ? `One search per day, counted from ${schedule.after} to ${schedule.after} the next day: it runs the first time your computer is on in that stretch, whether it's already awake, wakes from sleep, or starts up. Searches you run yourself add jobs but don't use up the day's search. Example: on at 8:30 Monday runs Monday's search; on again at 1 a.m. doesn't; the next one runs the first time you're on after ${schedule.after} Tuesday.`
           : info?.platform === "win32" ? (schedule.wake ? "A sleeping PC wakes for it; a PC that's off runs it when you next sign in." : "If your PC is asleep or off at that time, the search runs as soon as it's back.") : "If your Mac is asleep at that time, the search runs when it wakes; if it's shut down, it waits for the next time."} Strong matches are drafted when you next open the app. Searching while the computer is fully off isn't possible yet.</p>
       </>}
