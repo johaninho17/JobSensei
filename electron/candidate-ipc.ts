@@ -18,7 +18,7 @@ import { exportMarkdownPdf } from "./pdf-export";
 import { approveProposal, declineProposal, readProposals } from "./proposals";
 import { candidateInsight, reportRows } from "../src/shared/recruiter-insight";
 import { statusLabel } from "../src/shared/tracker";
-import { candidateAgyHomePath } from "./agy-home";
+import { removeCandidateHistory } from "./agy-home";
 import { nextQueuedCandidate, sendPosting, setLibraryCompany, stageLibraryLink, stageLibraryPaste, suggestCandidates } from "./posting-library";
 import { join } from "node:path";
 
@@ -172,7 +172,9 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
       if (busy) throw new Error(busy);
       await ctx.closeCandidate();
     }
-    return deleteCandidate(ctx.root(), entry.id, candidateAgyHomePath(ctx.userDataPath(), entry.id));
+    const result = await deleteCandidate(ctx.root(), entry.id);
+    await removeCandidateHistory(ctx.userDataPath(), entry.id);
+    return { ...result, removed: [...result.removed, "Their Agy history"] };
   });
   ipcMain.handle("pipeline:list", async () => listPipeline(ctx.root()));
   ipcMain.handle("pipeline:set-status", async (_event, entries: unknown, status: unknown) => {

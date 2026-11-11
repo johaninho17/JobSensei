@@ -33,7 +33,7 @@ import {
   type ClaimFailure,
   ClaimValidationError,
 } from "./application-artifacts";
-import { contextManifestHash } from "./context-manifest-hash";
+import { currentManifestHash } from "./context-manifest-hash";
 import { writeJsonAtomic, readTextFile } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
 import { normalizeEvidenceClassifications, scoreEvaluation } from "./fit-scoring";
@@ -878,14 +878,15 @@ async function loadApplication(workspacePath: string, jobId: string): Promise<Lo
   const manifest = await readOptionalJson(join(workspace, ".sensei", "active-context.json"), contextManifestSchema);
   const evidenceResult = await readJsonState(join(statePath, "application_evidence.json"), applicationEvidenceSchema);
   const applicationContext = await readOptionalJson(join(statePath, "application_context.json"), applicationContextSchema);
+  const snapshot = await readStateWithLegacy(statePath, jobPath, "evidence_snapshot.json", evidenceSnapshotSchema);
   const loaded: LoadedApplication = {
     jobPath,
     statePath,
     run: await readStateWithLegacy(statePath, jobPath, "application_run.json", applicationRunSchema),
-    snapshot: await readStateWithLegacy(statePath, jobPath, "evidence_snapshot.json", evidenceSnapshotSchema),
+    snapshot,
     evidence: evidenceResult.value,
     evidenceUnreadable: evidenceResult.exists && !evidenceResult.value,
-    manifestHash: manifest ? contextManifestHash(manifest) : null,
+    manifestHash: manifest ? currentManifestHash(manifest, snapshot?.manifestHash) : null,
     evaluationMarkdown: await readOptionalText(join(jobPath, "evaluation.md")),
     resumeName,
     resumeMarkdown: resumeName ? await readOptionalText(join(jobPath, resumeName)) : null,

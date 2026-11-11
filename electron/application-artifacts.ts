@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import { resumeSections } from "./resume-sections";
 import {
   coverLetterAuditJsonSchema,
   resumeAuditJsonSchema,
@@ -110,7 +111,7 @@ export function validateApplicationArtifact(markdown: string, artifactType: Appl
 
   if (artifactType === "resume") {
     if (SUMMARY_SECTION.test(markdown)) throw new Error("The resume cannot add a summary section because the canonical resume has none.");
-    validateResumeStructure(markdown);
+    validateResumeStructure(markdown, options.baselineMarkdown);
     const bulletCount = experienceBulletCount(markdown);
     const currentEmployer = options.baselineMarkdown ? firstEmployerName(options.baselineMarkdown) : firstEmployerName(markdown);
     const currentEmployerBulletCount = currentEmployer ? employerBullets(markdown, currentEmployer).length : 0;
@@ -728,12 +729,18 @@ export function coverLetterBodyParagraphs(markdown: string): string[] {
   });
 }
 
-function validateResumeStructure(markdown: string): void {
-  const normalized = stripMarkdown(markdown).toLowerCase();
-  const requiredInOrder = ["skills", "experience", "education"];
+/**
+ * The resume keeps the base resume's skills, experience, and education sections in the base's order, found by
+ * meaning through `resumeSections` (so "Core Competencies" is the skills section). Without a base, experience and
+ * education are required.
+ */
+function validateResumeStructure(markdown: string, baselineMarkdown?: string | null): void {
+  const known = (text: string): string[] => resumeSections(text).sections.map((section) => section.key).filter((key) => key === "skills" || key === "experience" || key === "education");
+  const required = baselineMarkdown ? known(baselineMarkdown) : ["experience", "education"];
+  const present = known(markdown);
   let cursor = -1;
-  for (const section of requiredInOrder) {
-    const next = normalized.indexOf(section, cursor + 1);
+  for (const section of required) {
+    const next = present.indexOf(section, cursor + 1);
     if (next < 0) throw new Error(`The resume must preserve the canonical \`${section}\` section or employer.`);
     cursor = next;
   }
@@ -829,8 +836,13 @@ export function currentEmployerRecencyStats(markdown: string, audit: ResumeAudit
   const employer = snapshot.canonicalResume?.employers[0]?.name ?? firstEmployerName(markdown);
   const currentBullets = employer ? employerBullets(markdown, employer) : [];
   const mappingByText = new Map(audit.claimMappings.map((mapping) => [normalizeResumeText(mapping.publicText), mapping]));
+  // An unchanged base-resume line under the current role is that role's own record (decision T8), so it counts.
+  const currentRole = snapshot.evidenceRows.find((row) => row.evidenceId === "base:r1:b1")?.recencyBand;
+  const baseIsRecent = currentRole === "current" || currentRole === "recent";
+  const baseBullets = new Set((snapshot.canonicalResume?.employers[0]?.originalBullets ?? []).map(normalizeResumeText));
   const recent = currentBullets.filter((bullet) => {
     const mapping = mappingByText.get(normalizeResumeText(bullet));
+    if (baseIsRecent && mapping?.claimType === "baseline" && baseBullets.has(normalizeResumeText(bullet))) return true;
     return mapping?.evidenceIds.some((id) => {
       const band = snapshot.evidenceRows.find((row) => row.evidenceId === id)?.recencyBand;
       return band === "current" || band === "recent";

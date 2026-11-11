@@ -144,6 +144,27 @@ export class TerminalSession {
   }
   resize(cols: number, rows: number): void { if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 2 || rows < 2 || cols > 500 || rows > 200) throw new Error("Terminal size is invalid."); this.process?.resize(cols, rows); }
   stop(): void { this.process?.kill(); this.process = null; this.pendingInput = []; }
+
+  /**
+   * Stops Agy and waits until it and every process it started have exited (up to `timeoutMs`, then forced), so
+   * nothing writes into Agy's home afterwards. Switching candidates relies on this before it swaps their histories.
+   */
+  async stopAndWait(timeoutMs = 8000): Promise<void> {
+    const ptyProcess = this.process;
+    if (!ptyProcess) return;
+    const windows = process.platform === "win32";
+    // Agy is the terminal's own process, so on macOS and Linux it leads its process group.
+    const target = windows ? ptyProcess.pid : -ptyProcess.pid;
+    const alive = () => { try { process.kill(target, 0); return true; } catch { return false; } };
+    const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
+    const exited = new Promise<void>((done) => ptyProcess.onExit(() => done()));
+    this.stop();
+    if (!windows) { try { process.kill(target, "SIGTERM"); } catch { /* already gone */ } }
+    await Promise.race([exited, sleep(timeoutMs)]);
+    const end = Date.now() + timeoutMs;
+    while (alive() && Date.now() < end) await sleep(200);
+    if (alive()) { try { process.kill(target, "SIGKILL"); } catch { /* already gone */ } await sleep(300); }
+  }
   onData(callback: (data: string) => void): void { this.onDataCallback = callback; }
   onExit(callback: (code: number) => void): void { this.onExitCallback = callback; }
   private environment(agy = false): NodeJS.ProcessEnv {

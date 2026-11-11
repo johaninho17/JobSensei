@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, realpathSync } from "node:fs";
-import { chmod, copyFile, lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, readFile, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import { writeJsonAtomic } from "./persistence";
@@ -21,35 +21,69 @@ export function agyHomePath(userDataPath: string): string {
   return join(userDataPath, "agy-home");
 }
 
-/** A candidate's own Agy home (Recruiter Edition). The name is the candidate id, checked by the caller. */
-export function candidateAgyHomePath(userDataPath: string, candidateId: string): string {
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidateId)) throw new Error("Invalid candidate home.");
-  return join(agyHomePath(userDataPath), "candidates", candidateId);
+/**
+ * Recruiter Edition (recruiter plan R2, changed 2026-11-11): one Agy home and one sign-in for the recruiter, used for
+ * every candidate, so Agy's first-run screens and terms happen once. What must not cross between candidates is Agy's
+ * history (conversations, memory, summaries, prompt history). Those entries are kept per candidate under
+ * `userData/agy-history/<candidate-id>/` and swapped into the shared home when that candidate opens, while Agy is
+ * stopped. Everything else in the home (sign-in, settings, first-run state, Agy's own program files) stays shared.
+ */
+export const AGY_HISTORY_ENTRIES = [
+  "antigravity-cli/conversations", "antigravity-cli/brain", "antigravity-cli/implicit", "antigravity-cli/annotations",
+  "antigravity-cli/conversation_summaries.db", "antigravity-cli/conversation_summaries.db-shm", "antigravity-cli/conversation_summaries.db-wal",
+  "antigravity-cli/history.jsonl", "antigravity-cli/jetbox_summaries_proto.pb", "config/projects",
+  // Found in a live run (2026-11-11): two cache files keep conversation titles and first prompts, and the logs keep
+  // prompts. The rest of the cache stays shared: `cache/onboarding.json` records that Agy's first run is done.
+  "antigravity-cli/cache/conversation_metadata.json", "antigravity-cli/cache/last_conversations.json", "antigravity-cli/log", "antigravity-cli/cli.log",
+  // The app's record of its background conversations (pruneHeadlessConversations) belongs with those conversations.
+  "antigravity-cli/jobsensei-headless.json",
+] as const;
+const HISTORY_OWNER = [".gemini", "antigravity-cli", "jobsensei-history-owner"] as const;
+/** History found in the shared home with no recorded owner is set aside here, never given to a candidate. */
+const UNOWNED = "_unowned";
+
+export function agyHistoryRoot(userDataPath: string): string {
+  return join(userDataPath, "agy-history");
 }
 
-const SIGN_IN_FILE = [".gemini", "antigravity-cli", "antigravity-oauth-token"] as const;
+export function candidateHistoryPath(userDataPath: string, candidateId: string): string {
+  if (candidateId !== UNOWNED && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidateId)) throw new Error("Invalid candidate history.");
+  return join(agyHistoryRoot(userDataPath), candidateId);
+}
+
+async function moveEntries(fromRoot: string, toRoot: string): Promise<void> {
+  for (const entry of AGY_HISTORY_ENTRIES) {
+    const from = join(fromRoot, ...entry.split("/"));
+    if (!(await lstat(from).catch(() => null))) continue;
+    const to = join(toRoot, ...entry.split("/"));
+    await rm(to, { recursive: true, force: true });
+    await mkdir(dirname(to), { recursive: true });
+    await rename(from, to);
+  }
+}
 
 /**
- * Shares the Agy sign-in with a candidate's new home. macOS keeps it in the keychain (the Keychains link covers it;
- * tested 2026-11-05). Agy also writes a token file in its home, which is what other systems rely on: a home without
- * one gets a copy of the newest token from the other candidates' homes. Only that file is copied, never memory.
+ * Makes the shared home hold only `candidateId`'s Agy history. Call only while Agy is stopped (opening a candidate
+ * stops it). The previous owner's history goes back to their store; history with no owner is set aside.
  */
-export async function shareSignIn(home: string): Promise<boolean> {
-  const target = join(home, ...SIGN_IN_FILE);
-  if (existsSync(target)) return false;
-  const homes = dirname(home);
-  let newest: { path: string; mtime: number } | null = null;
-  for (const name of (() => { try { return readdirSync(homes); } catch { return []; } })()) {
-    const path = join(homes, name, ...SIGN_IN_FILE);
-    if (path === target) continue;
-    const info = await lstat(path).catch(() => null);
-    if (info?.isFile() && (!newest || info.mtimeMs > newest.mtime)) newest = { path, mtime: info.mtimeMs };
-  }
-  if (!newest) return false;
-  await mkdir(dirname(target), { recursive: true });
-  await copyFile(newest.path, target);
-  await chmod(target, 0o600).catch(() => undefined);
-  return true;
+export async function useCandidateHistory(userDataPath: string, candidateId: string): Promise<void> {
+  const home = join(agyHomePath(userDataPath), ".gemini");
+  const ownerFile = join(agyHomePath(userDataPath), ...HISTORY_OWNER);
+  const owner = (await readFile(ownerFile, "utf8").catch(() => "")).trim();
+  if (owner === candidateId) return;
+  await moveEntries(home, candidateHistoryPath(userDataPath, owner || UNOWNED));
+  await moveEntries(candidateHistoryPath(userDataPath, candidateId), home);
+  await mkdir(dirname(ownerFile), { recursive: true });
+  await writeFile(ownerFile, `${candidateId}\n`);
+}
+
+/** Removes a candidate's Agy history (deleting the candidate). Clears the shared home too when it holds theirs. */
+export async function removeCandidateHistory(userDataPath: string, candidateId: string): Promise<void> {
+  await rm(candidateHistoryPath(userDataPath, candidateId), { recursive: true, force: true });
+  const ownerFile = join(agyHomePath(userDataPath), ...HISTORY_OWNER);
+  if ((await readFile(ownerFile, "utf8").catch(() => "")).trim() !== candidateId) return;
+  for (const entry of AGY_HISTORY_ENTRIES) await rm(join(agyHomePath(userDataPath), ".gemini", ...entry.split("/")), { recursive: true, force: true });
+  await rm(ownerFile, { force: true });
 }
 
 function realPath(path: string): string {
@@ -156,11 +190,20 @@ type AgySettings = { permissions?: { allow?: string[]; deny?: string[] }; [key: 
  * Writes the app-owned Agy settings for this workspace and returns the home folder to launch Agy with.
  * Keeps the user's own choices in that file (model, allowed commands); replaces only the rules this app added last time.
  */
-export async function prepareAgyHome(userDataPath: string, workspacePath: string, extraPaths: string[] = [], launcher?: { appRoot: string; runtimePath: string }, homeName?: string): Promise<string> {
-  // The Recruiter Edition gives each candidate their own home (recruiter plan R2): Agy keeps its conversations and
-  // memory there, so one candidate's details can never come back in another's run. The sign-in is shared.
-  const home = homeName ? candidateAgyHomePath(userDataPath, homeName) : agyHomePath(userDataPath);
-  if (homeName) await shareSignIn(home);
+// One preparation at a time: the terminal start and a background run can both prepare the home, and two history
+// swaps at once scrambled whose history was where (found live 2026-11-11).
+let preparing: Promise<unknown> = Promise.resolve();
+
+export function prepareAgyHome(userDataPath: string, workspacePath: string, extraPaths: string[] = [], launcher?: { appRoot: string; runtimePath: string }, candidateId?: string): Promise<string> {
+  const next = preparing.catch(() => undefined).then(() => prepareAgyHomeNow(userDataPath, workspacePath, extraPaths, launcher, candidateId));
+  preparing = next;
+  return next;
+}
+
+async function prepareAgyHomeNow(userDataPath: string, workspacePath: string, extraPaths: string[], launcher: { appRoot: string; runtimePath: string } | undefined, candidateId: string | undefined): Promise<string> {
+  // The Recruiter Edition shares one home and swaps in the open candidate's Agy history (useCandidateHistory).
+  const home = agyHomePath(userDataPath);
+  if (candidateId) await useCandidateHistory(userDataPath, candidateId);
   const settingsPath = join(home, ...SETTINGS);
   const generatedPath = join(home, ...GENERATED);
   await mkdir(dirname(settingsPath), { recursive: true });
@@ -169,9 +212,11 @@ export async function prepareAgyHome(userDataPath: string, workspacePath: string
   const keychains = await linkKeychains(home);
   // Agy's file tools never touch the keychains, through the link or directly.
   const keychainDenies = keychains ? [keychains, join(homedir(), "Library", "Keychains")].flatMap((path) => [`read_file(${path})`, `write_file(${path})`]) : [];
+  // Other candidates' stored Agy history is never readable by Agy.
+  const historyDenies = candidateId ? [`read_file(${agyHistoryRoot(userDataPath)})`, `write_file(${agyHistoryRoot(userDataPath)})`] : [];
   const agentPaths = agentPathsAbove(workspacePath);
   const readable = [...agentPaths, ...(launcher ? launcherReadPaths(home, launcher) : [])];
-  const generated = [...new Set([...boundaryDenyRules(workspacePath, extraPaths, readable), ...keychainDenies, ...COMMAND_DENIES])];
+  const generated = [...new Set([...boundaryDenyRules(workspacePath, extraPaths, readable), ...keychainDenies, ...historyDenies, ...COMMAND_DENIES])];
   // Reads outside the workspace ask first in proceed-in-sandbox mode, and the sandbox can't read them at all
   // unless allowed; these reads are expected, so allow them.
   const generatedAllow = readable.map((path) => `read_file(${path})`);
@@ -260,7 +305,8 @@ export function createAgyHomeCache(prepare: (workspace: string) => Promise<strin
 
 // ---------- Conversations the app starts (written answers, search, rating) ----------
 
-const HEADLESS_LEDGER = ".sensei-headless.json";
+/** Inside Agy's own folder and listed in AGY_HISTORY_ENTRIES, so in the Recruiter Edition it moves with each candidate's history. */
+const HEADLESS_LEDGER = join(".gemini", "antigravity-cli", "jobsensei-headless.json");
 type HeadlessLedger = { conversations: Record<string, string> };
 
 async function readHeadlessLedger(agyHome: string): Promise<HeadlessLedger> {
@@ -275,6 +321,7 @@ export async function recordHeadlessConversation(agyHome: string, id: string, no
   if (!/^[A-Za-z0-9-]{8,80}$/.test(id)) return;
   const ledger = await readHeadlessLedger(agyHome);
   ledger.conversations[id] = now.toISOString();
+  await mkdir(dirname(join(agyHome, HEADLESS_LEDGER)), { recursive: true });
   await writeFile(join(agyHome, HEADLESS_LEDGER), JSON.stringify(ledger), "utf8");
 }
 

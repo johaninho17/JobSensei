@@ -154,6 +154,11 @@ alex@example.com | linkedin.com/in/alex-morgan
     expect(stats.bulletCount).toBe(12);
     expect(stats.experienceWordCount).toBeGreaterThan(100);
     expect(() => validateApplicationArtifact(compositeResume, "resume")).not.toThrow();
+    // Sections are found by meaning (found live 2026-11-11: "Core Competencies" failed for want of the word "skills").
+    const competencies = compositeResume.replace("**CORE COMPETENCIES & TECHNICAL SKILLS**", "**CORE COMPETENCIES**");
+    expect(() => validateApplicationArtifact(competencies, "resume", { baselineMarkdown: competencies })).not.toThrow();
+    const noSkills = competencies.replace(/\*\*CORE COMPETENCIES\*\*[\s\S]*?(?=\*\*PROFESSIONAL)/, "");
+    expect(() => validateApplicationArtifact(noSkills, "resume", { baselineMarkdown: competencies })).toThrow(/`skills` section/);
   });
 
   it("strictly prevents private candidate profile data from entering public tests", async () => {
