@@ -23,6 +23,8 @@ import {
   composeCanonicalCoverLetter,
   composeCanonicalResume,
   summaryIsEditable,
+  nthRole,
+  roleOccurrence,
 } from "./canonical-resume";
 import { pruneUnsupportedSkills } from "./application-artifacts";
 import { contextManifestHash } from "./context-manifest-hash";
@@ -76,15 +78,16 @@ export function expandBundleBaselines(
 ): ExpandedApplicationBundle {
   const key = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "").replace(/inc$/, "");
   const templates = context?.schemaVersion === 2 ? context.resumeTemplate.employers : [];
-  const baselinesFor = (name: string) => {
-    const template = templates.find((employer) => key(employer.name) === key(name));
+  // Several roles at one employer are told apart by occurrence (roleOccurrence in canonical-resume.ts).
+  const baselinesFor = (name: string, occurrence = 0) => {
+    const template = nthRole(templates, name, occurrence, key);
     if (template?.baselineBullets?.length) return template.baselineBullets;
-    const original = canonical.employers.find((employer) => key(employer.name) === key(name));
+    const original = nthRole(canonical.employers, name, occurrence, key);
     return (original?.originalBullets ?? []).map((text) => ({ text, evidenceIds: [] as string[] }));
   };
-  const expand = (name: string, bullets: ApplicationBundle["resume"]["employers"][number]["bullets"]) => bullets.map((bullet) => {
+  const expand = (name: string, bullets: ApplicationBundle["resume"]["employers"][number]["bullets"], occurrence = 0) => bullets.map((bullet) => {
     if (!("baseline" in bullet)) return bullet;
-    const reference = baselinesFor(name)[bullet.baseline - 1];
+    const reference = baselinesFor(name, occurrence)[bullet.baseline - 1];
     if (!reference) {
       throw new ApplicationInputError(".sensei/application_bundle.json", new Error(`${name} has no base-resume bullet ${bullet.baseline}.`));
     }
@@ -92,20 +95,21 @@ export function expandBundleBaselines(
   });
   const drafted = bundle.resume.employers;
   const warnings: string[] = [];
-  const baselineOf = (name: string) => baselinesFor(name).map((bullet) => ({ text: bullet.text, evidenceIds: [...bullet.evidenceIds] }));
+  const baselineOf = (name: string, occurrence = 0) => baselinesFor(name, occurrence).map((bullet) => ({ text: bullet.text, evidenceIds: [...bullet.evidenceIds] }));
   const rowEmployer = new Map((context?.schemaVersion === 2 ? context.evidenceRows ?? [] : []).map((row) => [row.evidenceId, row.employer ?? ""]));
   const employers = canonical.employers.map((employer, index) => {
-    const match = drafted.find((candidate) => key(candidate.name) === key(employer.name));
-    if (!match) return { name: employer.name, bullets: baselineOf(employer.name) };
-    const bullets = expand(employer.name, match.bullets);
+    const occurrence = roleOccurrence(canonical.employers, index, key);
+    const match = nthRole(drafted, employer.name, occurrence, key);
+    if (!match) return { name: employer.name, bullets: baselineOf(employer.name, occurrence) };
+    const bullets = expand(employer.name, match.bullets, occurrence);
     // Earlier roles stay exactly as in the base resume unless every changed bullet cites that employer's evidence.
     if (index > 0) {
-      const original = new Set(baselineOf(employer.name).map((bullet) => key(bullet.text)));
+      const original = new Set(baselineOf(employer.name, occurrence).map((bullet) => key(bullet.text)));
       const unbacked = bullets.filter((bullet) => !original.has(key(bullet.text))
         && !bullet.evidenceIds.some((id) => key(rowEmployer.get(id) ?? "") === key(employer.name)));
       if (unbacked.length) {
         warnings.push(`Kept ${employer.name} as in the base resume: ${unbacked.length} changed bullet(s) cited no ${employer.name} evidence.`);
-        return { name: employer.name, bullets: baselineOf(employer.name) };
+        return { name: employer.name, bullets: baselineOf(employer.name, occurrence) };
       }
     }
     return { name: match.name, bullets };
@@ -156,8 +160,9 @@ function materializeBundle(
     if (ids.length === 0 && employerName && snapshot.canonicalResume) {
       // Unchanged base-resume bullets are the candidate's own approved wording.
       // Record them as baseline text; never borrow an unrelated evidence ID.
-      const baselineEmp = snapshot.canonicalResume.employers.find((e) => normalizeText(e.name) === normalizeText(employerName));
-      if (baselineEmp?.originalBullets.some((b) => normalizeText(b) === normalizeText(item.text))) {
+      // Every role at that employer counts (someone promoted there holds several roles under one name).
+      const baselineRoles = snapshot.canonicalResume.employers.filter((e) => normalizeText(e.name) === normalizeText(employerName));
+      if (baselineRoles.some((role) => role.originalBullets.some((b) => normalizeText(b) === normalizeText(item.text)))) {
         return {
           publicText: item.text,
           claimType: "baseline" as const,
@@ -177,7 +182,12 @@ function materializeBundle(
       ownership: ids.length ? "supported" : "",
     };
   };
-  const coverItems = bundle.coverLetter.bodyParagraphs.flatMap((paragraph) => paragraph.sentences);
+  // A run whose snapshot says no letter (src/shared/cover-letter-policy.ts) ignores any letter in the bundle.
+  const letter = snapshot.coverLetterPlan?.write === false ? null : bundle.coverLetter ?? null;
+  if (snapshot.coverLetterPlan?.write !== false && !letter) {
+    throw new ApplicationInputError(".sensei/application_bundle.json", new Error("coverLetter is missing; this run writes a cover letter (follow coverLetterBrief)."));
+  }
+  const coverItems = letter ? letter.bodyParagraphs.flatMap((paragraph) => paragraph.sentences) : [];
   // Letter sentences retell real work in the candidate voice: framed, never a new fact (ledger T4).
   const coverClaims = coverItems.map((item) => {
     const mapping = claim(item);
@@ -208,13 +218,13 @@ function materializeBundle(
           bullets: employer.bullets.map((item) => item.text),
         })),
       },
-      coverLetter: {
-        date: bundle.coverLetter.date,
-        recipientLines: bundle.coverLetter.recipientLines,
-        salutation: bundle.coverLetter.salutation,
-        bodyParagraphs: bundle.coverLetter.bodyParagraphs.map((paragraph) => paragraph.sentences.map((item) => item.text).join(" ")),
-        closing: bundle.coverLetter.closing,
-      },
+      coverLetter: letter ? {
+        date: letter.date,
+        recipientLines: letter.recipientLines,
+        salutation: letter.salutation,
+        bodyParagraphs: letter.bodyParagraphs.map((paragraph) => paragraph.sentences.map((item) => item.text).join(" ")),
+        closing: letter.closing,
+      } : null,
     }),
     evidence: applicationEvidenceSchema.parse({
       schemaVersion: 1,
@@ -230,11 +240,11 @@ function materializeBundle(
           ...bundle.resume.employers.flatMap((employer) => employer.bullets.map((item) => claim(item, true, employer.name))),
         ],
       },
-      coverLetter: {
+      coverLetter: letter ? {
         publicArtifact: "cover_letter.md",
         claimMappings: coverClaims,
         careerArc,
-      },
+      } : null,
       excludedClaims: bundle.excludedClaims,
       warnings: [...bundle.warnings, ...summaryWarnings],
     }),
@@ -339,7 +349,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
   }
 
   const resumeMarkdown = composeCanonicalResume(snapshot.canonicalResume, draft.resume, { includeSummary: summaryEditable });
-  const coverMarkdown = composeCanonicalCoverLetter(snapshot.canonicalResume, draft.coverLetter, { fullName: candidateProfile?.identity.fullName });
+  const coverMarkdown = draft.coverLetter ? composeCanonicalCoverLetter(snapshot.canonicalResume, draft.coverLetter, { fullName: candidateProfile?.identity.fullName }) : null;
   const resumeName = evidence.resume.publicArtifact;
   const escapedPrefix = (candidateProfile?.identity.artifactPrefix ?? "Candidate").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (!new RegExp(`^${escapedPrefix}_[A-Za-z0-9][A-Za-z0-9_-]*_Resume\\.md$`).test(resumeName)) {
@@ -348,7 +358,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
   const resumePath = assertInsideWorkspace(jobPath, join(jobPath, resumeName));
   const coverPath = assertInsideWorkspace(jobPath, join(jobPath, "cover_letter.md"));
   const resumeDrifts = canonicalResumeDrifts(resumeMarkdown, snapshot.canonicalResume);
-  const coverDrifts = canonicalCoverLetterDrifts(coverMarkdown, snapshot.canonicalResume);
+  const coverDrifts = coverMarkdown ? canonicalCoverLetterDrifts(coverMarkdown, snapshot.canonicalResume) : [];
   if (resumeDrifts.length || coverDrifts.length) {
     throw new Error(`Canonical composition failed: ${[...resumeDrifts, ...coverDrifts].map((drift) => drift.code).join(", ")}.`);
   }
@@ -363,7 +373,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
   // content checks annotate the persisted drafts for review; they do not suppress them.
   await Promise.all([
     writeTextAtomic(resumePath, resumeMarkdown),
-    writeTextAtomic(coverPath, coverMarkdown),
+    ...(coverMarkdown ? [writeTextAtomic(coverPath, coverMarkdown)] : []),
     writeTextAtomic(evaluationPath, normalizedEvaluation),
     ...(bundle ? [
       writeJsonAtomic(join(statePath, "application_draft.json"), draft),
@@ -377,6 +387,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
     fitScore: fit?.score ?? null,
     fitConfidence: fit?.confidence ?? null,
     gateStatus: fit ? gateStatusFor(fit) : null,
+    coverLetterSkipped: draft.coverLetter ? null : snapshot.coverLetterPlan?.reason ?? null,
   });
   if (persistRunState) await writeJsonAtomic(join(statePath, "validation_report.json"), finalReport);
   await writeTextAtomic(evaluationPath, mergeEvaluationAudit(normalizedEvaluation, {
@@ -408,6 +419,7 @@ export async function finalizeApplication(workspacePath: string, jobId: string, 
       fitScore: null,
       fitConfidence: null,
       gateStatus: null,
+      coverLetterSkipped: null,
       ats: null,
       keywordClasses: [],
       issues: inputValidationIssues(error),

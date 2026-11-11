@@ -2,6 +2,8 @@
 // evaluation, drafts, and tracker, with a health check per area. job-folders.ts builds it when it reads a job
 // and saves it as `.sensei/job_record.json` only when something changed.
 import { readFile } from "node:fs/promises";
+import { featuresFor } from "../src/shared/edition";
+import { currentEdition } from "./edition";
 import { join } from "node:path";
 import { FIT_GATE } from "../src/shared/fit-credit";
 import { JOB_RECORD_SCHEMA_VERSION, jobRecordSchema, type HealthState, type JobRecord } from "../src/shared/job-record";
@@ -24,6 +26,8 @@ export type JobRecordInput = {
   tracker: JobTracker | null;
   /** The status shown in the app (the user's, or derived). */
   status: TrackerStatus;
+  /** The last run wrote no cover letter on purpose (src/shared/cover-letter-policy.ts), so a resume alone is complete. */
+  letterSkipped?: boolean;
 };
 
 const WEAK = new Set(["gap", "unclear", "adjacent_transferable"]);
@@ -100,13 +104,15 @@ function health(input: JobRecordInput, record: JobRecord): JobRecord["health"] {
   // Drafts are expected once a job is rated at or above the gate.
   const belowGate = record.fit.score !== null && record.fit.score < FIT_GATE;
   const drafts = Number(record.documents.resume) + Number(record.documents.coverLetter);
-  const documents: HealthState = !record.documents.evaluation || belowGate ? (drafts ? "complete" : "not_needed") : drafts === 2 ? "complete" : drafts ? "partial" : "missing";
+  const expected = input.letterSkipped ? 1 : 2;
+  const documents: HealthState = !record.documents.evaluation || belowGate ? (drafts ? "complete" : "not_needed") : drafts >= expected && (record.documents.resume || !input.letterSkipped) ? "complete" : drafts ? "partial" : "missing";
   if (documents === "missing") notes.push("Rated above the gate, but no resume or cover letter yet.");
   if (documents === "partial") notes.push(record.documents.resume ? "No cover letter yet." : "No tailored resume yet.");
 
   // Interview history matters for learning: closed jobs and jobs in interviews should say what happened.
   const closed = input.status === "rejected" || input.status === "withdrawn";
-  const interviewed = record.interviews.recorded > 0 || record.interviews.preparedRounds > 0 || input.status === "interviewing" || input.status === "offer";
+  // The recruiter edition records no interviews (src/shared/edition.ts), so it has no tracking gaps.
+  const interviewed = featuresFor(currentEdition()).interviews && (record.interviews.recorded > 0 || record.interviews.preparedRounds > 0 || input.status === "interviewing" || input.status === "offer");
   let tracking: HealthState = "not_needed";
   if (interviewed && closed) {
     tracking = record.interviews.recorded && record.outcome?.reason ? "complete" : record.interviews.recorded || record.outcome?.reason ? "partial" : "missing";

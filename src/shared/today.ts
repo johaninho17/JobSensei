@@ -132,7 +132,7 @@ export function buildToday(input: {
       interviews: input.jobs.flatMap((job) => (job.tracker?.interviews ?? []).filter((event) => event.date === today).map((event) => ({ id: job.id, label: label(job), round: event.round }))),
     },
     due: {
-      followUps: input.jobs.map((job) => ({ job, days: followUpDays(job.tracker) })).filter((entry): entry is { job: JobFolderSummary; days: number } => entry.days !== null && entry.days <= 0 && !["rejected", "withdrawn"].includes(effectiveStatus(entry.job))).map((entry) => ({ id: entry.job.id, label: label(entry.job), days: -entry.days })),
+      followUps: input.jobs.map((job) => ({ job, days: followUpDays(job.tracker, input.now) })).filter((entry): entry is { job: JobFolderSummary; days: number } => entry.days !== null && entry.days <= 0 && !["rejected", "withdrawn"].includes(effectiveStatus(entry.job))).map((entry) => ({ id: entry.job.id, label: label(entry.job), days: -entry.days })),
       interviewsThisWeek: input.interviewDates.filter((entry) => entry.date >= today && entry.date <= weekAhead && byId.has(entry.jobId)).map((entry) => ({ id: entry.jobId, label: label(byId.get(entry.jobId)!), date: entry.date, round: entry.round })).sort((a, b) => a.date.localeCompare(b.date)),
       closedPostings: input.closedPostings.filter((posting) => byId.has(posting.jobId) && !["rejected", "withdrawn"].includes(effectiveStatus(byId.get(posting.jobId)!))),
       // Jobs with a follow-up date are covered by Follow-ups.

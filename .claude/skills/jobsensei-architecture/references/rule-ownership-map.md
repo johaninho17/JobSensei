@@ -6,6 +6,7 @@ Audit date: 2026-10-23, updated after Phase 4. ⚠ marks copies still known to c
 
 | Behavior | Intended owner | Other copies today |
 |---|---|---|
+| What each edition contains (solo, Recruiter Edition) | `src/shared/edition.ts` (`features`, `FEATURE_AGENT_ENTRIES`, `FEATURE_COMMANDS`, `FEATURE_MODULES`, `EDITION_INFO`) | Read by `vite.config.ts` (renderer `FEATURES.*` literals), `build-config/edition.cjs` (packaging), workspace sync, `sensei` launcher, readiness, `main.ts` feature IPC. AGENTS.md marks feature-only sections with `<!-- feature:<name> -->`. Tests: `tests/edition.test.ts`, `tests/edition-bundle.test.ts` |
 | Cover-letter structure & opening | `buildCoverLetterBrief` (`structure`, `introContract`) in `electron/evidence-snapshot.ts` | Pointers only: pipeline skill, writer skill, `workflow-contract.md`, `AGENTS.md`, snapshot `instructions`. Locked by `tests/cover-letter-contract.test.ts` |
 | JD content fed to the letter | `buildCoverLetterBrief` | None; `roleProblems` retired (optional in schema for old contexts). Test asserts no JD text in the brief |
 | Banned phrases (letters) | `prohibitedPatterns` in `buildCoverLetterBrief` (no truncation) | Anti-slop skill (generic vocabulary). The candidate's own phrases are allowed via the voice profile |

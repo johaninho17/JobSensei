@@ -36,6 +36,10 @@ import { readBulletBank } from "./bullet-bank";
 import { provenLinesFor } from "./proven-lines";
 import { FETCHED_FORM_PATH, readFetchedJobDescription } from "./jd-fetch";
 import { APPLICATION_FORM_FILE } from "./posting-clean";
+import { BASE_ROW_PREFIX, FILE_ROW_PREFIX, baseEarnsFitCredit, baseResumeRows, candidateFileRows, noFitCredit } from "./candidate-evidence";
+import { currentEdition } from "./edition";
+import { featuresFor } from "../src/shared/edition";
+import { countCareerFiles, coverLetterPlanFor } from "../src/shared/cover-letter-policy";
 
 const MANIFEST_PATH = ".sensei/active-context.json";
 const DENYLIST_PATH = "context/denylist.md";
@@ -75,8 +79,9 @@ function classifyEvidence(confidence: string, publicUse: string, sourceRole: str
   return "verified";
 }
 
-function eligibilityFor(classification: EvidenceSnapshotRow["classification"], publicUse: string): EvidenceSnapshotRow["eligibility"] {
+function eligibilityFor(classification: EvidenceSnapshotRow["classification"], publicUse: string, candidateFilesEligible = false): EvidenceSnapshotRow["eligibility"] {
   if (classification === "contradictory") return "blocked";
+  if (candidateFilesEligible) return "eligible";
   if (classification === "corroboration-required" || /corroborat|historical support|date reconciliation/i.test(publicUse)) return "corroboration-required";
   return /eligible|public|allowed/i.test(publicUse) ? "eligible" : "corroboration-required";
 }
@@ -260,6 +265,9 @@ export function buildApplicationRouting(
         }),
       };
     });
+  // The base resume's own rows are always routed and never take a place from context evidence (ledger T8).
+  const baseRoutes = scored.filter((candidate) => candidate.row.evidenceId.startsWith(BASE_ROW_PREFIX)).map((candidate) => candidate.route);
+  scored.splice(0, scored.length, ...scored.filter((candidate) => !candidate.row.evidenceId.startsWith(BASE_ROW_PREFIX)));
   const targetSize = Math.min(scored.length, Math.max(36, Math.min(48, Math.ceil(scored.length * 0.35))));
   const selected = new Map<string, typeof scored[number]>();
   const add = (candidate: typeof scored[number]) => {
@@ -339,57 +347,42 @@ export function buildApplicationRouting(
   scored.filter((candidate) => candidate.route.sourceAuthority === "corroboration").slice(0, 4).forEach(add);
   scored.filter((candidate) => candidate.route.sourceAuthority === "history").slice(0, 4).forEach(add);
   scored.forEach(add);
-  const routes = [...selected.values()].map((candidate) => candidate.route);
+  const routes = [...[...selected.values()].map((candidate) => candidate.route), ...baseRoutes];
   return applicationRoutingSchema.parse({
     schemaVersion: 1,
     selectedEvidenceIds: routes.map((route) => route.evidenceId),
     routes,
-    excludedEvidenceCount: Math.max(0, scored.length - routes.length),
+    excludedEvidenceCount: Math.max(0, scored.length - selected.size),
   });
 }
 
-function buildResumePlan(
+export function buildResumePlan(
   rows: EvidenceSnapshotRow[],
   canonicalResume: NonNullable<EvidenceSnapshot["canonicalResume"]>,
   footprint: EvidenceSnapshot["baseResumeFootprint"],
   jobDescription: string,
   candidateProfile: CandidateProfile | null,
 ): NonNullable<ApplicationContext["resumePlan"]> {
-  const totalRange = candidateProfile?.preferences.resume.totalExperienceBullets ?? { min: 10, max: 14 };
-  const currentRange = candidateProfile?.preferences.resume.currentEmployerBullets ?? { min: 6, max: 8 };
+  // Ledger R3: the base resume sets the length. Each role keeps its own number of bullets; a role may gain one bullet
+  // when more routed evidence exists than it has bullets (at most two roles, most recent first), and PDF export keeps
+  // the base's page count. Never fewer bullets than the base, so useful lines are replaced, not dropped.
   const baselineTotal = canonicalResume.employers.reduce((sum, employer) => sum + employer.originalBulletCount, 0);
-  const densityTarget = footprint?.targetExperienceWordMin
-    ? Math.ceil(footprint.targetExperienceWordMin / 17)
-    : baselineTotal;
   const routedCounts = new Map<string, number>();
   for (const row of rows) {
     if (row.employer) routedCounts.set(row.employer, (routedCounts.get(row.employer) ?? 0) + 1);
   }
   const currentEmployer = canonicalResume.employers[0]?.name ?? null;
-  const targets = canonicalResume.employers.map((employer, index) => ({
+  const targets = canonicalResume.employers.map((employer) => ({
     employer: employer.name,
-    targetBullets: index === 0
-      ? Math.max(currentRange.min, Math.min(currentRange.max, employer.originalBulletCount))
-      : employer.originalBulletCount,
+    targetBullets: employer.originalBulletCount,
     routedEvidenceCount: routedCounts.get(employer.name) ?? 0,
   }));
-  let plannedMinimum = targets.reduce((sum, target) => sum + target.targetBullets, 0);
-  while (plannedMinimum > totalRange.max) {
-    const reducible = [...targets].reverse().find((target) => target.employer !== currentEmployer && target.targetBullets > 1);
-    if (!reducible) break;
-    reducible.targetBullets -= 1;
-    plannedMinimum -= 1;
+  let added = 0;
+  for (const target of targets) {
+    if (added >= 2) break;
+    if (target.targetBullets > 0 && target.routedEvidenceCount > target.targetBullets) { target.targetBullets += 1; added += 1; }
   }
-  const targetTotalBullets = Math.max(totalRange.min, Math.min(totalRange.max, Math.max(baselineTotal, densityTarget, plannedMinimum)));
-  let remaining = targetTotalBullets - plannedMinimum;
-  while (remaining > 0) {
-    const candidate = targets.filter((target) => target.employer !== currentEmployer || target.targetBullets < currentRange.max).sort((left, right) =>
-      (right.routedEvidenceCount - right.targetBullets) - (left.routedEvidenceCount - left.targetBullets)
-      || right.routedEvidenceCount - left.routedEvidenceCount)[0];
-    if (!candidate || candidate.routedEvidenceCount <= candidate.targetBullets) break;
-    candidate.targetBullets += 1;
-    remaining -= 1;
-  }
+  const targetTotalBullets = Math.max(1, baselineTotal + added);
   const customerTarget = customerFacingTarget(jobDescription);
   const customerFacingEvidenceIds = rows
     .filter((row) => row.employer === currentEmployer)
@@ -531,13 +524,13 @@ export function narrativeStoryLines(profile?: CandidateProfile | null): string[]
 }
 
 /** Profile-driven run instructions (truth boundaries, anti-slop strictness, confidential names). */
-export function profileInstructionLines(profile?: CandidateProfile | null): string[] {
+export function profileInstructionLines(profile?: CandidateProfile | null, writeLetter = true): string[] {
   const boundaries = (profile?.truth.boundaries ?? []).map((line) => line.trim()).filter(Boolean);
   const confidentialNames = profile?.truth.confidentialNames ?? [];
   const relaxed = profile?.preferences.voice.antiSlopStrictness === "standard";
   const letter = profile?.preferences?.coverLetter;
   return [
-    ...(letter?.length ? [`Cover letters: ${letter.length.min}–${letter.length.max} words, ${letter.focus === "examples" ? "led by one or two real examples" : "led by the career story (where I started, why I moved, how I work now)"}; coverLetterBrief has the full structure.`] : []),
+    ...(writeLetter && letter?.length ? [`Cover letters: ${letter.length.min}–${letter.length.max} words, ${letter.focus === "examples" ? "led by one or two real examples" : "led by the career story (where I started, why I moved, how I work now)"}; coverLetterBrief has the full structure.`] : []),
     ...(boundaries.length ? [`The candidate's own truth boundaries (never cross them): ${boundaries.join(" ")}`] : []),
     confidentialNames.length
       ? `Never name these clients or partners in the resume or cover letter; describe them by industry instead (naming the industry is fine): ${confidentialNames.join(", ")}.`
@@ -604,7 +597,7 @@ async function resumeReferenceText(path: string, content: Buffer): Promise<strin
   return undefined;
 }
 
-function evidenceRows(markdown: string, sourcePath: string, sourceFamily: string | null): EvidenceSnapshotRow[] {
+function evidenceRows(markdown: string, sourcePath: string, sourceFamily: string | null, candidateFilesEligible = false): EvidenceSnapshotRow[] {
   const sourceRole = metadataValue(markdown, "source_role");
   const defaultConfidence = metadataValue(markdown, "confidence");
   const rows = new Map<string, EvidenceSnapshotRow>();
@@ -635,7 +628,7 @@ function evidenceRows(markdown: string, sourcePath: string, sourceFamily: string
         sourceLocator: value(["source locator"]) || metadataValue(markdown, "source_locator"),
         confidence,
         classification,
-        eligibility: eligibilityFor(classification, publicUse),
+        eligibility: eligibilityFor(classification, publicUse, candidateFilesEligible),
       });
     }
   }
@@ -766,6 +759,11 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       warnings: [error instanceof Error ? error.message : String(error)],
     }));
 
+  // Recruiter plan R4: one switch decides whether every checked candidate file is eligible evidence on its own.
+  const candidateFilesEligible = featuresFor(currentEdition()).candidateFilesEligible;
+  // Ledger T8: the base resume's own lines are evidence (both editions).
+  rows.push(...baseResumeRows(canonicalResult.canonicalResume, manifest.baseResumePath));
+
   const fileContents = await Promise.all(
     allPaths.map(async (relativePath) => {
       const absolutePath = assertInsideWorkspace(workspace, join(workspace, relativePath));
@@ -786,7 +784,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
     const role = sourceRole(relativePath, manifest);
     const text = /\.(?:md|txt|json)$/i.test(relativePath)
       ? content.toString("utf8")
-      : role === "secondary-resume"
+      : role === "secondary-resume" || (candidateFilesEligible && role === "linkedin")
         ? await resumeReferenceText(relativePath, content)
         : undefined;
     const manifestSource = manifest.sourceFiles.find((source) => source.path === relativePath);
@@ -797,7 +795,11 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       sourceRole: role,
       ...(text && (role === "structured" || role === "employer-context" || role === "broad" || role === "policy" || role === "secondary-resume") ? { contextText: text } : {}),
     });
-    if (role === "structured" && text) rows.push(...evidenceRows(text, relativePath, manifestSource?.sourceFamily ?? null));
+    const tableRows = role === "structured" && text ? evidenceRows(text, relativePath, manifestSource?.sourceFamily ?? null, candidateFilesEligible) : [];
+    rows.push(...tableRows);
+    if (candidateFilesEligible && text && !tableRows.length && (role === "structured" || role === "broad" || role === "secondary-resume" || role === "linkedin")) {
+      rows.push(...candidateFileRows(text, relativePath, manifestSource?.sourceFamily ?? null, canonicalResult.canonicalResume?.employers ?? []));
+    }
     if (role === "structured" && text && /^\s*[-*]\s*employer:\s*none\b/im.test(text)) noEmployerPaths.add(relativePath);
     if (role === "job-description" && text) {
       jobDescriptionText = text;
@@ -825,19 +827,29 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
   const currentEmployerStartYear = Number(/\b(?:19|20)\d{2}\b/.exec(canonicalResult.canonicalResume?.employers[0]?.dateRange ?? "")?.[0]) || null;
   const normalizedRows = rows.map((row) => ({
     ...row,
-    employer: row.evidenceId.startsWith("job:") || noEmployerPaths.has(row.sourcePath) ? null : inferEmployer(row, canonicalEmployers, candidateProfile, currentEmployerStartYear),
+    employer: row.evidenceId.startsWith(BASE_ROW_PREFIX) || row.evidenceId.startsWith(FILE_ROW_PREFIX) ? row.employer ?? null : row.evidenceId.startsWith("job:") || noEmployerPaths.has(row.sourcePath) ? null : inferEmployer(row, canonicalEmployers, candidateProfile, currentEmployerStartYear),
   })).sort((a, b) => a.evidenceId.localeCompare(b.evidenceId));
   // The best eligible row for each of the posting's requirements is always routed, so the run can cite
   // the closest real evidence even for a gap.
-  const citableRows = normalizedRows.filter((row) => row.eligibility === "eligible" && !row.evidenceId.startsWith("job:"));
+  // Base-resume rows stand in for a requirement only where they earn fit credit (noFitCredit owns the rule).
+  const citableRows = normalizedRows.filter((row) => row.eligibility === "eligible" && !row.evidenceId.startsWith("job:") && !noFitCredit(row.evidenceId));
   const mustHaveEvidenceIds = postingRecordFor(jobDescriptionText).requirements
     .map((requirement) => bestEvidenceForRequirement(requirement.text, citableRows))
     .filter((id): id is string => Boolean(id));
   const applicationRouting = buildApplicationRouting(normalizedRows, jobDescriptionText, mustHaveEvidenceIds, canonicalEmployers);
+  // Recruiter plan R7: whether this run writes a cover letter (src/shared/cover-letter-policy.ts owns the rule).
+  const voicePath = candidateProfile?.sources.applicationVoicePath ?? APPLICATION_VOICE_PROFILE_PATH;
+  const hasVoice = Boolean((await readFile(assertInsideWorkspace(workspace, join(workspace, voicePath)), "utf8").catch(() => "")).trim());
+  const coverLetterPlan = coverLetterPlanFor(candidateProfile, {
+    hasVoice,
+    careerFiles: countCareerFiles(manifest.selectedCareerPaths ?? [], manifest.secondaryResumePaths.length, Boolean(manifest.linkedinProfilePath)),
+    optIn: featuresFor(currentEdition()).coverLetterOptIn,
+  });
   const snapshotCore = {
     schemaVersion: 1 as const,
     jobId,
     manifestHash,
+    coverLetterPlan,
     baseResumePath: manifest.baseResumePath,
     baseResumeFootprint,
     canonicalResume: canonicalResult.canonicalResume,
@@ -1022,17 +1034,22 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       styleRules: compactStyleRules(stylePolicy, candidateProfile),
       resumePlan,
       provenLines: await provenLinesFor(workspace, new Set(snapshot.applicationRouting.selectedEvidenceIds), (id) => evidenceById.get(id)?.employer ?? null),
-      coverLetterBrief: buildCoverLetterBrief(jobDescriptionText, canonicalJob, candidateProfile),
+      ...(snapshot.coverLetterPlan?.write === false ? {} : { coverLetterBrief: buildCoverLetterBrief(jobDescriptionText, canonicalJob, candidateProfile) }),
       instructions: [
         "Use only evidenceRows for candidate facts; preserve employer, timeline, scope, eligibility, and classification ceilings.",
-        "Resume scope: keep earlier, less relevant roles verbatim from resumeTemplate.employers[i].baselineBullets. At the current employer, rework the 3-4 bullets that matter most for this job and keep the rest of its baseline bullets as anchors; curate the skills lines for the role.",
+        "Resume scope: keep earlier, less relevant roles verbatim from resumeTemplate.employers[i].baselineBullets. At the current employer, rework the 3-4 bullets that matter most for this job and keep the rest of its baseline bullets as anchors.",
+        "Length and skills follow the base resume (owner of this rule): every role keeps at least its baseline number of bullets (resumePlan.employerTargets); a weaker bullet may be replaced by a stronger supported one, never dropped. Keep every skills item from the base resume: lead with what this job needs, add supported items, and remove an item only when nothing supports it. Skills the posting does not ask for still show the candidate's range, so they stay. The resume keeps the base resume's page count.",
         "Unchanged baseline bullets are the candidate's own approved claims: copy them word for word with the evidenceIds listed in baselineBullets (often none). Never attach an unrelated evidence ID to make a bullet look supported.",
-        "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. Never add an event, metric, tool, or ownership that did not happen.",
-        ...profileInstructionLines(candidateProfile),
+        "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. The base resume is evidence too (owner of this rule): rows with `base:` IDs are its own lines, so a base line reworded for this job may cite its own `base:` row, and a candidate with only a base resume still gets a close tailoring. Whatever a line cites, it may not add an event, metric, tool, or ownership the cited rows do not state. " + (baseEarnsFitCredit() ? "`base:` rows also count when rating requirements." : "`base:` rows earn no fit credit; rate requirements from the other rows."),
+        ...profileInstructionLines(candidateProfile, snapshot.coverLetterPlan?.write !== false),
         "Maintain natural bullet length (~16-20 words) matching the baseline footprint; no word-by-word arithmetic.",
         "provenLines (owner of this rule) are lines from tailored resumes that got the candidate a real interview, each with its evidenceIds (all routed to this job). When you rewrite a bullet at the same employer from the same evidence, prefer that proven wording, adjusted lightly for this job; never move a line to another employer.",
-        "Cover letter: follow coverLetterBrief exactly. It owns the structure, opening, word range, and banned phrases. Do not use any other cover-letter structure.",
-        "Only cite eligible evidence rows for standalone claims; do not cite a single corroboration-required row alone.",
+        snapshot.coverLetterPlan?.write === false
+          ? `No cover letter for this job (owner of this rule): ${snapshot.coverLetterPlan.reason} Leave coverLetter out of the bundle; never write a generic letter.`
+          : "Cover letter: follow coverLetterBrief exactly. It owns the structure, opening, word range, and banned phrases. Do not use any other cover-letter structure.",
+        ...(candidateFilesEligible
+          ? ["Every checked candidate file is evidence on its own: rows from other resumes, LinkedIn, notes, and recruiter notes (`file:` IDs among them) are eligible and may back a claim alone, as written."]
+          : ["Only cite eligible evidence rows for standalone claims; do not cite a single corroboration-required row alone."]),
         "Use direct, natural wording; denylistRules always win. Apply styleRules to wording only, never as evidence.",
         resumePlan.customerFacingRole
           ? `Include ${resumePlan.targetCurrentEmployerCustomerBullets} supported current-employer customer-facing bullets and retain a technical foundation.`

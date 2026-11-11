@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SENIORITY_LEVELS, WORK_MODES } from "./posting";
 import { jobHealthSchema } from "./job-record";
 import type { Readiness } from "./readiness";
 import type { JobSearchSettings, JobSearchState, ScheduleInfo, SearchRun, SearchStatus, WatchedSuggestion } from "./job-search";
@@ -81,6 +82,24 @@ export const interviewLogisticsSchema = z.object({
 export type InterviewLogistics = z.infer<typeof interviewLogisticsSchema>;
 export const EMPTY_INTERVIEW_LOGISTICS: InterviewLogistics = { location: "", workAuthorization: "", compensation: "", noticePeriod: "", workArrangement: "" };
 
+/**
+ * The jobs a candidate is looking for (Recruiter Edition, plan R5): used to suggest who a posting suits. Every field
+ * is optional; an empty one is never held against a posting.
+ */
+export const candidateTargetsSchema = z.object({
+  /** Role titles, e.g. "Support Engineer", "Customer Success Manager". */
+  roles: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
+  /** Places they can work from, e.g. "Denver", "Colorado", "United States". Ignored for remote postings. */
+  locations: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
+  workModes: z.array(z.enum(WORK_MODES)).default([]),
+  level: z.enum(SENIORITY_LEVELS).nullable().default(null),
+  /** Lowest yearly pay they'd take, in US dollars. */
+  salaryFloor: z.number().int().nonnegative().max(10_000_000).nullable().default(null),
+  needsSponsorship: z.boolean().default(false),
+});
+export type CandidateTargets = z.infer<typeof candidateTargetsSchema>;
+export const EMPTY_CANDIDATE_TARGETS: CandidateTargets = { roles: [], locations: [], workModes: [], level: null, salaryFloor: null, needsSponsorship: false };
+
 export const candidateProfileSchema = z.object({
   schemaVersion: z.literal(1),
   identity: z.object({
@@ -130,6 +149,8 @@ export const candidateProfileSchema = z.object({
       length: coverLetterLengthSchema.default(DEFAULT_COVER_LETTER_LENGTH),
       /** What carries the letter: the career story (default) or one or two worked examples. */
       focus: z.enum(COVER_LETTER_FOCUS).default("career-story"),
+      /** Write cover letters at all; null = the edition's default (on in solo, off in the Recruiter Edition). */
+      enabled: z.boolean().nullable().default(null),
     }),
     voice: voiceSettingsSchema.default({
       tonePreset: "direct_outcomes",
@@ -139,6 +160,7 @@ export const candidateProfileSchema = z.object({
       narrativeDepth: "journey_first",
     }),
     interview: interviewLogisticsSchema.default(EMPTY_INTERVIEW_LOGISTICS),
+    targets: candidateTargetsSchema.default(EMPTY_CANDIDATE_TARGETS),
   }),
   truth: z.object({
     factualAuthority: z.string().default("Selected structured career evidence"),
@@ -620,6 +642,10 @@ export const canonicalResumeBaselineSchema = z.object({
   employers: z.array(canonicalResumeEmployerSchema).min(1),
   educationHeadingLine: z.string().min(1),
   educationLines: z.array(z.string().min(1)).min(1),
+  /** The base resume's own section order ("summary", "skills", "experience", "education", "extra:N"); kept on every draft. */
+  sectionOrder: z.array(z.string().regex(/^(?:summary|skills|experience|education|extra:\d+)$/)).optional(),
+  /** Other sections (licenses, certifications, projects…), kept word for word. */
+  extraSections: z.array(z.object({ headingLine: z.string().min(1), lines: z.array(z.string().min(1)) })).optional(),
   originalSkillsLines: z.array(z.string().min(1)).min(1),
   footprint: resumeFootprintSchema,
   warnings: z.array(z.string()).default([]),
@@ -646,7 +672,7 @@ export const applicationDraftSchema = z.object({
     salutation: z.string().min(1),
     bodyParagraphs: z.array(z.string().min(1)).min(1),
     closing: z.string().min(1).default("Sincerely,"),
-  }).strict(),
+  }).strict().nullable().default(null),
 }).strict();
 export type ApplicationDraft = z.infer<typeof applicationDraftSchema>;
 
@@ -698,6 +724,8 @@ export const evidenceSnapshotSchema = z.object({
   manifestHash: z.string().min(1),
   baseResumePath: z.string().min(1),
   baseResumeFootprint: resumeFootprintSchema.optional(),
+  /** Whether this run writes a cover letter (src/shared/cover-letter-policy.ts); old snapshots always did. */
+  coverLetterPlan: z.object({ write: z.boolean(), reason: z.string().nullable(), missing: z.array(z.string()).default([]), off: z.boolean().default(false) }).optional(),
   canonicalResume: canonicalResumeBaselineSchema.nullable().optional(),
   canonicalResumeWarnings: z.array(z.string()).default([]),
   secondaryResumePaths: z.array(z.string()),
@@ -967,7 +995,7 @@ export const applicationEvidenceSchema = z.object({
       timeline: careerArcTimelineSchema,
       evidenceIds: z.array(z.string().min(1)).min(1),
     })).min(2),
-  }),
+  }).nullable().default(null),
   excludedClaims: z.array(z.string()).default([]),
   warnings: z.array(z.string()).default([]),
 });
@@ -1006,7 +1034,7 @@ export const applicationBundleSchema = z.object({
       sentences: z.array(evidenceLinkedTextSchema).min(1),
     }).strict()).min(1),
     closing: z.string().min(1).default("Sincerely,"),
-  }).strict(),
+  }).strict().nullable().optional(),
   excludedClaims: z.array(z.string()).default([]),
   warnings: z.array(z.string()).default([]),
 }).strict();
@@ -1070,6 +1098,8 @@ export const applicationValidationReportSchema = z.object({
   fitScore: z.number().min(0).max(5).nullable().default(null),
   fitConfidence: z.enum(["high", "medium", "low"]).nullable().default(null),
   gateStatus: z.string().nullable().default(null),
+  /** Why no cover letter was written for this run (null when one was); shown on the job page. */
+  coverLetterSkipped: z.string().nullable().default(null),
   ats: z.object({
     status: z.enum(["passed", "warning", "not_exported", "unavailable"]),
     pdfPath: z.string().nullable(),
@@ -1220,6 +1250,43 @@ export type ContentReviewInfo = { added: ContentItemInfo[]; upgraded: Array<{ be
 export type ContextImportResult = { added: string[]; skipped: Array<{ name: string; reason: string }> };
 
 export interface SenseiApi {
+  /** Recruiter Edition only: the candidate list and switching (electron/candidate-ipc.ts). */
+  candidates: {
+    state(): Promise<import("./candidates").CandidatesState>;
+    /** Adds a candidate with their base resume, extra files, and notes, then opens them; reload the window afterwards. */
+    add(name: string, intake?: { resumePath?: string | null; files?: string[]; notes?: string | null }): Promise<{ entry: import("./candidates").CandidateEntry; resume: { ok: true; lines: string[] } | { ok: false; message: string } | null; files: string[]; skipped: Array<{ name: string; reason: string }> }>;
+    /** Absolute paths of a chosen resume or extra files; empty when cancelled. */
+    chooseFiles(kind: "resume" | "files"): Promise<string[]>;
+    /** Opens another candidate; reload the window afterwards. */
+    switchTo(id: string): Promise<void>;
+    /** Closes the open candidate; reload to show the Candidates page. */
+    showAll(): Promise<void>;
+    rename(id: string, name: string): Promise<import("./candidates").CandidateEntry>;
+    setStatus(id: string, status: import("./candidates").CandidateStatus): Promise<import("./candidates").CandidateEntry>;
+    /** The open candidate's recruiter notes (recruiter plan R4). */
+    notes(): Promise<string>;
+    /** Saves them as a context file and returns its path, to be checked for Agy. */
+    saveNotes(notes: string): Promise<string>;
+    /** Another candidate with jobs waiting, so the queue can move on to them (recruiter plan R5). */
+    nextQueued(): Promise<{ id: string; name: string; waiting: number } | null>;
+    /** Saves a .zip of the candidate's folder where the recruiter chooses; null when cancelled (recruiter plan R6). */
+    exportCandidate(candidateId: string): Promise<{ path: string; files: number } | null>;
+    /** Deletes a candidate for good; the typed name must match. Returns what was removed. */
+    deleteCandidate(candidateId: string, typedName: string): Promise<{ name: string; removed: string[] }>;
+    /** A drafted job's resume lines, what changed from the base, and the evidence behind each change (recruiter plan R8). */
+    review(jobId: string): Promise<import("./review").ApplicationReview>;
+    /** Every job across candidates (recruiter plan R5). */
+    pipeline(): Promise<import("./candidate-match").PipelineRow[]>;
+    /** Sets one status on several jobs; returns each job's status before, for Undo. */
+    setPipelineStatus(entries: Array<{ candidateId: string; jobId: string }>, status: TrackerStatus): Promise<Array<{ candidateId: string; jobId: string; previous: TrackerStatus }>>;
+    /** Posting library: fetch or save a posting once, then send it to one or more candidates. */
+    stageLink(url: string, postingId: string): Promise<import("./candidate-match").LibraryPosting>;
+    stagePaste(text: string, postingId: string): Promise<import("./candidate-match").LibraryPosting>;
+    setPostingCompany(postingId: string, company: string): Promise<import("./candidate-match").LibraryPosting>;
+    suggest(postingId: string): Promise<import("./candidate-match").CandidateSuggestion[]>;
+    /** Returns the open candidate's queue item (the window adds it) and who else got it. */
+    send(postingId: string, candidateIds: string[]): Promise<{ active: { pasteId: string; label: string | null } | null; queued: string[] }>;
+  };
   setup: {
     readiness(): Promise<Readiness>;
   };

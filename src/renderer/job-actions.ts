@@ -53,27 +53,30 @@ export function buildJobActions(job: JobFolderSummary | null, interview: Intervi
   const nextRound = next.kind === "practice" ? interview?.rounds.find((round) => round.id === next.roundId) ?? null : null;
   const debriefRound = [...(interview?.rounds ?? [])].reverse().find((round) => round.debriefSourcePaths.length && !round.artifactPaths.debriefAnalysis) ?? null;
 
-  if (debriefRound) {
-    add("analyze-debrief", `Analyze ${company} debrief`, `${named} debrief`, "Recommended", true);
-  } else if (nextRound?.stage === "technical_challenge" && !nextRound.artifactPaths.practiceLabs) {
-    add("prepare-current-challenge", `Prepare ${company} technical challenge`, `${named} technical challenge`, "Recommended", true);
-  } else if (nextRound) {
-    const words = stageWords(nextRound.stage);
-    add("start-current-mock", `Practice ${words}`, `Start ${named} ${words} mock`, "Recommended", true);
-  } else if (next.kind === "prepare") {
-    const words = stageWords(next.stage);
-    add("prepare-next-round", `Prepare ${words}`, `Prepare ${named} ${words}`, "Recommended", true);
-  } else {
-    add("evaluate-application", "Evaluate application", `Evaluate ${named} application`, "Recommended", true);
-  }
+  // Interview prep, mocks, and debriefs exist only where interviews do (the Recruiter Edition stops at applying).
+  if (FEATURES.interviews) {
+    if (debriefRound) {
+      add("analyze-debrief", `Analyze ${company} debrief`, `${named} debrief`, "Recommended", true);
+    } else if (nextRound?.stage === "technical_challenge" && !nextRound.artifactPaths.practiceLabs) {
+      add("prepare-current-challenge", `Prepare ${company} technical challenge`, `${named} technical challenge`, "Recommended", true);
+    } else if (nextRound) {
+      const words = stageWords(nextRound.stage);
+      add("start-current-mock", `Practice ${words}`, `Start ${named} ${words} mock`, "Recommended", true);
+    } else if (next.kind === "prepare") {
+      const words = stageWords(next.stage);
+      add("prepare-next-round", `Prepare ${words}`, `Prepare ${named} ${words}`, "Recommended", true);
+    } else {
+      add("evaluate-application", "Evaluate application", `Evaluate ${named} application`, "Recommended", true);
+    }
 
-  add("recruiter-interview", "Prepare recruiter interview", `Prepare ${named} recruiter interview`, "Interview");
-  add("hiring-manager-interview", "Prepare hiring manager interview", `Prepare ${named} hiring manager interview`, "Interview");
-  add("technical-interview", "Prepare technical interview", `Prepare ${named} technical interview`, "Interview");
-  add("technical-challenge", "Prepare technical challenge", `${named} technical challenge`, "Interview");
-  add("team-panel-interview", "Prepare team panel interview", `Prepare ${named} team panel interview`, "Interview");
-  if (current) add("mock-interview", "Start current-round mock", `Start ${named} ${stageWords(current.stage)} mock`, "Interview");
-  if (current?.debriefSourcePaths.length) add("debrief", "Analyze latest debrief", `${named} debrief`, "Interview");
+    add("recruiter-interview", "Prepare recruiter interview", `Prepare ${named} recruiter interview`, "Interview");
+    add("hiring-manager-interview", "Prepare hiring manager interview", `Prepare ${named} hiring manager interview`, "Interview");
+    add("technical-interview", "Prepare technical interview", `Prepare ${named} technical interview`, "Interview");
+    add("technical-challenge", "Prepare technical challenge", `${named} technical challenge`, "Interview");
+    add("team-panel-interview", "Prepare team panel interview", `Prepare ${named} team panel interview`, "Interview");
+    if (current) add("mock-interview", "Start current-round mock", `Start ${named} ${stageWords(current.stage)} mock`, "Interview");
+    if (current?.debriefSourcePaths.length) add("debrief", "Analyze latest debrief", `${named} debrief`, "Interview");
+  }
 
   if (application?.publicResumePath) add("review-resume", "Review tailored resume", `${named} resume`, "Application");
   add("review-cover-letter", "Review cover letter", `${named} cover letter`, "Application");

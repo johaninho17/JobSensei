@@ -7,7 +7,8 @@ const AUDIT_END = "<!-- jobsensei-application-audit:end -->";
 type EvaluationAuditInput = {
   resumeName: string;
   resumeMarkdown: string;
-  coverMarkdown: string;
+  /** Null when this run wrote no letter (src/shared/cover-letter-policy.ts). */
+  coverMarkdown: string | null;
   evidence: ApplicationEvidence;
   report: ApplicationValidationReport;
 };
@@ -39,6 +40,7 @@ export function mergeEvaluationAudit(evaluationMarkdown: string, input: Evaluati
   let coverWords: number | null = null;
   let coverParagraphs: number | null = null;
   try {
+    if (!input.coverMarkdown) throw new Error("no letter");
     const coverStats = validateApplicationArtifact(input.coverMarkdown, "cover-letter");
     coverWords = coverStats.wordCount;
     coverParagraphs = coverStats.paragraphCount;
@@ -52,7 +54,7 @@ export function mergeEvaluationAudit(evaluationMarkdown: string, input: Evaluati
   const generalIssues = input.report.issues.filter((candidate) =>
     !resumeIssues.includes(candidate) && !coverIssues.includes(candidate));
   const resumeEvidenceIds = new Set(input.evidence.resume.claimMappings.flatMap((mapping) => mapping.evidenceIds));
-  const coverEvidenceIds = new Set(input.evidence.coverLetter.claimMappings.flatMap((mapping) => mapping.evidenceIds));
+  const coverEvidenceIds = new Set((input.evidence.coverLetter?.claimMappings ?? []).flatMap((mapping) => mapping.evidenceIds));
   const excluded = input.evidence.excludedClaims.length
     ? input.evidence.excludedClaims.map((claim) => `- ${claim}`)
     : ["- None recorded."];
@@ -72,21 +74,27 @@ export function mergeEvaluationAudit(evaluationMarkdown: string, input: Evaluati
     "### Resume Findings",
     ...issueLines(resumeIssues),
     "",
-    "## Cover Letter Audit",
-    "- **Artifact:** `cover_letter.md`",
-    `- **Review status:** ${coverIssues.length ? "Review findings recorded" : "Passed"}`,
-    `- **Word count:** ${coverWords ?? "Unavailable"}`,
-    `- **Body paragraphs:** ${coverParagraphs ?? "Unavailable"}`,
-    `- **Mapped public claims:** ${input.evidence.coverLetter.claimMappings.length}`,
-    `- **Evidence references:** ${coverEvidenceIds.size}`,
-    `- **Career-arc stages:** ${input.evidence.coverLetter.careerArc.length}`,
-    "",
-    "### Career Arc",
-    ...input.evidence.coverLetter.careerArc.map((stage) => `- **${stage.timeline}:** ${stage.stage}`),
-    "",
-    "### Cover Letter Findings",
-    ...issueLines(coverIssues),
-    "",
+    ...(input.evidence.coverLetter ? [
+      "## Cover Letter Audit",
+      "- **Artifact:** `cover_letter.md`",
+      `- **Review status:** ${coverIssues.length ? "Review findings recorded" : "Passed"}`,
+      `- **Word count:** ${coverWords ?? "Unavailable"}`,
+      `- **Body paragraphs:** ${coverParagraphs ?? "Unavailable"}`,
+      `- **Mapped public claims:** ${input.evidence.coverLetter!.claimMappings.length}`,
+      `- **Evidence references:** ${coverEvidenceIds.size}`,
+      `- **Career-arc stages:** ${input.evidence.coverLetter!.careerArc.length}`,
+      "",
+      "### Career Arc",
+      ...input.evidence.coverLetter!.careerArc.map((stage) => `- **${stage.timeline}:** ${stage.stage}`),
+      "",
+      "### Cover Letter Findings",
+      ...issueLines(coverIssues),
+      "",
+    ] : [
+      "## Cover Letter Audit",
+      `- **Not written:** ${input.report.coverLetterSkipped ?? "No cover letter for this run."}`,
+      "",
+    ]),
     "## Overall Application Review",
     `- **Status:** ${reviewLabel(input.report)}`,
     `- **Run:** \`${input.report.runId ?? "Unavailable"}\``,

@@ -162,7 +162,7 @@ After a job reaches interview stage, a short Agy prompt such as `Example Labs in
 - Agy runs with the local permissions of the user operating the embedded terminal.
 - JobSensei does not connect an email account or bundled model provider.
 
-Read [Privacy](docs/privacy.md) and [Security](SECURITY.md) before adding sensitive files or publishing a fork.
+What the app stores and what leaves your computer: [PRIVACY.md](PRIVACY.md) (also in the app under Settings → Privacy and data). Terms: [TERMS.md](TERMS.md). Before publishing a fork, read the [builder checklist](docs/privacy.md) and [Security](SECURITY.md).
 
 ## Development
 

@@ -8,7 +8,7 @@ Use the strongest available source and preserve uncertainty.
 | Selected `data/context/broad/` | Raw supporting context selected by the user | Never read unselected broad files or double-count their structured derivatives |
 | Shared `source_family` files | Related raw and normalized representations of one source | Use the richest selected representation; never count derivatives as independent evidence |
 | LinkedIn profile | Education, skills, career history, and professional corroboration | Reconcile conflicting dates or titles |
-| Base resume | Identity, chronology, dates, presentation structure, and the candidate's approved bullets (usable word for word) | No fit-score credit; rewritten claims need context evidence; do not treat omitted experience as a gap |
+| Base resume | Identity, chronology, dates, presentation structure, and the candidate's approved bullets (usable word for word) | No fit-score credit; rewritten claims need evidence rows (its own `base:` rows count; see the snapshot instructions); do not treat omitted experience as a gap |
 | Secondary resumes | Older experience and historical corroboration | Lower weight; do not override stronger sources silently |
 | `data/jobs/<job-id>/` | Job-specific notes, drafts, transcripts, and feedback | Keep claims scoped to that job unless independently supported |
 

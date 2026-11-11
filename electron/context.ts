@@ -8,6 +8,8 @@ import { listResumePaths } from "./files";
 import { listJobFolders } from "./job-folders";
 import { readJson, writeJsonAtomic } from "./persistence";
 import { assertInsideWorkspace, logicalPath, workspaceFile } from "./workspace";
+import { currentEdition } from "./edition";
+import { featuresFor } from "../src/shared/edition";
 
 const CONTEXT_ROOTS = ["context/structured", "context/broad", "resumes", "cover-letters"];
 const PRIMARY_CONTEXT_ROOTS = ["context/structured"];
@@ -103,7 +105,7 @@ export async function buildContextManifest(workspacePath: string, selection: Con
     scope: selectedJobIds.length ? "selected-jobs" : "career-context",
     sourceFiles: sourceFiles.sort((a, b) => a.path.localeCompare(b.path)),
     generatedAt: new Date().toISOString(),
-    instructions: `Use only the selected files in this manifest. Selected structured context: ${selectedStructuredPaths.join(", ") || "none"}. Selected broad context: ${selectedBroadPaths.join(", ") || "none"}. Do not read unselected files or count related source families as independent evidence. Employer-context describes company scale only and cannot support candidate claims. Always enforce ${POLICY_PATHS.join(", ")} as policy. The configured base resume (${resumePaths.baseResumePath ?? "missing"}) controls identity, chronology, structure, and presentation; selected structured evidence controls factual claims. Secondary resumes and LinkedIn are lower-weight historical or corroboration sources. Missing evidence is a gap, never permission to invent or reuse conversation memory. Job evidence is limited to selected files.`,
+    instructions: `Use only the selected files in this manifest. Selected structured context: ${selectedStructuredPaths.join(", ") || "none"}. Selected broad context: ${selectedBroadPaths.join(", ") || "none"}. Do not read unselected files or count related source families as independent evidence. Employer-context describes company scale only and cannot support candidate claims. Always enforce ${POLICY_PATHS.join(", ")} as policy. The configured base resume (${resumePaths.baseResumePath ?? "missing"}) controls identity, chronology, structure, and presentation; selected structured evidence controls factual claims. ${featuresFor(currentEdition()).candidateFilesEligible ? "Every selected candidate file, including secondary resumes, LinkedIn, and notes, is evidence on its own." : "Secondary resumes and LinkedIn are lower-weight historical or corroboration sources."} Missing evidence is a gap, never permission to invent or reuse conversation memory. Job evidence is limited to selected files.`,
   });
   await writeJsonAtomic(join(workspacePath, MANIFEST_PATH), manifest);
   return manifest;

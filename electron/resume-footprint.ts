@@ -3,6 +3,7 @@ import { extname, resolve } from "node:path";
 import mammoth from "mammoth";
 import { resumeFootprintSchema, type ResumeFootprint } from "../src/shared/schemas";
 import { assertInsideWorkspace } from "./workspace";
+import { experienceBulletLines, mammothHtmlToMarkdown } from "./resume-sections";
 
 const MIN_FOOTPRINT_RATIO = 0.9;
 const MAX_FOOTPRINT_RATIO = 1.15;
@@ -26,9 +27,9 @@ export async function profileBaseResume(workspacePath: string, relativePath: str
 
 export function markdownFootprint(sourcePath: string, markdown: string): ResumeFootprint {
   const wordCount = countWords(markdown);
-  const bullets = experienceBullets(markdown);
+  // Experience is found exactly as the parser finds it (resume-sections.ts), whatever the heading is called.
+  const { all: bullets, firstEmployer: currentEmployerBullets } = experienceBulletLines(markdown);
   const experienceWordCount = countWords(bullets.join(" "));
-  const currentEmployerBullets = firstEmployerBullets(markdown);
   return resumeFootprintSchema.parse({
     sourcePath,
     format: "markdown",
@@ -52,18 +53,11 @@ async function docxFootprint(sourcePath: string, buffer: Buffer): Promise<Resume
     mammoth.convertToHtml({ buffer }),
   ]);
   const wordCount = countWords(raw.value);
-  const professionalHtml = sectionHtml(html.value, "PROFESSIONAL EXPERIENCE", "EDUCATION");
-  const lists = [...professionalHtml.matchAll(/<ul[^>]*>([\s\S]*?)<\/ul>/gi)]
-    .map((match) => match[1]);
-  const listCounts = lists
-    .map((list) => list.match(/<li\b/gi)?.length ?? 0)
-    .filter((count) => count > 0);
-  const experienceText = lists
-    .flatMap((list) => [...list.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map((match) => stripHtml(match[1])))
-    .join(" ");
-  const experienceWordCount = countWords(experienceText);
-  const experienceBulletCount = listCounts.reduce((sum, count) => sum + count, 0) || null;
-  const currentEmployerBulletCount = listCounts[0] ?? null;
+  // The same Markdown the parser reads, so Experience is found the same way for Word files.
+  const { all: bullets, firstEmployer } = experienceBulletLines(mammothHtmlToMarkdown(html.value));
+  const experienceWordCount = countWords(bullets.join(" "));
+  const experienceBulletCount = bullets.length || null;
+  const currentEmployerBulletCount = firstEmployer.length || null;
   const reliable = experienceBulletCount !== null && currentEmployerBulletCount !== null;
   return resumeFootprintSchema.parse({
     sourcePath,
@@ -133,41 +127,7 @@ function countWords(value: string): number {
   return plain.match(/\b[\p{L}\p{N}][\p{L}\p{N}'’+./&-]*\b/gu)?.length ?? 0;
 }
 
-function experienceBullets(markdown: string): string[] {
-  return professionalLines(markdown)
-    .filter((line) => /^\s*[-*+]\s+/.test(line))
-    .map((line) => line.replace(/^\s*[-*+]\s+/, "").trim());
-}
 
-function firstEmployerBullets(markdown: string): string[] {
-  const lines = professionalLines(markdown);
-  const firstBullet = lines.findIndex((line) => /^\s*[-*+]\s+/.test(line));
-  if (firstBullet < 0) return [];
-  const result: string[] = [];
-  for (const line of lines.slice(firstBullet)) {
-    if (/^\s*[-*+]\s+/.test(line)) {
-      result.push(line.replace(/^\s*[-*+]\s+/, "").trim());
-      continue;
-    }
-    if (result.length > 0 && /^(?:\s*#{2,4}\s+|\s*\*\*[A-Z])/.test(line)) break;
-  }
-  return result;
-}
 
-function professionalLines(markdown: string): string[] {
-  const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-  const normalized = (line: string) => line.replace(/[*_`#]/g, "").trim().toLowerCase();
-  const start = lines.findIndex((line) => normalized(line) === "professional experience");
-  const end = lines.findIndex((line, index) => index > start && normalized(line) === "education");
-  return start >= 0 && end > start ? lines.slice(start + 1, end) : [];
-}
 
-function sectionHtml(html: string, startLabel: string, endLabel: string): string {
-  const start = html.toLowerCase().indexOf(startLabel.toLowerCase());
-  const end = html.toLowerCase().indexOf(endLabel.toLowerCase(), Math.max(0, start + startLabel.length));
-  return start >= 0 ? html.slice(start, end > start ? end : undefined) : html;
-}
 
-function stripHtml(value: string): string {
-  return value.replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&");
-}

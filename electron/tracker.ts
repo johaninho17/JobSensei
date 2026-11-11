@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { jobTrackerSchema, jobTrackerUpdateSchema, type JobTracker } from "../src/shared/schemas";
 import { readJson, writeJsonAtomic } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
+import { featuresFor } from "../src/shared/edition";
+import { currentEdition } from "./edition";
 
 const JOB_ID = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 export const DEFAULT_FOLLOW_UP_DAYS = 7;
@@ -37,7 +39,7 @@ export async function updateJobTracker(workspacePath: string, jobId: string, inp
       : statusChanged && update.status === "applied" && !current.appliedAt ? now.toISOString().slice(0, 10) : current.appliedAt,
     // Applying sets a follow-up a week out, unless the user already has one or sets one now.
     nextFollowUpAt: update.nextFollowUpAt !== undefined ? update.nextFollowUpAt
-      : statusChanged && update.status === "applied" && !current.nextFollowUpAt ? addDays(now, DEFAULT_FOLLOW_UP_DAYS) : current.nextFollowUpAt,
+      : statusChanged && update.status === "applied" && !current.nextFollowUpAt && featuresFor(currentEdition()).nudges ? addDays(now, DEFAULT_FOLLOW_UP_DAYS) : current.nextFollowUpAt,
     history: statusChanged ? [...current.history, { at: now.toISOString(), status: update.status! }].slice(-200) : current.history,
     updatedAt: now.toISOString(),
   });

@@ -1,8 +1,6 @@
 # Privacy
 
-JobSensei is local-first. The app indexes and previews files under its repository-local `data/` directory and does not upload them by itself.
-
-Agy is a separate tool. When a user invokes Agy in the embedded terminal, Agy's own account, model, network, and permission policies apply. JobSensei limits workflow instructions and exposes the active context manifest, but it cannot override the external tool's privacy terms.
+What the app stores and what leaves the computer is described once, for users, in [`PRIVACY.md`](../PRIVACY.md) (also shown in the app). This page is the builder's checklist.
 
 Before publishing or sharing the repository:
 

@@ -333,6 +333,9 @@ function validateMappedEvidence(evidenceIds: string[], sourcePaths: string[], sn
     ...snapshot.selectedBroadPaths,
     ...snapshot.selectedJobFiles,
     jobDescriptionPath,
+    // The candidate's own resumes and LinkedIn: base-resume rows (ledger T8) and, in the Recruiter Edition, line rows.
+    ...snapshot.sourceFiles.filter((source) => source.sourceRole === "base-resume" || source.sourceRole === "secondary-resume" || source.sourceRole === "linkedin").map((source) => source.path),
+    ...(snapshot.baseResumePath ? [snapshot.baseResumePath] : []),
   ]);
   for (const row of rows) {
     if (!selected.has(row.sourcePath)) throw new Error(`The audit references an unselected evidence path: ${row.sourcePath}.`);

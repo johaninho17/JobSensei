@@ -113,3 +113,12 @@ describe("Agy first-run screens", () => {
     expect(classifyAgyScreen(`Terms of Service & Data Use\n[Done]\n\n${status}`)).toBe("ready");
   });
 });
+
+describe("Agy's first-run screens", () => {
+  it("never count as ready, so the queue doesn't type a job into them", async () => {
+    const { classifyAgyScreen } = await import("../src/shared/job-queue");
+    expect(classifyAgyScreen("Welcome to Antigravity CLI!\nChoose your color scheme:\n  > terminal\n    light\n[Next]\n  ↑/↓ Navigate · enter ConfirmGemini 4 Argon · medium")).toBe("blocked");
+    expect(classifyAgyScreen("Terms of Service & Data Use\n  > [x] Yes, I agree\n[Previous]      [Done]\nToggle")).toBe("blocked");
+    expect(classifyAgyScreen("> Type your message\nGemini 4 Argon · medium")).toBe("ready");
+  });
+});

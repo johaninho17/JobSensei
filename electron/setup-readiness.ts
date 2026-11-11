@@ -1,11 +1,14 @@
 // Computes setup readiness (src/shared/readiness.ts): the single owner of what JobSensei needs before it runs and
 // what improves its drafts. Read by Get Started, the Setup page, the job queue, and the evidence snapshot.
 import { workspaceFile } from "./workspace";
+import { countCareerFiles, coverLetterPlanFor } from "../src/shared/cover-letter-policy";
 import { readdir, stat } from "node:fs/promises";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { readinessSchema, RESUME_FORMAT_HELP, RESUME_PDF_ONLY, type Readiness, type ReadinessItem } from "../src/shared/readiness";
 import type { CandidateProfile, ContextManifest, Settings } from "../src/shared/schemas";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
+import { featuresFor, type Features } from "../src/shared/edition";
+import { currentEdition } from "./edition";
 
 export type ReadinessInput = {
   workspacePath: string;
@@ -14,6 +17,8 @@ export type ReadinessInput = {
   manifest: ContextManifest | null;
   contextFileCount: number;
   agy: { installed: boolean; signedIn: boolean | null };
+  /** Defaults to this build's edition; items for left-out features are not listed. */
+  features?: Features;
 };
 
 type ResumeCheck = { ok: true; employers: number; lines: string[] } | { ok: false; message: string };
@@ -57,6 +62,7 @@ const exists = (path: string) => stat(path).then((info) => info.isFile() && info
 
 export async function computeReadiness(input: ReadinessInput): Promise<Readiness> {
   const { profile, settings, manifest } = input;
+  const features = input.features ?? featuresFor(currentEdition());
   const root = resolve(input.workspacePath);
   const items: ReadinessItem[] = [];
   const add = (item: Omit<ReadinessItem, "lines"> & { lines?: string[] }) => items.push({ lines: [], ...item });
@@ -75,7 +81,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
     id: "resume", level: "required", state: !resumePath ? "missing" : resume?.ok ? "done" : "problem", action: "resume", path: resumePath ?? "resumes",
     title: "Base resume (Word or Markdown)",
     detail: !resumePath ? `Not chosen yet. ${RESUME_FORMAT_HELP}` : resume?.ok ? `${resumePath.split("/").pop()}: read ${resume.employers} job${resume.employers === 1 ? "" : "s"}, skills, and education.` : (resume as { message: string }).message,
-    improves: "Every tailored resume keeps its layout, order, dates, and one-page length.",
+    improves: "Every tailored resume keeps its layout, section order, dates, and length (its number of pages).",
     lines: resume?.ok ? resume.lines : [],
   });
 
@@ -109,14 +115,27 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
     improves: "Cover letters about you and your path, not a summary of the job posting.",
   });
 
-  const logistics = profile?.preferences.interview;
-  const blanks = logistics ? Object.entries({ location: logistics.location, "work authorization": logistics.workAuthorization, "pay target": logistics.compensation, "notice period": logistics.noticePeriod, "work setup": logistics.workArrangement }).filter(([, value]) => !filled(value)).map(([label]) => label) : ["all"];
-  add({
-    id: "logistics", level: "recommended", state: blanks.length ? "missing" : "done", action: "logistics", path: null,
-    title: "Interview logistics",
-    detail: blanks.length ? `Missing: ${blanks.join(", ")}.` : "All filled in.",
-    improves: "Interview prep and application answers use your words for pay, location, and start date; blanks are flagged, never guessed.",
-  });
+  if (features.interviews) {
+    const logistics = profile?.preferences.interview;
+    const blanks = logistics ? Object.entries({ location: logistics.location, "work authorization": logistics.workAuthorization, "pay target": logistics.compensation, "notice period": logistics.noticePeriod, "work setup": logistics.workArrangement }).filter(([, value]) => !filled(value)).map(([label]) => label) : ["all"];
+    add({
+      id: "logistics", level: "recommended", state: blanks.length ? "missing" : "done", action: "logistics", path: null,
+      title: "Interview logistics",
+      detail: blanks.length ? `Missing: ${blanks.join(", ")}.` : "All filled in.",
+      improves: "Interview prep and application answers use your words for pay, location, and start date; blanks are flagged, never guessed.",
+    });
+  }
+
+  if (features.candidates) {
+    const targets = profile?.preferences.targets;
+    const set = targets ? [targets.roles.length && "roles", targets.workModes.length && "work setup", targets.locations.length && "locations", targets.level && "level", targets.salaryFloor && "pay floor"].filter(Boolean) as string[] : [];
+    add({
+      id: "targets", level: "recommended", state: set.length ? "done" : "missing", action: "targets", path: null,
+      title: "Job targets",
+      detail: set.length ? `Set: ${set.join(", ")}.` : "Not set yet: roles, work setup, locations, level, pay floor.",
+      improves: "\"Who is this for?\" suggests this candidate for postings that fit, and says why.",
+    });
+  }
 
   const names = profile?.truth.confidentialNames ?? [];
   add({
@@ -143,13 +162,48 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
     improves: "Cross-checks your dates, titles, and wording.",
   });
 
-  const hasStoryBank = await exists(workspaceFile(root, "profile/story_bank.md"));
-  add({
-    id: "story-bank", level: "recommended", state: hasStoryBank ? "done" : "later", action: "none", path: "profile/story_bank.md",
-    title: "Story bank",
-    detail: hasStoryBank ? "Ready." : "Made automatically on your first interview prep.",
-    improves: "Interview answers use your best real examples, without repeats.",
-  });
+  // Recruiter plan R7: cover letters are off until turned on, and need enough real material (one owner: the policy).
+  if (features.coverLetterOptIn) {
+    const secondary = (profile?.sources.secondaryResumePaths ?? settings?.secondaryResumePaths ?? []).length;
+    const linkedin = Boolean(profile?.sources.linkedinProfilePath ?? settings?.linkedinProfilePath);
+    const plan = coverLetterPlanFor(profile, { hasVoice, careerFiles: countCareerFiles(manifest?.selectedCareerPaths ?? [], secondary, linkedin), optIn: true });
+    add({
+      id: "cover-letter", level: "recommended", state: plan.write || plan.off ? "done" : "problem", action: "cover-letter", path: null,
+      title: "Cover letters",
+      detail: plan.off ? "Off: applications get a tailored resume only." : plan.write ? "On: each application also gets a cover letter." : plan.reason ?? "",
+      improves: "Letters are written only with enough real material about the person; never a thin, generic letter.",
+    });
+  }
+
+  if (features.interviewProfile) {
+    const hasStoryBank = await exists(workspaceFile(root, "profile/story_bank.md"));
+    add({
+      id: "story-bank", level: "recommended", state: hasStoryBank ? "done" : "later", action: "none", path: "profile/story_bank.md",
+      title: "Story bank",
+      detail: hasStoryBank ? "Ready." : "Made automatically on your first interview prep.",
+      improves: "Interview answers use your best real examples, without repeats.",
+    });
+  }
+
+  // Recruiter Edition (plan R8): candidates are records the recruiter fills in, not users describing themselves.
+  // The name comes from adding the candidate, Agy is signed in once for the app, and the career story and voice are
+  // asked for only by the Cover letters row when letters are turned on.
+  if (features.candidates) {
+    const lettersOn = profile?.preferences.coverLetter.enabled === true;
+    const leftOut = new Set(["profile", "other-resumes", ...(lettersOn ? [] : ["story", "voice"])]);
+    for (let index = items.length - 1; index >= 0; index -= 1) if (leftOut.has(items[index]!.id)) items.splice(index, 1);
+    const reword = (id: string, change: Partial<ReadinessItem>) => { const item = items.find((entry) => entry.id === id); if (item) Object.assign(item, change); };
+    reword("resume", { title: "Base resume", improves: "Every tailored resume keeps this resume's layout, section order, dates, and length." });
+    reword("agy", { title: "Agy signed in (once for all candidates)", improves: "Agy writes the tailored drafts." });
+    reword("story", { title: "Career story (for cover letters)", improves: "Cover letters about the candidate's path, in their words." });
+    reword("voice", { title: "Writing voice (for cover letters)", improves: "Letters sound like the candidate." });
+    const context = items.find((entry) => entry.id === "context");
+    if (context) Object.assign(context, {
+      title: "Candidate files and notes",
+      detail: careerPaths.length ? `${careerPaths.length} file${careerPaths.length === 1 ? "" : "s"} used for tailoring.` : "None yet. Add older resumes, a LinkedIn export, notes, or recruiter notes in Career context.",
+      improves: "Everything here counts as the candidate's evidence; with only a resume, drafts reword the resume's own lines.",
+    });
+  }
 
   const required = items.filter((item) => item.level === "required");
   // Jobs may be added once Agy is installed: the queue itself waits until Agy is signed in and idle.

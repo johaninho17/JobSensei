@@ -30,11 +30,11 @@ export function JobFilters({ jobs, facets, onChange }: { jobs: JobFolderSummary[
       </label>
       <div className="jobs-filter-row"><span>Work setup</span><div className="pill-group">{WORK_MODES.filter((mode) => options.work[mode] > 0 || facets.work.includes(mode)).map((mode) => <button key={mode} type="button" className="pill" aria-pressed={facets.work.includes(mode)} onClick={() => onChange({ ...facets, work: toggle(facets.work, mode) })}>{WORK_LABEL[mode]} <small>{options.work[mode]}</small></button>)}</div></div>
       <div className="jobs-filter-row"><span>Fit</span><div className="pill-group">{FIT_BANDS.filter((band) => options.fit[band] > 0 || facets.fit.includes(band)).map((band) => <button key={band} type="button" className="pill" aria-pressed={facets.fit.includes(band)} onClick={() => onChange({ ...facets, fit: toggle(facets.fit, band) })}>{FIT_LABEL[band]} <small>{options.fit[band]}</small></button>)}</div></div>
-      <label className="jobs-filter-row"><span>Interview</span>
+      {FEATURES.interviews && <label className="jobs-filter-row"><span>Interview</span>
         <select value={facets.interview} onChange={(event) => onChange({ ...facets, interview: event.target.value as JobFacets["interview"] })}>
           <option value="any">Any</option><option value="yes">Went to interview</option><option value="no">No interview</option>
         </select>
-      </label>
+      </label>}
       {(options.tags.length > 0 || facets.tags.length > 0) && <div className="jobs-filter-row"><span>Tags</span><div className="pill-group">{options.tags.map((tag) => <button key={tag.name} type="button" className="pill" aria-pressed={facets.tags.some((own) => own.toLowerCase() === tag.name.toLowerCase())} onClick={() => onChange({ ...facets, tags: facets.tags.some((own) => own.toLowerCase() === tag.name.toLowerCase()) ? facets.tags.filter((own) => own.toLowerCase() !== tag.name.toLowerCase()) : [...facets.tags, tag.name] })}>{tag.name} <small>{tag.count}</small></button>)}</div></div>}
       {options.tags.length === 0 && <p className="muted jobs-filter-hint">Add tags on a job's Overview (Tracking) to filter by them here.</p>}
       {active > 0 && <button type="button" className="btn-link" onClick={() => onChange(NO_FACETS)}>Clear filters</button>}

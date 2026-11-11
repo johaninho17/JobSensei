@@ -3,7 +3,7 @@
 // so the app (not Agy) is the first to say what is missing, always in the same words.
 import { z } from "zod";
 
-export const READINESS_ACTIONS = ["profile", "resume", "agy", "context", "story", "logistics", "private-names", "voice", "other-resumes", "folder", "none"] as const;
+export const READINESS_ACTIONS = ["profile", "resume", "agy", "context", "story", "logistics", "private-names", "voice", "other-resumes", "targets", "cover-letter", "folder", "none"] as const;
 
 export const readinessItemSchema = z.object({
   id: z.string(),

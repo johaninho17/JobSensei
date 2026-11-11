@@ -4,14 +4,18 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 
+// The app's name follows the edition it was built as (JOBSENSEI_EDITION; src/shared/edition.ts).
+const { EDITION_INFO, parseEdition } = createRequire(import.meta.url)("../dist-electron/src/shared/edition.js");
+const name = EDITION_INFO[parseEdition(process.env.JOBSENSEI_EDITION)].productName;
 const release = resolve("release");
 function executable() {
-  if (process.platform === "win32") return join(release, "win-unpacked", "JobSensei.exe");
+  if (process.platform === "win32") return join(release, "win-unpacked", `${name}.exe`);
   if (process.platform === "darwin") {
-    const folder = readdirSync(release).find((name) => /^mac/.test(name) && existsSync(join(release, name, "JobSensei.app")));
-    return folder ? join(release, folder, "JobSensei.app", "Contents", "MacOS", "JobSensei") : null;
+    const folder = readdirSync(release).find((entry) => /^mac/.test(entry) && existsSync(join(release, entry, `${name}.app`)));
+    return folder ? join(release, folder, `${name}.app`, "Contents", "MacOS", name) : null;
   }
   return join(release, "linux-unpacked", "jobsensei");
 }

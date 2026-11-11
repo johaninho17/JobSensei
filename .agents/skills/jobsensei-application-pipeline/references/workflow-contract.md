@@ -52,7 +52,7 @@ If the snapshot includes current-employer context, use it only to calibrate orga
 
 The canonical template is immutable outside the constrained draft fields. Resume generation changes only skills and experience bullets. Cover-letter generation changes only recipient/date/salutation/body/closing fields. Finalization supplies all protected content and formatting.
 
-Use the pinned footprint, `resumePlan`, and candidate profile before drafting. Follow their total and current-employer bullet ranges, employer allocation, and role-relevant tailoring. Preserve employer boundaries and never fuse projects. The cover letter follows `coverLetterBrief` in the application context, which is its only specification.
+Use the pinned footprint, `resumePlan`, and candidate profile before drafting. Follow `resumePlan` employer targets and the snapshot `instructions` for length and skills (the base resume sets both). Preserve employer boundaries and never fuse projects. The cover letter follows `coverLetterBrief` in the application context, which is its only specification.
 
 For a customer-facing role, `resumePlan` supplies selected recent customer evidence and a current-employer target. Use it while retaining technical work. Tailoring changes emphasis; it does not replace the stable present-role narrative with a JD-shaped task list.
 

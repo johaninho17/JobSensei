@@ -1,21 +1,17 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, session, shell } from "electron";
 import { textContextMenu } from "./context-menu";
+import { EDITION_INFO, featuresFor } from "../src/shared/edition";
+import { currentEdition, prepareEditionFolder } from "./edition";
+import type { FeatureContext } from "./feature-context";
+import { activeCandidatePath, ensureRecruiterRoot, readRoster } from "./candidates";
 import { watch, type FSWatcher } from "node:fs";
 import { updateJobTracker } from "./tracker";
 import { latestRun } from "./run-status";
 import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription } from "./jd-fetch";
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { RunWatcher } from "./run-watcher";
-import { answerQuestion, buildTodayData, checkClosedPostings, keepPosting, removeQuestion } from "./today";
 import { createAgyHomeCache, prepareAgyHome, writeSenseiLauncher } from "./agy-home";
-import { QuestionAgent, headlessAgy } from "./question-agent";
-import { ensureSchedule, scheduleInfo } from "./search-schedule";
-import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, jobsForSearch, searchLearning, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
-import { jobKey, type SearchRun, type SearchStatus } from "../src/shared/job-search";
-import { boardRef } from "./job-boards";
-import { readPostingRecord } from "./posting-record";
 import { reachedInterview } from "../src/shared/tracker";
-import { parsePastedQuestions } from "./application-questions";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import type { Settings } from "../src/shared/schemas";
@@ -30,11 +26,9 @@ import { capWorkspaceNpmCache, initializeWorkspace, syncWorkspaceAgentFiles, typ
 import { TerminalSession, appRoot as terminalAppRoot, resolveAgyExecutable } from "./terminal";
 import { buildContextManifest, contextSources, readActiveContextManifest } from "./context";
 import { exportMarkdownPdf } from "./pdf-export";
-import { getInterviewOverview, listInterviewRounds, refreshInterviewDashboard, setCurrentInterviewRound } from "./interviews";
 import { invalidateSearchIndex, searchWorkspace } from "./search";
 import { getJobApplicationStatus, validateJobApplication } from "./application-validation";
 import { computeReadiness } from "./setup-readiness";
-import { finishUpdate, readPendingUpdate, reviewUpdate, scanRecordings, skipRecordings, startUpdate, undoUpdate } from "./content-refresh";
 import { CONTEXT_EXTENSIONS, importContextFiles, type ContextKind } from "./context-import";
 import { createCandidateProfile, readCandidateProfile, updateCandidateProfileDetails, updateCandidateProfilePreferences, updateCandidateProfileSources } from "./candidate-profile";
 import { compactStyleRules, profileInstructionLines } from "./evidence-snapshot";
@@ -42,13 +36,16 @@ import { loadCanonicalResumeBaseline } from "./canonical-resume";
 import { readBulletBank, saveBulletBank } from "./bullet-bank";
 
 // Tests and the new-user check run the app with a throwaway settings folder, so real settings are never touched.
+const edition = currentEdition();
+const features = featuresFor(edition);
+// The recruiter edition keeps its own settings folder and Agy homes; solo keeps the name it always had.
+if (edition !== "solo") app.setName(EDITION_INFO[edition].productName);
 if (process.env.SENSEI_USER_DATA) app.setPath("userData", resolve(process.env.SENSEI_USER_DATA));
 if (process.argv.includes("--dev") && !process.env.VITE_DEV_SERVER_URL) {
   process.env.VITE_DEV_SERVER_URL = "http://127.0.0.1:5173";
 }
 
 let mainWindow: BrowserWindow | undefined;
-let interviewWindow: BrowserWindow | undefined;
 let workspacePath: string;
 let settingsStore: SettingsStore;
 let workspaceWatcher: FSWatcher | undefined;
@@ -58,6 +55,7 @@ const terminal = new TerminalSession();
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
+    title: EDITION_INFO[edition].productName,
     width: 1500,
     height: 960,
     minWidth: 900,
@@ -97,63 +95,13 @@ function runSmokeCheck(window: BrowserWindow, outPath: string): void {
         const root = document.getElementById("root");
         const workspace = await window.sensei.workspace.getSummary().then((value) => value.status).catch((error) => "error: " + error.message);
         // A new, empty workspace must open on the first-run steps.
-        return { rendered: Boolean(root && root.childElementCount > 0 && document.body.innerText.trim().length > 20), firstRun: Boolean(document.querySelector(".onboarding [aria-current=step]")), workspace, text: document.body.innerText.slice(0, 120) };
+        return { rendered: Boolean(root && root.childElementCount > 0 && document.body.innerText.trim().length > 20), firstRun: Boolean(document.querySelector(${JSON.stringify(features.candidates ? ".candidates-home" : ".onboarding [aria-current=step]")})), workspace, text: document.body.innerText.slice(0, 120) };
       })()`).then((check: { rendered: boolean; firstRun: boolean; workspace: string; text: string }) => {
         clearTimeout(timer);
         finish({ ok: check.rendered && check.firstRun && !String(check.workspace).startsWith("error"), detail: JSON.stringify(check) });
       }, (error: unknown) => { clearTimeout(timer); finish({ ok: false, detail: String(error) }); });
     }, 4000);
   });
-}
-
-async function openInterviewWorkspaceWindow(jobId: string, roundId: string): Promise<void> {
-  if (!jobId || !roundId) throw new Error("A job and interview round are required.");
-  if (interviewWindow && !interviewWindow.isDestroyed()) {
-    const query = `interviewWorkspace=1&jobId=${encodeURIComponent(jobId)}&roundId=${encodeURIComponent(roundId)}`;
-    if (process.env.VITE_DEV_SERVER_URL) await interviewWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?${query}`);
-    else await interviewWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"), { search: `?${query}` });
-    interviewWindow.focus();
-    return;
-  }
-  interviewWindow = new BrowserWindow({
-    width: 1280,
-    height: 900,
-    minWidth: 900,
-    minHeight: 620,
-    title: "Sensei Interview Workspace",
-    backgroundColor: "#f4f6f8",
-    webPreferences: { preload: join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
-  });
-  const query = `interviewWorkspace=1&jobId=${encodeURIComponent(jobId)}&roundId=${encodeURIComponent(roundId)}`;
-  if (process.env.VITE_DEV_SERVER_URL) await interviewWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?${query}`);
-  else await interviewWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"), { search: `?${query}` });
-  interviewWindow.on("closed", () => { interviewWindow = undefined; });
-}
-
-let liveWindow: BrowserWindow | undefined;
-const LIVE_SIZE = { width: 440, height: 560 };
-const LIVE_STRIP_HEIGHT = 176;
-
-/** Compact always-on-top live window: one interview card at a time over the video call. */
-async function openLiveWindow(jobId: string, roundId: string): Promise<void> {
-  if (!jobId || !roundId) throw new Error("A job and interview round are required.");
-  const query = `interviewWorkspace=1&live=1&jobId=${encodeURIComponent(jobId)}&roundId=${encodeURIComponent(roundId)}`;
-  if (!liveWindow || liveWindow.isDestroyed()) {
-    liveWindow = new BrowserWindow({
-      ...LIVE_SIZE,
-      minWidth: 340,
-      minHeight: LIVE_STRIP_HEIGHT,
-      alwaysOnTop: true,
-      title: "Sensei Live",
-      backgroundColor: "#f6f7f5",
-      webPreferences: { preload: join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
-    });
-    liveWindow.setAlwaysOnTop(true, "floating");
-    liveWindow.on("closed", () => { liveWindow = undefined; });
-  }
-  if (process.env.VITE_DEV_SERVER_URL) await liveWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?${query}`);
-  else await liveWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"), { search: `?${query}` });
-  liveWindow.focus();
 }
 
 function logAgentSync(report: AgentSyncReport | null): void {
@@ -207,7 +155,10 @@ function getRepositoryRoot(): string {
   return app.isPackaged ? workspacePath : resolve(app.getAppPath());
 }
 
-ipcMain.handle("workspace:get-summary", async () => summarizeWorkspace(workspacePath, getRepositoryRoot(), await settingsStore.get()));
+// No workspace yet (Recruiter Edition before the first candidate): say so instead of reporting an error.
+ipcMain.handle("workspace:get-summary", async () => workspacePath
+  ? summarizeWorkspace(workspacePath, getRepositoryRoot(), await settingsStore.get())
+  : { path: "", repositoryRoot: getRepositoryRoot(), status: "unconfigured" as const, contextFileCount: 0, jobCount: 0, hasIndex: false, hasCandidateProfile: false, hasBaseResume: false, agyAvailable: false, warnings: [] });
 ipcMain.handle("workspace:rescan", async () => {
   invalidateSearchIndex(requireWorkspace());
   return summarizeWorkspace(requireWorkspace(), getRepositoryRoot(), await settingsStore.get());
@@ -393,168 +344,12 @@ const runWatcher = new RunWatcher({
 });
 ipcMain.handle("runs:latest", async () => runWatcher.current());
 
-// Written application questions: answered by a separate headless Agy in the background (never the terminal Agy).
-// The app-owned Agy home for background Agy runs (written answers, search, rating), one per workspace.
-const agyHomes = createAgyHomeCache((workspace) => prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath }));
-const agyHomeFor = (workspace: string) => agyHomes.get(workspace);
-const questionAgent = new QuestionAgent({
-  workspace: requireWorkspace,
-  runner: async () => {
-    const agyPath = resolveAgyExecutable();
-    if (!agyPath) throw new Error("Agy isn't installed, so questions can't be answered.");
-    const workspace = requireWorkspace();
-    // The same app-owned Agy home (and sign-in) as the terminal; prepared here when the terminal hasn't started yet.
-    return headlessAgy({ agyPath, agyHome: await agyHomeFor(workspace), cwd: workspace });
-  },
-  onUpdate: (jobId, state) => mainWindow?.webContents.send("questions:updated", jobId, state),
-});
-// Job Search: one headless Agy run finds links; the app opens, saves, and rates each one (electron/job-search.ts).
-/** The user's jobs as the search needs them (company, title, whether one reached an interview). */
-const searchJobs = async (workspace: string) => (await listJobFolders(workspace)).map((job) => ({ id: job.id, company: job.company, title: job.title, reachedInterview: reachedInterview(job) }));
-// The run lives here, not in the page: leaving Job Search never stops it, and every page hears its progress.
-let searchStatus: SearchStatus = { running: false, source: null, progress: null, startedAt: null };
-const setSearchStatus = (next: SearchStatus) => { searchStatus = next; mainWindow?.webContents.send("search:status", next); };
-const foundIds = (value: unknown) => (Array.isArray(value) ? value : [value]).map(String).filter((id) => /^find-[a-z0-9-]{4,40}$/.test(id));
-ipcMain.handle("search:get", async () => {
-  const workspace = requireWorkspace();
-  const profile = await readCandidateProfile(workspace).catch(() => null);
-  // A search the OS schedule started (the app was closed or in the background) shows as running too.
-  const scheduled = !searchStatus.running && (await searchLockHolder(workspace))?.by === "schedule";
-  return { settings: await readSearchSettings(workspace, profile), state: await readSearchState(workspace), status: scheduled ? { running: true, source: "search" as const, progress: null, startedAt: null, scheduled: true } : searchStatus };
-});
-const scheduleTarget = (workspace: string) => ({ runtime: process.execPath, runner: join(terminalAppRoot(), "dist-electron", "electron", "job-search-runner.js"), workspace, userData: app.getPath("userData") });
-/** Saves the settings and makes the OS schedule match them (installed when on, removed when off). */
-ipcMain.handle("search:save-settings", async (_event, input: unknown) => {
-  const workspace = requireWorkspace();
-  const settings = await saveSearchSettings(workspace, input);
-  await ensureSchedule(scheduleTarget(workspace), settings.schedule);
-  return settings;
-});
-let scheduleRepaired: "installed" | "removed" | null = null;
-ipcMain.handle("search:schedule-info", async () => ({ ...(await scheduleInfo(app.getPath("userData"))), repaired: scheduleRepaired }));
-ipcMain.handle("search:clear-pending", async (_event, ids: unknown) => clearPendingDrafts(requireWorkspace(), foundIds(ids)));
-/** Starts a run and returns at once; "watched" checks watched companies only (no Agy, no quota). */
-ipcMain.handle("search:run", async (_event, mode: unknown) => {
-  if (searchStatus.running) throw new Error("A search is already running.");
-  const watchedOnly = mode === "watched";
-  const agyPath = watchedOnly ? null : resolveAgyExecutable();
-  if (!watchedOnly && !agyPath) throw new Error("Agy isn't installed, so the search can't run. Check watched companies works without it.");
-  const workspace = requireWorkspace();
-  const lock = await takeSearchLock(workspace, "app");
-  if (!lock.ok) throw new Error(lock.by === "schedule" ? "A scheduled search is running right now; its matches appear here when it finishes." : "A search is already running.");
-  setSearchStatus({ running: true, source: watchedOnly ? "watched" : "search", progress: null, startedAt: new Date().toISOString() });
-  void (async () => {
-    let result: { run: SearchRun } | null = null;
-    try {
-      const agyHome = agyPath ? await agyHomeFor(workspace) : null;
-      const allJobs = await listJobFolders(workspace);
-      const { existingKeys, companies } = await jobsForSearch(workspace, allJobs.map((job) => ({ id: job.id, company: job.company, title: job.title, reachedInterview: reachedInterview(job) })));
-      result = await runSearch({
-        jobCompanies: companies,
-        learned: searchLearning(allJobs),
-        workspace,
-        profile: await readCandidateProfile(workspace).catch(() => null),
-        runner: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }) : null,
-        rater: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 240, jsonSchema: RATING_SCHEMA }) : null,
-        existingKeys,
-        onUpdate: (state) => mainWindow?.webContents.send("search:updated", state),
-        onProgress: (progress) => setSearchStatus({ ...searchStatus, progress }),
-      });
-    } catch (error) {
-      console.error("Job search failed:", error);
-    } finally {
-      await releaseSearchLock(workspace).catch(() => undefined);
-      setSearchStatus({ running: false, source: null, progress: null, startedAt: null });
-      mainWindow?.webContents.send("search:finished", result?.run ?? null);
-    }
-  })();
-});
-/** Agy's light rating for chosen matches (up to 10, one call), in the background like a search. */
-ipcMain.handle("search:rate", async (_event, ids: unknown) => {
-  if (searchStatus.running) throw new Error("A search is already running.");
-  const chosen = foundIds(ids).slice(0, 10);
-  if (!chosen.length) return;
-  const agyPath = resolveAgyExecutable();
-  if (!agyPath) throw new Error("Agy isn't installed, so matches can't be rated.");
-  const workspace = requireWorkspace();
-  const lock = await takeSearchLock(workspace, "app");
-  if (!lock.ok) throw new Error("A search is running right now; rate these when it finishes.");
-  setSearchStatus({ running: true, source: "rating", progress: { phase: "rating", checked: 0, total: chosen.length }, startedAt: new Date().toISOString() });
-  void (async () => {
-    let message = "";
-    try {
-      const agyHome = await agyHomeFor(workspace);
-      const rated = await rateItems({ workspace, profile: await readCandidateProfile(workspace).catch(() => null), rater: headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 240, jsonSchema: RATING_SCHEMA }), ids: chosen, onUpdate: (state) => mainWindow?.webContents.send("search:updated", state) });
-      message = `Agy rated ${rated} of ${chosen.length} match${chosen.length === 1 ? "" : "es"}.`;
-    } catch (error) {
-      message = `Agy couldn't rate them: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`;
-    } finally {
-      await releaseSearchLock(workspace).catch(() => undefined);
-      setSearchStatus({ running: false, source: null, progress: null, startedAt: null });
-      mainWindow?.webContents.send("search:rated", message);
-    }
-  })();
-});
-/** Companies from your jobs whose postings are on Ashby, Greenhouse, or Lever, for the watched list. */
-/** Companies from your jobs whose postings are on Ashby, Greenhouse, or Lever, for the watched list. */
-ipcMain.handle("search:suggest-watched", async () => {
-  const workspace = requireWorkspace();
-  return (await jobsForSearch(workspace, await searchJobs(workspace))).companies;
-});
-ipcMain.handle("search:set-status", async (_event, ids: unknown, status: unknown) => {
-  if (status !== "new" && status !== "dismissed") throw new Error("Use Save or Add to queue for those.");
-  return setItemStatus(requireWorkspace(), foundIds(ids), status);
-});
-ipcMain.handle("search:save-job", async (_event, id: unknown) => {
-  const [itemId] = foundIds(id);
-  if (!itemId) throw new Error("That isn't a found job.");
-  const workspace = requireWorkspace();
-  const jobId = await saveFoundJob(workspace, itemId);
-  invalidateJobCache(workspace, join(workspace, "jobs", jobId));
-  return jobId;
-});
-// Opens only a found job's own posting link (taken from the inbox, never from the renderer).
-ipcMain.handle("search:open-posting", async (_event, id: unknown) => {
-  const [itemId] = foundIds(id);
-  const item = (await readSearchState(requireWorkspace())).items.find((candidate) => candidate.id === itemId);
-  if (item && /^https?:\/\//i.test(item.url)) await shell.openExternal(item.url);
-});
-ipcMain.handle("search:stage", async (_event, id: unknown, pasteId: unknown, auto: unknown) => {
-  const [itemId] = foundIds(id);
-  if (!itemId || typeof pasteId !== "string") throw new Error("That isn't a found job.");
-  return stageFoundJob(requireWorkspace(), itemId, pasteId, auto === true);
-});
-const questionJobId = (value: unknown) => { const jobId = String(value ?? ""); if (!/^[a-z0-9][a-z0-9._-]*$/i.test(jobId)) throw new Error("Invalid job."); return jobId; };
-ipcMain.handle("questions:get", async (_event, jobId: unknown) => { const id = questionJobId(jobId); return { state: await questionAgent.get(id), running: questionAgent.isRunning(id) }; });
-ipcMain.handle("questions:auto", async (_event, jobId: unknown) => { void questionAgent.auto(questionJobId(jobId)); });
-ipcMain.handle("questions:ask", async (_event, jobId: unknown, text: unknown) => {
-  if (typeof text !== "string" || text.length > 20_000) throw new Error("Paste the questions as text.");
-  if (!parsePastedQuestions(text).length) throw new Error("Paste at least one question.");
-  void questionAgent.ask(questionJobId(jobId), text).catch(() => undefined);
-});
-ipcMain.handle("questions:answer-anyway", async (_event, jobId: unknown, questionId: unknown) => {
-  if (typeof questionId !== "string" || !/^q:\d+$/.test(questionId)) throw new Error("Invalid question.");
-  void questionAgent.answerAnyway(questionJobId(jobId), questionId);
-});
-ipcMain.handle("questions:retry", async (_event, jobId: unknown) => {
-  const id = questionJobId(jobId);
-  const state = await questionAgent.get(id);
-  if (!state || state.source === "posting") { void questionAgent.auto(id, true); return; }
-  void questionAgent.ask(id, state.questions.map((question) => question.label).join("\n\n"));
-});
+// The app-owned Agy home for background Agy runs (written answers, search, rating), one per workspace (a candidate's
+// folder in the Recruiter Edition gets that candidate's home).
+const agyHomes = createAgyHomeCache((workspace) => prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath }, agyHomeName));
 ipcMain.handle("jobs:update-tracker", async (_event, jobId: unknown, update: unknown) => updateJobTracker(requireWorkspace(), String(jobId), update));
 ipcMain.handle("jobs:validate-application", async (_event, jobId: string) => validateJobApplication(requireWorkspace(), jobId, false));
 
-ipcMain.handle("interviews:get-overview", async (_event, jobId: string) => getInterviewOverview(requireWorkspace(), jobId));
-ipcMain.handle("interviews:list-rounds", async (_event, jobId: string) => listInterviewRounds(requireWorkspace(), jobId));
-ipcMain.handle("interviews:set-current-round", async (_event, input: { jobId: string; roundId: string }) => setCurrentInterviewRound(requireWorkspace(), input?.jobId, input?.roundId));
-ipcMain.handle("interviews:refresh-dashboard", async (_event, jobId: string) => refreshInterviewDashboard(requireWorkspace(), jobId));
-ipcMain.handle("interviews:open-workspace-window", async (_event, input: { jobId: string; roundId: string; live?: boolean }) => input?.live ? openLiveWindow(String(input.jobId), String(input.roundId)) : openInterviewWorkspaceWindow(input?.jobId, input?.roundId));
-ipcMain.handle("interviews:set-live-collapsed", async (_event, collapsed: unknown) => {
-  if (!liveWindow || liveWindow.isDestroyed()) return;
-  const [width] = liveWindow.getSize();
-  liveWindow.setSize(width ?? LIVE_SIZE.width, collapsed === true ? LIVE_STRIP_HEIGHT : LIVE_SIZE.height, true);
-});
 ipcMain.handle("search:query", async (_event, input) => searchWorkspace(requireWorkspace(), input));
 
 ipcMain.handle("context:get-manifest", async (_event, selection) => { const settings = await settingsStore.get(); return buildContextManifest(requireWorkspace(), selection ?? {}, settings); });
@@ -569,7 +364,7 @@ ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
   if (await capWorkspaceNpmCache(workspace).catch(() => false)) console.info("Agy npm cache passed its size limit and was cleared.");
   const manifest = await buildContextManifest(workspace, {}, await settingsStore.get());
   // Agy runs with an app-owned home whose rules keep its file tools inside the workspace.
-  const agyHome = await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath })
+  const agyHome = await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath }, agyHomeName)
     .then(async (home) => { await writeSenseiLauncher(home, { appRoot: terminalAppRoot(), packaged: app.isPackaged, runtimePath: process.execPath }); return home; })
     .catch((error) => { console.error("Agy home setup failed:", error); return null; });
   terminal.setAgyHome(agyHome);
@@ -580,7 +375,7 @@ ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
 ipcMain.handle("terminal:set-context", async (_event, input) => {
   const manifest = await buildContextManifest(requireWorkspace(), input ?? {}, await settingsStore.get());
   terminal.setContext(manifest);
-  interviewWindow?.webContents.send("context:updated", manifest);
+  for (const window of featureWindows()) window.webContents.send("context:updated", manifest);
   return manifest;
 });
 ipcMain.handle("terminal:write", async (_event, data: string) => terminal.write(data));
@@ -625,7 +420,6 @@ async function readinessNow() {
   return computeReadiness({ workspacePath: workspace, profile, settings, manifest, contextFileCount: summary.contextFileCount, agy: { installed: summary.agyAvailable, signedIn: await agySignInState() } });
 }
 ipcMain.handle("setup:readiness", async () => readinessNow());
-// Today: built from the user's own data (electron/today.ts). Closed postings are checked in the background once a day.
 // Workspace folders: preview, tidy, undo (electron/layout-migration.ts; names owned by src/shared/workspace-layout.ts).
 ipcMain.handle("layout:plan", async () => planMigration(requireWorkspace()));
 ipcMain.handle("layout:apply", async () => {
@@ -657,39 +451,11 @@ async function afterLayoutChange(workspace: string): Promise<void> {
   mainWindow?.webContents.send("workspace:changed", ["context", "debrief", "profile"]);
 }
 
-ipcMain.handle("today:get", async () => {
-  const workspace = requireWorkspace();
-  const jobs = await listJobFolders(workspace);
-  const readiness = await readinessNow().catch(() => null);
-  const today = await buildTodayData(workspace, { jobs, profile: await readCandidateProfile(workspace).catch(() => null), readiness });
-  void checkClosedPostings(workspace, jobs).then((state) => { if (state.closed.length !== today.due.closedPostings.length) mainWindow?.webContents.send("today:changed"); }).catch(() => undefined);
-  return today;
-});
-ipcMain.handle("today:answer", async (_event, id: unknown, answer: unknown) => answerQuestion(requireWorkspace(), String(id), String(answer ?? "")));
-ipcMain.handle("today:remove-question", async (_event, id: unknown) => removeQuestion(requireWorkspace(), String(id)));
-ipcMain.handle("today:keep-posting", async (_event, jobId: unknown) => keepPosting(requireWorkspace(), String(jobId)));
-ipcMain.handle("today:close-posting", async (_event, jobId: unknown) => {
-  const workspace = requireWorkspace();
-  await updateJobTracker(workspace, String(jobId), { status: "rejected", outcome: { stageReached: null, result: "no_reply", reason: "Posting closed", date: new Date().toISOString().slice(0, 10) } });
-  await keepPosting(workspace, String(jobId));
-});
 // Interview content refresh (electron/content-refresh.ts): new recordings, the update Agy runs, and its check.
 async function jobNames(): Promise<Record<string, string>> {
   const jobs = await listJobFolders(requireWorkspace()).catch(() => []);
   return Object.fromEntries(jobs.map((job) => [job.id, [job.company, job.title].filter(Boolean).join(", ")]));
 }
-ipcMain.handle("content:recordings", async () => {
-  const names = await jobNames();
-  return { recordings: await scanRecordings(requireWorkspace(), Object.keys(names)), pending: await readPendingUpdate(requireWorkspace()) };
-});
-ipcMain.handle("content:start-update", async () => {
-  const names = await jobNames();
-  return (await startUpdate(requireWorkspace(), await scanRecordings(requireWorkspace(), Object.keys(names)), names)).prompt;
-});
-ipcMain.handle("content:review-update", async () => reviewUpdate(requireWorkspace()));
-ipcMain.handle("content:finish-update", async (_event, keepOld: unknown) => finishUpdate(requireWorkspace(), Array.isArray(keepOld) ? keepOld.filter((item): item is string => typeof item === "string") : []));
-ipcMain.handle("content:undo-update", async () => undoUpdate(requireWorkspace()));
-ipcMain.handle("content:skip", async (_event, paths: unknown) => skipRecordings(requireWorkspace(), Array.isArray(paths) ? paths.filter((path): path is string => typeof path === "string") : []));
 // The writing-voice file is the user's own; Setup edits only this one context file (other career sources stay read-only).
 ipcMain.handle("profile:save-voice", async (_event, text: unknown) => {
   if (typeof text !== "string" || text.length > 20_000) throw new Error("The voice profile must be text under 20,000 characters.");
@@ -704,6 +470,94 @@ ipcMain.handle("profile:save-voice", async (_event, text: unknown) => {
 });
 ipcMain.handle("terminal:restart", async () => terminal.restart());
 ipcMain.handle("terminal:stop", async () => terminal.stop());
+
+// Feature-only IPC lives in its own modules, loaded only when this edition has the feature (src/shared/edition.ts);
+// the recruiter build leaves those modules out of the app entirely.
+let interviewIpc: typeof import("./interview-ipc.js") | null = null;
+const featureContext: FeatureContext = {
+  requireWorkspace,
+  mainWindow: () => mainWindow,
+  agyHomeFor: (workspace) => agyHomes.get(workspace),
+  userDataPath: () => app.getPath("userData"),
+  appRoot: terminalAppRoot,
+  jobNames,
+};
+function featureWindows(): BrowserWindow[] { return interviewIpc?.interviewWindows() ?? []; }
+async function registerFeatureIpc(): Promise<void> {
+  if (features.interviews) { const module = await import("./interview-ipc.js"); module.registerInterviewIpc(featureContext); interviewIpc = module; }
+  if (features.applicationQuestions) (await import("./question-ipc.js")).registerQuestionIpc(featureContext);
+  if (features.contentRefresh) (await import("./content-ipc.js")).registerContentIpc(featureContext);
+  if (features.jobSearch) (await import("./search-ipc.js")).registerSearchIpc(featureContext);
+  if (features.today) (await import("./today-ipc.js")).registerTodayIpc(featureContext, { readiness: () => readinessNow() });
+  if (features.candidates) (await import("./candidate-ipc.js")).registerCandidateIpc({
+    root: () => { if (!recruiterRoot) throw new Error("The recruiter folder isn't open."); return recruiterRoot; },
+    busyReason: candidateBusyReason,
+    openCandidate: async (_id, folder) => { await closeCandidateFolder(); await openCandidateFolder(folder); },
+    closeCandidate: closeCandidateFolder,
+    userDataPath: () => app.getPath("userData"),
+    chooseSavePath: async (defaultName) => {
+      const result = mainWindow ? await dialog.showSaveDialog(mainWindow, { title: "Export candidate", defaultPath: join(app.getPath("downloads"), defaultName), filters: [{ name: "Zip archive", extensions: ["zip"] }] }) : { canceled: true, filePath: undefined };
+      return result.canceled || !result.filePath ? null : result.filePath;
+    },
+    chooseFiles: async (kind) => {
+      if (!mainWindow) return [];
+      const result = await dialog.showOpenDialog(mainWindow, kind === "resume"
+        ? { title: "Choose the candidate's resume", properties: ["openFile"], filters: [{ name: "Resume", extensions: ["docx", "md"] }] }
+        : { title: "Add the candidate's files", properties: ["openFile", "multiSelections"], filters: [{ name: "Candidate files", extensions: ["md", "txt", "pdf", "docx", "rtf", "json", "csv"] }] });
+      return result.canceled ? [] : result.filePaths;
+    },
+  });
+}
+
+/** Opens a workspace: seeds Agy's files, indexes career context, restores the base resume, and watches for changes. */
+async function openWorkspace(folder: string): Promise<void> {
+  workspacePath = folder;
+  logAgentSync(await initializeWorkspace(workspacePath));
+  await indexContext(workspacePath);
+  await settingsStore.setWorkspace(workspacePath);
+  // The profile also records the base resume; if the app's settings lost it, put it back so nothing downstream
+  // (career sources, the context manifest, Setup) sees "no resume".
+  const savedSettings = await settingsStore.get();
+  const profileResume = (await readCandidateProfile(workspacePath).catch(() => null))?.sources.baseResumePath ?? null;
+  if (!savedSettings.baseResumePath && profileResume) {
+    await settingsStore.save({ baseResumePath: profileResume, secondaryResumePaths: savedSettings.secondaryResumePaths, linkedinProfilePath: savedSettings.linkedinProfilePath });
+    console.info(`Base resume restored from the profile: ${profileResume}`);
+  }
+  startWorkspaceWatcher(workspacePath);
+}
+
+// Recruiter Edition (recruiter plan R1/R2): the recruiter folder, and the active candidate's own settings and Agy home.
+let recruiterRoot: string | null = null;
+let agyHomeName: string | undefined;
+async function openCandidateFolder(folder: string): Promise<void> {
+  const id = basename(folder);
+  const { candidateSettingsStore } = await import("./candidate-ipc.js");
+  settingsStore = candidateSettingsStore(folder);
+  agyHomeName = id;
+  invalidateSearchIndex();
+  await openWorkspace(folder);
+}
+async function closeCandidateFolder(): Promise<void> {
+  terminal.stop();
+  workspaceWatcher?.close();
+  workspaceWatcher = undefined;
+  workspacePath = undefined as unknown as string;
+  agyHomeName = undefined;
+  invalidateSearchIndex();
+}
+/**
+ * A job still running for the current candidate blocks a switch: a queue item Agy is working on, or a run the run
+ * tracker reports as running (a job sent from the chat). Agy's own output (starting up, signing in) never counts.
+ */
+async function candidateBusyReason(): Promise<string | null> {
+  if (!workspacePath) return null;
+  const queue = await readJobQueue(workspacePath).catch(() => null);
+  const queued = queue?.items.some((item) => item.status === "running") ?? false;
+  const run = await latestRun(workspacePath).catch(() => null);
+  if (!queued && run?.state !== "running") return null;
+  const name = recruiterRoot ? (await readRoster(recruiterRoot).catch(() => null))?.candidates.find((candidate) => candidate.id === basename(workspacePath))?.displayName : null;
+  return `${name ?? "This candidate"}'s job is still running. Wait for it to finish or stop Agy first.`;
+}
 
 async function resolveInitialWorkspacePath(store: SettingsStore): Promise<string> {
   if (process.env.SENSEI_WORKSPACE) {
@@ -720,34 +574,27 @@ async function resolveInitialWorkspacePath(store: SettingsStore): Promise<string
     }
   }
   if (app.isPackaged) {
-    return join(app.getPath("documents"), "JobSensei");
+    return join(app.getPath("documents"), EDITION_INFO[edition].defaultFolder);
   }
   return resolve(app.getAppPath(), "data");
 }
 
 app.whenReady().then(async () => {
   try {
+    await registerFeatureIpc();
     settingsStore = new SettingsStore(app.getPath("userData"));
-    workspacePath = await resolveInitialWorkspacePath(settingsStore);
-    logAgentSync(await initializeWorkspace(workspacePath));
-    await indexContext(workspacePath);
-    await settingsStore.setWorkspace(workspacePath);
-    // The profile also records the base resume; if the app's settings lost it, put it back so nothing downstream
-    // (career sources, the context manifest, Setup) sees "no resume".
-    const savedSettings = await settingsStore.get();
-    const profileResume = (await readCandidateProfile(workspacePath).catch(() => null))?.sources.baseResumePath ?? null;
-    if (!savedSettings.baseResumePath && profileResume) {
-      await settingsStore.save({ baseResumePath: profileResume, secondaryResumePaths: savedSettings.secondaryResumePaths, linkedinProfilePath: savedSettings.linkedinProfilePath });
-      console.info(`Base resume restored from the profile: ${profileResume}`);
+    const chosen = await prepareEditionFolder(await resolveInitialWorkspacePath(settingsStore), edition, join(app.getPath("documents"), EDITION_INFO[edition].defaultFolder));
+    if (features.candidates) {
+      // Recruiter Edition: the chosen folder holds the candidate list; the workspace is the active candidate's folder.
+      recruiterRoot = chosen;
+      await ensureRecruiterRoot(chosen);
+      await settingsStore.setWorkspace(chosen);
+      const active = await activeCandidatePath(chosen);
+      if (active) await openCandidateFolder(active);
+    } else {
+      await openWorkspace(chosen);
     }
-    // The scheduled search follows its settings: reinstalled if it went missing or is out of date (moved app or
-    // workspace), never changed when it already matches. Reported to the Job Search page.
-    void (async () => {
-      const searchSettings = await readSearchSettings(workspacePath, await readCandidateProfile(workspacePath).catch(() => null));
-      const result = await ensureSchedule(scheduleTarget(workspacePath), searchSettings.schedule).catch((error) => { console.error("Scheduled search could not be checked:", error); return null; });
-      if (result?.changed) console.info(`Scheduled search ${result.changed} to match Search settings.`);
-      if (result?.changed) scheduleRepaired = result.changed;
-    })();
+    if (features.jobSearch) void import("./search-ipc.js").then((module) => module.repairSchedule(featureContext, workspacePath)).catch(() => undefined);
     startWorkspaceWatcher(workspacePath);
   } catch (error) {
     console.error("Sensei startup initialization error:", error);

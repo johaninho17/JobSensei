@@ -3,6 +3,8 @@ import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { agentTextForLayout, type LayoutVersion } from "../src/shared/workspace-layout";
+import { agentsMdFor, featuresFor, includedAgentEntry, type Features } from "../src/shared/edition";
+import { currentEdition } from "./edition";
 import { layoutVersion, workspaceFile } from "./layout";
 import { healStrayPaths } from "./layout-migration";
 
@@ -27,14 +29,14 @@ export interface AgentSyncReport {
   backupPath: string | null;
 }
 
-export async function initializeWorkspace(workspacePath: string): Promise<AgentSyncReport> {
+export async function initializeWorkspace(workspacePath: string, features: Features = featuresFor(currentEdition())): Promise<AgentSyncReport> {
   // Logical names; the layout decides where each one sits on disk.
-  await Promise.all([...["profile", "context/structured", "context/broad", "resumes", "jobs", "debrief", "fallback-references"].map((folder) => mkdir(workspaceFile(workspacePath, folder), { recursive: true })),
+  await Promise.all([...["profile", "context/structured", "context/broad", "resumes", "jobs", ...(features.contentRefresh ? ["debrief"] : []), "fallback-references"].map((folder) => mkdir(workspaceFile(workspacePath, folder), { recursive: true })),
     mkdir(join(workspacePath, ".sensei"), { recursive: true }),
   ]);
   await healStrayPaths(workspacePath).catch(() => undefined);
 
-  return syncWorkspaceAgentFiles(workspacePath);
+  return syncWorkspaceAgentFiles(workspacePath, { features });
 }
 
 interface AgentSource {
@@ -126,7 +128,8 @@ async function digest(path: string): Promise<string | null> {
  * Agy runs from the workspace, so a stale copy silently undoes every skill fix.
  * Differing workspace files are backed up before replacement; nothing is lost.
  */
-export async function syncWorkspaceAgentFiles(workspacePath: string, options: { sourceRoots?: string[]; now?: Date } = {}): Promise<AgentSyncReport> {
+export async function syncWorkspaceAgentFiles(workspacePath: string, options: { sourceRoots?: string[]; now?: Date; features?: Features } = {}): Promise<AgentSyncReport> {
+  const features = options.features ?? featuresFor(currentEdition());
   const report: AgentSyncReport = { sourceRoot: null, updated: [], added: [], removed: [], backupPath: null };
   const original = await resolveAgentSource(options.sourceRoots);
   if (!original) return report;
@@ -136,7 +139,7 @@ export async function syncWorkspaceAgentFiles(workspacePath: string, options: { 
   const rendered = version === 1 ? null : await renderAgentSource(original, version);
   const source = rendered?.source ?? original;
   try {
-    return await syncFrom(source, workspacePath, report, options.now ?? new Date());
+    return await syncFrom(source, workspacePath, report, options.now ?? new Date(), features);
   } finally {
     if (rendered) await rm(rendered.root, { recursive: true, force: true });
   }
@@ -159,8 +162,7 @@ async function renderAgentSource(source: AgentSource, version: LayoutVersion): P
   return { root, source: { root: source.root, dirs, agentsMd } };
 }
 
-async function syncFrom(source: AgentSource, workspacePath: string, report: AgentSyncReport, now: Date): Promise<AgentSyncReport> {
-
+async function syncFrom(source: AgentSource, workspacePath: string, report: AgentSyncReport, now: Date, features: Features): Promise<AgentSyncReport> {
   const agentsRoot = join(workspacePath, ".agents");
   const stamp = now.toISOString().replace(/[:.]/g, "-");
   const backupRoot = join(agentsRoot, ".backups", stamp);
@@ -186,17 +188,21 @@ async function syncFrom(source: AgentSource, workspacePath: string, report: Agen
     await cp(sourcePath, target, { recursive: true });
   };
 
+  const leftOut: string[] = [];
   for (const dir of MANAGED_AGENT_DIRS) {
     const sourceDir = source.dirs[dir];
     if (!sourceDir || !await exists(sourceDir)) continue;
     const entries = await readdir(sourceDir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.name === ".DS_Store") continue;
-      await replace(join(sourceDir, entry.name), join(agentsRoot, dir, entry.name), `${dir}/${entry.name}`);
+      const label = `${dir}/${entry.name}`;
+      // Files for a feature this edition doesn't have are never seeded (and removed below if an older copy exists).
+      if (!includedAgentEntry(features, label)) { leftOut.push(label); continue; }
+      await replace(join(sourceDir, entry.name), join(agentsRoot, dir, entry.name), label);
     }
   }
 
-  for (const retired of RETIRED_WORKSPACE_ENTRIES) {
+  for (const retired of [...RETIRED_WORKSPACE_ENTRIES, ...leftOut]) {
     const target = join(agentsRoot, retired);
     if (await exists(target)) {
       await backup(target, retired);
@@ -206,7 +212,15 @@ async function syncFrom(source: AgentSource, workspacePath: string, report: Agen
   }
 
   if (source.agentsMd) {
-    await replace(source.agentsMd, join(workspacePath, "AGENTS.md"), "AGENTS.md");
+    // AGENTS.md is written with only this edition's sections (feature markers in the source decide).
+    const text = agentsMdFor(features, await readFile(source.agentsMd, "utf8"));
+    const target = join(workspacePath, "AGENTS.md");
+    const current = await readFile(target, "utf8").catch(() => null);
+    if (current !== text) {
+      if (current !== null) { await backup(target, "AGENTS.md"); report.updated.push("AGENTS.md"); }
+      else report.added.push("AGENTS.md");
+      await writeFile(target, text, "utf8");
+    }
   }
 
   await pruneAgentBackups(agentsRoot);

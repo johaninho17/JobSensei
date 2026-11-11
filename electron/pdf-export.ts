@@ -6,9 +6,15 @@ import { classifyApplicationArtifact, type ApplicationArtifactType } from "./app
 import { assertInsideWorkspace } from "./workspace";
 import { writeBinaryAtomic } from "./persistence";
 import { readCandidateProfile } from "./candidate-profile";
+import { composeCanonicalResume, loadCanonicalResumeBaseline } from "./canonical-resume";
 
 const RESUME_PRINT_HEIGHT_PX = 1035;
 const MAX_RESUME_OVERFLOW_RATIO = 1.12;
+/** Usable height of each page when a resume runs to more than one page (Letter, .46in top and bottom margins). */
+const RESUME_PAGE_CONTENT_PX = 968;
+/** The longest base resume the app keeps as it is (ledger R3). */
+const MAX_RESUME_PAGES = 4;
+const MIN_RESUME_FONT_PX = 10.5;
 
 type ResumeFit = {
   fontSizePx: number;
@@ -102,15 +108,48 @@ async function pdfPageCount(pdf: Uint8Array): Promise<number> {
   finally { await loadingTask.destroy(); }
 }
 
-async function fitResumeToOnePage(window: BrowserWindow, textScale: number): Promise<ResumeFit> {
+/** Usable height for a resume of this many pages (one page keeps the original single-page measure). */
+function resumeHeightPx(pages: number): number {
+  return pages <= 1 ? RESUME_PRINT_HEIGHT_PX : pages * RESUME_PAGE_CONTENT_PX;
+}
+
+/** A multi-page resume prints with page margins so page two starts below the edge like page one. */
+function multiPageCss(pages: number): string {
+  return pages > 1 ? "@page{size:Letter;margin:.46in 0}body{padding:0 .5in!important}li,p{break-inside:avoid}h2,h3,h4{break-after:avoid}" : "";
+}
+
+/**
+ * How many pages the base resume needs at the smallest readable size (ledger R3: each candidate keeps their own
+ * length). A one-page base stays one page; a two-page base may use two. Measured in the export window itself.
+ */
+async function measureResumePages(window: BrowserWindow, markdown: string): Promise<number> {
+  for (let pages = 1; pages <= MAX_RESUME_PAGES; pages += 1) {
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>${layoutCss("resume", 1)}${multiPageCss(pages)}</style></head><body>${markdownToHtml(markdown, "resume")}</body></html>`;
+    await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    const height = await window.webContents.executeJavaScript(`(() => { document.body.style.setProperty('--resume-font-size', '${MIN_RESUME_FONT_PX}px'); return Math.ceil(document.body.getBoundingClientRect().height); })()`) as number;
+    if (height <= resumeHeightPx(pages) * 0.965) return pages;
+  }
+  return MAX_RESUME_PAGES;
+}
+
+/** The base resume as the app reads it (its own bullets), to measure its length; null when there is none. */
+async function baseResumeMarkdown(workspacePath: string, baseResumePath: string | null | undefined): Promise<string | null> {
+  if (!baseResumePath) return null;
+  try {
+    const baseline = await loadCanonicalResumeBaseline(workspacePath, baseResumePath);
+    return composeCanonicalResume(baseline, { skillsLines: baseline.originalSkillsLines, employers: baseline.employers.map((employer) => ({ name: employer.name, bullets: employer.originalBullets })) } as Parameters<typeof composeCanonicalResume>[1]);
+  } catch { return null; }
+}
+
+async function fitResume(window: BrowserWindow, textScale: number, pages: number): Promise<ResumeFit> {
   return window.webContents.executeJavaScript(`(() => {
     const body = document.body;
     if (!body) return { fontSizePx: 0, pageFillRatio: 0, overflowRatio: 0 };
-    const maxHeight = ${RESUME_PRINT_HEIGHT_PX};
+    const maxHeight = ${resumeHeightPx(pages)};
     const targetHeight = maxHeight * 0.965;
     // CSS pixels print at 0.75pt. A 16px ceiling therefore produces readable
     // 12pt body copy on sparse resumes instead of leaving half a page unused.
-    const minSize = 10.5;
+    const minSize = ${MIN_RESUME_FONT_PX};
     const maxSize = 16;
     const apply = (size, spacing) => {
       body.style.setProperty('--resume-font-size', size + 'px');
@@ -166,14 +205,17 @@ async function fitResumeToOnePage(window: BrowserWindow, textScale: number): Pro
   })()`);
 }
 
+/** A resume passes at the base resume's page count (ledger R3); one page over with a small overflow is a warning. */
 export function pdfValidationStatus(
   artifactType: ApplicationArtifactType,
   pageCount: number,
   overflowRatio = 1,
+  basePages = 1,
 ): ExportedPdf["validationStatus"] {
   if (artifactType !== "resume" && artifactType !== "cover-letter") return "passed";
-  if (pageCount === 1) return "passed";
-  if (artifactType === "resume" && pageCount === 2 && overflowRatio <= MAX_RESUME_OVERFLOW_RATIO) return "warning";
+  const allowed = artifactType === "resume" ? basePages : 1;
+  if (pageCount <= allowed) return "passed";
+  if (artifactType === "resume" && pageCount === allowed + 1 && overflowRatio <= MAX_RESUME_OVERFLOW_RATIO) return "warning";
   return "failed";
 }
 
@@ -198,15 +240,21 @@ export async function exportMarkdownPdf(workspacePath: string, relativePath: str
   let pageCount = 0;
   let resumeFit: ResumeFit | null = null;
   let validationStatus: ExportedPdf["validationStatus"] = "passed";
+  let basePages = 1;
   try {
-    const html = `<!doctype html><html><head><meta charset="utf-8"><style>${layoutCss(artifactType, textScale)}</style></head><body>${markdownToHtml(markdown, artifactType)}</body></html>`;
+    // A tailored resume gets as many pages as the candidate's base resume needs; the base itself is measured as is.
+    if (artifactType === "resume") {
+      const base = isResumeSource ? markdown : await baseResumeMarkdown(workspacePath, profile?.sources.baseResumePath);
+      basePages = base ? await measureResumePages(window, base) : 1;
+    }
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>${layoutCss(artifactType, textScale)}${artifactType === "resume" ? multiPageCss(basePages) : ""}</style></head><body>${markdownToHtml(markdown, artifactType)}</body></html>`;
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-    if (artifactType === "resume") resumeFit = await fitResumeToOnePage(window, textScale);
+    if (artifactType === "resume") resumeFit = await fitResume(window, textScale, basePages);
     const pdf = await window.webContents.printToPDF({ printBackground: true, pageSize: "Letter", margins: { top: 0, bottom: 0, left: 0, right: 0 } });
     pageCount = await pdfPageCount(pdf);
-    validationStatus = pdfValidationStatus(artifactType, pageCount, resumeFit?.overflowRatio);
+    validationStatus = pdfValidationStatus(artifactType, pageCount, resumeFit?.overflowRatio, basePages);
     if (validationStatus === "failed") {
-      throw new Error(`The ${artifactType === "resume" ? "resume" : "cover letter"} rendered to ${pageCount} pages${resumeFit ? ` (${Math.round(resumeFit.overflowRatio * 100)}% of one page)` : ""}. The existing PDF was preserved; shorten the Markdown before exporting again.`);
+      throw new Error(`The ${artifactType === "resume" ? "resume" : "cover letter"} rendered to ${pageCount} pages${artifactType === "resume" ? `; the base resume uses ${basePages} page${basePages === 1 ? "" : "s"}` : ""}. The existing PDF was preserved; shorten the Markdown before exporting again.`);
     }
     await writeBinaryAtomic(outputPath, pdf);
   } finally { window.destroy(); }

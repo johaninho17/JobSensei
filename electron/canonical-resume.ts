@@ -11,6 +11,7 @@ import {
   type ResumeFootprint,
 } from "../src/shared/schemas";
 import { profileBaseResume } from "./resume-footprint";
+import { displayText, mammothHtmlToMarkdown, resumeSections } from "./resume-sections";
 import { assertInsideWorkspace } from "./workspace";
 
 export type CanonicalDriftCode =
@@ -34,29 +35,11 @@ function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function displayText(value: string): string {
-  return value
-    .replace(/\\([\\().,+-])/g, "$1")
-    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
-    .replace(/[*_`#]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function normalized(value: string): string {
   return displayText(value).replace(/[–—]/g, "-").toLowerCase();
 }
 
-function decodeHtml(value: string): string {
-  return value
-    .replace(/&#(\d+);/g, (_match, code: string) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_match, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", "\"")
-    .replaceAll("&#39;", "'");
-}
 
 function sanitizeHeaderLines(lines: string[]): string[] {
   const result = [...lines];
@@ -71,21 +54,6 @@ function sanitizeHeaderLines(lines: string[]): string[] {
   return result;
 }
 
-function mammothHtmlToMarkdown(html: string): string {
-  return decodeHtml(html)
-    .replace(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, "[$2]($1)")
-    .replace(/<strong>([\s\S]*?)<\/strong>/gi, "**$1**")
-    .replace(/<em>([\s\S]*?)<\/em>/gi, "*$1*")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<li>([\s\S]*?)<\/li>/gi, "- $1\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<\/?ul>|<p>/gi, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/^((?:#+\s*)?\*\*[^*\n]+?)\s*\n\*\*\s*/m, "$1**\n")
-    .trim();
-}
 
 function isHeading(line: string, label: RegExp): boolean {
   return label.test(displayText(line));
@@ -123,25 +91,25 @@ function parseCanonicalMarkdown(
   footprint: ResumeFootprint,
   warnings: string[],
 ): CanonicalResumeBaseline {
-  const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-  const skillsIndex = lines.findIndex((line) => isHeading(line, /^(?:skills(?:\s*[-–—&]\s*languages)?|core\s+competencies(?:\s*[-–—&]\s*technical\s+skills)?|technical\s+skills)$/i));
-  const professionalIndex = lines.findIndex((line) => isHeading(line, /^(?:professional\s+experience|work\s+experience|experience)$/i));
-  const educationIndex = lines.findIndex((line) => isHeading(line, /^education(?:\s*[-–—&]\s*languages)?$/i));
-  if (skillsIndex < 0 || professionalIndex <= skillsIndex || educationIndex <= professionalIndex) {
-    throw new Error("The configured base resume does not expose the required Skills, Professional Experience, and Education structure.");
+  // Sections in the resume's own order (resume-sections.ts owns how they are found).
+  const { headerLines: rawHeader, sections } = resumeSections(markdown);
+  const section = (key: string) => sections.find((entry) => entry.key === key);
+  const skills = section("skills");
+  const professional = section("experience");
+  const education = section("education");
+  if (!skills || !professional || !education) {
+    throw new Error("The configured base resume does not expose the required Skills, Experience, and Education sections.");
   }
-
-  // Optional summary section between the header and Skills. It is the candidate's own text:
-  // kept verbatim unless the user turns on summary tailoring in Settings.
-  const summaryIndex = lines.findIndex((line, index) => index < skillsIndex
-    && isHeading(line, /^(?:summary|professional\s+summary|career\s+summary|profile|professional\s+profile|about(?:\s+me)?)$/i));
-  const headerEnd = summaryIndex >= 0 ? summaryIndex : skillsIndex;
-  const rawHeaderLines = lines.slice(0, headerEnd).map((line) => line.trim()).filter(Boolean);
-  const headerLines = sanitizeHeaderLines(rawHeaderLines);
-  const summaryHeadingLine = summaryIndex >= 0 ? lines[summaryIndex]!.trim() : undefined;
-  const originalSummaryLines = summaryIndex >= 0 ? lines.slice(summaryIndex + 1, skillsIndex).map((line) => line.trim()).filter(Boolean) : undefined;
-  const originalSkillsLines = lines.slice(skillsIndex + 1, professionalIndex).map((line) => line.trim()).filter(Boolean);
-  const professionalLines = lines.slice(professionalIndex + 1, educationIndex);
+  const summary = section("summary");
+  // Summary is the candidate's own text: kept verbatim unless the user turns on summary tailoring in Settings.
+  const summaryHeadingLine = summary?.headingLine;
+  const originalSummaryLines = summary ? summary.lines.map((line) => line.trim()).filter(Boolean) : undefined;
+  const headerLines = sanitizeHeaderLines(rawHeader.map((line) => line.trim()).filter(Boolean));
+  const originalSkillsLines = skills.lines.map((line) => line.trim()).filter(Boolean);
+  const professionalLines = professional.lines;
+  let extraCount = 0;
+  const sectionOrder = sections.map((entry) => entry.key === "extra" ? `extra:${extraCount++}` : entry.key);
+  const extraSections = sections.filter((entry) => entry.key === "extra").map((entry) => ({ headingLine: entry.headingLine, lines: entry.lines.map((line) => line.trim()).filter(Boolean) }));
   const employers: CanonicalResumeEmployer[] = [];
   let protectedLines: string[] = [];
   let originalBullets: string[] = [];
@@ -173,7 +141,7 @@ function parseCanonicalMarkdown(
   finishEmployer();
   if (!employers.length) throw new Error("No employer blocks were found in the configured base resume.");
 
-  const educationLines = lines.slice(educationIndex + 1).map((line) => line.trim()).filter(Boolean);
+  const educationLines = education.lines.map((line) => line.trim()).filter(Boolean);
   const core = {
     schemaVersion: 1 as const,
     sourcePath,
@@ -181,11 +149,13 @@ function parseCanonicalMarkdown(
     structureSource,
     headerLines,
     ...(summaryHeadingLine ? { summaryHeadingLine, originalSummaryLines: originalSummaryLines ?? [] } : {}),
-    skillsHeadingLine: lines[skillsIndex]!.trim(),
-    professionalHeadingLine: lines[professionalIndex]!.trim(),
+    skillsHeadingLine: skills.headingLine,
+    professionalHeadingLine: professional.headingLine,
     employers,
-    educationHeadingLine: lines[educationIndex]!.trim(),
+    educationHeadingLine: education.headingLine,
     educationLines,
+    sectionOrder,
+    ...(extraSections.length ? { extraSections } : {}),
     originalSkillsLines,
     footprint,
     warnings,
@@ -280,14 +250,26 @@ export function summaryIsEditable(
   return Boolean(baseline.summaryHeadingLine && profile?.preferences.resume.includeSummary);
 }
 
+/**
+ * Roles are named by employer, and one person can hold several roles at one employer (a promotion). A role is
+ * matched by its employer name and by which occurrence of that name it is: the 2nd role at a company pairs with the
+ * 2nd draft entry for that company. Single owner for every place that pairs base-resume roles with drafted ones.
+ */
+export function roleOccurrence<T extends { name: string }>(roles: T[], index: number, key: (name: string) => string): number {
+  const name = key(roles[index]!.name);
+  return roles.slice(0, index).filter((role) => key(role.name) === name).length;
+}
+export function nthRole<T extends { name: string }>(roles: T[], name: string, occurrence: number, key: (name: string) => string): T | undefined {
+  return roles.filter((role) => key(role.name) === key(name))[occurrence];
+}
+
 export function composeCanonicalResume(
   baseline: CanonicalResumeBaseline,
   draft: ApplicationDraft["resume"],
   options: { includeSummary?: boolean } = {},
 ): string {
-  const draftEmployers = new Map(draft.employers.map((employer) => [normalized(employer.name), employer]));
   const baselineNames = baseline.employers.map((employer) => normalized(employer.name));
-  if (draftEmployers.size !== baseline.employers.length || [...draftEmployers.keys()].some((name) => !baselineNames.includes(name))) {
+  if (draft.employers.length !== baseline.employers.length || draft.employers.some((employer) => !baselineNames.includes(normalized(employer.name)))) {
     throw new Error("The resume draft must provide bullets for exactly the employers in the canonical base resume.");
   }
   const isLanguagesLine = (line: string) => /^languages\s*:/i.test(line.replace(/[*_`]/g, "").trim());
@@ -301,20 +283,23 @@ export function composeCanonicalResume(
       options.includeSummary && draft.summary?.trim() ? draft.summary.trim() : (baseline.originalSummaryLines ?? []).join("\n"),
     ].filter(Boolean)
     : [];
-  const sections = [
-    header,
-    ...summarySection,
-    baseline.skillsHeadingLine,
-    composedSkillsLines.join("\n"),
-    baseline.professionalHeadingLine,
-    ...baseline.employers.map((employer) => {
-      const selected = draftEmployers.get(normalized(employer.name));
-      if (!selected) throw new Error(`The resume draft is missing bullets for ${employer.name}.`);
-      return `${employer.protectedLines.join("\n")}\n${selected.bullets.map((bullet) => `- ${bullet.replace(/^[-*+]\s+/, "").trim()}`).join("\n")}`;
-    }),
-    baseline.educationHeadingLine,
-    baseline.educationLines.join("\n"),
-  ];
+  const blocks: Record<string, string[]> = {
+    summary: summarySection,
+    skills: [baseline.skillsHeadingLine, composedSkillsLines.join("\n")],
+    experience: [
+      baseline.professionalHeadingLine,
+      ...baseline.employers.map((employer, index) => {
+        const selected = nthRole(draft.employers, employer.name, roleOccurrence(baseline.employers, index, normalized), normalized);
+        if (!selected) throw new Error(`The resume draft is missing bullets for ${employer.name}.`);
+        return `${employer.protectedLines.join("\n")}\n${selected.bullets.map((bullet) => `- ${bullet.replace(/^[-*+]\s+/, "").trim()}`).join("\n")}`;
+      }),
+    ],
+    education: [baseline.educationHeadingLine, baseline.educationLines.join("\n")],
+  };
+  (baseline.extraSections ?? []).forEach((extra, index) => { blocks[`extra:${index}`] = [extra.headingLine, extra.lines.join("\n")].filter(Boolean); });
+  // The base resume's own section order (older baselines without one use the original fixed order).
+  const order = baseline.sectionOrder ?? ["summary", "skills", "experience", "education"];
+  const sections = [header, ...order.flatMap((key) => blocks[key] ?? [])];
   return `${sections.join("\n\n")}\n`;
 }
 
@@ -331,7 +316,7 @@ export function coverLetterSignatureName(headerLine: string, fullName?: string |
   return name;
 }
 
-export function composeCanonicalCoverLetter(baseline: CanonicalResumeBaseline, draft: ApplicationDraft["coverLetter"], options: { fullName?: string | null } = {}): string {
+export function composeCanonicalCoverLetter(baseline: CanonicalResumeBaseline, draft: NonNullable<ApplicationDraft["coverLetter"]>, options: { fullName?: string | null } = {}): string {
   const header = sanitizeHeaderLines(baseline.headerLines);
   return `${[
     header.join("\n"),
@@ -358,7 +343,7 @@ export function canonicalResumeDrifts(markdown: string, baseline: CanonicalResum
     return [{
       code: "SECTION_STRUCTURE_DRIFT",
       field: "sections",
-      expected: "Skills, Professional Experience, and Education in canonical order",
+      expected: "Skills, Experience, and Education in the base resume's order",
       actual: error instanceof Error ? error.message : String(error),
     }];
   }
@@ -375,6 +360,8 @@ export function canonicalResumeDrifts(markdown: string, baseline: CanonicalResum
     || displayText(baseline.skillsHeadingLine) !== displayText(candidate.skillsHeadingLine)
     || displayText(baseline.professionalHeadingLine) !== displayText(candidate.professionalHeadingLine)
     || displayText(baseline.educationHeadingLine) !== displayText(candidate.educationHeadingLine)
+    || (baseline.sectionOrder && JSON.stringify(baseline.sectionOrder) !== JSON.stringify(candidate.sectionOrder))
+    || JSON.stringify((baseline.extraSections ?? []).map((extra) => [displayText(extra.headingLine), ...extra.lines.map(displayText)])) !== JSON.stringify((candidate.extraSections ?? []).map((extra) => [displayText(extra.headingLine), ...extra.lines.map(displayText)]))
     || baseline.employers.length !== candidate.employers.length) {
     drifts.push({ code: "SECTION_STRUCTURE_DRIFT", field: "sections", expected: "Canonical section and employer order", actual: "Changed section or employer structure" });
   }
