@@ -45,6 +45,8 @@ export type EditionInfo = {
   subtitle: string | null;
   /** Short mark where space is short (null in solo). */
   badge: string | null;
+  /** Port of the dev server (`npm run dev`), different per edition so both can run side by side. */
+  devPort: number;
   /** Default folder under Documents in an installed app. */
   defaultFolder: string;
   /** Prefix of installer file names. */
@@ -52,8 +54,8 @@ export type EditionInfo = {
 };
 
 export const EDITION_INFO: Record<Edition, EditionInfo> = {
-  solo: { edition: "solo", productName: "JobSensei", appId: "com.jobsensei.desktop", subtitle: null, badge: null, defaultFolder: "JobSensei", artifactName: "JobSensei" },
-  recruiter: { edition: "recruiter", productName: "JobSensei Recruiter Edition", appId: "com.jobsensei.recruiter", subtitle: "Recruiter Edition", badge: "RE", defaultFolder: "JobSensei Recruiter", artifactName: "JobSensei-Recruiter-Edition" },
+  solo: { edition: "solo", productName: "JobSensei", appId: "com.jobsensei.desktop", subtitle: null, badge: null, devPort: 5173, defaultFolder: "JobSensei", artifactName: "JobSensei" },
+  recruiter: { edition: "recruiter", productName: "JobSensei Recruiter Edition", appId: "com.jobsensei.recruiter", subtitle: "Recruiter Edition", badge: "RE", devPort: 5174, defaultFolder: "JobSensei Recruiter", artifactName: "JobSensei-Recruiter-Edition" },
 };
 
 export function featuresFor(edition: Edition): Features {

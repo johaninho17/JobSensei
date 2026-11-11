@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import type { CandidateEntry, CandidatesState } from "../shared/candidates";
 import type { CandidateSuggestion, LibraryPosting } from "../shared/candidate-match";
 import { PrivacyDialog } from "./Privacy";
+import { PipelineView } from "./Pipeline";
 import { daysAgo, reportText, shortlistText, type Proposal, type ReportRow } from "../shared/recruiter-insight";
 
 const message = (caught: unknown) => (caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "Something went wrong.");
@@ -91,15 +92,24 @@ function CandidatesHome({ state }: { state: CandidatesState }) {
   const [approving, setApproving] = useState<CandidateEntry | null>(null);
   const [reporting, setReporting] = useState<CandidateEntry | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"candidates" | "pipeline">("candidates");
+  const [toast, setToast] = useState<string | null>(null);
   const listed = state.candidates.filter((candidate) => candidate.status !== "archived");
   const archived = state.candidates.filter((candidate) => candidate.status === "archived");
   const open = (id: string) => void window.sensei.candidates.switchTo(id).then(reloadForCandidate, (caught) => setError(message(caught)));
+  const openJob = (id: string, jobId: string) => { try { window.sessionStorage.setItem("sensei-open-job", jobId); } catch { /* storage unavailable */ } open(id); };
   return <main className="candidates-home" aria-labelledby="candidates-title">
     <header className="candidates-top">
       <span className="candidates-brand">{EDITION.productName}</span>
       <button className="btn-link" onClick={() => setPrivacy(true)}>Privacy and terms</button>
     </header>
-    <section className="candidates-page">
+    {/* The recruiter's pages when no candidate is open (plan Q1); inside a candidate they are in the sidebar. */}
+    <nav className="candidates-nav" aria-label="Recruiter">
+      <button aria-current={view === "candidates" ? "page" : undefined} onClick={() => setView("candidates")}>Candidates</button>
+      <button aria-current={view === "pipeline" ? "page" : undefined} onClick={() => setView("pipeline")}>Pipeline</button>
+    </nav>
+    {view === "pipeline" && <section className="candidates-page"><PipelineView activeId={null} onOpenJob={openJob} onOpenCandidate={open} onToast={(text) => setToast(text)} />{toast && <p className="muted" role="status">{toast}</p>}</section>}
+    {view === "candidates" && <section className="candidates-page">
       <div className="page-head candidates-head">
         <div><h1 id="candidates-title">Candidates</h1><p>{listed.length ? `${listed.length} candidate${listed.length === 1 ? "" : "s"}. Open one to add jobs and review tailored resumes.` : "No candidates yet."}</p></div>
         <button className="btn-primary" onClick={() => setAdding(true)}>Add candidate</button>
@@ -125,7 +135,7 @@ function CandidatesHome({ state }: { state: CandidatesState }) {
         </tbody>
       </table>
       {archived.length > 0 && <ArchivedList candidates={archived} />}
-    </section>
+    </section>}
     {adding && <div className="search-overlay" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") setAdding(false); }}>
       <div className="company-dialog intake-dialog" role="dialog" aria-modal="true" aria-labelledby="intake-home-title"><h2 id="intake-home-title">Add a candidate</h2><AddCandidateForm autoFocus onCancel={() => setAdding(false)} /></div>
     </div>}

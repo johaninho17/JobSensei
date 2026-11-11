@@ -72,6 +72,7 @@
 .nav-icon { flex: 0 0 auto; color: var(--muted); }
 .side-nav button[aria-current="page"] .nav-icon { color: var(--accent); }
 .side-count { margin-left: auto; color: var(--muted); font-size: var(--fs-13); font-variant-numeric: tabular-nums; }
+.side-group-title { margin: var(--space-3) 0 var(--space-1); padding: 0 var(--space-3); color: var(--muted); font: 600 var(--fs-12) var(--font-ui); }
 .side-recent h2 { margin: 0 0 var(--space-2); padding: 0 var(--space-3); color: var(--muted); font: 600 var(--fs-13) var(--font-ui); }
 .side-recent ul { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; }
 .side-recent button { display: grid; width: 100%; padding: 6px var(--space-3); border: 0; border-radius: var(--radius-s); color: var(--ink); background: none; text-align: left; cursor: pointer; }
@@ -953,6 +954,14 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 
 /* Candidates page: the recruiter's home when no candidate is open (recruiter plan R8) */
 .candidates-home { min-height: 100vh; background: var(--canvas); color: var(--ink); }
+.candidates-nav { display: flex; gap: var(--space-1); padding: var(--space-2) var(--space-5, 24px) 0; border-bottom: 1px solid var(--line); }
+.candidates-nav button { padding: var(--space-2) var(--space-3); border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: none; font: 600 var(--fs-13) var(--font-ui); cursor: pointer; }
+.candidates-nav button[aria-current="page"] { color: var(--ink); border-bottom-color: var(--brass); }
+.base-resume-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+/* The base resume is shown to read; replacing it is the way to change it (no edit or export toolbar here). */
+.base-resume-tab .document-meta { display: none; }
+.base-resume-read { margin: var(--space-2) 0 var(--space-3); }
+.base-resume-read ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); color: var(--muted); font-size: var(--fs-13); }
 .candidates-top { display: flex; justify-content: space-between; align-items: center; padding: var(--space-3) var(--space-5, 24px); border-bottom: 1px solid var(--line); }
 .candidates-brand { font-family: var(--font-display); font-size: var(--fs-15); font-weight: 600; }
 .candidates-page { max-width: 1080px; margin: 0 auto; padding: var(--space-5, 24px); }

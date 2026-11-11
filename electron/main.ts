@@ -37,12 +37,14 @@ import { readBulletBank, saveBulletBank } from "./bullet-bank";
 
 // Tests and the new-user check run the app with a throwaway settings folder, so real settings are never touched.
 const edition = currentEdition();
+// Each edition has its own dev server port (src/shared/edition.ts), so both editions can run at once.
+const DEV_URL = `http://127.0.0.1:${EDITION_INFO[edition].devPort}`;
 const features = featuresFor(edition);
 // The recruiter edition keeps its own settings folder and Agy homes; solo keeps the name it always had.
 if (edition !== "solo") app.setName(EDITION_INFO[edition].productName);
 if (process.env.SENSEI_USER_DATA) app.setPath("userData", resolve(process.env.SENSEI_USER_DATA));
 if (process.argv.includes("--dev") && !process.env.VITE_DEV_SERVER_URL) {
-  process.env.VITE_DEV_SERVER_URL = "http://127.0.0.1:5173";
+  process.env.VITE_DEV_SERVER_URL = DEV_URL;
 }
 
 let mainWindow: BrowserWindow | undefined;
@@ -68,7 +70,7 @@ function createWindow(): void {
   mainWindow.webContents.on("render-process-gone", (_event, details) => console.error(`Sensei renderer exited: ${details.reason}`));
   mainWindow.webContents.on("console-message", (event) => console.error(`Sensei renderer: ${event.message}`));
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith("http://127.0.0.1:5173") && !url.startsWith("file://")) event.preventDefault();
+    if (!url.startsWith(DEV_URL) && !url.startsWith("file://")) event.preventDefault();
   });
   mainWindow.on("closed", () => { terminal.stop(); runWatcher.stop(); mainWindow = undefined; });
   runWatcher.start();
@@ -606,7 +608,7 @@ app.whenReady().then(async () => {
   }
 
   const scriptPolicy = process.env.VITE_DEV_SERVER_URL ? "'self' 'unsafe-inline'" : "'self'";
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": [`default-src 'self'; style-src 'self' 'unsafe-inline'; script-src ${scriptPolicy}; worker-src 'self' blob:; img-src 'self' data:; object-src 'self' data:; frame-src 'self' data:; connect-src 'self' http://127.0.0.1:5173 ws://127.0.0.1:5173`] } }));
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": [`default-src 'self'; style-src 'self' 'unsafe-inline'; script-src ${scriptPolicy}; worker-src 'self' blob:; img-src 'self' data:; object-src 'self' data:; frame-src 'self' data:; connect-src 'self' ${DEV_URL} ${DEV_URL.replace("http", "ws")}`] } }));
   terminal.onData((data) => mainWindow?.webContents.send("terminal:data", data));
   terminal.onExit((code) => mainWindow?.webContents.send("terminal:exit", code));
   createWindow();
