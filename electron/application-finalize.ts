@@ -27,7 +27,7 @@ import {
   roleOccurrence,
 } from "./canonical-resume";
 import { pruneUnsupportedSkills } from "./application-artifacts";
-import { contextManifestHash } from "./context-manifest-hash";
+import { currentManifestHash } from "./context-manifest-hash";
 import { mergeEvaluationAudit } from "./evaluation-audit";
 import { gateStatusFor, normalizeEvaluationScore, scoreEvaluation } from "./fit-scoring";
 import { validateJobApplication } from "./application-validation";
@@ -338,7 +338,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
     || run.canonicalBaselineId !== snapshot.canonicalResume.baselineId) {
     throw new Error("The application draft does not identify the pinned canonical resume baseline.");
   }
-  if (snapshot.manifestHash !== contextManifestHash(manifest)) {
+  if (snapshot.manifestHash !== currentManifestHash(manifest, snapshot.manifestHash)) {
     throw new Error("The active context changed after the application snapshot. Begin a fresh run.");
   }
   if (evidence.applicationRunId !== run.runId

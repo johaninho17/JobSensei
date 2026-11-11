@@ -157,3 +157,21 @@ describe("every checked candidate file is evidence (Recruiter Edition, plan R4)"
     expect(rows).toHaveLength(80);
   });
 });
+
+describe("unchanged base lines count for the current role (decision T8, found live 2026-11-11)", () => {
+  it("counts base-resume bullets kept under a current role as backed by that role's record", async () => {
+    const { currentEmployerRecencyStats } = await import("../electron/application-artifacts");
+    const kept = ["Run discovery and product demos for operations buyers.", "Write proposals with legal and finance."];
+    const markdown = `**Northstar Labs** — Account Executive | Feb 2022 - Present\n- Manage about 40 mid-market accounts.\n- ${kept[0]}\n- ${kept[1]}\n\n**EDUCATION**\n**Example University**`;
+    const audit = { claimMappings: [
+      { publicText: "Manage about 40 mid-market accounts.", claimType: "candidate", evidenceIds: ["file:notes:1"] },
+      ...kept.map((publicText) => ({ publicText, claimType: "baseline", evidenceIds: [] })),
+    ] };
+    const snapshot = (band: string) => ({
+      canonicalResume: { employers: [{ name: "Northstar Labs", originalBullets: kept }] },
+      evidenceRows: [{ evidenceId: "base:r1:b1", recencyBand: band }, { evidenceId: "file:notes:1", recencyBand: "current" }],
+    });
+    expect(currentEmployerRecencyStats(markdown, audit as never, snapshot("current") as never)).toEqual({ total: 3, recent: 3 });
+    expect(currentEmployerRecencyStats(markdown, audit as never, snapshot("historical") as never)).toEqual({ total: 3, recent: 1 });
+  });
+});

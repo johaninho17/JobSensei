@@ -37,7 +37,7 @@ For an explicit regeneration, the saved JD is the only job-specific input. Exist
 ## Drafting Rules
 
 - Candidate facts come only from `evidenceRows`. The JD identifies what to prioritize; it never proves that the candidate performed it.
-- Respect every row's employer, timeline, scope, eligibility, `maximumClassification`, and source authority. Every public claim must cite an `eligible` evidence row. Never cite a single `corroboration-required` row alone. Never invent an evidence ID.
+- Respect every row's employer, timeline, scope, eligibility, `maximumClassification`, and source authority. Every public claim must cite an `eligible` evidence row. Never cite a single `corroboration-required` row alone. A bullet under an employer cites at least one row assigned to that employer; a row with no employer (such as a note) may only be cited beside one. Never invent an evidence ID.
 - Follow `resumePlan`, `resumeTemplate`, `footprint`, `denylistRules`, and the local candidate preferences. The finalizer restores protected identity, contact details, chronology, titles, dates, locations, education, and layout.
 - Unchanged base-resume bullets are the candidate's own approved claims: copy them word for word. A *rewritten* bullet must trace every claim to `evidenceRows` (the base resume's own lines count as evidence (`base:` rows; the snapshot instructions own this rule)); the baseline wording shows the confidence level to match, not new facts to add.
 - Resume summary: only if `resumeTemplate.summary.editable` is true, add `"summary": { "text": ..., "evidenceIds": [...] }` to `resume` in the bundle (at most 3 lines, same truth rules as bullets). Otherwise leave it out; the base resume's own summary, if any, stays verbatim.

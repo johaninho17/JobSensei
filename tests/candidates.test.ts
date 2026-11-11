@@ -249,3 +249,28 @@ describe("Agy home preparations run one at a time (found live 2026-11-11)", () =
     expect(await readFile(join(cli, "history.jsonl"), "utf8")).toBe("alex prompts");
   });
 });
+
+describe("the context fingerprint ignores how the files were chosen (found live 2026-11-11)", () => {
+  it("the same files read as unchanged whether chosen by default or explicitly, and older fingerprints still match", async () => {
+    const { createHash } = await import("node:crypto");
+    const { contextManifestHash, currentManifestHash } = await import("../electron/context-manifest-hash");
+    const manifest = {
+      schemaVersion: 1, workspacePath: "/w", baseResumePath: "resumes/base.md", secondaryResumePaths: [], linkedinProfilePath: null,
+      contextRoots: [], fallbackReferenceRoots: [], policyPaths: ["context/denylist.md"], primaryContextRoots: [], conditionalContextRoots: [],
+      selectedJobIds: [], selectedJobPaths: [], selectedCareerPaths: ["resumes/base.md"], selectedStructuredPaths: [], selectedBroadPaths: [], selectedJobFiles: [],
+      selectionMode: "default", scope: "career-context",
+      sourceFiles: [{ path: "resumes/base.md", modifiedAt: "2026-11-11T00:00:00.000Z", sizeBytes: 10, sourceFamily: "base" }],
+      generatedAt: "2026-11-11T00:00:00.000Z", instructions: "",
+    } as never as Parameters<typeof contextManifestHash>[0];
+    const explicit = { ...manifest, selectionMode: "explicit" } as typeof manifest;
+    expect(contextManifestHash(explicit)).toBe(contextManifestHash(manifest));
+    const m = manifest as unknown as Record<string, unknown> & { sourceFiles: Array<Record<string, unknown>> };
+    const legacy = createHash("sha256").update(JSON.stringify({
+      schemaVersion: m.schemaVersion, baseResumePath: m.baseResumePath, secondaryResumePaths: [], linkedinProfilePath: null, policyPaths: m.policyPaths,
+      selectedJobIds: [], selectedCareerPaths: m.selectedCareerPaths, selectedStructuredPaths: [], selectedBroadPaths: [], selectedJobFiles: [],
+      selectionMode: "default", scope: m.scope, sourceFiles: m.sourceFiles.map(({ path, modifiedAt, sizeBytes, sourceFamily }) => ({ path, modifiedAt, sizeBytes, sourceFamily })),
+    })).digest("hex");
+    expect(currentManifestHash(manifest, legacy)).toBe(legacy);
+    expect(currentManifestHash(explicit, legacy)).not.toBe(legacy);
+  });
+});
