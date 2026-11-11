@@ -137,10 +137,10 @@ export async function saveRecruiterNotes(candidateFolder: string, notes: string)
 }
 
 /**
- * Deletes a candidate for good (recruiter plan R6): their folder, their Agy home (sign-in copy and history), and their
- * place on the list. Returns what was removed. The caller confirms first and offers an export.
+ * Deletes a candidate for good (recruiter plan R6): their folder and their place on the list (the caller also removes
+ * their Agy history). Returns what was removed. The caller confirms first and offers an export.
  */
-export async function deleteCandidate(root: string, id: string, agyHome: string | null): Promise<{ name: string; removed: string[] }> {
+export async function deleteCandidate(root: string, id: string): Promise<{ name: string; removed: string[] }> {
   const roster = await readRoster(root);
   const entry = roster.candidates.find((candidate) => candidate.id === id);
   if (!entry) throw new Error("That candidate isn't on the list.");
@@ -148,7 +148,6 @@ export async function deleteCandidate(root: string, id: string, agyHome: string 
   const removed: string[] = [];
   await rm(folder, { recursive: true, force: true });
   removed.push(`Their folder (${candidateFolder(id)})`);
-  if (agyHome) { await rm(agyHome, { recursive: true, force: true }); removed.push("Their Agy history and sign-in copy"); }
   await saveRoster(root, { ...roster, candidates: roster.candidates.filter((candidate) => candidate.id !== id) });
   removed.push("Their place on the candidate list");
   const settings = await readRecruiterSettings(root);

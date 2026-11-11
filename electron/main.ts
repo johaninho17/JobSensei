@@ -345,7 +345,7 @@ const runWatcher = new RunWatcher({
 ipcMain.handle("runs:latest", async () => runWatcher.current());
 
 // The app-owned Agy home for background Agy runs (written answers, search, rating), one per workspace (a candidate's
-// folder in the Recruiter Edition gets that candidate's home).
+// folder in the Recruiter Edition shares it, with that candidate's Agy history swapped in).
 const agyHomes = createAgyHomeCache((workspace) => prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath }, agyHomeName));
 ipcMain.handle("jobs:update-tracker", async (_event, jobId: unknown, update: unknown) => updateJobTracker(requireWorkspace(), String(jobId), update));
 ipcMain.handle("jobs:validate-application", async (_event, jobId: string) => validateJobApplication(requireWorkspace(), jobId, false));
@@ -367,6 +367,8 @@ ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
   const agyHome = await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath }, agyHomeName)
     .then(async (home) => { await writeSenseiLauncher(home, { appRoot: terminalAppRoot(), packaged: app.isPackaged, runtimePath: process.execPath }); return home; })
     .catch((error) => { console.error("Agy home setup failed:", error); return null; });
+  // A candidate's Agy never runs outside the app's home: that would mix their history with the user's own Agy.
+  if (!agyHome && agyHomeName) throw new Error("Agy couldn't be prepared for this candidate. Close and reopen the candidate, then try again.");
   terminal.setAgyHome(agyHome);
   // The terminal start rewrote the home's settings; background runs reuse it for this workspace.
   if (agyHome) agyHomes.set(workspace, agyHome);
@@ -527,7 +529,8 @@ async function openWorkspace(folder: string): Promise<void> {
   startWorkspaceWatcher(workspacePath);
 }
 
-// Recruiter Edition (recruiter plan R1/R2): the recruiter folder, and the active candidate's own settings and Agy home.
+// Recruiter Edition (recruiter plan R1/R2): the recruiter folder, the active candidate's own settings, and whose Agy
+// history the shared Agy home holds (agyHomeName = the candidate id; electron/agy-home.ts swaps it in).
 let recruiterRoot: string | null = null;
 let agyHomeName: string | undefined;
 async function openCandidateFolder(folder: string): Promise<void> {
@@ -539,7 +542,8 @@ async function openCandidateFolder(folder: string): Promise<void> {
   await openWorkspace(folder);
 }
 async function closeCandidateFolder(): Promise<void> {
-  terminal.stop();
+  // Agy must be fully gone before the next candidate's history is swapped into the shared home.
+  await terminal.stopAndWait();
   workspaceWatcher?.close();
   workspaceWatcher = undefined;
   workspacePath = undefined as unknown as string;

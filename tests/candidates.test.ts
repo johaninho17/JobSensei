@@ -98,30 +98,84 @@ describe("active candidate", () => {
   });
 });
 
-describe("Agy home per candidate (recruiter plan R2)", () => {
-  it("gives each candidate their own home and refuses names that could leave it", async () => {
-    const { candidateAgyHomePath } = await import("../electron/agy-home");
-    expect(candidateAgyHomePath("/data", "alex-morgan-7k2f")).toBe(join("/data", "agy-home", "candidates", "alex-morgan-7k2f"));
-    for (const bad of ["../x", "a/b", "Alex"]) expect(() => candidateAgyHomePath("/data", bad)).toThrow();
+describe("one Agy home, history kept per candidate (recruiter plan R2, 2026-11-11)", () => {
+  async function home() {
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const userData = await root();
+    const cli = join(userData, "agy-home", ".gemini", "antigravity-cli");
+    await mkdir(join(cli, "conversations"), { recursive: true });
+    await writeFile(join(cli, "settings.json"), "{\"shared\":true}");
+    await writeFile(join(cli, "antigravity-oauth-token"), "shared sign-in");
+    return { userData, cli, writeFile, mkdir };
+  }
+
+  it("swaps each candidate's conversations and memory in and out; sign-in and settings stay shared", async () => {
+    const { useCandidateHistory } = await import("../electron/agy-home");
+    const { userData, cli, writeFile, mkdir } = await home();
+    await useCandidateHistory(userData, "alex-morgan-7k2f");
+    await mkdir(join(cli, "conversations"), { recursive: true });
+    await writeFile(join(cli, "conversations", "alex.pb"), "Alex's run");
+    await mkdir(join(cli, "brain"), { recursive: true });
+    await writeFile(join(cli, "brain", "memory.md"), "Alex's memory");
+    await writeFile(join(cli, "history.jsonl"), "alex prompts");
+    // Found live: the cache keeps conversation titles and first prompts, and the logs keep prompts.
+    await mkdir(join(cli, "cache"), { recursive: true });
+    await writeFile(join(cli, "cache", "conversation_metadata.json"), "alex first prompt");
+    await writeFile(join(cli, "cache", "onboarding.json"), "first run done");
+    await mkdir(join(cli, "log"), { recursive: true });
+    await writeFile(join(cli, "log", "cli-1.log"), "alex prompt");
+    await writeFile(join(cli, "cli.log"), "alex prompt");
+    await useCandidateHistory(userData, "jordan-lee-q9w3");
+    expect(await readFile(join(cli, "cache", "onboarding.json"), "utf8")).toBe("first run done");
+    for (const path of ["cache/conversation_metadata.json", "log", "cli.log"]) expect(await exists(join(cli, path))).toBe(false);
+    expect(await exists(join(cli, "conversations", "alex.pb"))).toBe(false);
+    expect(await exists(join(cli, "brain"))).toBe(false);
+    expect(await exists(join(cli, "history.jsonl"))).toBe(false);
+    expect(await readFile(join(cli, "antigravity-oauth-token"), "utf8")).toBe("shared sign-in");
+    expect(await readFile(join(cli, "settings.json"), "utf8")).toBe("{\"shared\":true}");
+    await mkdir(join(cli, "conversations"), { recursive: true });
+    await writeFile(join(cli, "conversations", "jordan.pb"), "Jordan's run");
+    await useCandidateHistory(userData, "alex-morgan-7k2f");
+    expect(await readFile(join(cli, "conversations", "alex.pb"), "utf8")).toBe("Alex's run");
+    expect(await exists(join(cli, "conversations", "jordan.pb"))).toBe(false);
+    expect(await readFile(join(cli, "brain", "memory.md"), "utf8")).toBe("Alex's memory");
+    expect(await readFile(join(userData, "agy-history", "jordan-lee-q9w3", "antigravity-cli", "conversations", "jordan.pb"), "utf8")).toBe("Jordan's run");
   });
 
-  it("copies only the sign-in into a new candidate's home, never memory", async () => {
-    const { shareSignIn } = await import("../electron/agy-home");
-    const { mkdir, writeFile, utimes } = await import("node:fs/promises");
-    const homes = join(await root(), "agy-home", "candidates");
-    const token = (name: string) => join(homes, name, ".gemini", "antigravity-cli", "antigravity-oauth-token");
-    for (const [name, text, age] of [["alex-morgan-7k2f", "old token", 100], ["jordan-lee-q9w3", "new token", 10]] as const) {
-      await mkdir(join(homes, name, ".gemini", "antigravity-cli", "conversations"), { recursive: true });
-      await writeFile(token(name), text);
-      await writeFile(join(homes, name, ".gemini", "antigravity-cli", "conversations", "chat.pb"), `${name} memory`);
-      const when = new Date(Date.now() - age * 1000);
-      await utimes(token(name), when, when);
-    }
-    const fresh = join(homes, "sam-rivera-a1b2");
-    expect(await shareSignIn(fresh)).toBe(true);
-    expect(await readFile(token("sam-rivera-a1b2"), "utf8")).toBe("new token");
-    expect(await exists(join(fresh, ".gemini", "antigravity-cli", "conversations"))).toBe(false);
-    expect(await shareSignIn(fresh)).toBe(false); // already signed in: left alone
+  it("sets aside history with no owner instead of giving it to a candidate", async () => {
+    const { useCandidateHistory } = await import("../electron/agy-home");
+    const { userData, cli, writeFile } = await home();
+    await writeFile(join(cli, "conversations", "old.pb"), "earlier history");
+    await useCandidateHistory(userData, "alex-morgan-7k2f");
+    expect(await exists(join(cli, "conversations", "old.pb"))).toBe(false);
+    expect(await exists(join(userData, "agy-history", "_unowned", "antigravity-cli", "conversations", "old.pb"))).toBe(true);
+  });
+
+  it("removes a deleted candidate's history, in the store and in the shared home", async () => {
+    const { removeCandidateHistory, useCandidateHistory } = await import("../electron/agy-home");
+    const { userData, cli, writeFile, mkdir } = await home();
+    await useCandidateHistory(userData, "alex-morgan-7k2f");
+    await mkdir(join(cli, "conversations"), { recursive: true });
+    await writeFile(join(cli, "conversations", "alex.pb"), "Alex's run");
+    await removeCandidateHistory(userData, "alex-morgan-7k2f");
+    expect(await exists(join(cli, "conversations", "alex.pb"))).toBe(false);
+    expect(await readFile(join(cli, "antigravity-oauth-token"), "utf8")).toBe("shared sign-in");
+    await mkdir(join(userData, "agy-history", "jordan-lee-q9w3"), { recursive: true });
+    await removeCandidateHistory(userData, "jordan-lee-q9w3");
+    expect(await exists(join(userData, "agy-history", "jordan-lee-q9w3"))).toBe(false);
+    await expect(removeCandidateHistory(userData, "../x")).rejects.toThrow();
+  });
+
+  it("denies Agy's file tools the stored histories", async () => {
+    const { prepareAgyHome } = await import("../electron/agy-home");
+    const userData = await root();
+    const { mkdir } = await import("node:fs/promises");
+    const workspace = join(await root(), "candidates", "alex-morgan-7k2f");
+    await mkdir(workspace, { recursive: true });
+    const agyHome = await prepareAgyHome(userData, workspace, [], undefined, "alex-morgan-7k2f");
+    expect(agyHome).toBe(join(userData, "agy-home"));
+    const settings = JSON.parse(await readFile(join(agyHome, ".gemini", "antigravity-cli", "settings.json"), "utf8").catch(() => "{}"));
+    expect(settings.permissions?.deny ?? []).toEqual(expect.arrayContaining([`read_file(${join(userData, "agy-history")})`]));
   });
 });
 
@@ -159,28 +213,39 @@ describe("export and delete (recruiter plan R6)", () => {
     if (process.platform !== "win32") expect(execFileSync("unzip", ["-p", target, "Alex_Morgan/resumes/base.md"]).toString()).toContain("REST API");
   });
 
-  it("deletes a candidate's folder, Agy home, and list entry, and never follows the keychain link out of the home", async () => {
+  it("deletes a candidate's folder and list entry, leaving the other candidate alone", async () => {
     const { deleteCandidate } = await import("../electron/candidates");
-    const { mkdir, writeFile, symlink } = await import("node:fs/promises");
     const dir = await root();
     const alex = await addCandidate(dir, "Alex Morgan", { suffix: "7k2f", seed: false });
     const jordan = await addCandidate(dir, "Jordan Lee", { suffix: "q9w3", seed: false });
     await setActiveCandidate(dir, alex.id);
-    const outside = join(dir, "keychains");
-    await mkdir(outside);
-    await writeFile(join(outside, "login.keychain-db"), "keep me");
-    const home = join(dir, "user-data", "agy-home", "candidates", alex.id);
-    await mkdir(join(home, "Library"), { recursive: true });
-    await symlink(outside, join(home, "Library", "Keychains"), "dir");
-    const result = await deleteCandidate(dir, alex.id, home);
+    const result = await deleteCandidate(dir, alex.id);
     expect(result.name).toBe("Alex Morgan");
     expect(await exists(join(dir, "candidates", alex.id))).toBe(false);
-    expect(await exists(home)).toBe(false);
-    expect(await readFile(join(outside, "login.keychain-db"), "utf8")).toBe("keep me");
     expect((await readRoster(dir)).candidates.map((candidate) => candidate.id)).toEqual([jordan.id]);
     expect(await activeCandidatePath(dir)).toBeNull();
     const leftovers = JSON.stringify([await readFile(join(dir, "recruiter", "candidates.json"), "utf8"), await readFile(join(dir, "recruiter", "settings.json"), "utf8")]);
     expect(leftovers).not.toContain("Alex");
     expect(await exists(join(dir, "candidates", jordan.id))).toBe(true);
+  });
+});
+
+describe("Agy home preparations run one at a time (found live 2026-11-11)", () => {
+  it("two candidates prepared at once each end with a consistent owner and no lost history", async () => {
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const { prepareAgyHome } = await import("../electron/agy-home");
+    const userData = await root();
+    const cli = join(userData, "agy-home", ".gemini", "antigravity-cli");
+    const alex = join(userData, "agy-history", "alex-morgan-7k2f", "antigravity-cli");
+    await mkdir(alex, { recursive: true });
+    await writeFile(join(alex, "history.jsonl"), "alex prompts");
+    const workspace = await root();
+    await Promise.all([
+      prepareAgyHome(userData, workspace, [], undefined, "alex-morgan-7k2f"),
+      prepareAgyHome(userData, workspace, [], undefined, "jordan-lee-q9w3"),
+      prepareAgyHome(userData, workspace, [], undefined, "alex-morgan-7k2f"),
+    ]);
+    expect((await readFile(join(cli, "jobsensei-history-owner"), "utf8")).trim()).toBe("alex-morgan-7k2f");
+    expect(await readFile(join(cli, "history.jsonl"), "utf8")).toBe("alex prompts");
   });
 });
