@@ -10,6 +10,7 @@ import { readJobQueue } from "./job-queue";
 import { listPipeline, setPipelineStatus } from "./pipeline";
 import { zipFolder } from "./zip-folder";
 import { applyIntake, type CandidateIntake } from "./candidate-intake";
+import { applicationReview } from "./application-review";
 import { candidateAgyHomePath } from "./agy-home";
 import { nextQueuedCandidate, sendPosting, setLibraryCompany, stageLibraryLink, stageLibraryPaste, suggestCandidates } from "./posting-library";
 import { join } from "node:path";
@@ -98,6 +99,7 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
     if (!activeId) throw new Error("Open a candidate first.");
     return candidatePath(ctx.root(), activeId);
   };
+  ipcMain.handle("review:get", async (_event, jobId: unknown) => applicationReview(await activeFolder(), id(jobId)));
   ipcMain.handle("candidates:notes", async () => readRecruiterNotes(await activeFolder()));
   /** Saves the open candidate's recruiter notes; returns the context path so the renderer checks it for Agy. */
   ipcMain.handle("candidates:save-notes", async (_event, notes: unknown) => {

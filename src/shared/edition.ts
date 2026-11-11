@@ -103,6 +103,7 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   pipeline: "candidates",
   "zip-folder": "candidates",
   "candidate-intake": "candidates",
+  "application-review": "candidates",
 };
 
 export function includedAgentEntry(features: Features, entry: string): boolean {

@@ -34,6 +34,7 @@ import { SubTabPanel, SubTabs } from "./SubTabs";
 import { CandidateGate, CandidateResumeCard, CandidateSwitcher, RecruiterNotes, WhoIsThisFor } from "./Candidates";
 import { PipelineView } from "./Pipeline";
 import { PrivacyDialog } from "./Privacy";
+import { ReviewPanel } from "./Review";
 import type { LibraryPosting } from "../shared/candidate-match";
 import type { CandidatesState } from "../shared/candidates";
 import { JobSearchView } from "./JobSearchView";
@@ -115,7 +116,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => storedPanelNumber("sensei-left-panel-width", 260));
   const [rightPanelWidth, setRightPanelWidth] = useState(() => storedPanelNumber("sensei-right-panel-width", 430));
   const [leftPanelOpen, setLeftPanelOpen] = useState(() => storedPanelOpen("sensei-left-panel-state"));
-  const [rightPanelOpen, setRightPanelOpen] = useState(() => storedPanelOpen("sensei-right-panel-state"));
+  // The Recruiter Edition starts with the Agy chat hidden (it still runs); the queue and job pages show progress.
+  const [rightPanelOpen, setRightPanelOpen] = useState(() => FEATURES.candidates ? window.localStorage.getItem("sensei-right-panel-state") === "open" : storedPanelOpen("sensei-right-panel-state"));
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [treeRevealPath, setTreeRevealPath] = useState<string | null>(null);
@@ -141,8 +143,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   /** Asks which company a pasted posting is for; null when the user skips. */
   const askCompany = (title: string | null) => new Promise<string | null>((resolve) => setCompanyAsk({ title, resolve }));
   // Recruiter Edition: which candidates a new posting is for (recruiter plan R5).
-  const [whoAsk, setWhoAsk] = useState<{ posting: LibraryPosting; resolve: (ids: string[] | null) => void } | null>(null);
-  const askWho = (posting: LibraryPosting) => new Promise<string[] | null>((resolve) => setWhoAsk({ posting, resolve }));
+  const [whoAsk, setWhoAsk] = useState<{ posting: LibraryPosting; remaining: number; resolve: (ids: string[] | null, forRest: boolean) => void } | null>(null);
+  // Several links pasted at once: the recruiter may choose candidates once for the rest of the batch.
+  const batchChoice = useRef<string[] | null>(null);
+  const askWho = (posting: LibraryPosting, remaining = 0) => new Promise<string[] | null>((resolve) => setWhoAsk({ posting, remaining, resolve: (ids, forRest) => { if (forRest && ids) batchChoice.current = ids; resolve(ids); } }));
   const runningItem = jobQueue.items.find((item) => item.status === "running");
   const busyJobLabel = runningItem ? runningItem.label ?? runningItem.url ?? "a queued job" : null;
   /**
@@ -158,7 +162,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     showPage(destination === "context" ? "context-home" : "jobs-home");
   }
   async function loadReadiness() { try { const next = await window.sensei.setup.readiness(); setReadiness(next); return next; } catch { return null; } }
-  async function queueJob(input: { kind: "link"; url: string } | { kind: "paste"; text: string; note?: string } | { kind: "found"; id: string; auto?: boolean }, manual: boolean): Promise<number> {
+  async function queueJob(input: { kind: "link"; url: string; batch?: { index: number; size: number } } | { kind: "paste"; text: string; note?: string } | { kind: "found"; id: string; auto?: boolean }, manual: boolean): Promise<number> {
     // The app says what setup is missing before a job reaches Agy (electron/setup-readiness.ts owns the rules).
     const ready = await loadReadiness();
     if (ready && !ready.ready) throw new Error(`${ready.blocker} Open Setup in the sidebar.`);
@@ -173,7 +177,9 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         const company = await askCompany(posting.title ?? firstLine);
         if (company) posting = await window.sensei.candidates.setPostingCompany(item.id, company);
       }
-      const chosen = await askWho(posting);
+      const batch = input.kind === "link" ? input.batch : undefined;
+      if (!batch || batch.index === 0) batchChoice.current = null;
+      const chosen = batchChoice.current ?? await askWho(posting, batch ? batch.size - batch.index - 1 : 0);
       if (!chosen) { const stop = new Error("No candidate chosen, so nothing was queued."); stop.name = "NotQueued"; throw stop; }
       const sent = await window.sensei.candidates.send(item.id, chosen);
       if (sent.queued.length) showToast(`Queued for ${plural(sent.queued.length, "other candidate")}; their jobs run after this candidate's queue`);
@@ -243,7 +249,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         notify("Job queue finished", `${queue.items.filter((item) => item.status === "done").length} drafted, ${queue.items.filter((item) => item.status === "needs_attention").length} need attention`);
       }
       if (JSON.stringify(queue) !== JSON.stringify(queueRef.current)) await saveQueue(queue);
-      if (send) { setRightPanelOpen(true); await window.sensei.terminal.write(`${promptForItem(send)}\r`); }
+      if (send) { if (!FEATURES.candidates) setRightPanelOpen(true); await window.sensei.terminal.write(`${promptForItem(send)}\r`); }
     };
     void tick();
     const timer = window.setInterval(() => void tick(), 5000);
@@ -1005,7 +1011,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     <div className={`panel-resizer is-right ${rightPanelOpen ? "" : "is-collapsed"}`} role="separator" aria-label="Resize terminal panel" aria-orientation="vertical" aria-valuemin={RIGHT_PANEL_MIN} aria-valuemax={panelMaximum("right")} aria-valuenow={rightPanelWidth} tabIndex={rightPanelOpen ? 0 : -1} onPointerDown={(event) => beginPanelResize("right", event)} onKeyDown={(event) => resizePanelWithKeyboard("right", event)} />
     <ToastRegion toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
     {shortcutsOpen && <ShortcutsPanel onClose={() => setShortcutsOpen(false)} />}
-    {FEATURES.candidates && whoAsk && <WhoIsThisFor posting={whoAsk.posting} activeId={candidates?.activeId ?? null} onDone={(ids) => { whoAsk.resolve(ids); setWhoAsk(null); }} />}
+    {FEATURES.candidates && whoAsk && <WhoIsThisFor posting={whoAsk.posting} remaining={whoAsk.remaining} activeId={candidates?.activeId ?? null} onDone={(ids, forRest) => { whoAsk.resolve(ids, forRest); setWhoAsk(null); }} />}
     {companyAsk && <CompanyDialog title={companyAsk.title} onDone={(company) => { companyAsk.resolve(company); setCompanyAsk(null); }} />}
     <TerminalPanel onQueueJob={queueJob} busyLabel={busyJobLabel} cwd={workspace.repositoryRoot || workspace.path} selectedJobFiles={selectedJobFiles} selectedCareerPaths={selectedCareerPaths} theme={theme} visible={rightPanelOpen && !needsSetup} onClose={() => setRightPanelOpen(false)} jobActions={jobActions} promptRequest={promptRequest} onPromptHandled={(id) => setPromptRequest((request) => request?.id === id ? null : request)} onInsertPrompt={insertJobPrompt} onOpenRun={(run) => { if (run.jobId && jobs.some((job) => job.id === run.jobId)) openJobView(run.jobId, run.kind === "interview" ? "interview" : "application", run.roundId ?? undefined); }} />
   </main>;
@@ -1373,7 +1379,7 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
   const renderJobs = (list: JobFolderSummary[]) => view === "cards" ? <div className="job-card-grid">{list.map((job) => <JobCard key={job.id} job={job} favorite={favorites.has(job.id)} onToggleFavorite={() => toggleFavorite(job.id)} handlers={menuHandlers(job)} selecting={selecting} selected={selected.has(job.id)} onSelect={(event) => toggleSelected(job.id, event as { shiftKey?: boolean })} />)}</div>
       : <div className="jobs-table-wrap"><table className="jobs-table"><thead><tr>{selecting && <th scope="col"><span className="sr-only">Selected</span></th>}<th scope="col">Role</th><th scope="col">Fit</th><th scope="col">Status</th><th scope="col">Interview</th><th scope="col">Next</th><th scope="col" className="col-added">Added</th><th scope="col"><span className="sr-only">Favorite and actions</span></th></tr></thead><tbody>{list.map((job) => <tr key={job.id} tabIndex={0} className={selected.has(job.id) ? "is-selected" : undefined} aria-selected={selecting ? selected.has(job.id) : undefined} onClick={(event) => { if (selecting || event.metaKey || event.ctrlKey) toggleSelected(job.id, event); else onOpenJob(job.id); }} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); if (selecting) toggleSelected(job.id, event); else onOpenJob(job.id); } }}>{selecting && <td><input type="checkbox" className="job-select" checked={selected.has(job.id)} aria-label={`Select ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => toggleSelected(job.id, { shiftKey: (event.nativeEvent as globalThis.MouseEvent).shiftKey })} /></td>}<td className="jobs-role"><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></td><td><FitBadge rating={job.rating} /></td><td><TrackerPill status={effectiveStatus(job)} job={job} /></td><td>{job.interviewRoundLabel ? <button className="btn-link" onClick={(event) => { event.stopPropagation(); onOpenJobView(job.id, "interview"); }}>{job.interviewRoundLabel}</button> : <span className="muted">None</span>}</td><td><NextBadge job={job} /></td><td className="tabular muted col-added">{formatJobDate(job.createdAt)}</td><td><button className={`job-favorite ${favorites.has(job.id) ? "is-favorite" : ""}`} aria-pressed={favorites.has(job.id)} aria-label={`Favorite ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => { event.stopPropagation(); toggleFavorite(job.id); }}>{favorites.has(job.id) ? "★" : "☆"}</button><JobMenuButton job={job} handlers={menuHandlers(job)} /></td></tr>)}</tbody></table></div>;
   return <section className="jobs-home">
-    <header className="page-head"><div><h1>Jobs</h1><p>{visibleJobs.length === jobs.length ? `${jobs.length} job${jobs.length === 1 ? "" : "s"}` : `${visibleJobs.length} of ${jobs.length} jobs shown`}. Open one to see its application and interview prep.</p></div></header>
+    <header className="page-head"><div><h1>Jobs</h1><p>{visibleJobs.length === jobs.length ? `${jobs.length} job${jobs.length === 1 ? "" : "s"}` : `${visibleJobs.length} of ${jobs.length} jobs shown`}. {FEATURES.candidates ? "Open one to review the tailored resume and mark it applied." : "Open one to see its application and interview prep."}</p></div></header>
     <JobQueueBox queue={queue} jobs={jobs} agyReady={agyReady} onOpenAgy={onOpenAgy} onSave={onSaveQueue} onQueueJob={onQueueJob} onOpenJob={onOpenJob} />
     {setup}
     <SubTabs<JobsTab>
@@ -1577,16 +1583,20 @@ function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAction, on
 const QUEUE_LABEL: Record<JobQueue["items"][number]["status"], string> = { queued: "Waiting", running: "Running in Agy", done: "Done", needs_attention: "Needs attention" };
 
 /** Job links waiting for Agy. With "Run automatically" on, the next link is sent (and run) when Agy is idle. */
-type QueueJob = (input: { kind: "link"; url: string } | { kind: "paste"; text: string; note?: string }, manual: boolean) => Promise<number>;
+/** `batch`: this link is one of several pasted together (index from 0), so a recruiter can choose candidates once. */
+type QueueJob = (input: { kind: "link"; url: string; batch?: { index: number; size: number } } | { kind: "paste"; text: string; note?: string }, manual: boolean) => Promise<number>;
 
 function JobQueueBox({ queue, jobs, agyReady, onOpenAgy, onSave, onQueueJob, onOpenJob }: { queue: JobQueue; jobs: JobFolderSummary[]; agyReady: boolean; onOpenAgy: () => void; onSave: (queue: JobQueue) => void; onQueueJob: QueueJob; onOpenJob: (jobId: string) => void }) {
   const [input, setInput] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const value = input.trim();
+  // Several links (one per line or separated by spaces) are added one after another.
+  const links = value.split(/\s+/).filter(Boolean);
+  const manyLinks = links.length > 1 && links.every((link) => /^https?:\/\/\S+$/i.test(link) && link.length <= 400);
   const isLink = /^https?:\/\/[^\s]+$/i.test(value);
   const duplicate = isLink && queue.items.some((item) => item.url === value && item.status !== "done");
-  const valid = !adding && !duplicate && (isLink ? value.length <= 400 : value.length >= 400);
+  const valid = !adding && !duplicate && (manyLinks || (isLink ? value.length <= 400 : value.length >= 400));
   const update = (id: string, patch: Partial<JobQueue["items"][number]>) => onSave({ ...queue, items: queue.items.map((item) => item.id === id ? { ...item, ...patch } : item) });
   async function add(event: React.FormEvent) {
     event.preventDefault();
@@ -1594,8 +1604,19 @@ function JobQueueBox({ queue, jobs, agyReady, onOpenAgy, onSave, onQueueJob, onO
     setAdding(true);
     setProblem(null);
     try {
-      await onQueueJob(isLink ? { kind: "link", url: value } : { kind: "paste", text: value }, false);
-      setInput("");
+      if (manyLinks) {
+        const fresh = [...new Set(links)].filter((link) => !queue.items.some((item) => item.url === link && item.status !== "done"));
+        const failed: string[] = [];
+        for (const [index, url] of fresh.entries()) {
+          try { await onQueueJob({ kind: "link", url, batch: { index, size: fresh.length } }, false); }
+          catch (caught) { if (caught instanceof Error && caught.name === "NotQueued") continue; failed.push(`${url} (${messageOf(caught, "couldn't be read")})`); }
+        }
+        setInput(failed.join("\n"));
+        if (failed.length) setProblem(`${failed.length} of ${fresh.length} link${fresh.length === 1 ? "" : "s"} couldn't be added; they're left in the box. Paste those job descriptions instead.`);
+      } else {
+        await onQueueJob(isLink ? { kind: "link", url: value } : { kind: "paste", text: value }, false);
+        setInput("");
+      }
     } catch (caught) {
       setProblem(messageOf(caught, "That doesn't look like a job description."));
     } finally {
@@ -1623,9 +1644,9 @@ function JobQueueBox({ queue, jobs, agyReady, onOpenAgy, onSave, onQueueJob, onO
   return <section className="job-queue" aria-labelledby="job-queue-title">
     <form className="add-job" onSubmit={add}>
       <label htmlFor="add-job-url" id="job-queue-title">Add jobs</label>
-      <textarea id="add-job-url" rows={isLink || !value ? 1 : 4} value={input} onChange={(event) => { setInput(event.target.value); setProblem(null); }} placeholder="Paste a job link or description" aria-describedby="add-job-help" />
+      <textarea id="add-job-url" rows={!manyLinks && (isLink || !value) ? 1 : 4} value={input} onChange={(event) => { setInput(event.target.value); setProblem(null); }} placeholder="Paste a job link or description" aria-describedby="add-job-help" />
       <button className="btn-primary" disabled={!valid}>Add to queue</button>
-      <p id="add-job-help">{problem ?? (duplicate ? "That link is already in the queue." : value && !isLink && value.length < 400 ? "Paste the whole job description, or just its link." : <>Agy runs one job at a time: it reads the posting, scores your fit, and drafts the resume and cover letter.</>)}</p>
+      <p id="add-job-help">{problem ?? (duplicate ? "That link is already in the queue." : manyLinks ? `${links.length} links: each is added in turn.` : value && !isLink && value.length < 400 ? "Paste the whole job description, or just its link." : FEATURES.candidates ? <>Agy tailors one job at a time for the candidate it's for: it reads the posting, rates the fit, and drafts the resume (and a cover letter when turned on).</> : <>Agy runs one job at a time: it reads the posting, scores your fit, and drafts the resume and cover letter.</>)}</p>
       <label className="queue-auto"><input type="checkbox" checked={queue.autoRun} onChange={(event) => onSave({ ...queue, autoRun: event.target.checked })} /> Run automatically when Agy is free</label>
     </form>
     {QUEUE_LIST}
@@ -2024,8 +2045,10 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
     onNavigate(job.id, "interview", roundId);
   }
   const tabs: Array<[JobWorkspaceTab, string, number | null]> = [["overview", "Overview", null], ["application", "Application", null], ...(FEATURES.interviews ? [["interview", "Interview", rounds.length || null] as [JobWorkspaceTab, string, number | null]] : []), ["files", "Files", files.length]];
-  const [appView, setAppView] = useState<ApplicationView>("resume");
-  useEffect(() => { setAppView("resume"); }, [job.id]);
+  // The Recruiter Edition opens drafts on Review: the posting beside the resume, then Mark applied (recruiter plan R8).
+  const firstAppView: ApplicationView = FEATURES.candidates ? "review" : "resume";
+  const [appView, setAppView] = useState<ApplicationView>(firstAppView);
+  useEffect(() => { setAppView(firstAppView); }, [job.id]);
   function openChecks() { setAppView("checks"); onNavigate(job.id, "application"); }
   const documents: Array<[string, FileTreeNode | undefined]> = [["Job description", jobDescription], ["Evaluation", evaluation], ["Resume", resumeMarkdown], ["Cover letter", coverLetterMarkdown]];
   return <section className="job-page">
@@ -2092,6 +2115,7 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
         value={appView}
         onChange={setAppView}
         tabs={[
+          ...(FEATURES.candidates ? [{ id: "review" as const, label: "Review", disabled: !resumeMarkdown }] : []),
           { id: "resume", label: "Resume", disabled: !resumeMarkdown },
           { id: "letter", label: "Cover letter", disabled: !coverLetterMarkdown && !letterSkipped },
           ...(FEATURES.applicationQuestions ? [{ id: "questions" as const, label: "Questions" }] : []),
@@ -2100,6 +2124,7 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
         ]}
       />
       <SubTabPanel idPrefix="app" value={appView}>
+        {FEATURES.candidates && appView === "review" && <ReviewPanel job={job} onUpdateTracker={onUpdateTracker} onOpenResume={() => setAppView("resume")} />}
         {appView === "resume" && <DocInline path={resumeMarkdown?.relativePath ?? null} label="resume" />}
         {appView === "letter" && (letterSkipped ? <p className="muted doc-skipped">No cover letter: {letterSkipped}</p> : <DocInline path={coverLetterMarkdown?.relativePath ?? null} label="cover letter" />)}
         {FEATURES.applicationQuestions && appView === "questions" && <QuestionsPanel jobId={job.id} />}
@@ -2112,7 +2137,7 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
   </section>;
 }
 
-type ApplicationView = "resume" | "letter" | "questions" | "evaluation" | "checks";
+type ApplicationView = "review" | "resume" | "letter" | "questions" | "evaluation" | "checks";
 
 /** The answers file's sections ("### question" then the answer), so edits made in the file are what's shown and copied. */
 function answerSections(markdown: string): Map<string, string> {

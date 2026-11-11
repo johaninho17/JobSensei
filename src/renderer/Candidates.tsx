@@ -227,7 +227,8 @@ export function RecruiterNotes({ name, onSaved }: { name: string | null; onSaved
  * "Who is this for?" (recruiter plan R5): every candidate, best match first, each with why they are or aren't
  * suggested. The open candidate and the suggested ones start ticked; nothing is queued until the recruiter confirms.
  */
-export function WhoIsThisFor({ posting, activeId, onDone }: { posting: LibraryPosting; activeId: string | null; onDone: (ids: string[] | null) => void }) {
+export function WhoIsThisFor({ posting, activeId, remaining = 0, onDone }: { posting: LibraryPosting; activeId: string | null; remaining?: number; onDone: (ids: string[] | null, forRest: boolean) => void }) {
+  const [forRest, setForRest] = useState(false);
   const [rows, setRows] = useState<CandidateSuggestion[] | null>(null);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -239,8 +240,8 @@ export function WhoIsThisFor({ posting, activeId, onDone }: { posting: LibraryPo
   }, [posting.id]);
   const toggle = (id: string) => setChosen((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const label = [posting.company, posting.title].filter(Boolean).join(", ") || posting.url || "this posting";
-  return <div className="search-overlay" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") onDone(null); }}>
-    <form className="company-dialog who-dialog" role="dialog" aria-modal="true" aria-labelledby="who-title" onSubmit={(event) => { event.preventDefault(); if (chosen.size) onDone([...chosen]); }}>
+  return <div className="search-overlay" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") onDone(null, false); }}>
+    <form className="company-dialog who-dialog" role="dialog" aria-modal="true" aria-labelledby="who-title" onSubmit={(event) => { event.preventDefault(); if (chosen.size) onDone([...chosen], forRest); }}>
       <h2 id="who-title">Who is this for?</h2>
       <p>{label}{posting.location ? ` · ${posting.location}` : ""}. Each candidate gets their own copy of the posting, tailored in their own folder.</p>
       {error && <p className="inline-error" role="alert">{error}</p>}
@@ -253,7 +254,8 @@ export function WhoIsThisFor({ posting, activeId, onDone }: { posting: LibraryPo
         {row.reasons.length > 0 && <ul className="who-reasons">{row.reasons.map((reason) => <li key={reason.text} className={reason.good ? "good" : "bad"}><span aria-hidden="true">{reason.good ? "✓" : "–"}</span> {reason.text}</li>)}</ul>}
       </li>)}</ul>}
       <div className="company-dialog-actions">
-        <button type="button" className="btn-quiet" onClick={() => onDone(null)}>Cancel</button>
+        {remaining > 0 && <label className="setup-check"><input type="checkbox" checked={forRest} onChange={(event) => setForRest(event.target.checked)} /> Use the same candidates for the next {remaining} link{remaining === 1 ? "" : "s"}</label>}
+        <button type="button" className="btn-quiet" onClick={() => onDone(null, false)}>Cancel</button>
         <button className="btn-primary" disabled={!chosen.size}>{chosen.size > 1 ? `Tailor for ${chosen.size} candidates` : "Tailor for 1 candidate"}</button>
       </div>
     </form>

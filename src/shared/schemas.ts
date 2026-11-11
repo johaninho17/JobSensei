@@ -1298,6 +1298,8 @@ export interface SenseiApi {
     exportCandidate(candidateId: string): Promise<{ path: string; files: number } | null>;
     /** Deletes a candidate for good; the typed name must match. Returns what was removed. */
     deleteCandidate(candidateId: string, typedName: string): Promise<{ name: string; removed: string[] }>;
+    /** A drafted job's resume lines, what changed from the base, and the evidence behind each change (recruiter plan R8). */
+    review(jobId: string): Promise<import("./review").ApplicationReview>;
     /** Every job across candidates (recruiter plan R5). */
     pipeline(): Promise<import("./candidate-match").PipelineRow[]>;
     /** Sets one status on several jobs; returns each job's status before, for Undo. */
