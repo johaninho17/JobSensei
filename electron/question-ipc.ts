@@ -1,6 +1,5 @@
 // Application questions IPC. Loaded only when the edition has `features.applicationQuestions` (src/shared/edition.ts).
 import { ipcMain } from "electron";
-import { prepareAgyHome } from "./agy-home";
 import { parsePastedQuestions } from "./application-questions";
 import type { FeatureContext } from "./feature-context";
 import { QuestionAgent, headlessAgy } from "./question-agent";
@@ -15,7 +14,7 @@ export function registerQuestionIpc(ctx: FeatureContext): void {
       if (!agyPath) throw new Error("Agy isn't installed, so questions can't be answered.");
       const workspace = ctx.requireWorkspace();
       // The same app-owned Agy home (and sign-in) as the terminal; prepared here when the terminal hasn't started yet.
-      const agyHome = ctx.agyHome() ?? await prepareAgyHome(ctx.userDataPath(), workspace, [], { appRoot: ctx.appRoot(), runtimePath: process.execPath });
+      const agyHome = await ctx.agyHomeFor(workspace);
       return headlessAgy({ agyPath, agyHome, cwd: workspace });
     },
     onUpdate: (jobId, state) => ctx.mainWindow()?.webContents.send("questions:updated", jobId, state),

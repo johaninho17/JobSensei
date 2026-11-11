@@ -88,6 +88,9 @@ export function plainTerminalText(output: string): string {
 export function classifyAgyScreen(plainTail: string): "ready" | "blocked" | "unknown" {
   // These screens keep the status line drawn below them, so a recent one wins over it.
   if (/do you trust the contents|safe to run outside of the sandbox|do you want to proceed\?|allow access to this file\?/i.test(plainTail.slice(-700))) return "blocked";
+  // A picker that is still open (Agy's first-run colour scheme, a model menu) ends with its key hint and then the
+  // status line, drawn in the same redraw: the hint wins, so the queue never types a job into the picker.
+  if (/navigate · enter confirm\s*(?:(?:gemini|claude|gpt)[^\n·]{0,40}·\s*(?:low|medium|high|xhigh|max))?\s*$/i.test(plainTail)) return "blocked";
   const ready = lastIndex(READY_LINE, plainTail);
   const blocked = lastIndex(BLOCKING, plainTail);
   if (ready < 0 && blocked < 0) return "unknown";

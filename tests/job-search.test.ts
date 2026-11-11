@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_JOB_SEARCH_SETTINGS, autoDraftPicks, canonicalUrl, effectiveFit, lightRatingPicks, rankInbox, skippedSite,
+  DEFAULT_JOB_SEARCH_SETTINGS, autoDraftPicks, canonicalUrl, effectiveFit, jobKey, lightRatingPicks, locationFits, placesFor, rankInbox, skippedSite, titleExcluded,
   type InboxItem, type JobSearchState,
 } from "../src/shared/job-search";
 import {
   boardOf, buildRatingPrompt, buildSearchPrompt, parseRatingReply, closedPosting, nameJob, resolveLink, singlePosting, parseSearchReply, postingAgeDays, quickFit, readSearchState, runSearch,
-  saveFoundJob, saveSearchSettings, stageFoundJob, vocabularyFrom,
+  readSearchSettings, saveFoundJob, saveSearchSettings, stageFoundJob, vocabularyFrom,
 } from "../electron/job-search";
 import { buildPostingRecord } from "../electron/posting-record";
 import { boardRef, fitsSearchTitles, titleSimilarity } from "../electron/job-boards";
@@ -235,7 +235,7 @@ describe("public job boards", () => {
     const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
     await saveSearchSettings(workspace, { ...settings, watched: [{ board: "ashby", slug: "northstar", name: "Northstar Labs" }] });
     const { run } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner: async () => { throw new Error("print_timeout"); } });
-    expect(run).toMatchObject({ status: "done", added: 1, error: "Agy took too long to search. Try fewer links per search or fewer titles." });
+    expect(run).toMatchObject({ status: "done", added: 1, error: "Agy took too long to search. Try fewer companies per search or fewer titles." });
   });
 });
 
@@ -294,5 +294,109 @@ describe("left-out postings can come back", () => {
     const second = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner, now });
     expect(second.run).toMatchObject({ added: 1, leftOut: { "already seen": 1 } });
     expect(second.state.items[0]).toMatchObject({ title: "Solutions Engineer", postedAt: "2026-09-20" });
+  });
+});
+
+describe("job search: places, companies, and board postings", () => {
+  const ashby = (jobs: Array<Record<string, unknown>>) => Response.json({ jobs: jobs.map((job) => ({ isListed: true, descriptionHtml: `<h2>Requirements</h2><ul><li>Strong SQL and Python for data troubleshooting</li><li>Experience running technical discovery with customers</li><li>Clear writing for technical and business audiences</li></ul><p>${"Northstar Labs builds data tools for retail teams and helps customers launch. ".repeat(8)}</p>`, ...job })) });
+  const settingsBay = { ...settings, locations: ["SF Bay Area"], workSetups: ["remote", "hybrid"] as Array<"remote" | "hybrid" | "onsite"> };
+
+  it("matches places through metro areas and keeps remote jobs only inside the US", () => {
+    expect(locationFits({ locations: ["Oakland, CA"], workplace: "hybrid" }, settingsBay)).toEqual({ fits: true, reason: "in your area" });
+    expect(locationFits({ locations: ["New York, NY"], workplace: "hybrid" }, settingsBay).fits).toBe(false);
+    expect(locationFits({ locations: ["Remote - US"], workplace: "remote" }, settingsBay).fits).toBe(true);
+    expect(locationFits({ locations: ["Remote - UK"], workplace: "remote" }, settingsBay).fits).toBe(false);
+    expect(locationFits({ locations: ["San Francisco"], workplace: "onsite" }, settingsBay).reason).toBe("onsite (not in your work setups)");
+    expect(locationFits({ locations: ["Austin, TX"], workplace: "onsite" }, { locations: [], workSetups: ["onsite"] }).fits).toBe(true);
+    expect(locationFits({ locations: [], workplace: null }, settingsBay).fits).toBe(true);
+    expect(placesFor("San Francisco Bay Area")).toEqual(expect.arrayContaining(["san francisco", "san leandro", "palo alto"]));
+  });
+
+  it("puts every search field the user wrote into Agy's prompt", () => {
+    const prompt = buildSearchPrompt({ ...settings, titles: ["Partner Engineer"], locations: ["Denver"], includeKeywords: ["APIs"], excludeKeywords: ["commission only"], skipCompanies: ["Acme"], extraSites: ["jobs.example.com"], skipSites: ["badboard.com"], resultsPerRun: 12 }, [], new Date("2026-11-10T00:00:00Z"), ["Northstar Labs"]);
+    for (const text of ["Partner Engineer", "Denver", "APIs", "commission only", "Acme", "jobs.example.com", "badboard.com", "12 companies", "Northstar Labs", "welcometothejungle.com"]) expect(prompt).toContain(text);
+  });
+
+  it("reads companies Agy names from their own boards, builds postings from board data, and watches them", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
+    await saveSearchSettings(workspace, settingsBay);
+    const pageLoads: string[] = [];
+    const fetcher = (async (url: string | URL) => {
+      const target = String(url);
+      if (target === "https://api.ashbyhq.com/posting-api/job-board/northstar") return ashby([
+        { title: "Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/northstar/se-1", location: "San Francisco", workplaceType: "Hybrid", publishedAt: "2026-11-05T10:00:00Z" },
+        { title: "Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/northstar/se-2", location: "London", workplaceType: "OnSite", publishedAt: "2026-11-05T10:00:00Z" },
+        { title: "Account Executive", jobUrl: "https://jobs.ashbyhq.com/northstar/ae-1", location: "Remote - US", workplaceType: "Remote", publishedAt: "2026-11-05T10:00:00Z" },
+      ]);
+      pageLoads.push(target);
+      return new Response("", { status: 404 });
+    }) as typeof fetch;
+    const reply = JSON.stringify({ companies: [{ name: "Northstar Labs", jobsUrl: "https://jobs.ashbyhq.com/northstar" }, { name: "Elsewhere", jobsUrl: "https://elsewhere.example.com/careers" }] });
+    const { run, state } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner: async () => ({ response: reply, conversationId: null }), now: () => new Date("2026-11-10T12:00:00Z") });
+    expect(run).toMatchObject({ status: "done", added: 1, companies: 1, leftOut: { "not in your places or setups": 1, "company not on a readable board": 1 } });
+    expect(state.items[0]).toMatchObject({ url: "https://jobs.ashbyhq.com/northstar/se-1", company: "Northstar Labs", postedAt: "2026-11-05" });
+    expect(pageLoads.filter((url) => url.includes("jobs.ashbyhq.com/northstar/se-1"))).toEqual([]);
+    expect((await readSearchSettings(workspace, null)).watched).toEqual([{ board: "ashby", slug: "northstar", name: "Northstar Labs", source: "search" }]);
+  });
+
+  it("watches the companies of the user's jobs and stops at the per-run limit, newest first", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
+    await saveSearchSettings(workspace, { ...settingsBay, maxNewPerRun: 5 });
+    const jobs = Array.from({ length: 7 }, (_, n) => ({ title: `Solutions Engineer ${["", "II", "III", "IV", "V", "VI", "VII"][n]}`.trim(), jobUrl: `https://jobs.ashbyhq.com/northstar/se-${n}`, location: "Oakland", workplaceType: "Hybrid", publishedAt: `2026-11-0${n + 1}T10:00:00Z` }));
+    const fetcher = (async (url: string | URL) => String(url).includes("api.ashbyhq.com") ? ashby(jobs) : new Response("", { status: 404 })) as typeof fetch;
+    const { run, state } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner: null, jobCompanies: [{ board: "ashby", slug: "northstar", name: "Northstar Labs", jobs: 2, interviewed: true }], now: () => new Date("2026-11-10T12:00:00Z") });
+    expect(run).toMatchObject({ added: 5, leftOut: { "over this run's limit": 2 } });
+    expect(state.items.map((item) => item.postedAt)).toEqual(["2026-11-07", "2026-11-06", "2026-11-05", "2026-11-04", "2026-11-03"]);
+    expect((await readSearchSettings(workspace, null)).watched[0]).toMatchObject({ slug: "northstar", source: "jobs" });
+  });
+});
+
+describe("job search: fixes from the first live check", () => {
+  const anywhere = { locations: [] as string[], workSetups: ["remote", "hybrid", "onsite"] as Array<"remote" | "hybrid" | "onsite"> };
+  it("keeps remote jobs only when they're in the US or name no place", () => {
+    expect(locationFits({ locations: ["Korea"], workplace: "remote" }, anywhere).fits).toBe(false);
+    expect(locationFits({ locations: ["Remote - Europe"], workplace: "remote" }, anywhere).fits).toBe(false);
+    expect(locationFits({ locations: ["Remote"], workplace: "remote" }, anywhere).fits).toBe(true);
+    expect(locationFits({ locations: ["New York"], workplace: "remote" }, anywhere).fits).toBe(true);
+    expect(locationFits({ locations: ["Denver, CO"], workplace: "onsite" }, anywhere).fits).toBe(true);
+    expect(locationFits({ locations: ["Seoul"], workplace: "onsite" }, anywhere).fits).toBe(false);
+  });
+
+  it("needs the search title's words in one part of the job title", () => {
+    expect(fitsSearchTitles("Sr. Software Engineer - Investor Solutions", ["solutions engineering"])).toBe(false);
+    expect(fitsSearchTitles("Senior Solutions Engineer, Enterprise", ["solutions engineering"])).toBe(true);
+    expect(fitsSearchTitles("Forward Deployed Engineering Lead", ["forward deployed engineer"])).toBe(true);
+  });
+
+  it("treats the same role posted per city as one job", () => {
+    expect(jobKey("TribalScale", "Forward Deployed Engineer (Atlanta, Georgia)")).toBe(jobKey("TribalScale", "Forward Deployed Engineer (New York)"));
+    expect(jobKey("Acme", "Solutions Engineer - Austin, TX")).toBe(jobKey("Acme", "Solutions Engineer"));
+    expect(jobKey("Acme", "Solutions Engineer")).not.toBe(jobKey("Acme", "Solutions Architect"));
+  });
+});
+
+describe("job search: words to leave out of titles", () => {
+  it("leaves out titles with the user's words as whole words, including short forms", () => {
+    const words = ["Senior", "Principal", "Lead"];
+    expect(titleExcluded("Senior Solutions Engineer", words)).toBe("Senior");
+    expect(titleExcluded("Sr. Solutions Engineer", words)).toBe("Senior");
+    expect(titleExcluded("Forward Deployed Engineering Lead", words)).toBe("Lead");
+    expect(titleExcluded("Solutions Engineer, Lead Generation Tools", words)).toBe("Lead");
+    expect(titleExcluded("Solutions Engineer, Leading Accounts", words)).toBeNull();
+    expect(titleExcluded("Solutions Engineer II", words)).toBeNull();
+  });
+
+  it("tells Agy and skips matching board jobs", async () => {
+    expect(buildSearchPrompt({ ...settings, excludeTitleWords: ["Senior", "Staff"] }, [])).toContain("Leave out roles whose title includes: Senior, Staff");
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
+    await saveSearchSettings(workspace, { ...settings, excludeTitleWords: ["Senior"], watched: [{ board: "ashby", slug: "northstar", name: "Northstar Labs", source: "user" }] });
+    const body = `<ul><li>Strong SQL and Python for data troubleshooting</li><li>Technical discovery with customers</li></ul><p>${"Northstar Labs helps retail teams launch data tools. ".repeat(10)}</p>`;
+    const fetcher = (async () => Response.json({ jobs: [
+      { title: "Senior Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/northstar/s1", location: "Remote - US", workplaceType: "Remote", publishedAt: "2026-11-05T10:00:00Z", isListed: true, descriptionHtml: body },
+      { title: "Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/northstar/s2", location: "Remote - US", workplaceType: "Remote", publishedAt: "2026-11-05T10:00:00Z", isListed: true, descriptionHtml: body },
+    ] })) as typeof fetch;
+    const { run, state } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner: null, now: () => new Date("2026-11-10T12:00:00Z") });
+    expect(run).toMatchObject({ added: 1, leftOut: { "title has a word you left out": 1 } });
+    expect(state.items[0].title).toBe("Solutions Engineer");
   });
 });

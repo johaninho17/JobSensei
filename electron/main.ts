@@ -9,7 +9,9 @@ import { updateJobTracker } from "./tracker";
 import { latestRun } from "./run-status";
 import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription } from "./jd-fetch";
 import { readJobQueue, saveJobQueue } from "./job-queue";
-import { prepareAgyHome, writeSenseiLauncher } from "./agy-home";
+import { RunWatcher } from "./run-watcher";
+import { createAgyHomeCache, prepareAgyHome, writeSenseiLauncher } from "./agy-home";
+import { reachedInterview } from "../src/shared/tracker";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import type { Settings } from "../src/shared/schemas";
@@ -17,7 +19,9 @@ import { markdownSaveInputSchema, pdfExportRequestSchema } from "../src/shared/s
 import { SettingsStore } from "./settings";
 import { deleteWorkspacePath, getBaseResume, listFileTree, listResumePaths, previewFile, revealWorkspacePath, saveMarkdownFile } from "./files";
 import { invalidateJobCache, listJobArtifacts, listJobFolders, listJobTree } from "./job-folders";
-import { assertInsideWorkspace, indexContext, summarizeWorkspace } from "./workspace";
+import { assertInsideWorkspace, indexContext, layoutVersion, summarizeWorkspace } from "./workspace";
+import { toLogical } from "../src/shared/workspace-layout";
+import { applyMigration, healStrayPaths, planMigration, undoMigration } from "./layout-migration";
 import { capWorkspaceNpmCache, initializeWorkspace, syncWorkspaceAgentFiles, type AgentSyncReport } from "./workspace-init";
 import { TerminalSession, appRoot as terminalAppRoot, resolveAgyExecutable } from "./terminal";
 import { buildContextManifest, contextSources, readActiveContextManifest } from "./context";
@@ -30,7 +34,6 @@ import { createCandidateProfile, readCandidateProfile, updateCandidateProfileDet
 import { compactStyleRules, profileInstructionLines } from "./evidence-snapshot";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
 import { readBulletBank, saveBulletBank } from "./bullet-bank";
-import { generateJobClarifyingQuestions, saveJobClarificationAnswers } from "./clarifying-questions";
 
 // Tests and the new-user check run the app with a throwaway settings folder, so real settings are never touched.
 const edition = currentEdition();
@@ -67,7 +70,8 @@ function createWindow(): void {
   mainWindow.webContents.on("will-navigate", (event, url) => {
     if (!url.startsWith("http://127.0.0.1:5173") && !url.startsWith("file://")) event.preventDefault();
   });
-  mainWindow.on("closed", () => { terminal.stop(); mainWindow = undefined; });
+  mainWindow.on("closed", () => { terminal.stop(); runWatcher.stop(); mainWindow = undefined; });
+  runWatcher.start();
   if (process.env.SENSEI_SMOKE_OUT) runSmokeCheck(mainWindow, process.env.SENSEI_SMOKE_OUT);
   if (process.env.VITE_DEV_SERVER_URL) void mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   else void mainWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"));
@@ -110,12 +114,20 @@ function requireWorkspace(): string {
   return workspacePath;
 }
 
+let strayTimer: NodeJS.Timeout | null = null;
+
 function startWorkspaceWatcher(path: string): void {
   workspaceWatcher?.close();
   if (workspaceWatchTimer) clearTimeout(workspaceWatchTimer);
   try {
     workspaceWatcher = watch(path, { recursive: true }, (_eventType, filename) => {
-      const changedPath = filename?.toString().replaceAll("\\", "/") ?? "";
+      const rawPath = filename?.toString().replaceAll("\\", "/") ?? "";
+      // A tidy workspace has no original folders: a file appearing in one was written to an old path. Bring it home.
+      if (layoutVersion(path) === 2 && /^(context|debrief)\//.test(rawPath)) {
+        if (strayTimer) clearTimeout(strayTimer);
+        strayTimer = setTimeout(() => void healStrayPaths(path).catch(() => undefined), 2000);
+      }
+      const changedPath = toLogical(rawPath, layoutVersion(path));
       if (!changedPath || changedPath.startsWith(".sensei/") || changedPath.includes("/.sensei/") || changedPath.includes(".tmp-") || changedPath === "context/index.json") return;
       invalidateJobCache(path, changedPath);
       workspaceChangedPaths.add(changedPath);
@@ -178,8 +190,6 @@ ipcMain.handle("profile:preview", async () => {
 });
 ipcMain.handle("bullet-bank:get", async () => readBulletBank(requireWorkspace()));
 ipcMain.handle("bullet-bank:save", async (_event, bank) => saveBulletBank(requireWorkspace(), bank));
-ipcMain.handle("clarifications:get-questions", async (_event, jobId: string) => generateJobClarifyingQuestions(requireWorkspace(), jobId));
-ipcMain.handle("clarifications:submit-answers", async (_event, { jobId, answers }: { jobId: string; answers: any[] }) => saveJobClarificationAnswers(requireWorkspace(), jobId, answers));
 
 ipcMain.handle("settings:get", async () => {
   const current = await settingsStore.get();
@@ -327,8 +337,16 @@ ipcMain.handle("app:open-release", async (_event, url: unknown) => {
   const repository = await releaseRepository();
   if (typeof url === "string" && repository && url.startsWith(`https://github.com/${repository}/releases/`)) await shell.openExternal(url);
 });
-ipcMain.handle("runs:latest", async () => latestRun(requireWorkspace()));
+// One watcher reads the latest run for the whole app and pushes "runs:changed" when it changes.
+const runWatcher = new RunWatcher({
+  read: async () => workspacePath ? latestRun(workspacePath) : null,
+  onChange: (run) => mainWindow?.webContents.send("runs:changed", run),
+});
+ipcMain.handle("runs:latest", async () => runWatcher.current());
 
+// The app-owned Agy home for background Agy runs (written answers, search, rating), one per workspace (a candidate's
+// folder in the Recruiter Edition gets that candidate's home).
+const agyHomes = createAgyHomeCache((workspace) => prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath }, agyHomeName));
 ipcMain.handle("jobs:update-tracker", async (_event, jobId: unknown, update: unknown) => updateJobTracker(requireWorkspace(), String(jobId), update));
 ipcMain.handle("jobs:validate-application", async (_event, jobId: string) => validateJobApplication(requireWorkspace(), jobId, false));
 
@@ -350,7 +368,8 @@ ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
     .then(async (home) => { await writeSenseiLauncher(home, { appRoot: terminalAppRoot(), packaged: app.isPackaged, runtimePath: process.execPath }); return home; })
     .catch((error) => { console.error("Agy home setup failed:", error); return null; });
   terminal.setAgyHome(agyHome);
-  lastAgyHome = agyHome ?? lastAgyHome;
+  // The terminal start rewrote the home's settings; background runs reuse it for this workspace.
+  if (agyHome) agyHomes.set(workspace, agyHome);
   return terminal.start(cwd, workspace, manifest);
 });
 ipcMain.handle("terminal:set-context", async (_event, input) => {
@@ -401,6 +420,37 @@ async function readinessNow() {
   return computeReadiness({ workspacePath: workspace, profile, settings, manifest, contextFileCount: summary.contextFileCount, agy: { installed: summary.agyAvailable, signedIn: await agySignInState() } });
 }
 ipcMain.handle("setup:readiness", async () => readinessNow());
+// Workspace folders: preview, tidy, undo (electron/layout-migration.ts; names owned by src/shared/workspace-layout.ts).
+ipcMain.handle("layout:plan", async () => planMigration(requireWorkspace()));
+ipcMain.handle("layout:apply", async () => {
+  const workspace = requireWorkspace();
+  await closeAgyForLayoutChange(workspace);
+  const plan = await applyMigration(workspace);
+  await afterLayoutChange(workspace);
+  return plan;
+});
+ipcMain.handle("layout:undo", async () => {
+  const workspace = requireWorkspace();
+  await closeAgyForLayoutChange(workspace);
+  const result = await undoMigration(workspace);
+  await afterLayoutChange(workspace);
+  return result;
+});
+
+/** Agy holds the old folder names in its loaded instructions, so it is closed first; never in the middle of a job. */
+async function closeAgyForLayoutChange(workspace: string): Promise<void> {
+  const queue = await readJobQueue(workspace).catch(() => null);
+  if (queue?.items.some((item) => item.status === "running")) throw new Error("A job is running in Agy. Wait for it to finish, then try again.");
+  terminal.stop();
+}
+
+/** Agy's instructions name real folders, so they are rewritten for the new layout; every cache starts over. */
+async function afterLayoutChange(workspace: string): Promise<void> {
+  logAgentSync(await syncWorkspaceAgentFiles(workspace).catch((error) => { console.error("Agy skill sync failed:", error); return null; }));
+  invalidateSearchIndex(workspace);
+  mainWindow?.webContents.send("workspace:changed", ["context", "debrief", "profile"]);
+}
+
 // Interview content refresh (electron/content-refresh.ts): new recordings, the update Agy runs, and its check.
 async function jobNames(): Promise<Record<string, string>> {
   const jobs = await listJobFolders(requireWorkspace()).catch(() => []);
@@ -414,7 +464,7 @@ ipcMain.handle("profile:save-voice", async (_event, text: unknown) => {
   const relativePath = profile?.sources.applicationVoicePath ?? "context/application_voice_profile.md";
   if (!/^context\/[^/]+\.md$/.test(relativePath)) throw new Error("The voice profile must be a Markdown file in the context folder.");
   const path = assertInsideWorkspace(workspace, join(workspace, relativePath));
-  await mkdir(join(workspace, "context"), { recursive: true });
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, text.endsWith("\n") ? text : `${text}\n`, "utf8");
   return relativePath;
 });
@@ -423,12 +473,11 @@ ipcMain.handle("terminal:stop", async () => terminal.stop());
 
 // Feature-only IPC lives in its own modules, loaded only when this edition has the feature (src/shared/edition.ts);
 // the recruiter build leaves those modules out of the app entirely.
-let lastAgyHome: string | null = null;
 let interviewIpc: typeof import("./interview-ipc.js") | null = null;
 const featureContext: FeatureContext = {
   requireWorkspace,
   mainWindow: () => mainWindow,
-  agyHome: () => lastAgyHome,
+  agyHomeFor: (workspace) => agyHomes.get(workspace),
   userDataPath: () => app.getPath("userData"),
   appRoot: terminalAppRoot,
   jobNames,
@@ -439,6 +488,7 @@ async function registerFeatureIpc(): Promise<void> {
   if (features.applicationQuestions) (await import("./question-ipc.js")).registerQuestionIpc(featureContext);
   if (features.contentRefresh) (await import("./content-ipc.js")).registerContentIpc(featureContext);
   if (features.jobSearch) (await import("./search-ipc.js")).registerSearchIpc(featureContext);
+  if (features.today) (await import("./today-ipc.js")).registerTodayIpc(featureContext, { readiness: () => readinessNow() });
   if (features.candidates) (await import("./candidate-ipc.js")).registerCandidateIpc({
     root: () => { if (!recruiterRoot) throw new Error("The recruiter folder isn't open."); return recruiterRoot; },
     busyReason: candidateBusyReason,
@@ -485,7 +535,6 @@ async function openCandidateFolder(folder: string): Promise<void> {
   const { candidateSettingsStore } = await import("./candidate-ipc.js");
   settingsStore = candidateSettingsStore(folder);
   agyHomeName = id;
-  lastAgyHome = null;
   invalidateSearchIndex();
   await openWorkspace(folder);
 }
@@ -495,7 +544,6 @@ async function closeCandidateFolder(): Promise<void> {
   workspaceWatcher = undefined;
   workspacePath = undefined as unknown as string;
   agyHomeName = undefined;
-  lastAgyHome = null;
   invalidateSearchIndex();
 }
 /**
@@ -547,6 +595,8 @@ app.whenReady().then(async () => {
     } else {
       await openWorkspace(chosen);
     }
+    if (features.jobSearch) void import("./search-ipc.js").then((module) => module.repairSchedule(featureContext, workspacePath)).catch(() => undefined);
+    startWorkspaceWatcher(workspacePath);
   } catch (error) {
     console.error("Sensei startup initialization error:", error);
   }

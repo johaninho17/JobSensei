@@ -34,4 +34,27 @@ Career files added in the app (Career context → Sources → Add files, or drag
 
 The job queue lives in the workspace at `.sensei/job_queue.json`: `autoRun` and up to 50 `items` (`kind`: link or paste, `url` for a link, a display `label`, an optional `note`, `manual` for items sent from the chat, `status`: queued, running, done, needs_attention, plus sent and finished times and the resulting `jobId`). A pasted job description is saved as `.sensei/staged-jds/<item-id>.md` (with a `.json` of parsed company, title, and location) and removed once its item leaves the queue. The app sends one job at a time to Agy, only when Agy is idle; links and pastes from the chat join the same queue, so a new paste never replaces a running job.
 
+Job Search keeps its files in `.sensei/job-search/`: `settings.json` (titles, places, work setups, level, pay floor, keywords, boards, watched companies with how each was added, schedule, limits, ratings), `state.json` (every found job with its quick fit and any Agy light rating, every run with what it found and left out, links already seen, and drafts a scheduled search marked for the app to queue), `postings/<find-id>.md` (each found posting, cleaned like any other), `scheduled.log`, and `run.lock` (one search at a time between the app and the schedule). Nothing in `state.json` is ever trimmed.
+
+`.sensei/evidence_snapshot.json` in each job is stored gzip-compressed (about five times smaller); the app reads compressed and older uncompressed snapshots alike.
+
 Files outside `data/` are application source and public documentation. Never place private candidate data in `examples/`; examples must remain fictional.
+
+## Folder layouts
+
+A workspace uses one of two folder layouts. The app, its saved data, and every check name files the same way in both (the *logical* path, the left column); only the place on disk differs. `src/shared/workspace-layout.ts` owns the names, and `.sensei/layout.json` records which layout a workspace uses (no file = original).
+
+| Logical path (always) | Original layout | Tidy layout |
+|---|---|---|
+| `context/structured/` | same | `career/records/` |
+| `context/broad/` | same | `career/notes/` |
+| `context/<other files>` | same | `career/` |
+| `context/application_voice_profile.md` | same | `profile/writing-voice.md` |
+| `context/denylist.md` | same | `profile/private-names.md` |
+| `profile/story_bank.md` | same | `profile/story-bank.md` |
+| `profile/interview_voice.md` | same | `profile/interview-voice.md` |
+| `debrief/interview-memory/` | same | `interviews/memory/` |
+| `debrief/<company>/` | same | `interviews/recordings/<company>/` |
+| `jobs/<job-id>/`, `resumes/`, `profile/candidate.json` | same | same |
+
+Setup → Your folders previews the move, applies it, and can undo it (`electron/layout-migration.ts`). Nothing is deleted: exact copies, old `screened-jobs/`, and leftover run files go to `archive/`. Agy's copy of the instructions in the workspace is rewritten with the disk names, and a file an Agy run writes to an old path is moved to its real home.

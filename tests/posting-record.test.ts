@@ -184,3 +184,24 @@ describe("posting record file", () => {
     expect(await readPostingRecord(dir)).toBeNull();
   });
 });
+
+describe("pay comes from the pay line, not other money in the posting", () => {
+  it("skips the company's revenue and funding and reads the salary", () => {
+    const posting = [
+      "# Customer Success Manager", "**Company:** Northstar Labs", "**Source:** https://jobs.ashbyhq.com/northstar/1", "",
+      "We've raised a $13.5 million Series A.",
+      "- Our CEO scaled sales teams from $0 to $30M in ARR.",
+      "## Benefits", "- $120K-$150K base salary + early equity", "- Yearly $500 learning stipend",
+    ].join("\n");
+    expect(parsePay(posting)).toMatchObject({ min: 120000, max: 150000, period: "year" });
+  });
+
+  it("keeps a salary sentence that also mentions funding far from the amount", () => {
+    const posting = "# Analyst\n\nThe estimated starting annual salary range for this position is $135,000 to $180,000 USD. The range is a guideline and may change with skills, experience, and the company's funding stage.";
+    expect(parsePay(posting)).toMatchObject({ min: 135000, max: 180000 });
+  });
+
+  it("reports no pay rather than a wrong one when only company money appears", () => {
+    expect(parsePay("# Engineer\n\nWe grew from $0 to $30M ARR and raised $50M from top investors.")).toBeNull();
+  });
+});

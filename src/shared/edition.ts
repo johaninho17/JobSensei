@@ -25,13 +25,15 @@ export type Features = {
   candidateFilesEligible: boolean;
   /** Cover letters are off until turned on per candidate, and need enough material (recruiter plan R7). */
   coverLetterOptIn: boolean;
+  /** Today page: morning matches, what's due, insights, questions, closed-posting checks (builds on Job Search and interviews). */
+  today: boolean;
   /** Drafts mark a job applied (solo: sent through Sensei); off where a recruiter sends and marks it (recruiter plan R8). */
   draftsMarkApplied: boolean;
 };
 
 const FEATURES: Record<Edition, Features> = {
-  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, draftsMarkApplied: true },
-  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, draftsMarkApplied: false },
+  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, today: true, draftsMarkApplied: true },
+  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, today: false, draftsMarkApplied: false },
 };
 
 export type EditionInfo = {
@@ -93,6 +95,8 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   "application-questions": "applicationQuestions",
   "content-ipc": "contentRefresh",
   "content-refresh": "contentRefresh",
+  "today-ipc": "today",
+  "today": "today",
   "search-ipc": "jobSearch",
   "job-search": "jobSearch",
   "job-search-runner": "jobSearch",

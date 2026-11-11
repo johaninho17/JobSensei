@@ -28,3 +28,4 @@ desktop.ini
 # Private builder notes (decisions ledger, handoffs)
 /dev-notes/
 CLAUDE.local.md
+.vitest/

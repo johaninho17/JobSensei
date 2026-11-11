@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { SenseiApi } from "../src/shared/schemas";
+import type { RunStatus, SenseiApi } from "../src/shared/schemas";
 import type { JobSearchState, SearchRun, SearchStatus } from "../src/shared/job-search";
 
 const api: SenseiApi = {
@@ -18,6 +18,19 @@ const api: SenseiApi = {
     finishUpdate: (keepOld) => ipcRenderer.invoke("content:finish-update", keepOld),
     undoUpdate: () => ipcRenderer.invoke("content:undo-update"),
     skip: (paths) => ipcRenderer.invoke("content:skip", paths),
+  },
+  layout: {
+    plan: () => ipcRenderer.invoke("layout:plan"),
+    apply: () => ipcRenderer.invoke("layout:apply"),
+    undo: () => ipcRenderer.invoke("layout:undo"),
+  },
+  today: {
+    get: () => ipcRenderer.invoke("today:get"),
+    answer: (id, answer) => ipcRenderer.invoke("today:answer", id, answer),
+    removeQuestion: (id) => ipcRenderer.invoke("today:remove-question", id),
+    keepPosting: (jobId) => ipcRenderer.invoke("today:keep-posting", jobId),
+    closePosting: (jobId) => ipcRenderer.invoke("today:close-posting", jobId),
+    onChanged: (callback) => { const listener = () => callback(); ipcRenderer.on("today:changed", listener); return () => ipcRenderer.removeListener("today:changed", listener); },
   },
   // Recruiter Edition only (registered when the edition has candidates).
   candidates: {
@@ -81,10 +94,6 @@ const api: SenseiApi = {
     get: () => ipcRenderer.invoke("bullet-bank:get"),
     save: (bank) => ipcRenderer.invoke("bullet-bank:save", bank),
   },
-  clarifications: {
-    getQuestions: (jobId) => ipcRenderer.invoke("clarifications:get-questions", jobId),
-    submitAnswers: (jobId, answers) => ipcRenderer.invoke("clarifications:submit-answers", { jobId, answers }),
-  },
   settings: {
     get: () => ipcRenderer.invoke("settings:get"),
     save: (input) => ipcRenderer.invoke("settings:save", input),
@@ -132,6 +141,7 @@ const api: SenseiApi = {
   },
   runs: {
     latest: () => ipcRenderer.invoke("runs:latest"),
+    onChanged: (callback) => { const listener = (_event: Electron.IpcRendererEvent, run: RunStatus | null) => callback(run); ipcRenderer.on("runs:changed", listener); return () => ipcRenderer.removeListener("runs:changed", listener); },
   },
   queue: {
     get: () => ipcRenderer.invoke("queue:get"),

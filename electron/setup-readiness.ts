@@ -1,5 +1,6 @@
 // Computes setup readiness (src/shared/readiness.ts): the single owner of what JobSensei needs before it runs and
 // what improves its drafts. Read by Get Started, the Setup page, the job queue, and the evidence snapshot.
+import { workspaceFile } from "./workspace";
 import { countCareerFiles, coverLetterPlanFor } from "../src/shared/cover-letter-policy";
 import { readdir, stat } from "node:fs/promises";
 import { dirname, extname, join, resolve, sep } from "node:path";
@@ -154,7 +155,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
   });
 
   const voicePath = profile?.sources.applicationVoicePath ?? "context/application_voice_profile.md";
-  const hasVoice = await exists(join(root, voicePath));
+  const hasVoice = await exists(workspaceFile(root, voicePath));
   add({
     id: "voice", level: "recommended", state: hasVoice ? "done" : "missing", action: "voice", path: voicePath,
     title: "Your writing voice",
@@ -184,7 +185,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
   }
 
   if (features.interviewProfile) {
-    const hasStoryBank = await exists(join(root, "profile", "story_bank.md"));
+    const hasStoryBank = await exists(workspaceFile(root, "profile/story_bank.md"));
     add({
       id: "story-bank", level: "recommended", state: hasStoryBank ? "done" : "later", action: "none", path: "profile/story_bank.md",
       title: "Story bank",

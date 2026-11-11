@@ -1,17 +1,21 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
-import type { CandidateProfile } from "../src/shared/schemas";
+import type { CandidateProfile, JobFolderSummary } from "../src/shared/schemas";
 import type { PostingRecord } from "../src/shared/posting";
 import {
   DEFAULT_JOB_SEARCH_SETTINGS, EMPTY_JOB_SEARCH_STATE, SEARCH_BOARDS, SKIPPED_BOARDS,
-  canonicalUrl, jobKey, jobSearchSettingsSchema, lightRatingPicks, jobSearchStateSchema, skippedSite,
-  type InboxItem, type JobSearchSettings, type JobSearchState, type QuickFit, type SearchProgress, type SearchRun,
+  canonicalUrl, jobKey, jobSearchSettingsSchema, lightRatingPicks, locationFits, titleExcluded, jobSearchStateSchema, skippedSite,
+  type InboxItem, type JobSearchSettings, type JobSearchState, type QuickFit, type SearchProgress, type SearchRun, type WatchedSuggestion,
 } from "../src/shared/job-search";
 import { readActiveContextManifest } from "./context";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
-import { fetchAndClean, stageCleanedPosting, suggestJobId } from "./jd-fetch";
-import { bestMatch, boardKey, boardRef, fitsSearchTitles, listBoardJobs, type BoardJob, type BoardRef } from "./job-boards";
+import { fetchAndClean, postingFromBoard, stageCleanedPosting, suggestJobId } from "./jd-fetch";
+import { bestMatch, boardPostingHtml, fitsSearchTitles, listBoardJobs, titleSimilarity, type BoardJob } from "./job-boards";
+import { computeLearnings, furthestRecordedStage } from "../src/shared/learnings";
+import { boardKey, boardOf, boardRef, singlePosting, type BoardRef } from "../src/shared/boards";
+
+export { boardOf, singlePosting };
 import { assertInsideWorkspace } from "./files";
 import { readJson, writeJsonAtomic, writeTextAtomic } from "./persistence";
 import { buildPostingRecord } from "./posting-record";
@@ -32,8 +36,16 @@ const MIN_POSTING_CHARS = 400;
 
 export const SEARCH_SCHEMA = JSON.stringify({
   type: "object",
-  required: ["jobs"],
+  required: ["companies"],
   properties: {
+    companies: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["name"],
+        properties: { name: { type: "string" }, jobsUrl: { type: "string" } },
+      },
+    },
     jobs: {
       type: "array",
       items: {
@@ -89,51 +101,64 @@ export async function saveSearchState(workspace: string, state: JobSearchState):
 
 // ---------- The search prompt (owner of what Agy is told) ----------
 
-export function buildSearchPrompt(settings: JobSearchSettings, recent: string[], today: Date = new Date()): string {
+export function buildSearchPrompt(settings: JobSearchSettings, recent: string[], today: Date = new Date(), knownCompanies: string[] = []): string {
   const boards = SEARCH_BOARDS.filter((board) => !settings.boardsOff.includes(board.id));
   const list = (items: string[], empty: string) => items.length ? items.join("; ") : empty;
   return [
-    `Find up to ${settings.resultsPerRun} current job postings, quickly (a few searches, no more than a few minutes) in the United States that match the search below. Use web search only: do not read or write any files, and run no commands.`,
+    `Find up to ${settings.resultsPerRun} companies in the United States that are hiring now for the roles below, quickly (a few searches, no more than a few minutes). Use web search only: do not read or write any files, and run no commands.`,
     "",
-    "Search:",
+    "Roles:",
     `- Titles or role families: ${list(settings.titles, "use the include keywords")}`,
     `- Where: ${list(settings.locations, "anywhere in the United States")}; work setup: ${settings.workSetups.join(", ") || "any"}`,
-    `- Level: ${list(settings.levels, "any")}${settings.payFloor ? `; base pay at least $${settings.payFloor.toLocaleString("en-US")} a year when the posting states pay` : ""}`,
-    settings.needsSponsorship ? "- The candidate needs visa sponsorship: skip postings that say they don't sponsor." : "",
-    `- Posted within the last ${settings.postedWithinDays} days (today is ${today.toISOString().slice(0, 10)}).`,
-    settings.includeKeywords.length ? `- Should mention: ${settings.includeKeywords.join(", ")}` : "",
-    settings.excludeKeywords.length ? `- Leave out postings about: ${settings.excludeKeywords.join(", ")}` : "",
+    `- Level: ${list(settings.levels, "any")}${settings.payFloor ? `; base pay at least $${settings.payFloor.toLocaleString("en-US")} a year when stated` : ""}`,
+    settings.needsSponsorship ? "- The candidate needs visa sponsorship: skip companies that say they don't sponsor." : "",
+    `- Hiring within the last ${settings.postedWithinDays} days (today is ${today.toISOString().slice(0, 10)}).`,
+    settings.includeKeywords.length ? `- Should involve: ${settings.includeKeywords.join(", ")}` : "",
+    settings.excludeKeywords.length ? `- Leave out roles about: ${settings.excludeKeywords.join(", ")}` : "",
+    settings.excludeTitleWords.length ? `- Leave out roles whose title includes: ${settings.excludeTitleWords.join(", ")}` : "",
     settings.skipCompanies.length ? `- Never these companies: ${settings.skipCompanies.join(", ")}` : "",
+    knownCompanies.length ? `- Already known, find others: ${knownCompanies.slice(0, 60).join(", ")}` : "",
     "",
     "Where to look:",
-    `- Search these boards first (site: searches work well): ${boards.map((board) => `${board.name} (${board.domain})`).join(", ")}${settings.extraSites.length ? `; also these sites: ${settings.extraSites.join(", ")}` : ""}.`,
-    `- Never use or link to: ${[...SKIPPED_BOARDS.map((board) => board.domain), ...settings.skipSites].join(", ")}. If a job is only found there, find the same job on the company's own careers page or applicant system, or leave it out.`,
-    "- Copy each link exactly as it appears in a search result. Never type, shorten, or assemble a link yourself; a made-up link is worse than none.",
-    "- Prefer the company's own applicant-system link (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, or its careers site) over aggregators.",
-    recent.length ? `- Already seen, don't return again: ${recent.slice(-30).join("; ")}` : "",
+    `- Search these sources (site: searches work well): ${boards.map((board) => `${board.name} (${board.domain})`).join(", ")}${settings.extraSites.length ? `; also: ${settings.extraSites.join(", ")}` : ""}.`,
+    `- Never use: ${[...SKIPPED_BOARDS.map((board) => board.domain), ...settings.skipSites].join(", ")}.`,
     "",
-    "Return only links to single job postings (never search pages, lists, or company home pages), each with its title, company, location, and posted date (YYYY-MM-DD) when the page shows one. Don't guess a field you can't see; leave it out. Don't rate or describe the jobs: the app opens every link and checks it.",
+    "Return:",
+    "- companies: each company's name and the link to its jobs page as you saw it, ideally its applicant system (jobs.ashbyhq.com/<company>, job-boards.greenhouse.io/<company>, jobs.lever.co/<company>) or its careers page. The app reads every company's open jobs itself, so return companies, not single postings.",
+    "- jobs (optional): a single posting you saw on a site that isn't an applicant system, with its title, company, location, and posted date (YYYY-MM-DD) if shown.",
+    "- Copy links exactly as they appear in results. Never type, shorten, or assemble a link; a made-up link is worse than none. Don't rate or describe anything.",
+    recent.length ? `- Postings already seen: ${recent.slice(-30).join("; ")}` : "",
   ].filter((line) => line !== "").join("\n");
 }
 
 export type FoundLink = { url: string; title?: string; company?: string; location?: string; postedDate?: string };
+export type FoundCompany = { name: string; jobsUrl?: string };
 
 export function parseSearchReply(response: string): FoundLink[] {
+  return parseSearchResult(response).jobs;
+}
+
+export function parseSearchResult(response: string): { jobs: FoundLink[]; companies: FoundCompany[] } {
   const text = response.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
   let value: unknown;
   try { value = JSON.parse(text); } catch {
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return [];
-    try { value = JSON.parse(match[0]); } catch { return []; }
+    try { value = match ? JSON.parse(match[0]) : null; } catch { value = null; }
   }
-  const jobs = Array.isArray((value as { jobs?: unknown })?.jobs) ? (value as { jobs: unknown[] }).jobs : [];
+  const record = (value ?? {}) as { jobs?: unknown; companies?: unknown };
   const str = (input: unknown) => typeof input === "string" && input.trim() ? input.trim() : undefined;
-  return jobs.flatMap((job) => {
-    const record = job as Record<string, unknown>;
-    const url = str(record?.url);
+  const jobs = (Array.isArray(record.jobs) ? record.jobs : []).flatMap((job) => {
+    const item = job as Record<string, unknown>;
+    const url = str(item?.url);
     if (!url || !/^https?:\/\//i.test(url)) return [];
-    return [{ url, title: str(record.title), company: str(record.company), location: str(record.location), postedDate: str(record.postedDate) }];
+    return [{ url, title: str(item.title), company: str(item.company), location: str(item.location), postedDate: str(item.postedDate) }];
   });
+  const companies = (Array.isArray(record.companies) ? record.companies : []).flatMap((company) => {
+    const item = company as Record<string, unknown>;
+    const name = str(item?.name);
+    return name ? [{ name, jobsUrl: str(item.jobsUrl) }] : [];
+  });
+  return { jobs, companies };
 }
 
 // ---------- Dead and stale postings ----------
@@ -269,26 +294,6 @@ export async function resolveLink(url: string, fetcher: typeof fetch): Promise<s
   return current;
 }
 
-/** False for a known board's list or company page (not one posting); unknown sites are given the benefit of the doubt. */
-export function singlePosting(url: string): boolean {
-  let parsed: URL;
-  try { parsed = new URL(url); } catch { return false; }
-  const host = parsed.hostname.toLowerCase();
-  const parts = parsed.pathname.split("/").filter(Boolean);
-  if (/lever\.co$/.test(host) || /ashbyhq\.com$/.test(host)) return parts.length >= 2 && !["apply", "application"].includes(parts[1]);
-  if (/greenhouse\.io$/.test(host)) return parts.includes("jobs") && /^\d+$/.test(parts[parts.indexOf("jobs") + 1] ?? "") || parsed.searchParams.has("gh_jid");
-  if (/workable\.com$/.test(host)) return parts.includes("j") || parts.includes("view");
-  if (/smartrecruiters\.com$/.test(host)) return parts.length >= 2;
-  return parsed.pathname.length > 1;
-}
-
-const BOARD_BY_HOST: Array<[RegExp, string]> = [[/greenhouse\.io$/, "greenhouse"], [/lever\.co$/, "lever"], [/ashbyhq\.com$/, "ashby"], [/workable\.com$/, "workable"], [/smartrecruiters\.com$/, "smartrecruiters"], [/myworkdayjobs\.com$/, "workday"], [/ycombinator\.com$/, "yc"], [/builtin\.com$/, "builtin"], [/wellfound\.com$/, "wellfound"]];
-export function boardOf(url: string): string | null {
-  try {
-    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
-    return BOARD_BY_HOST.find(([pattern]) => pattern.test(host))?.[1] ?? host;
-  } catch { return null; }
-}
 
 /** Title and company: what Agy saw on the page first, then the page; "Company - Title" page titles (Lever) are split. */
 export function nameJob(link: FoundLink, pageCompany: string | null, pageTitle: string | null): { company: string | null; title: string | null } {
@@ -310,6 +315,10 @@ export type SearchDeps = {
   now?: () => Date;
   /** Keys of jobs already in Jobs (canonical URLs and company|title keys). */
   existingKeys: Set<string>;
+  /** Companies of the user's jobs on Ashby/Greenhouse/Lever, watched automatically when `autoWatch` is on. */
+  jobCompanies?: WatchedSuggestion[];
+  /** What the user's recorded interviews teach the search (see `searchLearning`). */
+  learned?: SearchLearning;
   onUpdate?: (state: JobSearchState) => void;
   onProgress?: (progress: SearchProgress) => void;
   /** Set by the scheduled runner. */
@@ -318,15 +327,18 @@ export type SearchDeps = {
 
 const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
 
-const agyError = (message: string) => /print_timeout|DEADLINE_EXCEEDED/.test(message) ? "Agy took too long to search. Try fewer links per search or fewer titles."
+const agyError = (message: string) => /print_timeout|DEADLINE_EXCEEDED/.test(message) ? "Agy took too long to search. Try fewer companies per search or fewer titles."
   : /quota|RESOURCE_EXHAUSTED/i.test(message) ? "Agy's quota is used up for now. Try again later." : message.slice(0, 200);
+
+/** A link to check, with the board job behind it when it came from a company's live list. */
+type Candidate = { link: FoundLink; source: "watched" | "search"; board: { ref: BoardRef; job: BoardJob } | null };
 
 export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchState; run: SearchRun }> {
   const now = deps.now ?? (() => new Date());
   const fetcher = deps.fetcher ?? fetch;
-  const settings = await readSearchSettings(deps.workspace, deps.profile);
+  let settings = await readSearchSettings(deps.workspace, deps.profile);
   let state = await readSearchState(deps.workspace);
-  const run: SearchRun = { id: newId("run"), startedAt: now().toISOString(), finishedAt: null, status: "running", found: 0, added: 0, leftOut: {}, autoQueued: 0, replaced: 0, rated: 0, error: null, source: deps.runner ? "search" : "watched", scheduled: deps.scheduled === true };
+  const run: SearchRun = { id: newId("run"), startedAt: now().toISOString(), finishedAt: null, status: "running", found: 0, added: 0, leftOut: {}, autoQueued: 0, replaced: 0, rated: 0, companies: 0, error: null, source: deps.runner ? "search" : "watched", scheduled: deps.scheduled === true };
   state = await saveSearchState(deps.workspace, { ...state, runs: [...state.runs, run] });
   deps.onUpdate?.(state);
   const finish = async (patch: Partial<SearchRun>) => {
@@ -338,42 +350,70 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   const leftOut: Record<string, number> = {};
   const skip = (reason: string) => { leftOut[reason] = (leftOut[reason] ?? 0) + 1; };
 
-  // Board lists, read once per run: live postings with their dates, for watched companies and for checking links.
+  // Board lists, read once per run: live postings with their places, setup, dates, and text.
   const boards = new Map<string, Promise<BoardJob[] | null>>();
   const boardJobs = (ref: BoardRef) => {
     const key = boardKey(ref);
     if (!boards.has(key)) boards.set(key, listBoardJobs(ref, fetcher).catch(() => null));
     return boards.get(key)!;
   };
+  const watchedKeys = () => new Set(settings.watched.map((company) => boardKey(company)));
+  const addWatched = async (companies: JobSearchSettings["watched"]) => {
+    const known = watchedKeys();
+    const fresh = companies.filter((company) => !known.has(boardKey(company)));
+    if (!fresh.length) return 0;
+    settings = await saveSearchSettings(deps.workspace, { ...settings, watched: [...settings.watched, ...fresh] });
+    return fresh.length;
+  };
+  // Companies of the user's own jobs join the watched list (the setting is on by default and editable).
+  if (settings.autoWatch && deps.jobCompanies?.length) await addWatched(deps.jobCompanies.map((company) => ({ board: company.board, slug: company.slug, name: company.name, source: "jobs" as const })));
+
+  const candidates: Candidate[] = [];
+  const fromBoard = (ref: BoardRef, job: BoardJob, name: string | undefined, source: Candidate["source"]) => {
+    if (!fitsSearchTitles(job.title, settings.titles)) return;
+    if (titleExcluded(job.title, settings.excludeTitleWords)) { skip("title has a word you left out"); return; }
+    candidates.push({ link: { url: job.url, title: job.title, company: name || job.company || undefined, location: job.location ?? undefined, postedDate: job.postedAt ?? undefined }, source, board: { ref, job } });
+  };
 
   // 1. Watched companies (free): their live postings whose titles fit the search.
-  const links: Array<FoundLink & { watched?: boolean }> = [];
   for (const [index, company] of settings.watched.entries()) {
     deps.onProgress?.({ phase: "watched", checked: index, total: settings.watched.length });
     const jobs = await boardJobs(company);
     if (!jobs) { skip("watched board unreadable"); continue; }
-    for (const job of jobs) {
-      if (!fitsSearchTitles(job.title, settings.titles)) continue;
-      links.push({ url: job.url, title: job.title, company: company.name || job.company || undefined, location: job.location ?? undefined, postedDate: job.postedAt ?? undefined, watched: true });
-    }
+    for (const job of jobs) fromBoard(company, job, company.name, "watched");
   }
 
-  // 2. Agy's search (one run).
+  // 2. Agy's search (one run): companies hiring for the titles, read from their own boards; plus postings seen elsewhere.
   let agyFailure: string | null = null;
+  let companiesFound = 0;
   if (deps.runner) {
     deps.onProgress?.({ phase: "agy", checked: 0, total: 0 });
     const recent = state.items.slice(-30).map((item) => [item.company, item.title].filter(Boolean).join(" — ")).filter(Boolean);
     try {
-      links.push(...parseSearchReply((await deps.runner(buildSearchPrompt(settings, recent, now()), { conversationId: null })).response));
+      const reply = parseSearchResult((await deps.runner(buildSearchPrompt(settings, recent, now(), settings.watched.map((company) => company.name || company.slug)), { conversationId: null })).response);
+      const found: JobSearchSettings["watched"] = [];
+      for (const company of reply.companies) {
+        const ref = company.jobsUrl ? boardRef(company.jobsUrl) : null;
+        if (!ref) { skip("company not on a readable board"); continue; }
+        const jobs = await boardJobs(ref);
+        if (!jobs) { skip("company board not found"); continue; }
+        companiesFound += 1;
+        if (!watchedKeys().has(boardKey(ref))) found.push({ ...ref, name: company.name, source: "search" });
+        for (const job of jobs) fromBoard(ref, job, company.name, "search");
+      }
+      // Companies Agy found are kept, so later searches (and free checks) read them without Agy.
+      if (settings.watchFoundCompanies) await addWatched(found);
+      for (const link of reply.jobs) candidates.push({ link, source: "search", board: null });
     } catch (error) {
       agyFailure = agyError(error instanceof Error ? error.message : String(error));
-      if (!links.length) return finish({ status: "failed", error: agyFailure, leftOut });
+      if (!candidates.length) return finish({ status: "failed", error: agyFailure, leftOut });
     }
   }
 
-  // 3. The app checks every link.
+  // 3. The app checks every candidate: newest first, cheap checks (seen, place, age) before any posting is loaded.
   // `seen` is kept between runs and only grows with jobs that were added or found closed, so a posting left out for
-  // its age, its board, or a filter comes back once the user changes that setting. `checked` stops repeats within a run.
+  // its age, its place, or a filter comes back once the user changes that setting. `checked` stops repeats within a run.
+  candidates.sort((a, b) => (Date.parse(b.link.postedDate ?? "") || 0) - (Date.parse(a.link.postedDate ?? "") || 0));
   const seen = new Set([...state.seen, ...deps.existingKeys]);
   const checked = new Set<string>();
   const sameUrl = (a: string, b: string) => canonicalUrl(a).toLowerCase() === b.toLowerCase();
@@ -381,36 +421,49 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   const skipCompanies = settings.skipCompanies.map((name) => name.toLowerCase());
   let added = 0;
   let replaced = 0;
-  for (const [index, link] of links.entries()) {
-    deps.onProgress?.({ phase: "checking", checked: index, total: links.length });
-    let url = canonicalUrl(await resolveLink(link.url, fetcher));
+  for (const [index, candidate] of candidates.entries()) {
+    deps.onProgress?.({ phase: "checking", checked: index, total: candidates.length });
+    const link = candidate.link;
+    let board = candidate.board;
+    let url = canonicalUrl(board ? link.url : await resolveLink(link.url, fetcher));
     if (seen.has(url) || checked.has(url)) { skip("already seen"); continue; }
     checked.add(url);
-    if (skippedSite(url, settings)) { skip("skipped board"); continue; }
-    if (!singlePosting(url)) { skip("not a single posting"); continue; }
-    let postedDate = link.postedDate;
-    // On Ashby, Greenhouse, and Lever the company's live list decides: a link not on it is swapped for the live
-    // posting with the same title, or left out as closed.
-    const ref = boardRef(url);
-    const jobs = ref ? await boardJobs(ref) : null;
-    if (jobs) {
-      const live = jobs.find((job) => sameUrl(job.url, url));
-      const swap = live ? null : link.title ? bestMatch(jobs, link.title) : null;
-      if (!live && !swap) { seen.add(url); skip("posting closed"); continue; }
-      if (swap) {
-        url = canonicalUrl(swap.url);
-        if (seen.has(url) || checked.has(url)) { skip("already seen"); continue; }
-        checked.add(url);
-        replaced += 1;
+    if (!board) {
+      if (skippedSite(url, settings)) { skip("skipped board"); continue; }
+      if (!singlePosting(url)) { skip("not a single posting"); continue; }
+      // On Ashby, Greenhouse, and Lever the company's live list decides: a link not on it is swapped for the live
+      // posting with the same title, or left out as closed.
+      const ref = boardRef(url);
+      const jobs = ref ? await boardJobs(ref) : null;
+      if (ref && jobs) {
+        const live = jobs.find((job) => sameUrl(job.url, url));
+        const swap = live ? null : link.title ? bestMatch(jobs, link.title) : null;
+        if (!live && !swap) { seen.add(url); skip("posting closed"); continue; }
+        if (swap) {
+          url = canonicalUrl(swap.url);
+          if (seen.has(url) || checked.has(url)) { skip("already seen"); continue; }
+          checked.add(url);
+          replaced += 1;
+        }
+        board = { ref, job: (live ?? swap)! };
       }
-      postedDate = (live ?? swap)!.postedAt ?? postedDate;
     }
+    const postedDate = board?.job.postedAt ?? link.postedDate;
     const age = postingAgeDays(postedDate, now());
     if (age !== null && age > settings.postedWithinDays) { skip("too old"); continue; }
+    if (board) {
+      const place = locationFits(board.job, settings);
+      if (!place.fits) { skip(`not in your places or setups`); continue; }
+    }
+    if (company(link, board) && skipCompanies.includes(company(link, board)!.toLowerCase())) { skip("skipped company"); continue; }
+    if (added >= settings.maxNewPerRun) { skip("over this run's limit"); continue; }
     let markdown: string;
     let meta: { title: string | null; company: string | null; location: string | null };
     try {
-      const { extracted } = await fetchAndClean(url, fetcher);
+      const html = board ? await boardPostingHtml(board.ref, board.job, fetcher) : null;
+      const { extracted } = html && board
+        ? postingFromBoard({ url, title: board.job.title, company: company(link, board), location: board.job.locations.join("; ") || board.job.location, html })
+        : await fetchAndClean(url, fetcher);
       markdown = extracted.markdown;
       meta = extracted;
     } catch (error) {
@@ -422,33 +475,42 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
     if (closedPosting(markdown)) { seen.add(url); skip("posting closed"); continue; }
     if (markdown.replace(/^[\s\S]*?\*\*Source:\*\*[^\n]*\n/, "").trim().length < MIN_POSTING_CHARS) { skip("couldn't read"); continue; }
     const record = buildPostingRecord(markdown);
-    const { company, title } = nameJob(link, meta.company ?? record.company ?? null, meta.title ?? record.title ?? null);
-    const key = jobKey(company, title);
+    // The posting's own words decide when they state the setup ("On-site in New York City"): boards' labels can be
+    // wrong (a recruiting marketplace marks client jobs "Remote"). Board places are kept alongside the posting's.
+    if (!board || record.workSetup?.mode) {
+      const places = [...(record.workSetup?.mode ? [record.workSetup.text] : []), record.location ?? link.location ?? "", ...(board?.job.locations ?? [])].filter(Boolean);
+      const place = locationFits({ locations: places, workplace: record.workSetup?.mode ?? board?.job.workplace ?? null }, settings);
+      if (!place.fits) { skip("not in your places or setups"); continue; }
+    }
+    const { company: companyName, title } = nameJob(link, meta.company ?? record.company ?? null, meta.title ?? record.title ?? null);
+    const key = jobKey(companyName, title);
     if (key && (seen.has(key) || checked.has(key))) { skip("already seen"); continue; }
     if (key) checked.add(key);
-    if (company && skipCompanies.includes(company.toLowerCase())) { skip("skipped company"); continue; }
+    if (title && titleExcluded(title, settings.excludeTitleWords)) { skip("title has a word you left out"); continue; }
+    if (companyName && skipCompanies.includes(companyName.toLowerCase())) { skip("skipped company"); continue; }
     const text = `${title ?? ""} ${record.summary.join(" ")}`.toLowerCase();
     if (settings.excludeKeywords.some((word) => text.includes(word.toLowerCase()))) { skip("excluded keyword"); continue; }
     const item: InboxItem = {
       id: newId("find"),
       url,
       title,
-      company,
-      location: meta.location ?? record.location ?? link.location ?? null,
+      company: companyName,
+      location: board?.job.locations.join("; ") || meta.location || record.location || link.location || null,
       board: boardOf(url),
       postedAt: age !== null && postedDate ? new Date(Date.parse(postedDate)).toISOString().slice(0, 10) : null,
       foundAt: now().toISOString(),
       runId: run.id,
       status: "new",
       pay: record.pay?.text ?? null,
-      workSetup: record.workSetup?.text ?? record.workSetup?.mode ?? null,
+      workSetup: record.workSetup?.text ?? board?.job.workplace ?? record.workSetup?.mode ?? null,
       level: record.seniority,
-      fit: quickFit(record, vocab, settings),
+      fit: learnedFit(quickFit(record, vocab, settings), deps.learned),
       jobId: null,
       queuedAt: null,
       autoQueued: false,
-      watched: link.watched === true,
+      watched: candidate.source === "watched",
       agyFit: null,
+      likeInterviewed: title ? likeInterviewed(title, deps.learned) : null,
     };
     await writeTextAtomic(path(deps.workspace, `${POSTINGS_DIR}/${item.id}.md`), markdown);
     seen.add(url);
@@ -457,7 +519,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
     state = await saveSearchState(deps.workspace, { ...state, items: [...state.items, item], seen: [...seen] });
     deps.onUpdate?.(state);
   }
-  deps.onProgress?.({ phase: "checking", checked: links.length, total: links.length });
+  deps.onProgress?.({ phase: "checking", checked: candidates.length, total: candidates.length });
   state = await saveSearchState(deps.workspace, { ...state, seen: [...seen] });
   // 4. Agy's light rating for this run's best new matches (one call), when the search used Agy.
   let rated = 0;
@@ -473,7 +535,54 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
       }
     }
   }
-  return finish({ status: "done", found: links.length, added, replaced, rated, leftOut, error: agyFailure });
+  return finish({ status: "done", found: candidates.length, added, replaced, rated, companies: companiesFound, leftOut, error: agyFailure });
+}
+
+const company = (link: FoundLink, board: Candidate["board"]) => link.company ?? board?.job.company ?? null;
+
+/**
+ * What the search needs from the user's Jobs: keys of jobs already there (never shown again) and the companies whose
+ * postings are on Ashby/Greenhouse/Lever (watched automatically when `autoWatch` is on), with how many jobs each has
+ * and whether one reached an interview. Used by Run now, the scheduled runner, and the watched-list suggestions.
+ */
+export async function jobsForSearch(workspace: string, jobs: Array<{ id: string; company: string | null; title: string | null; reachedInterview: boolean }>): Promise<{ existingKeys: Set<string>; companies: WatchedSuggestion[] }> {
+  const existingKeys = new Set(jobs.map((job) => jobKey(job.company, job.title)).filter((key): key is string => Boolean(key)));
+  const found = new Map<string, WatchedSuggestion>();
+  for (const job of jobs) {
+    const posting = await readJson<{ url?: string | null }>(path(workspace, `jobs/${job.id}/.sensei/posting.json`));
+    const ref = posting?.url ? boardRef(posting.url) : null;
+    if (!ref) continue;
+    const key = boardKey(ref);
+    const current = found.get(key) ?? { board: ref.board, slug: ref.slug, name: job.company ?? ref.slug, jobs: 0, interviewed: false };
+    current.jobs += 1;
+    current.interviewed ||= job.reachedInterview;
+    found.set(key, current);
+  }
+  const companies = [...found.values()].sort((a, b) => Number(b.interviewed) - Number(a.interviewed) || b.jobs - a.jobs || a.name.localeCompare(b.name));
+  return { existingKeys, companies };
+}
+
+/**
+ * What recorded interviews teach the search: titles of jobs that got a real interview (matches like them rank a little
+ * higher) and gap terms that recur in applications with no interview (flagged on new matches). From Learnings (U31).
+ */
+export type SearchLearning = { interviewed: Array<{ title: string; company: string | null }>; rejectionGaps: string[] };
+
+export function searchLearning(jobs: JobFolderSummary[]): SearchLearning {
+  return {
+    interviewed: jobs.filter((job) => furthestRecordedStage(job) !== null && job.title).map((job) => ({ title: job.title!, company: job.company })),
+    rejectionGaps: computeLearnings(jobs).gapTerms.filter((term) => term.noInterview >= 2 && term.noInterview > term.interviewed).map((term) => term.term),
+  };
+}
+
+export function likeInterviewed(title: string, learned: SearchLearning | undefined): string | null {
+  const match = learned?.interviewed.find((job) => titleSimilarity(job.title, title) >= 0.6);
+  return match ? `Like ${match.company ? `your ${match.company} interview` : "a job that got you an interview"}` : null;
+}
+
+function learnedFit(fit: QuickFit, learned: SearchLearning | undefined): QuickFit {
+  const recurring = fit.gaps.filter((gap) => learned?.rejectionGaps.some((term) => term.toLowerCase() === gap.toLowerCase()));
+  return recurring.length ? { ...fit, flags: [...fit.flags, `Came up in applications without interviews: ${recurring.join(", ")}`] } : fit;
 }
 
 // ---------- One search at a time (the app and the scheduled runner share this lock) ----------

@@ -18,8 +18,8 @@ The base resume protects presentation and fixed career fields. It is not trusted
 ## First Launch
 
 1. JobSensei creates the local `data/` workspace.
-2. The Get Started screen collects a name and artifact prefix.
-3. The user selects a base resume.
+2. First-run steps, all in the app: your name and file prefix; your base resume (the app shows what it read); Agy sign-in; then recommended extras (career files, career story, interview logistics, names to keep private, writing voice). The Setup page in the sidebar keeps the same list with what each step improves.
+3. Adding a job waits until the required steps (name, a readable base resume, Agy installed) are done.
 4. Career evidence is added under `data/context/structured/`; source notes may be added under `data/context/broad/`.
 5. The app creates an active context manifest from the files selected in the interface.
 6. The Agy panel (top bar → Agy) launches Agy from the repository root so it can discover `.agents/skills/`.
@@ -160,4 +160,29 @@ See [Privacy](docs/privacy.md), [Workspace Format](docs/workspace-format.md), an
 - **Track:** status is automatic (drafts mean Applied, interview prep means Interviewing) until you set it on the job page. Set follow-up dates and notes in Tracking. The status strip filters jobs; old applications with no reply can be closed in one step.
 - **Interview:** the Interviews page lists every job with prep. A job's Interview tab shows the round stepper, question cards, key points, and a readiness checklist. Start live mode in the app, or open the small always-on-top Live window during the call.
 - **Watch runs:** the bar at the top of the Agy panel shows the latest run, its result, and its top issues.
+- **Find jobs (Job Search):** set titles, places, work setups, level, pay floor, and keywords in Search settings. Every run reads the open jobs of your watched companies from their own boards (free): companies of the jobs you add and companies Agy finds are watched automatically, and you can add or remove any. **Run now** also asks Agy (one run) for more companies hiring for your titles. Matches are filtered by your places and setups, ranked by a quick fit (and Agy's light rating for the best 10), and folded below your bar. Select several to draft, save, or dismiss. Wellfound and Otta are searched by Agy; boards that block reading (LinkedIn, Indeed, Glassdoor, ZipRecruiter) are skipped.
+- **Search on a schedule:** Search settings → Schedule. The default runs one search a day, the first time your computer is on after your chosen time (for example 8:00), counted from that time to the same time the next day; searches you run yourself don't use it up. The page says whether it is on. Strong matches can be drafted automatically above a rating you choose.
+- **Cover letters:** Settings → Career story → Cover letter sets the length (default 200–280 words) and whether the letter leads with your career story (default) or with examples.
+
+## Organizing jobs and folders
+
+- **Jobs page:** Filters (company, work setup, fit, went to interview, tags), Group (company, kind of role, status, work setup), and saved views that bring back a tab, search, filters, grouping, and sort in one click. Filtering to one company shows its summary (jobs by status, average fit, interviews, a link to its research and prep). Tags are added on a job's Overview under Tracking.
+- **Adding a job you already have** (same posting link, or same company and title) asks before adding it again.
+- **Your folders (Setup):** an optional tidy layout for the workspace folder with plain names. Preview first, apply, undo. Job folders and resumes are never moved. See `docs/workspace-format.md` § Folder layouts.
+
+## What runs in the background
+
+Agy (the AI) only runs for these, each with only what that task needs:
+
+| What | When | What Agy gets |
+|---|---|---|
+| Application drafts | A job you add, or a found job you send for drafts, reaches the front of the queue (one at a time; "Run automatically" can pause it) | The posting, the evidence rows routed to that job (about 20), your resume layout, style rules, and the cover-letter brief, about 30 KB |
+| Written application questions | Right after an application run starts, for Greenhouse, Ashby, and Lever postings | The questions, the posting, that job's evidence rows, your stories, voice, and the job's cover letter |
+| Job search | When you press Run now, or once a day on your schedule (if you turned it on) | Your search settings only: titles, places, setups, level, pay floor, words to leave out, boards. No resume or career files |
+| Light rating | After a search, for up to 10 of the best new matches (one call), or Rate with Agy | Each job's requirements and a short card: role titles and dates, skills lines, career story, target roles |
+| Interview prep, content updates | Only when you ask (Prepare a round; Update from new recordings) | The round's context: routed evidence, stories, voice, role memory, earlier rounds |
+
+Everything else is the app's own work, with no AI: reading companies' job lists from Ashby, Greenhouse, and Lever (plain web requests), checking whether your saved and applied postings are still listed (once a day, when Today opens and after the morning search), quick fit, the Today page's insights and questions, Learnings, readiness, and the schedule.
+
+Things you add are used the next time a task needs them; nothing rewrites past drafts. A new career file (or an answer to a Today question) is used by the next application once it's checked in Career context; a new story is used by the next interview prep; new recordings are used when you press Update.
 

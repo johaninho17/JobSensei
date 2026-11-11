@@ -1,11 +1,12 @@
-import { mkdir, readFile, readdir } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { postingRecordFor } from "./posting-record";
 import { basename, join, resolve } from "node:path";
 import { candidateProfileSchema, type CandidateProfile, type EvidenceSnapshot, type InterviewLogistics } from "../src/shared/schemas";
 import { BANNED_PHRASES, narrativeStoryLines } from "./evidence-snapshot";
 import { bestEvidenceForRequirement, parseMustHaves } from "./fit-scoring";
-import { writeJsonAtomic } from "./persistence";
-import { assertInsideWorkspace } from "./workspace";
+import { writeJsonAtomic, readTextFile } from "./persistence";
+import { toDisk } from "../src/shared/workspace-layout";
+import { assertInsideWorkspace, layoutVersion } from "./workspace";
 
 /** The four canonical rounds and their question limits. Single owner for round IDs and bounds. */
 export const INTERVIEW_STAGES = {
@@ -129,7 +130,7 @@ export function logisticsLines(logistics: InterviewLogistics | undefined): Recor
 }
 
 async function readText(workspace: string, relativePath: string): Promise<string> {
-  return readFile(assertInsideWorkspace(workspace, join(workspace, relativePath)), "utf8").catch(() => "");
+  return readTextFile(assertInsideWorkspace(workspace, join(workspace, relativePath))).catch(() => "");
 }
 
 async function readJsonFile<T>(workspace: string, relativePath: string): Promise<T | null> {
@@ -146,7 +147,31 @@ async function roleMemoryFor(workspace: string, title: string): Promise<{ family
     .some((alias) => alias.trim() && normalized.includes(` ${alias.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `)));
   if (!match?.path) return null;
   const patterns = await readText(workspace, match.path);
-  return patterns ? { family: match.family ?? "", path: match.path, patterns: patterns.slice(0, 6000) } : null;
+  return patterns ? { family: match.family ?? "", path: toDisk(match.path, layoutVersion(workspace)), patterns: patterns.slice(0, 6000) } : null;
+}
+
+/**
+ * Company research for this round: this job's own file, or a recent one (under 60 days) from another job at the same
+ * company, whose company, news, and process sections Agy reuses (the pipeline skill owns how). Role sections are
+ * always written fresh for this job.
+ */
+export async function companyResearchFor(workspace: string, jobId: string, company: string | null, now = new Date()): Promise<{ path: string | null; reuseFrom: string | null; reuseAgeDays: number | null }> {
+  const own = `jobs/${jobId}/interviews/company_research.md`;
+  if (await stat(join(workspace, own)).catch(() => null)) return { path: own, reuseFrom: null, reuseAgeDays: null };
+  const key = (company ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(inc|llc|ltd|corp|co)\b/g, "").trim();
+  if (!key) return { path: null, reuseFrom: null, reuseAgeDays: null };
+  let best: { path: string; mtime: number } | null = null;
+  for (const entry of await readdir(join(workspace, "jobs"), { withFileTypes: true }).catch(() => [])) {
+    if (!entry.isDirectory() || entry.name === jobId) continue;
+    const other = await readJsonFile<{ company?: string }>(workspace, `jobs/${entry.name}/.sensei/job.json`);
+    const otherKey = (other?.company ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(inc|llc|ltd|corp|co)\b/g, "").trim();
+    if (otherKey !== key) continue;
+    const path = `jobs/${entry.name}/interviews/company_research.md`;
+    const info = await stat(join(workspace, path)).catch(() => null);
+    if (info && (!best || info.mtimeMs > best.mtime)) best = { path, mtime: info.mtimeMs };
+  }
+  const age = best ? Math.floor((now.getTime() - best.mtime) / 86_400_000) : null;
+  return best && age !== null && age <= 60 ? { path: null, reuseFrom: best.path, reuseAgeDays: age } : { path: null, reuseFrom: null, reuseAgeDays: null };
 }
 
 export async function buildInterviewContext(workspacePath: string, jobId: string, stageInput: string, now = new Date()) {
@@ -210,13 +235,14 @@ export async function buildInterviewContext(workspacePath: string, jobId: string
     },
     gaps,
     evidenceRows,
-    storyBank: { path: STORY_BANK_PATH, exists: stories.length > 0, stories },
-    voice: { path: INTERVIEW_VOICE_PATH, ...voice },
+    storyBank: { path: toDisk(STORY_BANK_PATH, layoutVersion(workspace)), exists: stories.length > 0, stories },
+    voice: { path: toDisk(INTERVIEW_VOICE_PATH, layoutVersion(workspace)), ...voice },
     /** Career direction, story, working style, and values from Settings: the substance behind motivation questions. */
     careerStory: narrativeStoryLines(profile),
     logistics: logisticsLines(profile?.preferences.interview),
     roleMemory: await roleMemoryFor(workspace, title),
     priorRounds,
+    companyResearch: await companyResearchFor(workspace, jobId, job.company ?? null, now),
     rules: {
       questionLimits: { min: spec.min, max: spec.max },
       bannedPhrases: BANNED_PHRASES,

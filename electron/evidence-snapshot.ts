@@ -1,3 +1,4 @@
+import { readTextFile, writeCompressedJsonAtomic } from "./persistence";
 import { createHash } from "node:crypto";
 import { postingRecordFor, writePostingRecord } from "./posting-record";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
@@ -32,6 +33,7 @@ import { readCandidateProfile } from "./candidate-profile";
 import { buildContextManifest, readActiveContextManifest } from "./context";
 import { deriveVoicePresets } from "../src/shared/voice-presets";
 import { readBulletBank } from "./bullet-bank";
+import { provenLinesFor } from "./proven-lines";
 import { FETCHED_FORM_PATH, readFetchedJobDescription } from "./jd-fetch";
 import { APPLICATION_FORM_FILE } from "./posting-clean";
 import { BASE_ROW_PREFIX, FILE_ROW_PREFIX, baseEarnsFitCredit, baseResumeRows, candidateFileRows, noFitCredit } from "./candidate-evidence";
@@ -871,11 +873,12 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
   });
 
   const currentPath = assertInsideWorkspace(workspace, join(statePath, "evidence_snapshot.json"));
-  const existingVersion = await readFile(currentPath, "utf8")
+  const existingVersion = await readTextFile(currentPath)
     .then((value) => evidenceSnapshotSchema.parse(JSON.parse(value)))
     .catch(() => null);
   const snapshot = existingVersion?.snapshotId === snapshotId ? existingVersion : candidateSnapshot;
-  await writeJsonAtomic(currentPath, snapshot);
+  // The full record of what the model saw for this job (~250 KB as text) is kept compressed (~10x smaller).
+  await writeCompressedJsonAtomic(currentPath, snapshot);
   const hiddenJobPath = assertInsideWorkspace(jobPath, join(statePath, "job.json"));
   let canonicalJob: { title?: string | null; company?: string | null; location?: string | null } | null = await readFile(hiddenJobPath, "utf8")
     .catch(() => readFile(join(jobPath, "job.json"), "utf8"))
@@ -1030,6 +1033,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       denylistRules: snapshot.denylistRules,
       styleRules: compactStyleRules(stylePolicy, candidateProfile),
       resumePlan,
+      provenLines: await provenLinesFor(workspace, new Set(snapshot.applicationRouting.selectedEvidenceIds), (id) => evidenceById.get(id)?.employer ?? null),
       ...(snapshot.coverLetterPlan?.write === false ? {} : { coverLetterBrief: buildCoverLetterBrief(jobDescriptionText, canonicalJob, candidateProfile) }),
       instructions: [
         "Use only evidenceRows for candidate facts; preserve employer, timeline, scope, eligibility, and classification ceilings.",
@@ -1039,6 +1043,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
         "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. The base resume is evidence too (owner of this rule): rows with `base:` IDs are its own lines, so a base line reworded for this job may cite its own `base:` row, and a candidate with only a base resume still gets a close tailoring. Whatever a line cites, it may not add an event, metric, tool, or ownership the cited rows do not state. " + (baseEarnsFitCredit() ? "`base:` rows also count when rating requirements." : "`base:` rows earn no fit credit; rate requirements from the other rows."),
         ...profileInstructionLines(candidateProfile, snapshot.coverLetterPlan?.write !== false),
         "Maintain natural bullet length (~16-20 words) matching the baseline footprint; no word-by-word arithmetic.",
+        "provenLines (owner of this rule) are lines from tailored resumes that got the candidate a real interview, each with its evidenceIds (all routed to this job). When you rewrite a bullet at the same employer from the same evidence, prefer that proven wording, adjusted lightly for this job; never move a line to another employer.",
         snapshot.coverLetterPlan?.write === false
           ? `No cover letter for this job (owner of this rule): ${snapshot.coverLetterPlan.reason} Leave coverLetter out of the bundle; never write a generic letter.`
           : "Cover letter: follow coverLetterBrief exactly. It owns the structure, opening, word range, and banned phrases. Do not use any other cover-letter structure.",

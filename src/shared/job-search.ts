@@ -9,18 +9,22 @@ export const JOB_SEARCH_SCHEMA_VERSION = 1;
 export const WORK_SETUPS = ["remote", "hybrid", "onsite"] as const;
 export const SEARCH_LEVELS = ["intern", "junior", "mid", "senior", "staff", "lead", "manager", "director"] as const;
 
-export type BoardInfo = { id: string; name: string; domain: string; reason?: string };
+/** `direct`: the app reads companies' open jobs from this board itself, free. Otherwise Agy searches it. */
+export type BoardInfo = { id: string; name: string; domain: string; reason?: string; direct?: boolean };
 
 /** Boards Agy searches by default: public job pages the app can open and read. */
 export const SEARCH_BOARDS: BoardInfo[] = [
-  { id: "greenhouse", name: "Greenhouse", domain: "greenhouse.io" },
-  { id: "lever", name: "Lever", domain: "lever.co" },
-  { id: "ashby", name: "Ashby", domain: "ashbyhq.com" },
+  { id: "greenhouse", name: "Greenhouse", domain: "greenhouse.io", direct: true },
+  { id: "lever", name: "Lever", domain: "lever.co", direct: true },
+  { id: "ashby", name: "Ashby", domain: "ashbyhq.com", direct: true },
   { id: "workable", name: "Workable", domain: "workable.com" },
   { id: "smartrecruiters", name: "SmartRecruiters", domain: "smartrecruiters.com" },
   { id: "yc", name: "Y Combinator (Work at a Startup)", domain: "ycombinator.com" },
   { id: "builtin", name: "Built In", domain: "builtin.com" },
+  // Wellfound and Otta can't be read directly (sign-in, bot blocking; checked 2026-11-10): Agy searches them, and the
+  // app reads the companies it finds from their own Ashby/Greenhouse/Lever boards.
   { id: "wellfound", name: "Wellfound", domain: "wellfound.com" },
+  { id: "otta", name: "Welcome to the Jungle (Otta)", domain: "welcometothejungle.com" },
 ];
 
 /** Boards never searched: they require sign-in, block automated reading, or only link elsewhere. */
@@ -44,6 +48,8 @@ export const jobSearchSettingsSchema = z.object({
   /** Postings older than this are treated as stale. */
   postedWithinDays: z.number().int().min(1).max(90).default(30),
   includeKeywords: z.array(z.string().min(1)).default([]),
+  /** Words that rule a job out when they appear in its title (e.g. Senior, Principal, Lead), as whole words. */
+  excludeTitleWords: z.array(z.string().min(1)).default([]),
   excludeKeywords: z.array(z.string().min(1)).default([]),
   /** Built-in boards the user turned off (by id). */
   boardsOff: z.array(z.string()).default([]),
@@ -52,7 +58,19 @@ export const jobSearchSettingsSchema = z.object({
   /** Extra boards or domains never to use. */
   skipSites: z.array(z.string().min(1)).default([]),
   /** Companies whose public boards (Ashby, Greenhouse, Lever) are checked on every run, free and without Agy. */
-  watched: z.array(z.object({ board: z.enum(["ashby", "greenhouse", "lever"]), slug: z.string().min(1), name: z.string().default("") })).default([]),
+  watched: z.array(z.object({
+    board: z.enum(["ashby", "greenhouse", "lever"]),
+    slug: z.string().min(1),
+    name: z.string().default(""),
+    /** How it was added: by the user, from the user's jobs, or found by a search. */
+    source: z.enum(["user", "jobs", "search"]).default("user"),
+  })).default([]),
+  /** Companies of jobs the user adds are watched automatically. */
+  autoWatch: z.boolean().default(true),
+  /** Companies Agy finds hiring for the titles are added to the watched list. */
+  watchFoundCompanies: z.boolean().default(true),
+  /** New matches added per run at most (the newest first); the rest wait for the next run. */
+  maxNewPerRun: z.number().int().min(5).max(300).default(60),
   /** Companies the user never wants to see. */
   skipCompanies: z.array(z.string().min(1)).default([]),
   /** Lowest quick fit shown above the fold; lower ones are folded into "Below your bar". */
@@ -74,6 +92,7 @@ export const jobSearchSettingsSchema = z.object({
     wake: z.boolean().default(false),
   }).default({ enabled: false, mode: "daily", after: "08:00", days: [1, 2, 3, 4, 5], times: ["08:00"], wake: false }),
   /** How many postings one search asks Agy for. */
+  /** How many companies one Agy search asks for. */
   resultsPerRun: z.number().int().min(5).max(40).default(20),
 });
 export type JobSearchSettings = z.infer<typeof jobSearchSettingsSchema>;
@@ -129,6 +148,8 @@ export const inboxItemSchema = z.object({
   /** Found on a watched company's board. */
   watched: z.boolean().default(false),
   agyFit: agyFitSchema.nullable().default(null),
+  /** A job like one that got the user a real interview (title), shown and ranked a little higher. */
+  likeInterviewed: z.string().nullable().default(null),
 });
 export type InboxItem = z.infer<typeof inboxItemSchema>;
 
@@ -144,6 +165,8 @@ export const searchRunSchema = z.object({
   autoQueued: z.number().int().default(0),
   /** Dead links swapped for the company's live posting with the same title. */
   replaced: z.number().int().default(0),
+  /** Companies Agy named whose boards the app could read. */
+  companies: z.number().int().default(0),
   /** Matches Agy gave a light rating in this run. */
   rated: z.number().int().default(0),
   /** "search" = Agy + watched companies; "watched" = watched companies only (no Agy). */
@@ -220,7 +243,9 @@ export function canonicalUrl(url: string): string {
 
 export function jobKey(company: string | null, title: string | null): string | null {
   const norm = (value: string | null) => (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  return company && title ? `${norm(company)}|${norm(title)}` : null;
+  // The same role posted once per city ("Engineer (Atlanta)", "Engineer (New York)") is one job.
+  const role = (title ?? "").replace(/\([^)]*\)/g, " ").replace(/\s[-–|]\s*(?:remote|hybrid|[A-Z][\w .]+,\s*[A-Z]{2})\s*$/i, " ");
+  return company && title ? `${norm(company)}|${norm(role)}` : null;
 }
 
 /** Whether a link belongs to a board or site the search must not use. */
@@ -244,12 +269,89 @@ export function lightRatingPicks(items: InboxItem[], settings: Pick<JobSearchSet
     .sort((a, b) => b.fit.score - a.fit.score).slice(0, limit);
 }
 
+// ---------- Where a job is, against where the user wants to work ----------
+
+/** Metro areas a user may type, with the places inside them. Matching is by plain text, so any place the user types still works. */
+export const METRO_AREAS: Record<string, string[]> = {
+  "bay area": ["san francisco", "south san francisco", "oakland", "berkeley", "emeryville", "san jose", "palo alto", "mountain view", "sunnyvale", "santa clara", "cupertino", "redwood city", "menlo park", "san mateo", "foster city", "burlingame", "san bruno", "fremont", "san leandro", "hayward", "pleasanton", "walnut creek", "milpitas", "los gatos", "campbell"],
+  "new york": ["new york", "nyc", "brooklyn", "manhattan", "queens", "jersey city", "hoboken"],
+  "seattle": ["seattle", "bellevue", "redmond", "kirkland"],
+  "boston": ["boston", "cambridge", "somerville", "waltham"],
+  "los angeles": ["los angeles", "santa monica", "culver city", "pasadena", "irvine", "el segundo"],
+  "austin": ["austin"],
+  "chicago": ["chicago"],
+  "washington dc": ["washington, dc", "washington dc", "arlington", "reston", "mclean", "bethesda"],
+  "denver": ["denver", "boulder"],
+};
+
+const US_HINT = /\b(?:us|usa|united states|u\.s\.?)\b/i;
+const US_STATES = ["alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey", "new mexico", "new york", "north carolina", "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont", "virginia", "washington", "west virginia", "wisconsin", "wyoming"];
+const STATE_CODE = /,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/;
+/** Words that say how a job is worked, not where: what's left after removing them names a place. */
+const NOT_A_PLACE = /\b(?:remote|anywhere|hybrid|on-?site|in[- ]office|fully|work from home|wfh|distributed|flexible|global(?:ly)?|first|or|and|optional)\b|[-–|,;:/()]/gi;
+
+/** Whether a place string is in the US: a US hint, a state, a state code, or a known US town. */
+export function inUS(where: string): boolean {
+  const text = where.toLowerCase();
+  return US_HINT.test(where) || STATE_CODE.test(where) || US_STATES.some((state) => text.includes(state))
+    || Object.values(METRO_AREAS).some((towns) => towns.some((town) => text.includes(town)));
+}
+
+const namesAPlace = (where: string) => where.replace(NOT_A_PLACE, " ").trim().length > 0;
+
+/** The places a user's entry covers: the entry itself plus a metro area's towns ("SF Bay Area" → San Francisco, Oakland…). */
+export function placesFor(entry: string): string[] {
+  const text = entry.toLowerCase().replace(/\bsf\b/g, "san francisco").trim();
+  const metro = Object.entries(METRO_AREAS).find(([name, towns]) => text.includes(name) || towns.some((town) => text === town));
+  return [...new Set([text.replace(/,.*$/, "").trim(), ...(metro ? metro[1] : [])].filter(Boolean))];
+}
+
+/**
+ * Whether a job's place and work setup fit the user's settings. Remote jobs fit when the user accepts remote and the job
+ * is in the US or names no place (a remote job limited to another country doesn't); on-site and hybrid jobs fit when that
+ * setup is accepted and the place is one the user listed (or, with no places listed, is in the US). Jobs with no place
+ * are kept: the user decides.
+ */
+export function locationFits(job: { locations: string[]; workplace: "remote" | "hybrid" | "onsite" | null }, settings: Pick<JobSearchSettings, "locations" | "workSetups">): { fits: boolean; reason: string } {
+  const where = job.locations.join(" | ");
+  const remote = job.workplace === "remote" || (!job.workplace && /\bremote\b/i.test(where) && !/\bhybrid\b/i.test(where));
+  const accepts = (mode: "remote" | "hybrid" | "onsite") => !settings.workSetups.length || settings.workSetups.includes(mode);
+  const wanted = settings.locations.flatMap(placesFor);
+  const inWanted = wanted.length > 0 && wanted.some((place) => where.toLowerCase().includes(place));
+  if (remote) {
+    if (accepts("remote") && (inUS(where) || !namesAPlace(where) || inWanted)) return { fits: true, reason: "remote" };
+    if (inWanted && (accepts("hybrid") || accepts("onsite"))) return { fits: true, reason: "in your area" };
+    return { fits: false, reason: accepts("remote") ? "remote outside the US" : "remote (not in your work setups)" };
+  }
+  const mode = job.workplace ?? (/\bhybrid\b/i.test(where) ? "hybrid" : null);
+  if (mode && !accepts(mode)) return { fits: false, reason: `${mode} (not in your work setups)` };
+  if (!namesAPlace(where)) return { fits: true, reason: "place not stated" };
+  if (!wanted.length) return inUS(where) ? { fits: true, reason: "any US place" } : { fits: false, reason: "outside the US" };
+  return inWanted ? { fits: true, reason: "in your area" } : { fits: false, reason: "outside your places" };
+}
+
+/** Whether a job title has one of the user's left-out words, as a whole word ("Lead" never matches "Leading"). */
+export function titleExcluded(title: string, words: string[]): string | null {
+  // Common short forms count as the same word ("Senior" also leaves out "Sr." titles).
+  const SHORT: Record<string, string[]> = { senior: ["sr"], junior: ["jr"], principal: ["princ"], manager: ["mgr"], director: ["dir"] };
+  for (const word of words) {
+    const forms = [word.trim(), ...(SHORT[word.trim().toLowerCase()] ?? [])];
+    for (const form of forms) {
+      const escaped = form.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (escaped && new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, "i").test(title)) return word.trim();
+    }
+  }
+  return null;
+}
+
 /** Inbox order: by fit (Agy's light rating, else quick fit; highest first), then newest. */
 export function rankInbox(items: InboxItem[], sort: "fit" | "newest" | "company" = "fit"): InboxItem[] {
   const time = (item: InboxItem) => Date.parse(item.postedAt ?? item.foundAt) || 0;
-  return [...items].sort((a, b) => sort === "company" ? (a.company ?? "").localeCompare(b.company ?? "") || effectiveFit(b) - effectiveFit(a)
-    : sort === "newest" ? time(b) - time(a) || effectiveFit(b) - effectiveFit(a)
-      : effectiveFit(b) - effectiveFit(a) || time(b) - time(a));
+  // Jobs like ones that got interviews rank a quarter point higher (the shown score doesn't change).
+  const rank = (item: InboxItem) => effectiveFit(item) + (item.likeInterviewed ? 0.25 : 0);
+  return [...items].sort((a, b) => sort === "company" ? (a.company ?? "").localeCompare(b.company ?? "") || rank(b) - rank(a)
+    : sort === "newest" ? time(b) - time(a) || rank(b) - rank(a)
+      : rank(b) - rank(a) || time(b) - time(a));
 }
 
 /** Which new items to queue for drafts by themselves: at or above the user's rating, within today's cap. */

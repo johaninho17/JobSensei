@@ -3,6 +3,7 @@ import { SENIORITY_LEVELS, WORK_MODES } from "./posting";
 import { jobHealthSchema } from "./job-record";
 import type { Readiness } from "./readiness";
 import type { JobSearchSettings, JobSearchState, ScheduleInfo, SearchRun, SearchStatus, WatchedSuggestion } from "./job-search";
+import type { TodayData } from "./today";
 
 export const schemaVersion = 1;
 
@@ -305,6 +306,8 @@ export const jobTrackerSchema = z.object({
   appliedAt: trackerDateSchema.nullable().default(null),
   nextFollowUpAt: trackerDateSchema.nullable().default(null),
   notes: z.string().max(5000).default(""),
+  /** The user's own labels for the job ("referral", "dream job"); a filter on the Jobs page. */
+  tags: z.array(z.string().max(30)).max(12).default([]),
   history: z.array(trackerEventSchema).max(200).default([]),
   interviews: z.array(interviewEventSchema).max(30).default([]),
   outcome: jobOutcomeSchema.nullable().default(null),
@@ -316,6 +319,7 @@ export const jobTrackerUpdateSchema = z.object({
   appliedAt: trackerDateSchema.nullable().optional(),
   nextFollowUpAt: trackerDateSchema.nullable().optional(),
   notes: z.string().max(5000).optional(),
+  tags: z.array(z.string().max(30)).max(12).optional(),
   interviews: z.array(interviewEventSchema).max(30).optional(),
   outcome: jobOutcomeSchema.nullable().optional(),
 }).strict();
@@ -1178,35 +1182,6 @@ export const bulletBankSchema = z.object({
 });
 export type BulletBank = z.infer<typeof bulletBankSchema>;
 
-export const clarifyingQuestionOptionSchema = z.object({
-  id: z.string(),
-  label: z.string(),
-  description: z.string().optional(),
-});
-export type ClarifyingQuestionOption = z.infer<typeof clarifyingQuestionOptionSchema>;
-
-export const clarifyingQuestionSchema = z.object({
-  id: z.string(),
-  prompt: z.string(),
-  contextHint: z.string().optional(),
-  options: z.array(clarifyingQuestionOptionSchema),
-  allowWriteIn: z.boolean().default(true),
-});
-export type ClarifyingQuestion = z.infer<typeof clarifyingQuestionSchema>;
-
-export const clarifyingAnswerSchema = z.object({
-  questionId: z.string(),
-  selectedOptionId: z.string().nullable().default(null),
-  writeInText: z.string().nullable().default(null),
-});
-export type ClarifyingAnswer = z.infer<typeof clarifyingAnswerSchema>;
-
-export const clarifyingAnswersReportSchema = z.object({
-  jobId: z.string(),
-  answers: z.array(clarifyingAnswerSchema),
-  updatedAt: z.string(),
-});
-export type ClarifyingAnswersReport = z.infer<typeof clarifyingAnswersReportSchema>;
 
 /** Job links waiting to be sent to Agy one at a time: `.sensei/job_queue.json` in the workspace. */
 export const jobQueueItemSchema = z.object({
@@ -1344,6 +1319,21 @@ export interface SenseiApi {
     undoUpdate(): Promise<void>;
     skip(paths: string[]): Promise<void>;
   };
+  /** Today: what happened, what's due, insights, and questions (electron/today.ts). */
+  /** Workspace folders: preview the tidy layout, apply it, undo it. */
+  layout: {
+    plan(): Promise<LayoutPlan>;
+    apply(): Promise<LayoutPlan>;
+    undo(): Promise<{ restored: number; skipped: string[] }>;
+  };
+  today: {
+    get(): Promise<TodayData>;
+    answer(id: string, answer: string): Promise<{ addedPath: string | null }>;
+    removeQuestion(id: string): Promise<void>;
+    keepPosting(jobId: string): Promise<void>;
+    closePosting(jobId: string): Promise<void>;
+    onChanged(callback: () => void): () => void;
+  };
   /** Job Search: settings, the inbox of found postings, and the search run (Agy finds links; the app checks them). */
   jobSearch: {
     get(): Promise<{ settings: JobSearchSettings; state: JobSearchState; status: SearchStatus }>;
@@ -1389,10 +1379,6 @@ export interface SenseiApi {
   bulletBank: {
     get(): Promise<BulletBank>;
     save(bank: BulletBank): Promise<BulletBank>;
-  };
-  clarifications: {
-    getQuestions(jobId: string): Promise<ClarifyingQuestion[]>;
-    submitAnswers(jobId: string, answers: ClarifyingAnswer[]): Promise<void>;
   };
   settings: {
     get(): Promise<Settings>;
@@ -1440,6 +1426,8 @@ export interface SenseiApi {
   };
   runs: {
     latest(): Promise<RunStatus | null>;
+    /** Pushed by the main process when the latest run changes (one watcher for the whole app). */
+    onChanged(callback: (run: RunStatus | null) => void): () => void;
   };
   /** Scenario questions answered by a background Agy (electron/question-agent.ts). */
   questions: {
@@ -1479,3 +1467,7 @@ export interface SenseiApi {
     onExit(callback: (code: number) => void): () => void;
   };
 }
+
+export type LayoutMove = { from: string; to: string; kind: "move" | "archive"; reason: string };
+/** What tidying the workspace folders would do (version 2 = already tidy). */
+export type LayoutPlan = { version: 1 | 2; moves: LayoutMove[]; conflicts: string[]; notes: string[]; canUndo: boolean };

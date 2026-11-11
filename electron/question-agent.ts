@@ -15,8 +15,8 @@ import { countWords, validateNamedTermSupport } from "./application-artifacts";
 import { BANNED_PHRASES } from "./evidence-snapshot";
 import { postingBody } from "./fit-scoring";
 import { parseInterviewVoice, parseStoryBank, type Story } from "./interview-context";
-import { writeJsonAtomic, writeTextAtomic } from "./persistence";
-import { assertInsideWorkspace } from "./workspace";
+import { writeJsonAtomic, writeTextAtomic, readTextFile } from "./persistence";
+import { assertInsideWorkspace, workspaceFile } from "./workspace";
 
 export const ANSWERS_FILE = "application_answers.md";
 export const QUESTIONS_STATE_FILE = ".sensei/application_questions.json";
@@ -238,7 +238,7 @@ export function headlessAgy(options: { agyPath: string; agyHome: string; cwd: st
   });
 }
 
-const read = (path: string) => readFile(path, "utf8").catch(() => "");
+const read = (path: string) => readTextFile(path).catch(() => "");
 
 /** The letter's paragraphs from "Dear …" to the sign-off (no header or contact lines). */
 export function letterBody(letter: string): string {
@@ -365,8 +365,8 @@ export class QuestionAgent {
       const [contextRaw, snapshotRaw, storyBank, voice, posting, letter] = await Promise.all([
         read(join(paths.job, ".sensei", "application_context.json")),
         read(join(paths.job, ".sensei", "evidence_snapshot.json")),
-        read(join(paths.workspace, "profile", "story_bank.md")),
-        read(join(paths.workspace, "profile", "interview_voice.md")),
+        read(workspaceFile(paths.workspace, "profile/story_bank.md")),
+        read(workspaceFile(paths.workspace, "profile/interview_voice.md")),
         read(join(paths.job, "original_jd.md")),
         read(join(paths.job, "cover_letter.md")),
       ]);

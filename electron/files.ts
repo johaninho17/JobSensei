@@ -5,7 +5,7 @@ import mammoth from "mammoth";
 import type { FilePreview, FileTreeNode, MarkdownSaveInput } from "../src/shared/schemas";
 import { filePreviewSchema, markdownSaveInputSchema } from "../src/shared/schemas";
 import { writeTextAtomic } from "./persistence";
-import { assertInsideWorkspace } from "./workspace";
+import { assertInsideWorkspace, logicalPath, workspaceFile } from "./workspace";
 
 /** Loaded only when needed: pipeline commands import this module in plain-runtime mode, where "electron" is unavailable. */
 function electronShell(): typeof import("electron").shell {
@@ -44,7 +44,7 @@ function stripRtf(value: string): string {
 async function nodeForPath(workspacePath: string, path: string): Promise<FileTreeNode | null> {
   const info = await stat(path).catch(() => null);
   if (!info) return null;
-  const relativePath = relative(workspacePath, path).replaceAll("\\", "/");
+  const relativePath = logicalPath(workspacePath, path);
   if (info.isDirectory()) {
     const entries = await readdir(path, { withFileTypes: true });
     const children: FileTreeNode[] = [];
@@ -81,7 +81,7 @@ async function jobMetadataForPath(workspacePath: string, relativePath: string): 
 export async function listFileTree(workspacePath: string): Promise<FileTreeNode[]> {
   const roots: FileTreeNode[] = [];
   for (const name of ["context", "cover-letters", "debrief"]) {
-    const node = await nodeForPath(workspacePath, join(workspacePath, name));
+    const node = await nodeForPath(workspacePath, workspaceFile(workspacePath, name));
     if (node) roots.push(node);
   }
   return roots;
@@ -123,7 +123,7 @@ export async function saveMarkdownFile(workspacePath: string, input: MarkdownSav
   if (parsed.relativePath.startsWith(".") || parsed.relativePath.includes("\\")) throw new Error("Use a workspace-relative Markdown path.");
   const workspaceRoot = resolve(workspacePath);
   const path = assertInsideWorkspace(workspaceRoot, resolve(workspaceRoot, parsed.relativePath));
-  const safeRelativePath = relative(workspaceRoot, path).replaceAll("\\", "/");
+  const safeRelativePath = logicalPath(workspaceRoot, path);
   if (!safeRelativePath.match(/^(jobs|debrief|resumes)\//)) throw new Error("Career source files are read-only. Only job, debrief, and resume Markdown can be edited.");
   if (extname(path).toLowerCase() !== ".md") throw new Error("Only Markdown files can be edited.");
 
@@ -176,7 +176,7 @@ export async function getBaseResume(workspacePath: string, configuredPath: strin
     try {
       const safe = assertInsideWorkspace(workspacePath, resolve(workspacePath, candidate));
       const info = await stat(safe).catch(() => null);
-      if (info?.isFile()) return relative(workspacePath, safe).replaceAll("\\", "/");
+      if (info?.isFile()) return logicalPath(workspacePath, safe);
     } catch { /* Skip stale or unsafe configured paths and try the default. */ }
   }
   return null;
@@ -189,15 +189,11 @@ export async function listResumePaths(workspacePath: string, configuredBase: str
     try {
       const safe = assertInsideWorkspace(workspacePath, resolve(workspacePath, candidate));
       const info = await stat(safe).catch(() => null);
-      const relativeCandidate = relative(workspacePath, safe).replaceAll("\\", "/");
+      const relativeCandidate = logicalPath(workspacePath, safe);
       if (info?.isFile() && relativeCandidate !== baseResumePath) secondaryResumePaths.push(relativeCandidate);
     } catch { /* Ignore stale or unsafe saved paths. */ }
   }
   return { baseResumePath, secondaryResumePaths: [...new Set(secondaryResumePaths)] };
-}
-
-export function hashPath(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
 }
 
 export { assertInsideWorkspace };

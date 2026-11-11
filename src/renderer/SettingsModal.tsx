@@ -1,3 +1,4 @@
+import { logisticsUpdate, parseNames, readLogistics, readStoryFields, storyUpdate } from "../shared/profile-fields";
 import { PrivacyAndTerms } from "./Privacy";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { EMPTY_INTERVIEW_LOGISTICS, type BulletBank, type BulletBankItem, type CandidateProfile, type InterviewLogistics, type Settings, type VoiceSettings } from "../shared/schemas";
@@ -97,16 +98,18 @@ export function SettingsModal({
       });
       setIncludeSummary(profile.preferences.resume.includeSummary ?? false);
 
-      setTurningPoints(profile.preferences.coverLetter?.narrativePillars?.turningPoints ?? profile.career?.narrativePillars?.turningPoints ?? "");
+      // The same reading and saving as the Setup page (src/shared/profile-fields.ts owns both).
+      const story = readStoryFields(profile);
+      setTurningPoints(story.turningPoints);
       setLetterFocus(profile.preferences.coverLetter?.focus ?? "career-story");
       setLetterMin(profile.preferences.coverLetter?.length?.min ?? 200);
       setLetterMax(profile.preferences.coverLetter?.length?.max ?? 280);
-      setWorkingStyle(profile.preferences.coverLetter?.narrativePillars?.workingStyle ?? profile.career?.narrativePillars?.workingStyle ?? "");
-      setPersonalValues(profile.preferences.coverLetter?.narrativePillars?.personalValues ?? profile.career?.narrativePillars?.personalValues ?? "");
-      setTransitionSummary(profile.career?.transitionSummary ?? "");
+      setWorkingStyle(story.workingStyle);
+      setPersonalValues(story.personalValues);
+      setTransitionSummary(story.transitionSummary);
       setConfidentialNamesText((profile.truth?.confidentialNames ?? []).join(", "));
       setBoundariesText((profile.truth?.boundaries ?? []).join("\n"));
-      setLogistics({ ...EMPTY_INTERVIEW_LOGISTICS, ...(profile.preferences.interview ?? {}) });
+      setLogistics(readLogistics(profile));
     }
     void window.sensei.profile.preview().then(setPreview).catch(() => setPreview(null));
     setSaveSuccess(false);
@@ -147,18 +150,14 @@ export function SettingsModal({
           ...profile.preferences.coverLetter,
           focus: letterFocus,
           length: { min: Math.min(letterMin, letterMax - 20), max: Math.max(letterMax, letterMin + 20) },
-          narrativePillars: {
-            turningPoints,
-            workingStyle,
-            personalValues,
-          },
+          narrativePillars: storyUpdate({ transitionSummary, turningPoints, workingStyle, personalValues }).narrativePillars,
         },
       });
       const withDetails = await window.sensei.profile.updateDetails({
-        transitionSummary,
-        confidentialNames: confidentialNamesText.split(/[,\n]/).map((name) => name.trim()).filter(Boolean),
+        transitionSummary: transitionSummary.trim(),
+        confidentialNames: parseNames(confidentialNamesText),
         boundaries: boundariesText.split("\n").map((line) => line.trim()).filter(Boolean),
-        interviewLogistics: logistics,
+        interviewLogistics: logisticsUpdate(logistics),
       });
       onProfileUpdated(withDetails ?? updated);
       setPreview(await window.sensei.profile.preview().catch(() => null));

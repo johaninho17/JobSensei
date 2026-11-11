@@ -6,12 +6,13 @@ import {
   type InboxItem, type JobSearchSettings, type JobSearchState, type ScheduleInfo, type SearchRun, type SearchStatus, type WatchedSuggestion,
 } from "../shared/job-search";
 import { SubTabs } from "./SubTabs";
+import { Section } from "./Section";
+import { boardName, boardRef } from "../shared/boards";
 
-type Tab = "matches" | "settings" | "runs";
+type Tab = "matches" | "drafting" | "saved" | "dismissed" | "settings" | "runs";
 type Sort = "fit" | "newest" | "company";
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : /(?:ch|sh|s|x)$/.test(word) ? "es" : "s"}`;
-const BOARD_NAMES: Record<string, string> = { greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby", workday: "Workday", smartrecruiters: "SmartRecruiters", oracle: "Oracle", linkedin: "LinkedIn" };
 const capital = (text: string | null) => text ? text[0].toUpperCase() + text.slice(1) : null;
 const fitClass = (score: number) => score >= 4 ? "is-high" : score >= 3 ? "is-mid" : "is-low";
 const SETUP_LABEL: Record<(typeof WORK_SETUPS)[number], string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
@@ -23,6 +24,7 @@ export function runSummary(run: SearchRun): string {
   const head = `${run.added} new match${run.added === 1 ? "" : "es"} from ${run.found} link${run.found === 1 ? "" : "s"}`;
   const notes = [
     run.rated ? `${run.rated} rated by Agy` : "",
+    run.companies ? `${run.companies} compan${run.companies === 1 ? "y" : "ies"} found by Agy` : "",
     run.replaced ? `${run.replaced} dead link${run.replaced === 1 ? "" : "s"} swapped for the live posting` : "",
     left ? `left out: ${left}` : "",
     run.error ? `Agy: ${run.error}` : "",
@@ -53,7 +55,12 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
     return window.sensei.jobSearch.onUpdated(setState);
   }, []);
 
-  const live = useMemo(() => rankInbox((state?.items ?? []).filter((item) => item.status !== "dismissed"), sort), [state, sort]);
+  // Matches are only new finds; jobs sent for drafts, saved, or dismissed each get their own tab.
+  const live = useMemo(() => rankInbox((state?.items ?? []).filter((item) => item.status === "new"), sort), [state, sort]);
+  const byStatus = (status: InboxItem["status"]) => rankInbox((state?.items ?? []).filter((item) => item.status === status), "newest");
+  const drafting = byStatus("queued");
+  const savedItems = byStatus("saved");
+  const dismissedItems = byStatus("dismissed");
   const bar = settings?.minFit ?? DEFAULT_JOB_SEARCH_SETTINGS.minFit;
   const above = live.filter((item) => effectiveFit(item) >= bar && !item.fit.blockers.length);
   const below = live.filter((item) => !above.includes(item));
@@ -65,6 +72,33 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
     try {
       await window.sensei.jobSearch.run(mode);
       setTab("matches");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(reason));
+    }
+  }
+
+  async function turnOnSchedule() {
+    if (!settings) return;
+    setError("");
+    try {
+      setSettings(await window.sensei.jobSearch.saveSettings({ ...settings, schedule: { ...settings.schedule, enabled: true } }));
+      onToast(settings.schedule.mode === "daily" ? `Scheduled search on: once a day, the first time your computer is on after ${settings.schedule.after}.` : "Scheduled search on.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(reason));
+    }
+  }
+
+  // Companies of the user's jobs on Ashby/Greenhouse/Lever: watched in one click, then checked right away (free).
+  const [jobCompanies, setJobCompanies] = useState<WatchedSuggestion[]>([]);
+  useEffect(() => { void window.sensei.jobSearch.suggestWatched().then(setJobCompanies).catch(() => undefined); }, [settings?.watched.length]);
+  const unwatched = settings ? jobCompanies.filter((company) => !settings.watched.some((watched) => watched.board === company.board && watched.slug.toLowerCase() === company.slug.toLowerCase())) : [];
+  async function watchJobCompaniesAndCheck() {
+    if (!settings) return;
+    setError("");
+    try {
+      const next = await window.sensei.jobSearch.saveSettings({ ...settings, watched: [...settings.watched, ...unwatched.map((company) => ({ board: company.board, slug: company.slug, name: company.name, source: "jobs" as const }))] });
+      setSettings(next);
+      await runNow("watched");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(reason));
     }
@@ -122,12 +156,12 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
 
   function renderItem(item: InboxItem) {
     const isSelected = selected.has(item.id);
-    const facts = [item.location, item.workSetup, item.pay, capital(item.level), item.postedAt ? `Posted ${item.postedAt}` : null, item.board ? BOARD_NAMES[item.board] ?? item.board : null].filter(Boolean);
+    const facts = [item.location, item.workSetup, item.pay, capital(item.level), item.postedAt ? `Posted ${item.postedAt}` : null, boardName(item.board)].filter(Boolean);
     return <li key={item.id} className={`find-row${isSelected ? " is-selected" : ""}`} onClick={selecting ? () => toggle(item.id) : undefined}>
       {selecting && <input type="checkbox" checked={isSelected} onChange={() => toggle(item.id)} onClick={(event) => event.stopPropagation()} aria-label={`Select ${item.company ?? ""} ${item.title ?? ""}`} />}
       <span className={`fit-badge ${fitClass(effectiveFit(item))}`} title={item.agyFit ? `Agy's light rating (quick fit ${item.fit.score.toFixed(1)}); the full rating runs when you draft` : "Quick fit: the app's own check of your files against the posting, not a full rating"}>{effectiveFit(item).toFixed(1)}{item.agyFit && <small className="fit-badge-source">Agy</small>}</span>
       <div className="find-main">
-        <strong>{item.title ?? "Untitled role"}</strong> <span className="muted">· {item.company ?? "Company not named"}</span>{item.watched && <span className="find-tag">Watched company</span>}
+        <strong>{item.title ?? "Untitled role"}</strong> <span className="muted">· {item.company ?? "Company not named"}</span>{item.watched && <span className="find-tag">Watched company</span>}{item.likeInterviewed && <span className="find-tag" title="Ranked a little higher: similar to a job where you got a real interview">{item.likeInterviewed}</span>}
         {facts.length > 0 && <p className="find-facts">{facts.join(" · ")}</p>}
         {item.agyFit && <p className="find-why">{item.agyFit.why}{item.agyFit.gaps.length > 0 && <span className="muted"> Gaps: {item.agyFit.gaps.join("; ")}.</span>}</p>}
         <p className={item.agyFit ? "find-why muted" : "find-why"}>{item.agyFit ? `Quick check: ${item.fit.why}` : item.fit.why}</p>
@@ -145,7 +179,8 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
           <button className="btn-link" disabled={busy} onClick={() => void dismiss([item.id])}>Dismiss</button>
         </>}
         {item.status === "saved" && item.jobId && <button className="btn-link" onClick={() => onOpenJob(item.jobId!)}>In Jobs: open</button>}
-        {item.status === "queued" && <span className="muted">{item.autoQueued ? "Sent for drafts automatically" : "Sent for drafts"}</span>}
+        {item.status === "queued" && <span className="muted">{item.autoQueued ? "Sent for drafts automatically" : "Sent for drafts"}{item.queuedAt ? ` · ${new Date(item.queuedAt).toLocaleDateString()}` : ""}</span>}
+        {item.status === "dismissed" && <button className="btn-quiet" disabled={busy} onClick={() => void window.sensei.jobSearch.setStatus([item.id], "new").then(setState)}>Restore</button>}
       </div>}
     </li>;
   }
@@ -157,7 +192,9 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
         : lastRun && lastRun.status !== "running" ? `Last ${lastRun.source === "watched" ? "check" : "search"} ${new Date(lastRun.startedAt).toLocaleString()}: ${runSummary(lastRun)}`
           : "Agy searches the job boards with your settings; the app opens every link, drops closed and old postings, and rates each one against your files."}
       {!running && " A search uses one Agy run; checking watched companies and rating postings use none."}
-    </p></div>
+    </p>
+    {settings && <ScheduleStatus settings={settings} onTurnOn={() => void turnOnSchedule()} />}
+    </div>
     <div className="find-run-buttons">
       {(settings?.watched.length ?? 0) > 0 && <button className="btn-quiet" disabled={running || !settings?.titles.length} onClick={() => void runNow("watched")}>Check watched companies</button>}
       <button className="btn-primary" disabled={running || !settings?.titles.length} title={settings?.titles.length ? undefined : "Add at least one job title in Search settings"} onClick={() => void runNow("search")}>{running ? "Searching…" : "Run now"}</button>
@@ -166,6 +203,9 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
     {error && <p className="inline-error" role="alert">{error}</p>}
     <SubTabs idPrefix="job-search" label="Job Search" value={tab} onChange={setTab} tabs={[
       { id: "matches", label: "Matches", count: newCount || null },
+      { id: "drafting", label: "Sent for drafts", count: drafting.length || null },
+      { id: "saved", label: "Saved", count: savedItems.length || null },
+      { id: "dismissed", label: "Dismissed", count: dismissedItems.length || null },
       { id: "settings", label: "Search settings" },
       { id: "runs", label: "Runs", count: state?.runs.length || null },
     ]} actions={tab === "matches" && live.length > 0 ? <>
@@ -174,6 +214,10 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
     </> : null} />
 
     {tab === "matches" && <div role="tabpanel" aria-labelledby="job-search-tab-matches">
+      {unwatched.length > 0 && !running && <div className="find-callout">
+        <span>{unwatched.length} compan{unwatched.length === 1 ? "y" : "ies"} from your jobs post on Ashby, Greenhouse, or Lever. Watching them means every run reads their open jobs directly: free, with real dates.</span>
+        <button className="btn-quiet" disabled={!settings?.titles.length} onClick={() => void watchJobCompaniesAndCheck()}>Watch them and check now</button>
+      </div>}
       {selecting && <div className="select-bar" role="toolbar" aria-label="Selected matches">
         <strong aria-live="polite">{selected.size ? `${plural(selected.size, "job")} selected` : "Click jobs to select them"}</strong>
         <button className="btn-link" onClick={() => setSelected(new Set(visibleNew))}>Select all {visibleNew.length} new</button>
@@ -196,6 +240,11 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
       <p className="muted find-note">Quick fit is the app's own check of your resume and checked work records against the posting's requirements (no quota). Scores marked Agy are its light rating of the requirements against a short card of your roles, skills, and story. The full rating runs when you draft an application.</p>
     </div>}
 
+    {(tab === "drafting" || tab === "saved" || tab === "dismissed") && <div role="tabpanel" aria-labelledby={`job-search-tab-${tab}`}>
+      <p className="muted find-tab-note">{tab === "drafting" ? "Jobs you sent to the queue for a tailored resume and letter. Each becomes a job in Jobs once Agy finishes." : tab === "saved" ? "Jobs you saved for later. They're in Jobs as Saved." : "Jobs you dismissed. They never come back in a search; restore one to see it in Matches again."}</p>
+      {(() => { const list = tab === "drafting" ? drafting : tab === "saved" ? savedItems : dismissedItems; return list.length ? <ul className="find-list">{list.map(renderItem)}</ul> : <p className="muted">Nothing here yet.</p>; })()}
+    </div>}
+
     {tab === "settings" && settings && <SearchSettingsForm settings={settings} onSaved={(next) => { setSettings(next); onToast("Search settings saved."); }} />}
 
     {tab === "runs" && <div role="tabpanel" aria-labelledby="job-search-tab-runs">
@@ -216,7 +265,7 @@ function SearchSettingsForm({ settings, onSaved }: { settings: JobSearchSettings
   const [draft, setDraft] = useState(settings);
   const [lists, setLists] = useState(() => ({
     titles: listText(settings.titles), locations: listText(settings.locations), includeKeywords: listText(settings.includeKeywords),
-    excludeKeywords: listText(settings.excludeKeywords), extraSites: listText(settings.extraSites), skipSites: listText(settings.skipSites), skipCompanies: listText(settings.skipCompanies),
+    excludeKeywords: listText(settings.excludeKeywords), excludeTitleWords: listText(settings.excludeTitleWords), extraSites: listText(settings.extraSites), skipSites: listText(settings.skipSites), skipCompanies: listText(settings.skipCompanies),
   }));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -228,7 +277,7 @@ function SearchSettingsForm({ settings, onSaved }: { settings: JobSearchSettings
     try {
       const next = await window.sensei.jobSearch.saveSettings({
         ...draft,
-        titles: parseList(lists.titles), locations: parseList(lists.locations), includeKeywords: parseList(lists.includeKeywords), excludeKeywords: parseList(lists.excludeKeywords),
+        titles: parseList(lists.titles), locations: parseList(lists.locations), includeKeywords: parseList(lists.includeKeywords), excludeKeywords: parseList(lists.excludeKeywords), excludeTitleWords: parseList(lists.excludeTitleWords),
         extraSites: parseList(lists.extraSites), skipSites: parseList(lists.skipSites), skipCompanies: parseList(lists.skipCompanies),
       });
       onSaved(next);
@@ -239,7 +288,7 @@ function SearchSettingsForm({ settings, onSaved }: { settings: JobSearchSettings
   const text = (key: keyof typeof lists, label: string, hint: string) => <label className="search-field"><span>{label}</span>
     <input value={lists[key]} onChange={(event) => setLists((current) => ({ ...current, [key]: event.target.value }))} placeholder={hint} /></label>;
   return <form className="search-settings" role="tabpanel" aria-labelledby="job-search-tab-settings" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-    <fieldset><legend>What to look for</legend>
+    <Section id="search-look" title="What to look for" defaultOpen={true} note={"Titles, places, level, pay, and words to leave out."}>
       {text("titles", "Job titles", "e.g. Solutions Engineer, Customer Success Manager")}
       {text("locations", "Where", "Cities or states; leave empty for anywhere in the US")}
       <div className="search-field"><span>Work setup</span><div className="search-checks">{WORK_SETUPS.map((mode) => <label key={mode}><input type="checkbox" checked={draft.workSetups.includes(mode)} onChange={() => set("workSetups", toggleIn(draft.workSetups, mode))} />{SETUP_LABEL[mode]}</label>)}</div></div>
@@ -248,18 +297,19 @@ function SearchSettingsForm({ settings, onSaved }: { settings: JobSearchSettings
       <label className="search-check"><input type="checkbox" checked={draft.needsSponsorship} onChange={(event) => set("needsSponsorship", event.target.checked)} />I need visa sponsorship</label>
       <label className="search-field"><span>Posted within (days)</span><input type="number" min={1} max={90} value={draft.postedWithinDays} onChange={(event) => set("postedWithinDays", Number(event.target.value) || 30)} /></label>
       {text("includeKeywords", "Should mention", "Optional keywords")}
+      {text("excludeTitleWords", "Leave out titles with", "Whole words, e.g. Senior, Principal, Lead, Staff")}
       {text("excludeKeywords", "Leave out postings about", "e.g. commission only, clearance")}
       {text("skipCompanies", "Never show these companies", "Optional")}
-    </fieldset>
-    <fieldset><legend>Where to search</legend>
-      <div className="search-field"><span>Boards</span><div className="search-checks">{SEARCH_BOARDS.map((board) => <label key={board.id}><input type="checkbox" checked={!draft.boardsOff.includes(board.id)} onChange={() => set("boardsOff", toggleIn(draft.boardsOff, board.id))} />{board.name}</label>)}</div></div>
+    </Section>
+    <Section id="search-where" title="Where to search" defaultOpen={false} note={"Boards Agy searches and boards the app reads directly."}>
+      <div className="search-field"><span>Boards</span><div className="search-checks">{SEARCH_BOARDS.map((board) => <label key={board.id} title={board.direct ? "The app reads companies' open jobs here itself, free" : "Agy searches this site; the companies it finds are read from their own boards"}><input type="checkbox" checked={!draft.boardsOff.includes(board.id)} onChange={() => set("boardsOff", toggleIn(draft.boardsOff, board.id))} />{board.name}<span className="muted"> · {board.direct ? "read directly" : "searched by Agy"}</span></label>)}</div></div>
       {text("extraSites", "Also search these sites", "Careers pages or boards, e.g. jobs.example.com")}
       {text("skipSites", "Never use these sites", "Domains to skip")}
       <p className="muted">Always skipped: {SKIPPED_BOARDS.map((board) => `${board.name} (${board.reason})`).join("; ")}.</p>
-    </fieldset>
-    <WatchedCompanies watched={draft.watched} onChange={(watched) => set("watched", watched)} />
+    </Section>
+    <WatchedCompanies watched={draft.watched} onChange={(watched) => set("watched", watched)} autoWatch={draft.autoWatch} onAutoWatch={(value) => set("autoWatch", value)} watchFound={draft.watchFoundCompanies} onWatchFound={(value) => set("watchFoundCompanies", value)} />
     <ScheduleFields schedule={draft.schedule} onChange={(schedule) => set("schedule", schedule)} />
-    <fieldset><legend>Ratings and drafts</legend>
+    <Section id="search-ratings" title="Ratings and drafts" defaultOpen={false} note={"Your bar, automatic drafts, and how much each search does."}>
       <label className="search-field"><span>Your bar (quick fit, 1–5)</span><input type="number" min={1} max={5} step={0.1} value={draft.minFit} onChange={(event) => set("minFit", Number(event.target.value) || 3)} /></label>
       <label className="search-check"><input type="checkbox" checked={draft.autoDraftAt !== null} onChange={(event) => set("autoDraftAt", event.target.checked ? 4 : null)} />Draft applications automatically for strong matches</label>
       {draft.autoDraftAt !== null && <div className="settings-inline-fields">
@@ -267,58 +317,72 @@ function SearchSettingsForm({ settings, onSaved }: { settings: JobSearchSettings
         <label className="search-field"><span>At most per day</span><input type="number" min={1} max={10} value={draft.autoDraftDailyCap} onChange={(event) => set("autoDraftDailyCap", Number(event.target.value) || 3)} /></label>
       </div>}
       <label className="search-check"><input type="checkbox" checked={draft.lightRating} onChange={(event) => set("lightRating", event.target.checked)} />After each search, let Agy rate up to 10 of the best new matches (one short call)</label>
-      <label className="search-field"><span>Links per search</span><input type="number" min={5} max={40} value={draft.resultsPerRun} onChange={(event) => set("resultsPerRun", Number(event.target.value) || 20)} /></label>
-    </fieldset>
+      <label className="search-field"><span>Companies Agy looks for per search</span><input type="number" min={5} max={40} value={draft.resultsPerRun} onChange={(event) => set("resultsPerRun", Number(event.target.value) || 20)} /></label>
+      <label className="search-field"><span>New matches per run, at most (newest first; the rest wait for the next run)</span><input type="number" min={5} max={300} value={draft.maxNewPerRun} onChange={(event) => set("maxNewPerRun", Number(event.target.value) || 60)} /></label>
+    </Section>
     {error && <p className="inline-error" role="alert">{error}</p>}
     <button className="btn-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save search settings"}</button>
   </form>;
 }
 
-const BOARD_LABEL: Record<WatchedSuggestion["board"], string> = { ashby: "Ashby", greenhouse: "Greenhouse", lever: "Lever" };
+
+const SOURCE_LABEL: Record<JobSearchSettings["watched"][number]["source"], string> = { user: "added by you", jobs: "from your jobs", search: "found by search" };
 
 /** Companies checked on every run through their public boards, free and without Agy. */
-function WatchedCompanies({ watched, onChange }: { watched: JobSearchSettings["watched"]; onChange: (watched: JobSearchSettings["watched"]) => void }) {
+function WatchedCompanies({ watched, onChange, autoWatch, onAutoWatch, watchFound, onWatchFound }: { watched: JobSearchSettings["watched"]; onChange: (watched: JobSearchSettings["watched"]) => void; autoWatch: boolean; onAutoWatch: (value: boolean) => void; watchFound: boolean; onWatchFound: (value: boolean) => void }) {
   const [link, setLink] = useState("");
   const [problem, setProblem] = useState("");
+  const [filter, setFilter] = useState("");
   const [suggestions, setSuggestions] = useState<WatchedSuggestion[] | null>(null);
   const has = (board: string, slug: string) => watched.some((company) => company.board === board && company.slug.toLowerCase() === slug.toLowerCase());
   function addLink() {
     setProblem("");
-    const ref = parseBoardLink(link);
+    const ref = boardRef(link);
     if (!ref) { setProblem("Use a company's Ashby, Greenhouse, or Lever jobs link, such as jobs.lever.co/acme."); return; }
-    if (!has(ref.board, ref.slug)) onChange([...watched, { ...ref, name: ref.slug }]);
+    if (!has(ref.board, ref.slug)) onChange([...watched, { ...ref, name: ref.slug, source: "user" }]);
     setLink("");
   }
-  return <fieldset><legend>Watched companies</legend>
-    <p className="muted">Checked on every run through their public job boards, with no Agy quota. Only roles that fit your job titles are shown.</p>
-    {watched.length > 0 && <ul className="watched-list">{watched.map((company) => <li key={`${company.board}:${company.slug}`}>
-      <span>{company.name || company.slug} <span className="muted">· {BOARD_LABEL[company.board]}</span></span>
-      <button type="button" className="btn-link" onClick={() => onChange(watched.filter((candidate) => candidate !== company))}>Remove</button>
-    </li>)}</ul>}
+  const counts = (["user", "jobs", "search"] as const).map((source) => [source, watched.filter((company) => company.source === source).length] as const).filter(([, count]) => count > 0);
+  const shown = watched.filter((company) => !filter.trim() || `${company.name} ${company.slug}`.toLowerCase().includes(filter.trim().toLowerCase()));
+  const fresh = (suggestions ?? []).filter((item) => !has(item.board, item.slug));
+  return <Section id="search-watched" title="Watched companies" defaultOpen={false} count={watched.length || null}>
+    <p className="muted">Checked on every run through their public job boards, with no Agy quota. Only roles that fit your titles, places, and work setups are kept.</p>
+    <label className="search-check"><input type="checkbox" checked={autoWatch} onChange={(event) => onAutoWatch(event.target.checked)} />Watch the companies of jobs I add</label>
+    <label className="search-check"><input type="checkbox" checked={watchFound} onChange={(event) => onWatchFound(event.target.checked)} />Watch companies Agy finds hiring for my titles</label>
+    {watched.length > 0 && <details className="watched-details" open={watched.length <= 12}>
+      <summary>{watched.length} watched{counts.length ? ` (${counts.map(([source, count]) => `${count} ${SOURCE_LABEL[source]}`).join(", ")})` : ""}</summary>
+      {watched.length > 12 && <input className="watched-filter" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Find a company" aria-label="Find a watched company" />}
+      <ul className="watched-list">{shown.map((company) => <li key={`${company.board}:${company.slug}`}>
+        <span>{company.name || company.slug} <span className="muted">· {boardName(company.board)} · {SOURCE_LABEL[company.source]}</span></span>
+        <button type="button" className="btn-link" onClick={() => onChange(watched.filter((candidate) => candidate !== company))}>Remove</button>
+      </li>)}</ul>
+    </details>}
     <div className="settings-inline-fields">
       <label className="search-field"><span>Add by jobs link</span><input value={link} onChange={(event) => setLink(event.target.value)} placeholder="jobs.ashbyhq.com/acme" /></label>
       <button type="button" className="btn-quiet" disabled={!link.trim()} onClick={addLink}>Add</button>
     </div>
     {problem && <p className="inline-error" role="alert">{problem}</p>}
     {suggestions === null ? <button type="button" className="btn-link" onClick={() => void window.sensei.jobSearch.suggestWatched().then(setSuggestions).catch(() => setSuggestions([]))}>Suggest companies from your jobs</button>
-      : !suggestions.filter((item) => !has(item.board, item.slug)).length ? <p className="muted">No more companies from your jobs use Ashby, Greenhouse, or Lever.</p>
-        : <div className="watched-suggestions"><span className="muted">From your jobs:</span>{suggestions.filter((item) => !has(item.board, item.slug)).slice(0, 24).map((item) =>
-          <button type="button" key={`${item.board}:${item.slug}`} className="btn-quiet" title={`${item.jobs} job${item.jobs === 1 ? "" : "s"}${item.interviewed ? ", reached an interview" : ""}`} onClick={() => onChange([...watched, { board: item.board, slug: item.slug, name: item.name }])}>+ {item.name}{item.interviewed ? " ★" : ""}</button>)}</div>}
-  </fieldset>;
+      : !fresh.length ? <p className="muted">No more companies from your jobs use Ashby, Greenhouse, or Lever.</p>
+        : <div className="watched-suggestions"><span className="muted">From your jobs:</span>
+          <button type="button" className="btn-quiet" onClick={() => onChange([...watched, ...fresh.map((item) => ({ board: item.board, slug: item.slug, name: item.name, source: "jobs" as const }))])}>Watch all {fresh.length}</button>
+          {fresh.slice(0, 24).map((item) =>
+          <button type="button" key={`${item.board}:${item.slug}`} className="btn-quiet" title={`${item.jobs} job${item.jobs === 1 ? "" : "s"}${item.interviewed ? ", reached an interview" : ""}`} onClick={() => onChange([...watched, { board: item.board, slug: item.slug, name: item.name, source: "jobs" }])}>+ {item.name}{item.interviewed ? " ★" : ""}</button>)}</div>}
+  </Section>;
 }
 
-/** The board and company in a jobs link the user pasted (same rules as electron/job-boards.ts boardRef). */
-function parseBoardLink(text: string): { board: WatchedSuggestion["board"]; slug: string } | null {
-  let parsed: URL;
-  try { parsed = new URL(text.trim().includes("://") ? text.trim() : `https://${text.trim()}`); } catch { return null; }
-  const host = parsed.hostname.toLowerCase();
-  const first = parsed.pathname.split("/").filter(Boolean)[0];
-  const slug = first && /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/.test(first) ? first : null;
-  if (host === "jobs.ashbyhq.com" && slug) return { board: "ashby", slug };
-  if (host === "jobs.lever.co" && slug) return { board: "lever", slug };
-  if (/(?:^|\.)greenhouse\.io$/.test(host)) { const ghSlug = first === "embed" ? parsed.searchParams.get("for") : slug; if (ghSlug) return { board: "greenhouse", slug: ghSlug }; }
-  return null;
+/** The scheduled search, said plainly: off (with Turn on), or when it runs; a repair the app made is mentioned. */
+function ScheduleStatus({ settings, onTurnOn }: { settings: JobSearchSettings; onTurnOn: () => void }) {
+  const [info, setInfo] = useState<(ScheduleInfo & { repaired?: string | null }) | null>(null);
+  useEffect(() => { void window.sensei.jobSearch.scheduleInfo().then(setInfo).catch(() => undefined); }, [settings.schedule.enabled, settings.schedule.after, settings.schedule.mode]);
+  if (!info?.supported) return null;
+  const days = settings.schedule.days.length === 7 || !settings.schedule.days.length ? "every day" : settings.schedule.days.map((day) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ");
+  const when = settings.schedule.mode === "daily" ? `once a day, the first time your computer is on after ${settings.schedule.after} (${days})` : `at ${settings.schedule.times.join(", ")} (${days})`;
+  if (!settings.schedule.enabled) return <p className="find-schedule is-off">Scheduled search is off. <button className="btn-link" disabled={!settings.titles.length} onClick={onTurnOn}>Turn on</button> <span className="muted">({when}; change it in Search settings)</span></p>;
+  if (!info.installed) return <p className="find-schedule is-off">Scheduled search is on in your settings but not installed on this computer. <button className="btn-link" onClick={onTurnOn}>Install it</button></p>;
+  return <p className="find-schedule">Scheduled search is on: {when}.{info.repaired === "installed" ? " It was reinstalled when the app started, to match your settings." : ""}</p>;
 }
+
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -335,7 +399,7 @@ function ScheduleFields({ schedule, onChange }: { schedule: JobSearchSettings["s
     });
     if (parsed.length && parsed.length <= 4 && parsed.every(Boolean)) onChange({ ...schedule, times: parsed as string[] });
   }
-  return <fieldset><legend>Schedule</legend>
+  return <Section id="search-schedule" title="Schedule" defaultOpen={false} count={schedule.enabled ? "On" : "Off"}>
     {info && !info.supported ? <p className="muted">{info.detail}</p> : <>
       <label className="search-check"><input type="checkbox" checked={schedule.enabled} onChange={(event) => onChange({ ...schedule, enabled: event.target.checked })} />Search on a schedule, even when JobSensei is closed</label>
       {schedule.enabled && <>
@@ -353,5 +417,5 @@ function ScheduleFields({ schedule, onChange }: { schedule: JobSearchSettings["s
       </>}
       {info && <p className="muted">{info.installed ? (schedule.enabled ? "Status: scheduled. Changes apply when you save." : "Status: scheduled. Saving turns it off.") : schedule.enabled ? "Status: not scheduled yet. Save to turn it on." : "Status: off."}</p>}
     </>}
-  </fieldset>;
+  </Section>;
 }

@@ -38,6 +38,14 @@ import { ReviewPanel } from "./Review";
 import type { LibraryPosting } from "../shared/candidate-match";
 import type { CandidatesState } from "../shared/candidates";
 import { JobSearchView } from "./JobSearchView";
+import { Section } from "./Section";
+import { TodayView } from "./TodayView";
+import { WorkspaceFolders } from "./WorkspaceFolders";
+import { CompanyStrip, JobFilters, SavedViews, TagEditor, storeJobViews, storedJobViews } from "./JobOrganize";
+import { GROUPINGS, NO_FACETS, findDuplicateJob, groupJobs, matchesFacets, type Grouping, type JobFacets, type JobView } from "../shared/job-organize";
+import { nextInterviewStep } from "../shared/interview-progress";
+import { logisticsUpdate, parseNames, readLogistics, readStoryFields, storyUpdate, type StoryFields } from "../shared/profile-fields";
+import type { InterviewLogistics } from "../shared/schemas";
 import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
 import { storyTitles } from "./interview-cards";
 
@@ -55,7 +63,7 @@ const VIEWER_PANEL_MIN = 320;
 type PromptRequest = { id: number; text: string; label: string };
 type JobWorkspaceTab = "overview" | "application" | "interview" | "files";
 type JobLocation = { kind: "job"; jobId: string; tab: JobWorkspaceTab; roundId?: string };
-type PageLocation = { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" };
+type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" };
 type WorkspaceLocation =
   | PageLocation
   | JobLocation
@@ -162,6 +170,12 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     showPage(destination === "context" ? "context-home" : "jobs-home");
   }
   async function loadReadiness() { try { const next = await window.sensei.setup.readiness(); setReadiness(next); return next; } catch { return null; } }
+  /** A job the user already has (same posting link, or same company and title) is asked about before it is added again. */
+  function confirmNotDuplicate(incoming: { url?: string | null; company?: string | null; title?: string | null }): boolean {
+    const existing = findDuplicateJob(jobs, incoming);
+    if (!existing) return true;
+    return window.confirm(`You already have this job: ${[existing.company, existing.title].filter(Boolean).join(", ") || existing.name} (${TRACKER_LABELS[effectiveStatus(existing)].toLowerCase()}, added ${new Date(existing.createdAt).toLocaleDateString()}).\n\nAdd it again anyway?`);
+  }
   async function queueJob(input: { kind: "link"; url: string; batch?: { index: number; size: number } } | { kind: "paste"; text: string; note?: string } | { kind: "found"; id: string; auto?: boolean }, manual: boolean): Promise<number> {
     // The app says what setup is missing before a job reaches Agy (electron/setup-readiness.ts owns the rules).
     const ready = await loadReadiness();
@@ -192,6 +206,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       item.label = await window.sensei.jobSearch.stage(input.id, item.id, input.auto === true);
     } else if (input.kind === "link") {
       const meta = await window.sensei.jobs.stageLink(input.url, item.id);
+      if (!confirmNotDuplicate({ url: input.url, company: meta.company, title: meta.title })) throw new Error("Not added: you already have this job.");
       item.url = input.url;
       item.label = [meta.company, meta.title].filter(Boolean).join(", ") || input.url;
     } else {
@@ -203,6 +218,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         const company = await askCompany(meta.title ?? firstLine);
         if (company) meta = await window.sensei.jobs.setStagedCompany(item.id, company);
       }
+      if (!confirmNotDuplicate({ company: meta.company, title: meta.title ?? firstLine })) throw new Error("Not added: you already have this job.");
       item.label = [meta.company, meta.title ?? firstLine].filter(Boolean).join(", ") || null;
     }
     const current = queueRef.current;
@@ -224,7 +240,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     if (!jobQueue.items.some((item) => item.status === "queued" || item.status === "running")) return;
     let cancelled = false;
     const tick = async () => {
-      const [latest, terminalState] = await Promise.all([window.sensei.runs.latest().catch(() => null), window.sensei.terminal.status().catch(() => null)]);
+      const terminalState = await window.sensei.terminal.status().catch(() => null);
+      const latest = lastRunRef.current;
       if (cancelled) return;
       const before = queueRef.current;
       const ready = terminalState ? agyReadiness(terminalState, Date.now()) : false;
@@ -255,32 +272,31 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     const timer = window.setInterval(() => void tick(), 5000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [jobQueue.autoRun, queueActivity]);
-  // Run watcher: notify when a pipeline run finishes, even with the Agy panel closed.
+  // Run watcher: the main process pushes the latest run when it changes (one watcher for the whole app). Here the app
+  // notifies when a run finishes and starts written answers, even with the Agy panel closed.
+  const [latestRun, setLatestRun] = useState<RunStatus | null>(null);
   const lastRunRef = useRef<RunStatus | null>(null);
   const askedQuestions = useRef(new Set<string>());
+  const onRunRef = useRef<(run: RunStatus | null) => void>(() => undefined);
+  onRunRef.current = (run) => {
+    const previous = lastRunRef.current;
+    lastRunRef.current = run;
+    setLatestRun(run);
+    // An application run starts the background answers for its posting's written questions as soon as the run's
+    // snapshot exists (the evidence the answers need). Once per job: main skips jobs that already have answers.
+    if (FEATURES.applicationQuestions && run?.kind === "application" && run.jobId && (run.state === "running" || Date.now() - Date.parse(run.at) < 15 * 60_000) && !askedQuestions.current.has(run.jobId)) {
+      askedQuestions.current.add(run.jobId);
+      void window.sensei.questions.auto(run.jobId).catch(() => undefined);
+    }
+    if (previous?.state === "running" && run && run.state !== "running" && previous.kind === run.kind && previous.jobId === run.jobId) {
+      notify(`${RUN_KIND_LABEL[run.kind]} finished`, `${run.label}: ${RUN_STATE_LABEL[run.state]}`);
+    }
+  };
   useEffect(() => {
     if (workspace.status !== "ready") return;
-    let cancelled = false;
-    const tick = async () => {
-      const run = await window.sensei.runs.latest().catch(() => null);
-      if (cancelled) return;
-      const previous = lastRunRef.current;
-      lastRunRef.current = run;
-      // An application run starts the background answers for its posting's written questions as soon as the run's
-      // snapshot exists (the evidence the answers need). It lives here, not in the Agy panel, so it also happens
-      // while the panel is hidden. Once per job: main skips jobs that already have answers.
-      if (FEATURES.applicationQuestions && run?.kind === "application" && run.jobId && (run.state === "running" || Date.now() - Date.parse(run.at) < 15 * 60_000) && !askedQuestions.current.has(run.jobId)) {
-        askedQuestions.current.add(run.jobId);
-        void window.sensei.questions.auto(run.jobId).catch(() => undefined);
-      }
-      if (previous?.state === "running" && run && run.state !== "running" && previous.kind === run.kind && previous.jobId === run.jobId) {
-        notify(`${RUN_KIND_LABEL[run.kind]} finished`, `${run.label}: ${RUN_STATE_LABEL[run.state]}`);
-      }
-    };
-    void tick();
-    const timer = window.setInterval(() => void tick(), 4000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [workspace.status, notificationsOn]);
+    void window.sensei.runs.latest().then((run) => onRunRef.current(run)).catch(() => undefined);
+    return window.sensei.runs.onChanged((run) => onRunRef.current(run));
+  }, [workspace.status]);
   // Once a day: follow-ups due. Once per launch: a newer release.
   useEffect(() => {
     if (!FEATURES.nudges || !jobs.length) return;
@@ -315,7 +331,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       if (event.key === "g") { goPrefix.current = Date.now(); return; }
       if (Date.now() - goPrefix.current < 1200) {
         goPrefix.current = 0;
-        const page = FEATURES.interviews || event.key !== "i" ? ({ j: "jobs-home", i: "interviews-home", c: "context-home" } as const)[event.key as "j" | "i" | "c"] : undefined;
+        const page = FEATURES.interviews || event.key !== "i" ? ({ ...(FEATURES.today ? { t: "today-home" } : {}), j: "jobs-home", i: "interviews-home", c: "context-home" } as Record<string, PageLocation["kind"]>)[event.key] : undefined;
         if (page) { event.preventDefault(); showPage(page); }
         return;
       }
@@ -377,7 +393,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       return next;
     });
   }, [activeJobId]);
-  const [navigationHistory, setNavigationHistory] = useState<WorkspaceLocation[]>([{ kind: "jobs-home" }]);
+  const [navigationHistory, setNavigationHistory] = useState<WorkspaceLocation[]>([{ kind: FEATURES.today ? "today-home" : "jobs-home" }]);
   const [navigationIndex, setNavigationIndex] = useState(0);
   const previewRequestId = useRef(0);
 
@@ -534,7 +550,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
 
   function currentReturnLocation(jobId: string | null): JobLocation | PageLocation {
     const current = navigationHistory[navigationIndex];
-    if (current?.kind === "job" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home") return current;
+    if (current?.kind === "job" || current?.kind === "today-home" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home") return current;
     if (current?.kind === "document") return current.returnTo;
     return jobId ? { kind: "job", jobId, tab: "overview" } : { kind: "jobs-home" };
   }
@@ -595,7 +611,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     if (currentLocation.kind === kind) return;
     pushLocation({ kind });
   }
-  function showJobsHome() { showPage("jobs-home"); }
+  function showJobsHome() { showPage(FEATURES.today ? "today-home" : "jobs-home"); }
 
   function openJobView(jobId: string, tab: JobWorkspaceTab, roundId?: string) {
     const current = navigationHistory[navigationIndex];
@@ -826,7 +842,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   useEffect(() => {
     let cancelled = false;
     setInterviewOverview(null);
-    if (!viewedJobId) { setInterviewLoading(false); return; }
+    // Editions without interviews register no interview handlers (src/shared/edition.ts), so nothing is asked for.
+    if (!viewedJobId || !FEATURES.interviews) { setInterviewLoading(false); return; }
     setInterviewLoading(true);
     void window.sensei.interviews.getOverview(viewedJobId)
       .then((overview) => { if (!cancelled) setInterviewOverview(overview); })
@@ -859,6 +876,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   );
   const recentForStatus = recentJobIds.slice(0, 3).map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job) && job!.id !== viewedJob?.id);
   const paletteActions: PaletteAction[] = [
+    ...(FEATURES.today ? [{ id: "go-today", title: "Go to Today", subtitle: "Morning search, what's due, insights, and questions", keywords: "home day summary", shortcut: "g t", run: () => showPage("today-home") }] : []),
     { id: "go-jobs", title: "Go to Jobs", subtitle: "All jobs, the queue, and the status strip", keywords: "home list cards", shortcut: "g j", run: () => showPage("jobs-home") },
     ...(FEATURES.interviews ? [{ id: "go-interviews", title: "Go to Interviews", subtitle: "Every job with interview prep", keywords: "rounds prep", shortcut: "g i", run: () => showPage("interviews-home") }] : []),
     { id: "go-context", title: "Go to Career context", subtitle: "Resumes and sources Agy reads", keywords: "files sources resume", shortcut: "g c", run: () => showPage("context-home") },
@@ -927,6 +945,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       <button className="wordmark" aria-label={`${EDITION.productName}: all jobs`} onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span><span className="wordmark-name">Sensei{EDITION.subtitle && <small className="wordmark-edition">{EDITION.subtitle}</small>}</span></button>
       {FEATURES.candidates && candidates && <CandidateSwitcher state={candidates} />}
       <ul className="side-nav">
+        {FEATURES.today && <li><button aria-current={activePage === "today-home" ? "page" : undefined} onClick={() => showPage("today-home")}><NavIcon name="today" />Today</button></li>}
         <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
         {FEATURES.candidates && <li><button aria-current={activePage === "pipeline-home" ? "page" : undefined} onClick={() => showPage("pipeline-home")}><NavIcon name="pipeline" />Pipeline</button></li>}
         {FEATURES.jobSearch && <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" />Job Search{searchStatus.running ? <span className="side-due" title={searchProgressText(searchStatus)}>Searching…</span> : searchNew > 0 && <span className="side-count" title={`${searchNew} new match${searchNew === 1 ? "" : "es"}`}>{searchNew}</span>}</button></li>}
@@ -981,6 +1000,9 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
           <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
+          : FEATURES.today && currentLocation.kind === "today-home" ? <TodayView onOpenJob={openJob} onToast={showToast}
+              onGo={(target) => showPage(({ setup: "setup-home", jobs: "jobs-home", "job-search": "search-home", interviews: "interviews-home", learnings: "interviews-home", context: "context-home" } as const)[target])}
+              onAnswerAddedFile={(path) => void updateContext([...new Set([...selectedCareerPaths, path])], selectedJobFiles)} />
           : FEATURES.jobSearch && currentLocation.kind === "search-home" ? <JobSearchView status={searchStatus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onOpenJob={openJob} onToast={showToast} />
           : FEATURES.interviews && currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
           : FEATURES.candidates && currentLocation.kind === "pipeline-home" ? <PipelineView activeId={candidates?.activeId ?? null} onToast={showToast} onOpenJob={(candidateId, jobId) => {
@@ -989,7 +1011,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
             try { window.sessionStorage.setItem("sensei-open-job", jobId); } catch { /* storage unavailable */ }
             void window.sensei.candidates.switchTo(candidateId).then(() => window.location.reload(), (caught) => setError(messageOf(caught, "Couldn't open that candidate.")));
           }} />
-          : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
+          : currentLocation.kind === "setup-home" ? <SetupHome onToast={showToast} readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome
             onOpen={(path) => void selectFile(path)}
             notes={FEATURES.candidates ? <RecruiterNotes name={candidateProfile?.identity.fullName ?? null} onSaved={(path) => void checkContextPath(path)} /> : null}
@@ -1013,12 +1035,13 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     {shortcutsOpen && <ShortcutsPanel onClose={() => setShortcutsOpen(false)} />}
     {FEATURES.candidates && whoAsk && <WhoIsThisFor posting={whoAsk.posting} remaining={whoAsk.remaining} activeId={candidates?.activeId ?? null} onDone={(ids, forRest) => { whoAsk.resolve(ids, forRest); setWhoAsk(null); }} />}
     {companyAsk && <CompanyDialog title={companyAsk.title} onDone={(company) => { companyAsk.resolve(company); setCompanyAsk(null); }} />}
-    <TerminalPanel onQueueJob={queueJob} busyLabel={busyJobLabel} cwd={workspace.repositoryRoot || workspace.path} selectedJobFiles={selectedJobFiles} selectedCareerPaths={selectedCareerPaths} theme={theme} visible={rightPanelOpen && !needsSetup} onClose={() => setRightPanelOpen(false)} jobActions={jobActions} promptRequest={promptRequest} onPromptHandled={(id) => setPromptRequest((request) => request?.id === id ? null : request)} onInsertPrompt={insertJobPrompt} onOpenRun={(run) => { if (run.jobId && jobs.some((job) => job.id === run.jobId)) openJobView(run.jobId, run.kind === "interview" ? "interview" : "application", run.roundId ?? undefined); }} />
+    <TerminalPanel latestRun={latestRun} onQueueJob={queueJob} busyLabel={busyJobLabel} cwd={workspace.repositoryRoot || workspace.path} selectedJobFiles={selectedJobFiles} selectedCareerPaths={selectedCareerPaths} theme={theme} visible={rightPanelOpen && !needsSetup} onClose={() => setRightPanelOpen(false)} jobActions={jobActions} promptRequest={promptRequest} onPromptHandled={(id) => setPromptRequest((request) => request?.id === id ? null : request)} onInsertPrompt={insertJobPrompt} onOpenRun={(run) => { if (run.jobId && jobs.some((job) => job.id === run.jobId)) openJobView(run.jobId, run.kind === "interview" ? "interview" : "application", run.roundId ?? undefined); }} />
   </main>;
 }
 
-function NavIcon({ name }: { name: "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" | "pipeline" }) {
+function NavIcon({ name }: { name: "today" | "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" | "pipeline" }) {
   const paths: Record<typeof name, string> = {
+    today: "M5 6h14v14H5z M5 10h14 M9 4v4 M15 4v4 M9 14h2 M13 14h2 M9 17h2",
     jobs: "M4 8h16v11H4zM9 8V5h6v3M4 13h16",
     search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z M15.5 15.5L20 20",
     interviews: "M5 5h14v10H9l-4 4z M8.5 9.5h7 M8.5 12h4",
@@ -1046,7 +1069,7 @@ function ToastRegion({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: n
 
 const SHORTCUTS: Array<[string, string]> = [
   ["⌘K or Ctrl K", "Search jobs, files, and actions"],
-  ["g then j / i / c", "Go to Jobs, Interviews, or Career context"],
+  ["g then t / j / i / c", "Go to Today, Jobs, Interviews, or Career context"],
   ["[ and ]", "Previous or next job (on a job page)"],
   ["1 – 6", "Set the open job to Saved, Applied, Interviewing, Offer, Rejected, Withdrawn"],
   ["⌘J or Ctrl J", "Show or hide Agy"],
@@ -1289,6 +1312,10 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
   const [anchor, setAnchor] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(storedFavoriteJobIds);
+  const [facets, setFacets] = useState<JobFacets>(NO_FACETS);
+  const [views, setViews] = useState<JobView[]>(storedJobViews);
+  const [group, setGroup] = useState<Grouping>(() => { const stored = window.localStorage.getItem("sensei-jobs-group"); return GROUPINGS.includes(stored as Grouping) ? stored as Grouping : "none"; });
+  useEffect(() => { window.localStorage.setItem("sensei-jobs-group", group); }, [group]);
   const [sort, setSort] = useState<"added" | "company" | "role" | "follow-up" | "fit">(() => {
     const stored = window.localStorage.getItem("sensei-jobs-sort");
     return ["added", "company", "role", "follow-up", "fit"].includes(stored ?? "") ? stored as "added" : "added";
@@ -1325,7 +1352,7 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
     const normalized = query.trim().toLowerCase();
     const text = (value: string | null | undefined, fallback: string) => (value ?? fallback).toLowerCase();
     return jobs
-      .filter((job) => matches(job, filter) && inTab(job, tab) && (!normalized || `${job.company ?? ""} ${job.title ?? ""} ${job.name} ${job.location ?? ""} ${effectiveStatus(job)} ${job.interviewRoundLabel ?? ""} ${job.tracker?.notes ?? ""}`.toLowerCase().includes(normalized)))
+      .filter((job) => matches(job, filter) && inTab(job, tab) && matchesFacets(job, facets) && (!normalized || `${job.company ?? ""} ${job.title ?? ""} ${job.name} ${job.location ?? ""} ${effectiveStatus(job)} ${job.interviewRoundLabel ?? ""} ${job.tracker?.notes ?? ""}`.toLowerCase().includes(normalized)))
       .sort((a, b) => {
         if (sort === "company") return text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
         if (sort === "role") return text(a.title, "").localeCompare(text(b.title, ""));
@@ -1333,7 +1360,7 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
         if (sort === "follow-up") return (followUpDays(a.tracker) ?? 9999) - (followUpDays(b.tracker) ?? 9999);
         return Date.parse(b.createdAt) - Date.parse(a.createdAt) || text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
       });
-  }, [jobs, query, filter, sort, favorites, tab]);
+  }, [jobs, query, filter, sort, favorites, tab, facets]);
   const stale = staleApplications(jobs);
   async function closeStale() {
     if (!window.confirm(`Mark ${stale.length} application${stale.length === 1 ? "" : "s"} with no reply after ${STALE_DAYS} days as rejected? You can change any of them back later.`)) return;
@@ -1390,10 +1417,14 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
       tabs={JOB_TABS.filter((candidate) => candidate.id !== "offer" || jobs.some((job) => inTab(job, "offer"))).map((candidate) => ({ id: candidate.id, label: candidate.label, count: jobs.filter((job) => inTab(job, candidate.id)).length }))}
     />
     <SubTabPanel idPrefix="jobs" value={tab}>
+    <SavedViews views={views} current={{ tab, query, facets, group, sort }} onChange={(next) => { setViews(next); storeJobViews(next); }}
+      onApply={(saved) => { setStatusGroup(saved.tab); setQuery(saved.query); setFacets(saved.facets); setGroup(saved.group); if (["added", "company", "role", "follow-up", "fit"].includes(saved.sort)) setSort(saved.sort as typeof sort); setFilter("all"); }} />
     <div className="jobs-toolbar">
       <label className="workspace-search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search jobs…" aria-label="Search jobs" /></label>
       {(["follow-up", "review", "favorites"] as JobsFilter[]).filter((value) => FEATURES.nudges || value !== "follow-up").filter((value) => filterCounts[value] > 0 || filter === value).map((value) => <button key={value} className="filter-toggle" aria-pressed={filter === value} onClick={() => setFilter(filter === value ? "all" : value)}>{filterLabels[value]}<span>{filterCounts[value]}</span></button>)}
       <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option>{FEATURES.nudges && <option value="follow-up">Follow-up date</option>}<option value="fit">Best fit</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
+      <JobFilters jobs={jobs.filter((job) => inTab(job, tab))} facets={facets} onChange={setFacets} />
+      <label className="jobs-sort"><span>Group</span><select value={group} onChange={(event) => setGroup(event.target.value as Grouping)} aria-label="Group jobs"><option value="none">No groups</option><option value="company">Company</option><option value="role">Kind of role</option><option value="status">Status</option><option value="work">Work setup</option></select></label>
       <button className="filter-toggle" aria-pressed={selecting} title="Select several jobs to change their status at once (or Cmd/Ctrl-click a job)" onClick={() => selecting ? exitSelect() : setSelecting(true)}>{selecting ? "Done" : "Select"}</button>
       <div className="segmented" role="group" aria-label="Layout">{(["cards", "list"] as JobsView[]).map((value) => <button key={value} aria-pressed={view === value} onClick={() => setView(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div>
       <details className="jobs-more">
@@ -1405,6 +1436,7 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
         </div>
       </details>
     </div>
+    {facets.company && <CompanyStrip jobs={jobs} company={facets.company} onOpenJob={(jobId, view) => view ? onOpenJobView(jobId, view) : onOpenJob(jobId)} onClear={() => setFacets({ ...facets, company: null })} />}
     {exported && <p className="export-note" role="status">{exported}</p>}
     {selecting && <div className="select-bar" role="toolbar" aria-label="Selected jobs">
       <strong aria-live="polite">{selected.size ? `${plural(selected.size, "job")} selected` : "Click jobs to select them"}</strong>
@@ -1421,7 +1453,11 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
         <section className="jobs-group" aria-labelledby="closed-reached"><h2 id="closed-reached">Reached interviews <span>{visibleJobs.filter(reachedInterview).length}</span></h2><p>Jobs that got to at least one interview: the ones worth a debrief.</p>{visibleJobs.some(reachedInterview) ? renderJobs(visibleJobs.filter(reachedInterview)) : <p className="muted">None yet.</p>}</section>
         <details className="jobs-group"><summary><h2>No interview <span>{visibleJobs.filter((job) => !reachedInterview(job)).length}</span></h2></summary>{renderJobs(visibleJobs.filter((job) => !reachedInterview(job)))}</details>
       </>
-      : renderJobs(visibleJobs)}
+      : group === "none" ? renderJobs(visibleJobs)
+      : groupJobs(visibleJobs, group).map((entry) => <section key={entry.key} className="jobs-group jobs-group-by" aria-label={entry.label}>
+          <h2>{entry.label} <span>{entry.jobs.length}</span>{group === "company" && entry.jobs.length > 1 && <button className="btn-link" onClick={() => setFacets({ ...facets, company: entry.label })}>View company</button>}</h2>
+          {renderJobs(entry.jobs)}
+        </section>)}
     </SubTabPanel>
   </section>;
 }
@@ -1454,14 +1490,11 @@ const VOICE_TEMPLATE = [
  * used, so nothing is filled in without the user knowing why.
  */
 function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessItem["action"]; profile: CandidateProfile | null; onSaved: (profile: CandidateProfile | null) => void; onClose: () => void }) {
-  const pillars = profile?.preferences.coverLetter.narrativePillars;
-  const logistics = profile?.preferences.interview;
+  // The same reading and saving as Settings (src/shared/profile-fields.ts owns both).
+  const logistics = readLogistics(profile);
   const [values, setValues] = useState<Record<string, string>>(() => ({
-    transitionSummary: profile?.career.transitionSummary ?? "",
-    turningPoints: pillars?.turningPoints || profile?.career.narrativePillars.turningPoints || "",
-    workingStyle: pillars?.workingStyle || profile?.career.narrativePillars.workingStyle || "",
-    personalValues: pillars?.personalValues || profile?.career.narrativePillars.personalValues || "",
-    location: logistics?.location ?? "", workAuthorization: logistics?.workAuthorization ?? "", compensation: logistics?.compensation ?? "", noticePeriod: logistics?.noticePeriod ?? "", workArrangement: logistics?.workArrangement ?? "",
+    ...readStoryFields(profile),
+    ...logistics,
     names: (profile?.truth.confidentialNames ?? []).join("\n"),
     voice: "",
     roles: (profile?.preferences.targets.roles ?? []).join("\n"),
@@ -1491,13 +1524,13 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
     try {
       let next: CandidateProfile | null = profile;
       if (action === "story") {
-        next = await window.sensei.profile.updateDetails({ transitionSummary: values.transitionSummary!.trim() });
-        // Story pillars have one owner: preferences.coverLetter.narrativePillars (W13).
-        next = await window.sensei.profile.updatePreferences({ ...next.preferences, coverLetter: { ...next.preferences.coverLetter, narrativePillars: { turningPoints: values.turningPoints!.trim(), workingStyle: values.workingStyle!.trim(), personalValues: values.personalValues!.trim() } } });
+        const story = storyUpdate(values as unknown as StoryFields);
+        next = await window.sensei.profile.updateDetails({ transitionSummary: story.transitionSummary });
+        next = await window.sensei.profile.updatePreferences({ ...next.preferences, coverLetter: { ...next.preferences.coverLetter, narrativePillars: story.narrativePillars } });
       } else if (action === "logistics") {
-        next = await window.sensei.profile.updateDetails({ interviewLogistics: { location: values.location!.trim(), workAuthorization: values.workAuthorization!.trim(), compensation: values.compensation!.trim(), noticePeriod: values.noticePeriod!.trim(), workArrangement: values.workArrangement!.trim() } });
+        next = await window.sensei.profile.updateDetails({ interviewLogistics: logisticsUpdate(values as unknown as InterviewLogistics) });
       } else if (action === "private-names") {
-        next = await window.sensei.profile.updateDetails({ confidentialNames: [...new Set(values.names!.split(/\n|,/).map((name) => name.trim()).filter(Boolean))] });
+        next = await window.sensei.profile.updateDetails({ confidentialNames: parseNames(values.names!) });
       } else if (action === "voice") {
         await window.sensei.profile.saveVoice(values.voice!);
       } else if (action === "facts" && profile) {
@@ -1582,7 +1615,7 @@ const READINESS_STATE: Record<ReadinessItem["state"], string> = { done: "Done", 
 const ACTION_LABEL: Partial<Record<ReadinessItem["action"], string>> = { profile: "Open Settings", resume: "Choose resume", agy: "Open Agy", context: "Open Career context", story: "Open Settings", logistics: "Open Settings", "private-names": "Open Settings", "other-resumes": "Add a resume", voice: "Open Settings" };
 
 /** Setup: what JobSensei needs (required) and what makes it better (recommended), each with how to do it in the app. */
-function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAction, onReveal, onAddLinkedin }: { readiness: Readiness | null; profile: CandidateProfile | null; onProfileSaved: (profile: CandidateProfile | null) => void; onRefresh: () => void; onAction: (action: ReadinessItem["action"]) => void; onReveal: (path: string) => void; onAddLinkedin: () => void }) {
+function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAction, onReveal, onAddLinkedin, onToast }: { onToast: (message: string) => void; readiness: Readiness | null; profile: CandidateProfile | null; onProfileSaved: (profile: CandidateProfile | null) => void; onRefresh: () => void; onAction: (action: ReadinessItem["action"]) => void; onReveal: (path: string) => void; onAddLinkedin: () => void }) {
   useEffect(() => { onRefresh(); }, []);
   const [editing, setEditing] = useState<ReadinessItem["action"] | null>(null);
   if (!readiness) return <section className="setup-home"><p className="muted">Checking your setup…</p></section>;
@@ -1599,8 +1632,10 @@ function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAction, on
   </li>;
   return <section className="setup-home">
     <header className="page-head"><div><h1>{FEATURES.candidates ? profile?.identity.fullName ?? "Candidate" : "Setup"}</h1><p>{FEATURES.candidates ? (readiness.ready ? "Ready for jobs. The optional items below help Agy tailor more closely." : "Add the base resume to start tailoring.") : readiness.ready ? "JobSensei has what it needs. The recommended steps make drafts and interview prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button> · <button className="btn-link" onClick={() => onReveal("")}>Open your workspace folder</button></p></div></header>
-    <section className="iv-section"><h2>Required</h2><ol className="setup-list">{readiness.items.filter((item) => item.level === "required").map(row)}</ol></section>
-    <section className="iv-section"><h2>Recommended</h2><ol className="setup-list">{readiness.items.filter((item) => item.level === "recommended").map(row)}</ol></section>
+    {(["required", "recommended"] as const).map((level) => { const items = readiness.items.filter((item) => item.level === level); const done = items.filter((item) => item.state === "done").length; return <Section key={level} id={`setup-${level}`} title={level === "required" ? "Required" : "Recommended"} count={`${done} of ${items.length}`} defaultOpen={level === "recommended" || done < items.length}>
+      <ol className="setup-list">{items.map(row)}</ol>
+    </Section>; })}
+    <WorkspaceFolders onToast={onToast} onChanged={onRefresh} />
   </section>;
 }
 
@@ -1785,6 +1820,7 @@ function TrackerPanel({ job, onUpdate }: { job: JobFolderSummary; onUpdate: (upd
       <label><span>Applied</span><input type="date" value={effectiveAppliedAt(job) ?? ""} onChange={(event) => void onUpdate({ appliedAt: event.target.value || null })} /></label>
       {FEATURES.nudges && <label><span>Follow up on</span><input type="date" value={tracker?.nextFollowUpAt ?? ""} onChange={(event) => void onUpdate({ nextFollowUpAt: event.target.value || null })} /></label>}
     </div>
+    <TagEditor tags={tracker?.tags ?? []} suggestions={[]} onChange={(tags) => void onUpdate({ tags })} />
     <label className="tracker-notes"><span>Notes</span><textarea rows={1} value={notes} placeholder="Recruiter name, referral, what they said…" onChange={(event) => setNotes(event.target.value)} onBlur={() => { if (notes !== (tracker?.notes ?? "")) void onUpdate({ notes }); }} /></label>
     {history.length > 0 && <details className="must-group"><summary>History ({tracker?.history.length ?? history.length})</summary><ol className="tracker-history" aria-label="Status history">{history.map((event) => <li key={event.at}><TrackerPill status={event.status} /><span className="muted">{new Date(event.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span></li>)}</ol></details>}
   </section>;
@@ -1801,7 +1837,10 @@ function InterviewsHome({ jobs, allJobs, newRecordings, onRecordingsChanged, onS
   }, [jobs]);
   const rows = jobs.map((job) => {
     const overview = overviews[job.id];
-    const round = overview?.rounds.find((candidate) => candidate.id === overview.currentRoundId) ?? overview?.rounds.at(-1) ?? null;
+    // The round that's actually next (after interviews the user recorded), else the one last opened.
+    const next = overview ? nextInterviewStep({ rounds: overview.rounds, knownProcess: overview.knownProcess, recorded: job.tracker?.interviews ?? [] }) : null;
+    const round = (next?.kind === "practice" ? overview?.rounds.find((candidate) => candidate.id === next.roundId) : null)
+      ?? overview?.rounds.find((candidate) => candidate.id === overview.currentRoundId) ?? overview?.rounds.at(-1) ?? null;
     return { job, overview, round };
   }).sort((a, b) => Number(["rejected", "withdrawn"].includes(effectiveStatus(a.job))) - Number(["rejected", "withdrawn"].includes(effectiveStatus(b.job))) || (a.round?.scheduledDate ?? "9999").localeCompare(b.round?.scheduledDate ?? "9999") || Date.parse(b.job.modifiedAt) - Date.parse(a.job.modifiedAt));
   const closed = (job: JobFolderSummary) => ["rejected", "withdrawn"].includes(effectiveStatus(job));
@@ -1863,52 +1902,44 @@ function LearningsView({ jobs, overviews, onOpenFile }: { jobs: JobFolderSummary
   const managerQuestions = section(texts.memory, /hiring manager/i);
   return <div className="learnings">
     {learn.unrecorded > 0 && <p className="learn-note" role="status">{plural(learn.unrecorded, "job")} with interview prep {learn.unrecorded === 1 ? "has" : "have"} no recorded interviews yet, so {learn.unrecorded === 1 ? "it isn't" : "they aren't"} counted below. Record them in each job's "What happened?" (Jobs ⋯ → Data health lists them).</p>}
-    <section className="iv-section">
-      <h3>How far applications got</h3>
+    <Section id="learn-1" title="How far applications got" defaultOpen={true}>
       <p className="learn-note">Real interviews only, as recorded in each job. Prep alone doesn't count.</p>
       <dl className="learn-stats">
         <div><dt>Applied</dt><dd className="tabular">{learn.applied}</dd></div>
         <div><dt>Got an interview</dt><dd className="tabular">{learn.interviewed}<small>{percent(learn.interviewed, learn.applied)}</small></dd></div>
         {learn.funnel.filter((row) => row.stage !== "recruiter").map((row) => <div key={row.stage}><dt>Reached {STAGE_LABELS[row.stage].toLowerCase()}</dt><dd className="tabular">{row.count}<small>{percent(row.count, learn.interviewed)}</small></dd></div>)}
       </dl>
-    </section>
-    <section className="iv-section">
-      <h3>Did fit predict how far you got?</h3>
+    </Section>
+    <Section id="learn-2" title="Did fit predict how far you got?" defaultOpen={true}>
       <table className="learn-table"><thead><tr><th>Furthest stage</th><th>Jobs</th><th>Average fit</th></tr></thead>
         <tbody>{learn.fitByStage.map((row) => <tr key={row.stage}><td>{STAGE_LABELS[row.stage]}</td><td className="tabular">{row.jobs}</td><td className="tabular">{row.averageFit?.toFixed(2) ?? "—"}</td></tr>)}</tbody></table>
-    </section>
-    {(learn.bySetup.length > 0 || learn.pay.interviewed !== null) && <section className="iv-section">
-      <h3>Which jobs gave interviews</h3>
+    </Section>
+    {(learn.bySetup.length > 0 || learn.pay.interviewed !== null) && <Section id="learn-3" title="Which jobs gave interviews" defaultOpen={false}>
       <table className="learn-table"><thead><tr><th>Jobs</th><th>Applied</th><th>Got an interview</th></tr></thead>
         <tbody>{learn.bySetup.map((row) => <tr key={row.label}><td>{row.label}</td><td className="tabular">{row.applied}</td><td className="tabular">{row.interviewed}{percent(row.interviewed, row.applied)}</td></tr>)}</tbody></table>
       <p className="learn-note">Median posted pay: <strong className="tabular">{money(learn.pay.interviewed)}</strong> for jobs with an interview, <strong className="tabular">{money(learn.pay.notInterviewed)}</strong> for the rest.</p>
-    </section>}
-    {learn.gapTerms.length > 0 && <section className="iv-section">
-      <h3>Gaps in applications that got no interview</h3>
+    </Section>}
+    {learn.gapTerms.length > 0 && <Section id="learn-4" title="Gaps in applications that got no interview" defaultOpen={false}>
       <p className="learn-note">Tools the posting asked for that your evidence didn't cover, counted per job.</p>
       <ul className="learn-fixes">{learn.gapTerms.map((row) => <li key={row.term}><span>{row.term}</span><small>{row.noInterview} with no interview · {row.interviewed} with one</small></li>)}</ul>
-    </section>}
-    {learn.reasons.length > 0 && <section className="iv-section">
-      <h3>Why it ended, in your words</h3>
+    </Section>}
+    {learn.reasons.length > 0 && <Section id="learn-5" title="Why it ended, in your words" defaultOpen={false}>
       <ul className="learn-fixes">{learn.reasons.map((row) => <li key={row.jobId}><span>{row.company}: {row.reason}</span><small>{row.stage}</small></li>)}</ul>
-    </section>}
-    <section className="iv-section">
-      <h3>Questions asked most</h3>
+    </Section>}
+    <Section id="learn-6" title="Questions asked most" defaultOpen={false}>
       <div className="learn-columns">
         <div><h4>Recruiter</h4><div className="iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(recruiterQuestions.split("\n").slice(0, 10).join("\n"), [], { readable: true }) }} /></div>
         <div><h4>Hiring manager</h4><div className="iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(managerQuestions.split("\n").slice(0, 8).join("\n"), [], { readable: true }) }} /></div>
       </div>
       {memoryPath && <button className="btn-link" onClick={() => onOpenFile(memoryPath)}>All patterns and interviewer feedback</button>}
-    </section>
-    {fixes.length > 0 && <section className="iv-section">
-      <h3>Delivery fixes</h3>
+    </Section>
+    {fixes.length > 0 && <Section id="learn-7" title="Delivery fixes" defaultOpen={false}>
       <ul className="learn-fixes">{fixes.map((item) => <li key={item.fix}><span>{item.fix}</span><small>{item.status || "no status"}</small></li>)}</ul>
       <button className="btn-link" onClick={() => onOpenFile("profile/interview_voice.md")}>Open interview voice</button>
-    </section>}
-    {storyCounts.size > 0 && <section className="iv-section">
-      <h3>Stories used most in prep</h3>
+    </Section>}
+    {storyCounts.size > 0 && <Section id="learn-8" title="Stories used most in prep" defaultOpen={false}>
       <ul className="learn-fixes">{[...storyCounts.entries()].sort((a, b) => b[1] - a[1]).map(([id, count]) => <li key={id}><span>{id}{texts.stories[id] ? ` · ${texts.stories[id]}` : ""}</span><small>{count} card{count === 1 ? "" : "s"}</small></li>)}</ul>
-    </section>}
+    </Section>}
   </div>;
 }
 
@@ -3223,19 +3254,15 @@ const RUN_KIND_LABEL: Record<RunStatus["kind"], string> = { fetch: "Job posting 
 const RUN_STATE_LABEL: Record<RunStatus["state"], string> = { running: "Running", passed: "Passed", warnings: "Passed with warnings", failed: "Needs fixes" };
 
 /** The latest pipeline run, refreshed every few seconds while the Agy panel is open. */
-function RunStatusBar({ onOpen }: { onOpen: (run: RunStatus) => void }) {
-  const [run, setRun] = useState<RunStatus | null>(null);
+function RunStatusBar({ run, onOpen }: { run: RunStatus | null; onOpen: (run: RunStatus) => void }) {
+  // The run comes from the app's one run watcher; only the elapsed time ticks here, and only while a run is going.
   const [now, setNow] = useState(Date.now());
+  const running = run?.state === "running";
   useEffect(() => {
-    let cancelled = false;
-    const load = () => void window.sensei.runs.latest().then((next) => {
-      if (cancelled) return;
-      setRun(next);
-    }).catch(() => undefined);
-    load();
-    const timer = window.setInterval(() => { load(); setNow(Date.now()); }, 4000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, []);
+    if (!running) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
   if (!run) return null;
   const elapsed = Math.max(0, Math.round((now - Date.parse(run.at)) / 1000));
   const duration = run.state === "running" ? `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}` : run.durationSeconds !== null ? `${run.durationSeconds}s` : null;
@@ -3252,7 +3279,7 @@ function RunStatusBar({ onOpen }: { onOpen: (run: RunStatus) => void }) {
   </section>;
 }
 
-function TerminalPanel({ cwd, selectedJobFiles, selectedCareerPaths, theme, visible, onClose, jobActions, promptRequest, onPromptHandled, onInsertPrompt, onOpenRun, onQueueJob, busyLabel }: { onOpenRun: (run: RunStatus) => void; onQueueJob: QueueJob; busyLabel: string | null; cwd: string; selectedJobFiles: string[]; selectedCareerPaths: string[]; theme: "dark" | "light"; visible: boolean; onClose: () => void; jobActions: JobAction[]; promptRequest: PromptRequest | null; onPromptHandled: (id: number) => void; onInsertPrompt: (action: JobAction) => void }) {
+function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareerPaths, theme, visible, onClose, jobActions, promptRequest, onPromptHandled, onInsertPrompt, onOpenRun, onQueueJob, busyLabel }: { latestRun: RunStatus | null; onOpenRun: (run: RunStatus) => void; onQueueJob: QueueJob; busyLabel: string | null; cwd: string; selectedJobFiles: string[]; selectedCareerPaths: string[]; theme: "dark" | "light"; visible: boolean; onClose: () => void; jobActions: JobAction[]; promptRequest: PromptRequest | null; onPromptHandled: (id: number) => void; onInsertPrompt: (action: JobAction) => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -3639,7 +3666,7 @@ function TerminalPanel({ cwd, selectedJobFiles, selectedCareerPaths, theme, visi
         </div>
       </div>
 
-      {visible && <RunStatusBar onOpen={onOpenRun} />}
+      {visible && <RunStatusBar run={latestRun} onOpen={onOpenRun} />}
       <div className="terminal-body">
         {viewMode === "chat" ? (
           <div className="chat-container">

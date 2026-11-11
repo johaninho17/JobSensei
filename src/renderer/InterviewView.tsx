@@ -1,5 +1,6 @@
 // One interview view for a job: round stepper, question cards, prep sidebar, and live mode.
 // Content comes from the round's files (prep.md, question_bank.md, research) and profile/story_bank.md.
+import { roundDone } from "../shared/interview-progress";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { InterviewOverview, InterviewRound, JobFolderSummary } from "../shared/schemas";
 import { listItems, markdownSections, parseInterviewCards, splitIds, storyTitles, type CardKind, type InterviewCard } from "./interview-cards";
@@ -122,8 +123,8 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
     <ol className="iv-stepper" aria-label="Interview rounds">
       {rounds.map((candidate, index) => <li key={candidate.id}>
         <button className={`iv-step is-${candidate.status} ${candidate.id === round.id ? "is-current" : ""}`} aria-current={candidate.id === round.id ? "step" : undefined} onClick={() => selectRound(candidate.id)}>
-          <span className="iv-step-dot" aria-hidden="true">{candidate.status === "completed" || candidate.status === "debriefed" ? "✓" : index + 1}</span>
-          <span className="iv-step-text"><strong>{candidate.label}</strong><small>{candidate.scheduledDate ?? STATUS_LABEL[candidate.status]}</small></span>
+          <span className="iv-step-dot" aria-hidden="true">{roundDone(candidate, job.tracker?.interviews ?? []) ? "✓" : index + 1}</span>
+          <span className="iv-step-text"><strong>{candidate.label}</strong><small>{roundDone(candidate, job.tracker?.interviews ?? []) && !["completed", "debriefed"].includes(candidate.status) ? "Interview done" : candidate.scheduledDate ?? STATUS_LABEL[candidate.status]}</small></span>
         </button>
       </li>)}
       {onInsertPrompt && <li><button className="iv-step is-add" onClick={() => onInsertPrompt(`Prepare ${company} ${job.title ?? ""} next interview round ${jobRef}`.replace(/\s+/g, " "), "Prepare next round")}><span className="iv-step-dot" aria-hidden="true">+</span><span className="iv-step-text"><strong>Next round</strong><small>Ask Agy to prepare it</small></span></button></li>}

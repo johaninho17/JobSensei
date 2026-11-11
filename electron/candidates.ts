@@ -10,6 +10,7 @@ import {
 import { featuresFor } from "../src/shared/edition";
 import { readJson, writeJsonAtomic, writeTextAtomic } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
+import { workspaceFile } from "./layout";
 import { initializeWorkspace } from "./workspace-init";
 
 const now = () => new Date().toISOString();
@@ -122,13 +123,14 @@ const NOTES_HEADER = "# Recruiter notes\n\n- source_role: recruiter-notes\n\n";
 const MAX_NOTES = 50_000;
 
 export async function readRecruiterNotes(candidateFolder: string): Promise<string> {
-  const raw = await readFile(join(candidateFolder, ...RECRUITER_NOTES_PATH.split("/")), "utf8").catch(() => "");
+  const raw = await readFile(workspaceFile(candidateFolder, RECRUITER_NOTES_PATH), "utf8").catch(() => "");
   return raw.startsWith(NOTES_HEADER) ? raw.slice(NOTES_HEADER.length) : raw;
 }
 
 export async function saveRecruiterNotes(candidateFolder: string, notes: string): Promise<string> {
   if (notes.length > MAX_NOTES) throw new Error("Notes are limited to 50,000 characters.");
-  const path = join(candidateFolder, ...RECRUITER_NOTES_PATH.split("/"));
+  // Logical path: the folder layout decides where it sits on disk (src/shared/workspace-layout.ts).
+  const path = workspaceFile(candidateFolder, RECRUITER_NOTES_PATH);
   await mkdir(dirname(path), { recursive: true });
   await writeTextAtomic(path, `${NOTES_HEADER}${notes.replaceAll("\r\n", "\n").trim()}\n`);
   return RECRUITER_NOTES_PATH;

@@ -8,6 +8,7 @@ import { coverLetterPlan } from "../src/shared/cover-letter-policy";
 import { buildContextManifest } from "../electron/context";
 import { createEvidenceSnapshot } from "../electron/evidence-snapshot";
 import { finalizeApplication } from "../electron/application-finalize";
+import { readTextFile } from "../electron/persistence";
 
 const edition = process.env.JOBSENSEI_EDITION;
 afterEach(() => { if (edition === undefined) delete process.env.JOBSENSEI_EDITION; else process.env.JOBSENSEI_EDITION = edition; });
@@ -52,7 +53,7 @@ async function workspace(): Promise<string> {
 }
 
 async function writeBundle(root: string, withLetter: boolean): Promise<void> {
-  const snapshot = JSON.parse(await readFile(join(root, "jobs", "sample-role", ".sensei", "evidence_snapshot.json"), "utf8"));
+  const snapshot = JSON.parse(await readTextFile(join(root, "jobs", "sample-role", ".sensei", "evidence_snapshot.json")));
   const run = JSON.parse(await readFile(join(root, "jobs", "sample-role", ".sensei", "application_run.json"), "utf8"));
   await writeFile(join(root, "jobs", "sample-role", ".sensei", "application_bundle.json"), JSON.stringify({
     schemaVersion: 1, applicationRunId: run.runId, evidenceSnapshotId: snapshot.snapshotId, canonicalBaselineId: snapshot.canonicalResume.baselineId,

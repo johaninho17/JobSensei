@@ -3,6 +3,7 @@
 // questions that are plainly logistics ("how did you hear about us", salary, start date). Everything else goes to the
 // background answerer (question-agent.ts), where Agy decides per question whether to answer, skip, or give notes.
 // Any other job board returns null and nothing happens.
+import { postingRef } from "../src/shared/boards";
 import type { ApplicationQuestion } from "../src/shared/schemas";
 import { decodeEntities, fetchText } from "./jd-fetch";
 
@@ -115,18 +116,9 @@ const ASHBY_QUERY = "query ApiJobPosting($organizationHostedJobsPageName: String
 
 /** Which supported board a posting link is on; null for any other host. */
 export function formSource(url: string): { board: "greenhouse" | "ashby" | "lever"; parts: string[] } | null {
-  let parsed: URL;
-  try { parsed = new URL(url); } catch { return null; }
-  const path = parsed.pathname.split("/").filter(Boolean);
-  if (/(?:^|\.)greenhouse\.io$/i.test(parsed.hostname)) {
-    const jobIndex = path.indexOf("jobs");
-    const board = jobIndex > 0 ? path[jobIndex - 1] : null;
-    const id = jobIndex >= 0 ? path[jobIndex + 1] : parsed.searchParams.get("gh_jid");
-    return board && id ? { board: "greenhouse", parts: [board, id] } : null;
-  }
-  if (/^jobs\.ashbyhq\.com$/i.test(parsed.hostname) && path.length >= 2) return { board: "ashby", parts: [path[0]!, path[1]!] };
-  if (/^jobs\.(?:eu\.)?lever\.co$/i.test(parsed.hostname) && path.length >= 2) return { board: "lever", parts: [parsed.origin, path[0]!, path[1]!] };
-  return null;
+  const ref = postingRef(url);
+  if (!ref) return null;
+  return { board: ref.board, parts: ref.board === "lever" ? [ref.origin, ref.slug, ref.id] : [ref.slug, ref.id] };
 }
 
 /** The form's fields from a posting link, or null when the board isn't supported. */

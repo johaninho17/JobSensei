@@ -1,22 +1,35 @@
 // Job Search IPC. Loaded only when the edition has `features.jobSearch` (src/shared/edition.ts).
 import { ipcMain, shell } from "electron";
 import { join } from "node:path";
-import { prepareAgyHome } from "./agy-home";
 import { readCandidateProfile } from "./candidate-profile";
 import type { FeatureContext } from "./feature-context";
-import { boardRef } from "./job-boards";
 import { invalidateJobCache, listJobFolders } from "./job-folders";
-import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
-import { readPostingRecord } from "./posting-record";
+import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, jobsForSearch, searchLearning, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
 import { headlessAgy } from "./question-agent";
-import { installSchedule, removeSchedule, scheduleInfo } from "./search-schedule";
+import { ensureSchedule, scheduleInfo } from "./search-schedule";
 import { resolveAgyExecutable } from "./terminal";
-import { jobKey, type SearchRun, type SearchStatus } from "../src/shared/job-search";
+import type { SearchRun, SearchStatus } from "../src/shared/job-search";
+import type { JobFolderSummary } from "../src/shared/schemas";
 import { reachedInterview } from "../src/shared/tracker";
+
+/** The user's jobs as the search needs them (company, title, whether one reached an interview). */
+const searchJobs = (jobs: JobFolderSummary[]) => jobs.map((job) => ({ id: job.id, company: job.company, title: job.title, reachedInterview: reachedInterview(job) }));
+const scheduleTarget = (ctx: FeatureContext, workspace: string) => ({ runtime: process.execPath, runner: join(ctx.appRoot(), "dist-electron", "electron", "job-search-runner.js"), workspace, userData: ctx.userDataPath() });
+let scheduleRepaired: "installed" | "removed" | null = null;
+
+/**
+ * On opening a workspace: the scheduled search follows its settings, reinstalled if it went missing or is out of date
+ * (moved app or workspace), never changed when it already matches. Reported to the Job Search page.
+ */
+export async function repairSchedule(ctx: FeatureContext, workspace: string): Promise<void> {
+  const settings = await readSearchSettings(workspace, await readCandidateProfile(workspace).catch(() => null));
+  const result = await ensureSchedule(scheduleTarget(ctx, workspace), settings.schedule).catch((error) => { console.error("Scheduled search could not be checked:", error); return null; });
+  if (result?.changed) { console.info(`Scheduled search ${result.changed} to match Search settings.`); scheduleRepaired = result.changed; }
+}
 
 export function registerSearchIpc(ctx: FeatureContext): void {
   // The same app-owned Agy home (and sign-in) as the terminal; prepared here when the terminal hasn't started yet.
-  const home = async (workspace: string) => ctx.agyHome() ?? await prepareAgyHome(ctx.userDataPath(), workspace, [], { appRoot: ctx.appRoot(), runtimePath: process.execPath });
+  const home = (workspace: string) => ctx.agyHomeFor(workspace);
   // Job Search: one headless Agy run finds links; the app opens, saves, and rates each one (electron/job-search.ts).
   // The run lives here, not in the page: leaving Job Search never stops it, and every page hears its progress.
   let searchStatus: SearchStatus = { running: false, source: null, progress: null, startedAt: null };
@@ -29,17 +42,14 @@ export function registerSearchIpc(ctx: FeatureContext): void {
     const scheduled = !searchStatus.running && (await searchLockHolder(workspace))?.by === "schedule";
     return { settings: await readSearchSettings(workspace, profile), state: await readSearchState(workspace), status: scheduled ? { running: true, source: "search" as const, progress: null, startedAt: null, scheduled: true } : searchStatus };
   });
-  const scheduleTarget = (workspace: string) => ({ runtime: process.execPath, runner: join(ctx.appRoot(), "dist-electron", "electron", "job-search-runner.js"), workspace, userData: ctx.userDataPath() });
   /** Saves the settings and makes the OS schedule match them (installed when on, removed when off). */
   ipcMain.handle("search:save-settings", async (_event, input: unknown) => {
     const workspace = ctx.requireWorkspace();
     const settings = await saveSearchSettings(workspace, input);
-    const info = await scheduleInfo(ctx.userDataPath());
-    if (settings.schedule.enabled) await installSchedule(scheduleTarget(workspace), settings.schedule);
-    else if (info.installed) await removeSchedule(ctx.userDataPath());
+    await ensureSchedule(scheduleTarget(ctx, workspace), settings.schedule);
     return settings;
   });
-  ipcMain.handle("search:schedule-info", async () => scheduleInfo(ctx.userDataPath()));
+  ipcMain.handle("search:schedule-info", async () => ({ ...(await scheduleInfo(ctx.userDataPath())), repaired: scheduleRepaired }));
   ipcMain.handle("search:clear-pending", async (_event, ids: unknown) => clearPendingDrafts(ctx.requireWorkspace(), foundIds(ids)));
   /** Starts a run and returns at once; "watched" checks watched companies only (no Agy, no quota). */
   ipcMain.handle("search:run", async (_event, mode: unknown) => {
@@ -55,9 +65,11 @@ export function registerSearchIpc(ctx: FeatureContext): void {
       let result: { run: SearchRun } | null = null;
       try {
         const agyHome = agyPath ? await home(workspace) : null;
-        const jobs = await listJobFolders(workspace);
-        const existingKeys = new Set(jobs.map((job) => jobKey(job.company, job.title)).filter((key): key is string => Boolean(key)));
+        const allJobs = await listJobFolders(workspace);
+        const { existingKeys, companies } = await jobsForSearch(workspace, searchJobs(allJobs));
         result = await runSearch({
+          jobCompanies: companies,
+          learned: searchLearning(allJobs),
           workspace,
           profile: await readCandidateProfile(workspace).catch(() => null),
           runner: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }) : null,
@@ -104,19 +116,7 @@ export function registerSearchIpc(ctx: FeatureContext): void {
   /** Companies from your jobs whose postings are on Ashby, Greenhouse, or Lever, for the watched list. */
   ipcMain.handle("search:suggest-watched", async () => {
     const workspace = ctx.requireWorkspace();
-    const jobs = await listJobFolders(workspace);
-    const found = new Map<string, { board: "ashby" | "greenhouse" | "lever"; slug: string; name: string; jobs: number; interviewed: boolean }>();
-    for (const job of jobs) {
-      const url = (await readPostingRecord(join(workspace, "jobs", job.id)).catch(() => null))?.url;
-      const ref = url ? boardRef(url) : null;
-      if (!ref) continue;
-      const key = `${ref.board}:${ref.slug.toLowerCase()}`;
-      const current = found.get(key) ?? { ...ref, name: job.company ?? ref.slug, jobs: 0, interviewed: false };
-      current.jobs += 1;
-      current.interviewed ||= reachedInterview(job);
-      found.set(key, current);
-    }
-    return [...found.values()].sort((a, b) => Number(b.interviewed) - Number(a.interviewed) || b.jobs - a.jobs || a.name.localeCompare(b.name));
+    return (await jobsForSearch(workspace, searchJobs(await listJobFolders(workspace)))).companies;
   });
   ipcMain.handle("search:set-status", async (_event, ids: unknown, status: unknown) => {
     if (status !== "new" && status !== "dismissed") throw new Error("Use Save or Add to queue for those.");

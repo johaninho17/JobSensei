@@ -4,8 +4,8 @@ import type { BrowserWindow } from "electron";
 export type FeatureContext = {
   requireWorkspace: () => string;
   mainWindow: () => BrowserWindow | undefined;
-  /** The Agy home the terminal last prepared, or null before the terminal has started. */
-  agyHome: () => string | null;
+  /** The app-owned Agy home for this workspace (the terminal's, or prepared on first use). */
+  agyHomeFor: (workspace: string) => Promise<string>;
   userDataPath: () => string;
   appRoot: () => string;
   /** Lists the workspace's jobs as id → "Company, Title". */

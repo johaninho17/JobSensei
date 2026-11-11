@@ -129,6 +129,23 @@ export function extractJobDescription(html: string, url: string): Omit<FetchedJo
 
 type Extracted = Omit<FetchedJobDescription, "fetchedAt">;
 
+/**
+ * A posting built from a job board's own data (Ashby/Lever lists, Greenhouse's per-job API) instead of loading its
+ * page: the same header, text conversion, and cleanup as a fetched page, so everything downstream reads it the same.
+ */
+export function postingFromBoard(input: { url: string; title: string; company: string | null; location: string | null; html: string }): { extracted: Extracted; form: string | null } {
+  const header = [
+    `# ${input.title}`,
+    "",
+    ...(input.company ? [`**Company:** ${input.company}  `] : []),
+    ...(input.location ? [`**Location:** ${input.location}  `] : []),
+    `**Source:** ${input.url}`,
+    "",
+  ];
+  const body = htmlToText(decodeEntities(input.html));
+  return cleanExtracted({ url: input.url, title: input.title, company: input.company, location: input.location, suggestedJobId: suggestJobId(input.company, input.title), markdown: `${header.join("\n")}\n${body}\n` });
+}
+
 /** A fetched page through the shared cleanup: the form is split off, invisible characters and buttons removed. */
 function cleanExtracted(extracted: Extracted): { extracted: Extracted; form: string | null } {
   const { markdown, form } = cleanPosting(extracted.markdown, { title: extracted.title, company: extracted.company, location: extracted.location, source: extracted.url });

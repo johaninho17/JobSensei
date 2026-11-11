@@ -10,6 +10,7 @@ import { readPostingRecord } from "./posting-record";
 import { buildJobRecord, saveJobRecord } from "./job-record";
 import { effectiveStatus } from "../src/shared/tracker";
 import { roleFacts } from "./role-facts";
+import { readTextFile } from "./persistence";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -133,7 +134,7 @@ export async function readRating(jobPath: string, status: JsonRecord): Promise<n
   const evaluation = await readFile(join(jobPath, "evaluation.md"), "utf8").catch(() => "");
   try {
     // Apply the same evidence ceiling used by validation without rewriting old evaluations.
-    const snapshot = await readFile(join(jobPath, ".sensei", "evidence_snapshot.json"), "utf8")
+    const snapshot = await readTextFile(join(jobPath, ".sensei", "evidence_snapshot.json"))
       .then((raw) => evidenceSnapshotSchema.parse(JSON.parse(raw)))
       .catch(() => null);
     const boundedEvaluation = snapshot ? normalizeEvidenceClassifications(evaluation, snapshot).markdown : evaluation;
