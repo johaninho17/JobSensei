@@ -39,3 +39,22 @@ Job Search keeps its files in `.sensei/job-search/`: `settings.json` (titles, pl
 `.sensei/evidence_snapshot.json` in each job is stored gzip-compressed (about five times smaller); the app reads compressed and older uncompressed snapshots alike.
 
 Files outside `data/` are application source and public documentation. Never place private candidate data in `examples/`; examples must remain fictional.
+
+## Folder layouts
+
+A workspace uses one of two folder layouts. The app, its saved data, and every check name files the same way in both (the *logical* path, the left column); only the place on disk differs. `src/shared/workspace-layout.ts` owns the names, and `.sensei/layout.json` records which layout a workspace uses (no file = original).
+
+| Logical path (always) | Original layout | Tidy layout |
+|---|---|---|
+| `context/structured/` | same | `career/records/` |
+| `context/broad/` | same | `career/notes/` |
+| `context/<other files>` | same | `career/` |
+| `context/application_voice_profile.md` | same | `profile/writing-voice.md` |
+| `context/denylist.md` | same | `profile/private-names.md` |
+| `profile/story_bank.md` | same | `profile/story-bank.md` |
+| `profile/interview_voice.md` | same | `profile/interview-voice.md` |
+| `debrief/interview-memory/` | same | `interviews/memory/` |
+| `debrief/<company>/` | same | `interviews/recordings/<company>/` |
+| `jobs/<job-id>/`, `resumes/`, `profile/candidate.json` | same | same |
+
+Setup → Your folders previews the move, applies it, and can undo it (`electron/layout-migration.ts`). Nothing is deleted: exact copies, old `screened-jobs/`, and leftover run files go to `archive/`. Agy's copy of the instructions in the workspace is rewritten with the disk names, and a file an Agy run writes to an old path is moved to its real home.

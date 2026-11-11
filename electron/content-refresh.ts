@@ -6,7 +6,8 @@ import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs
 import { join, relative } from "node:path";
 import { z } from "zod";
 import { readJson, writeJsonAtomic } from "./persistence";
-import { assertInsideWorkspace } from "./workspace";
+import { toDisk, toLogical } from "../src/shared/workspace-layout";
+import { assertInsideWorkspace, layoutVersion, workspaceFile } from "./workspace";
 
 export const LEDGER_FILE = ".sensei/content-sources.json";
 export const UPDATE_FILE = ".sensei/content-update.json";
@@ -42,7 +43,7 @@ export type Recording = {
 const sha = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
 
 async function walk(root: string, dir: string): Promise<string[]> {
-  const entries = await readdir(join(root, dir), { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(workspaceFile(root, dir), { withFileTypes: true }).catch(() => []);
   const out: string[] = [];
   for (const entry of entries) {
     if (entry.name.startsWith(".")) continue;
@@ -56,11 +57,12 @@ async function walk(root: string, dir: string): Promise<string[]> {
 /** Recordings the old Agy-written list says were imported (backticked `debrief/...` paths under "## Imported recordings"). */
 export function importedFromList(interviewStories: string): string[] {
   const section = /##\s*Imported recordings([\s\S]*?)(?=\n##\s|$)/i.exec(interviewStories)?.[1] ?? "";
-  return [...section.matchAll(/`(debrief\/[^`]+)`/g)].map((match) => match[1]!);
+  // A tidy workspace's list names the recordings by their disk path; both spellings mean the same file.
+  return [...section.matchAll(/`((?:debrief|interviews\/recordings)\/[^`]+)`/g)].map((match) => toLogical(match[1]!, 2));
 }
 
 async function readLedger(workspace: string): Promise<Ledger> {
-  const parsed = ledgerSchema.safeParse(await readJson<unknown>(join(workspace, LEDGER_FILE)));
+  const parsed = ledgerSchema.safeParse(await readJson<unknown>(workspaceFile(workspace, LEDGER_FILE)));
   return parsed.success ? parsed.data : { files: {} };
 }
 
@@ -71,21 +73,21 @@ export async function scanRecordings(workspacePath: string, jobIds: string[] = [
   const paths = (await walk(root, "debrief")).sort();
   const now = new Date().toISOString();
   if (!Object.keys(ledger.files).length) {
-    const listed = new Set(importedFromList(await readFile(join(root, "context/structured/interview-stories.md"), "utf8").catch(() => "")));
+    const listed = new Set(importedFromList(await readFile(workspaceFile(root, "context/structured/interview-stories.md"), "utf8").catch(() => "")));
     // A file the old list names counts as imported as it is now, and so does a companion file beside it that is no
     // newer than it (the AI summary saved with a transcript). Everything else starts as new.
-    const modified = new Map(await Promise.all(paths.map(async (path) => [path, (await stat(join(root, path))).mtimeMs] as const)));
+    const modified = new Map(await Promise.all(paths.map(async (path) => [path, (await stat(workspaceFile(root, path))).mtimeMs] as const)));
     const folder = (path: string) => path.slice(0, path.lastIndexOf("/"));
     const companion = (path: string) => folder(path) !== "debrief" && [...listed].some((listedPath) => folder(listedPath) === folder(path) && (modified.get(path) ?? Infinity) <= (modified.get(listedPath) ?? -Infinity) + 60_000);
     for (const path of paths) {
       if (!listed.has(path) && !companion(path)) continue;
-      const data = await readFile(join(root, path));
+      const data = await readFile(workspaceFile(root, path));
       ledger.files[path] = { hash: sha(data), size: data.length, firstSeen: now, status: "imported", importedAt: null };
     }
-    if (Object.keys(ledger.files).length) await writeJsonAtomic(join(root, LEDGER_FILE), ledger);
+    if (Object.keys(ledger.files).length) await writeJsonAtomic(workspaceFile(root, LEDGER_FILE), ledger);
   }
   // A file with the same content as one already imported, or as an earlier file in this scan, is a duplicate.
-  const hashed = await Promise.all(paths.map(async (path) => { const data = await readFile(join(root, path)); return { path, size: data.length, hash: sha(data) }; }));
+  const hashed = await Promise.all(paths.map(async (path) => { const data = await readFile(workspaceFile(root, path)); return { path, size: data.length, hash: sha(data) }; }));
   const owner = new Map<string, string>();
   for (const [path, entry] of Object.entries(ledger.files)) if (!owner.has(entry.hash)) owner.set(entry.hash, path);
   const recordings: Recording[] = [];
@@ -191,7 +193,7 @@ export function restoreLost(markdown: string, lost: ContentReview["lost"]): stri
 }
 
 async function contentPaths(root: string): Promise<string[]> {
-  const memory = (await readdir(join(root, MEMORY_DIR)).catch(() => [] as string[])).filter((name) => name.endsWith(".md")).map((name) => `${MEMORY_DIR}/${name}`);
+  const memory = (await readdir(workspaceFile(root, MEMORY_DIR)).catch(() => [] as string[])).filter((name) => name.endsWith(".md")).map((name) => `${MEMORY_DIR}/${name}`);
   return [...CONTENT_FILES, ...memory];
 }
 
@@ -206,16 +208,17 @@ export async function startUpdate(workspacePath: string, recordings: Recording[]
   const backup = `${BACKUP_ROOT}/${now.toISOString().replace(/[:.]/g, "-")}`;
   const files = await contentPaths(root);
   for (const file of files) {
-    const source = join(root, file);
+    const source = workspaceFile(root, file);
     if (!(await stat(source).catch(() => null))?.isFile()) continue;
     await mkdir(join(root, backup, file, ".."), { recursive: true });
     await copyFile(source, join(root, backup, file));
   }
   await pruneBackups(root);
-  await rm(join(root, CHANGES_FILE), { force: true });
-  const update: PendingUpdate = { startedAt: now.toISOString(), backup, files, recordings: await Promise.all(chosen.map(async (recording) => { const data = await readFile(join(root, recording.path)); return { path: recording.path, hash: sha(data), size: data.length }; })) };
-  await writeJsonAtomic(join(root, UPDATE_FILE), update);
-  const list = chosen.map((recording) => `- ${recording.path}${recording.jobId ? ` (job: ${recording.jobId}${jobNames[recording.jobId] ? `, ${jobNames[recording.jobId]}` : ""})` : " (job not matched: ask me which job it was)"}${recording.state === "changed" ? " — a newer version of a recording imported before; import only what's new in it" : ""}`).join("\n");
+  await rm(workspaceFile(root, CHANGES_FILE), { force: true });
+  const update: PendingUpdate = { startedAt: now.toISOString(), backup, files, recordings: await Promise.all(chosen.map(async (recording) => { const data = await readFile(workspaceFile(root, recording.path)); return { path: recording.path, hash: sha(data), size: data.length }; })) };
+  await writeJsonAtomic(workspaceFile(root, UPDATE_FILE), update);
+  const version = layoutVersion(root);
+  const list = chosen.map((recording) => `- ${toDisk(recording.path, version)}${recording.jobId ? ` (job: ${recording.jobId}${jobNames[recording.jobId] ? `, ${jobNames[recording.jobId]}` : ""})` : " (job not matched: ask me which job it was)"}${recording.state === "changed" ? " — a newer version of a recording imported before; import only what's new in it" : ""}`).join("\n");
   const prompt = [
     "Run the interview review import (.agents/workflows/jobsensei-interview-review.md) on only these new recordings:",
     list,
@@ -225,18 +228,18 @@ export async function startUpdate(workspacePath: string, recordings: Recording[]
 }
 
 export async function readPendingUpdate(workspacePath: string): Promise<PendingUpdate | null> {
-  const parsed = updateSchema.safeParse(await readJson<unknown>(join(workspacePath, UPDATE_FILE)));
+  const parsed = updateSchema.safeParse(await readJson<unknown>(workspaceFile(workspacePath, UPDATE_FILE)));
   return parsed.success ? parsed.data : null;
 }
 
-async function readText(root: string, path: string) { return readFile(join(root, path), "utf8").catch(() => ""); }
+async function readText(root: string, path: string) { return readFile(workspaceFile(root, path), "utf8").catch(() => ""); }
 
 /** What the update changed, compared with the backup and Agy's change list. */
 export async function reviewUpdate(workspacePath: string): Promise<ContentReview & { files: string[]; changeListFound: boolean }> {
   const root = assertInsideWorkspace(workspacePath, workspacePath);
   const update = await readPendingUpdate(root);
   if (!update) throw new Error("No content update is in progress.");
-  const changesRaw = await readJson<{ changes?: ChangeEntry[] }>(join(root, CHANGES_FILE));
+  const changesRaw = await readJson<{ changes?: ChangeEntry[] }>(workspaceFile(root, CHANGES_FILE));
   const changes = Array.isArray(changesRaw?.changes) ? changesRaw.changes : [];
   const files = [...new Set([...update.files, ...await contentPaths(root)])];
   const before: ContentItem[] = [];
@@ -259,13 +262,13 @@ export async function finishUpdate(workspacePath: string, keepOld: string[] = []
   const review = await reviewUpdate(root);
   const putBack = [...review.lost, ...review.replaced.filter((entry) => keepOld.includes(`${entry.before.file}#${entry.before.key}`)).map(({ before, after }) => ({ before, after }))];
   for (const file of new Set(putBack.map((entry) => entry.before.file))) {
-    const path = assertInsideWorkspace(root, join(root, file));
+    const path = assertInsideWorkspace(root, workspaceFile(root, file));
     await writeFile(path, restoreLost(await readText(root, file), putBack.filter((entry) => entry.before.file === file)), "utf8");
   }
   const ledger = await readLedger(root);
   for (const recording of update.recordings) ledger.files[recording.path] = { hash: recording.hash, size: recording.size, firstSeen: ledger.files[recording.path]?.firstSeen ?? now.toISOString(), status: "imported", importedAt: now.toISOString() };
-  await writeJsonAtomic(join(root, LEDGER_FILE), ledger);
-  await rm(join(root, UPDATE_FILE), { force: true });
+  await writeJsonAtomic(workspaceFile(root, LEDGER_FILE), ledger);
+  await rm(workspaceFile(root, UPDATE_FILE), { force: true });
   return { restored: putBack.length };
 }
 
@@ -276,10 +279,10 @@ export async function undoUpdate(workspacePath: string): Promise<void> {
   if (!update) return;
   for (const file of update.files) {
     const saved = join(root, update.backup, file);
-    if ((await stat(saved).catch(() => null))?.isFile()) await copyFile(saved, join(root, file));
-    else await rm(join(root, file), { force: true });
+    if ((await stat(saved).catch(() => null))?.isFile()) await copyFile(saved, workspaceFile(root, file));
+    else await rm(workspaceFile(root, file), { force: true });
   }
-  await rm(join(root, UPDATE_FILE), { force: true });
+  await rm(workspaceFile(root, UPDATE_FILE), { force: true });
 }
 
 /** Marks recordings skipped (not interview recordings, or not worth importing); they stop showing as new. */
@@ -288,14 +291,14 @@ export async function skipRecordings(workspacePath: string, paths: string[], now
   const ledger = await readLedger(root);
   for (const path of paths) {
     if (!path.startsWith("debrief/") || path.includes("..")) continue;
-    const data = await readFile(join(root, path)).catch(() => null);
+    const data = await readFile(workspaceFile(root, path)).catch(() => null);
     if (data) ledger.files[path] = { hash: sha(data), size: data.length, firstSeen: now.toISOString(), status: "skipped", importedAt: null };
   }
-  await writeJsonAtomic(join(root, LEDGER_FILE), ledger);
+  await writeJsonAtomic(workspaceFile(root, LEDGER_FILE), ledger);
 }
 
 async function pruneBackups(root: string): Promise<void> {
-  const names = (await readdir(join(root, BACKUP_ROOT)).catch(() => [] as string[])).sort();
+  const names = (await readdir(workspaceFile(root, BACKUP_ROOT)).catch(() => [] as string[])).sort();
   for (const name of names.slice(0, Math.max(0, names.length - KEEP_BACKUPS))) await rm(join(root, BACKUP_ROOT, name), { recursive: true, force: true });
 }
 

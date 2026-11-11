@@ -164,6 +164,12 @@ See [Privacy](docs/privacy.md), [Workspace Format](docs/workspace-format.md), an
 - **Search on a schedule:** Search settings → Schedule. The default runs one search a day, the first time your computer is on after your chosen time (for example 8:00), counted from that time to the same time the next day; searches you run yourself don't use it up. The page says whether it is on. Strong matches can be drafted automatically above a rating you choose.
 - **Cover letters:** Settings → Career story → Cover letter sets the length (default 200–280 words) and whether the letter leads with your career story (default) or with examples.
 
+## Organizing jobs and folders
+
+- **Jobs page:** Filters (company, work setup, fit, went to interview, tags), Group (company, kind of role, status, work setup), and saved views that bring back a tab, search, filters, grouping, and sort in one click. Filtering to one company shows its summary (jobs by status, average fit, interviews, a link to its research and prep). Tags are added on a job's Overview under Tracking.
+- **Adding a job you already have** (same posting link, or same company and title) asks before adding it again.
+- **Your folders (Setup):** an optional tidy layout for the workspace folder with plain names. Preview first, apply, undo. Job folders and resumes are never moved. See `docs/workspace-format.md` § Folder layouts.
+
 ## What runs in the background
 
 Agy (the AI) only runs for these, each with only what that task needs:

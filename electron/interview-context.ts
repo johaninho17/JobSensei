@@ -5,7 +5,8 @@ import { candidateProfileSchema, type CandidateProfile, type EvidenceSnapshot, t
 import { BANNED_PHRASES, narrativeStoryLines } from "./evidence-snapshot";
 import { bestEvidenceForRequirement, parseMustHaves } from "./fit-scoring";
 import { writeJsonAtomic, readTextFile } from "./persistence";
-import { assertInsideWorkspace } from "./workspace";
+import { toDisk } from "../src/shared/workspace-layout";
+import { assertInsideWorkspace, layoutVersion } from "./workspace";
 
 /** The four canonical rounds and their question limits. Single owner for round IDs and bounds. */
 export const INTERVIEW_STAGES = {
@@ -146,7 +147,7 @@ async function roleMemoryFor(workspace: string, title: string): Promise<{ family
     .some((alias) => alias.trim() && normalized.includes(` ${alias.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `)));
   if (!match?.path) return null;
   const patterns = await readText(workspace, match.path);
-  return patterns ? { family: match.family ?? "", path: match.path, patterns: patterns.slice(0, 6000) } : null;
+  return patterns ? { family: match.family ?? "", path: toDisk(match.path, layoutVersion(workspace)), patterns: patterns.slice(0, 6000) } : null;
 }
 
 /**
@@ -234,8 +235,8 @@ export async function buildInterviewContext(workspacePath: string, jobId: string
     },
     gaps,
     evidenceRows,
-    storyBank: { path: STORY_BANK_PATH, exists: stories.length > 0, stories },
-    voice: { path: INTERVIEW_VOICE_PATH, ...voice },
+    storyBank: { path: toDisk(STORY_BANK_PATH, layoutVersion(workspace)), exists: stories.length > 0, stories },
+    voice: { path: toDisk(INTERVIEW_VOICE_PATH, layoutVersion(workspace)), ...voice },
     /** Career direction, story, working style, and values from Settings: the substance behind motivation questions. */
     careerStory: narrativeStoryLines(profile),
     logistics: logisticsLines(profile?.preferences.interview),

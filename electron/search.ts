@@ -8,7 +8,7 @@ import {
   type SearchResult,
   type SearchResultKind,
 } from "../src/shared/schemas";
-import { assertInsideWorkspace } from "./workspace";
+import { assertInsideWorkspace, logicalPath } from "./workspace";
 
 const SEARCH_ROOTS = ["context", "resumes", "cover-letters", "debrief", "jobs"];
 const IGNORED_NAMES = new Set([".DS_Store", ".sensei", "node_modules", "fallback-references", "example_evals"]);
@@ -82,7 +82,7 @@ async function indexDirectory(workspacePath: string, path: string, documents: Se
       continue;
     }
     if (!entry.isFile()) continue;
-    const relativePath = relative(workspacePath, child).replaceAll("\\", "/");
+    const relativePath = logicalPath(workspacePath, child);
     const info = await stat(child).catch(() => null);
     if (!info?.isFile()) continue;
     const extension = extname(entry.name).toLowerCase();

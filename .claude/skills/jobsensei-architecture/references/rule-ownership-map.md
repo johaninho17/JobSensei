@@ -70,4 +70,5 @@ Audit date: 2026-10-23, updated after Phase 4. ⚠ marks copies still known to c
 | Proven lines (wording from resumes that got interviews) | `provenLinesFor` (`electron/proven-lines.ts`) + snapshot instruction "provenLines (owner of this rule)" | None |
 | Company research reuse | Interview pipeline SKILL step 4 (owner); `companyResearchFor` in `interview-context.ts` supplies the file | None |
 | Today questions, insights, closed postings, morning summary | `src/shared/today.ts`, `electron/today.ts` | None (`tests/today.test.ts`) |
-
+| Where workspace files sit on disk (folder layouts) | `src/shared/workspace-layout.ts` (names, Agy text rewrite); `electron/layout.ts` (`assertInsideWorkspace`, `workspaceFile`, `logicalPath`); `electron/layout-migration.ts` (preview, apply, undo, stray files) | None. Code and saved data keep logical paths (`tests/workspace-layout.test.ts`) |
+| Jobs page filters, grouping, saved views, tags, company summary, duplicate warning | `src/shared/job-organize.ts`; drawn by `JobOrganize.tsx` and `JobsHome` | None (`tests/job-organize.test.ts`) |

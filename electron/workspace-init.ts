@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { agentTextForLayout, type LayoutVersion } from "../src/shared/workspace-layout";
+import { layoutVersion, workspaceFile } from "./layout";
+import { healStrayPaths } from "./layout-migration";
 
 /** Agy runtime directories the app owns and keeps in sync inside the workspace. */
 export const MANAGED_AGENT_DIRS = ["skills", "rules", "workflows"] as const;
@@ -24,16 +28,11 @@ export interface AgentSyncReport {
 }
 
 export async function initializeWorkspace(workspacePath: string): Promise<AgentSyncReport> {
-  await Promise.all([
-    mkdir(join(workspacePath, "profile"), { recursive: true }),
-    mkdir(join(workspacePath, "context", "structured"), { recursive: true }),
-    mkdir(join(workspacePath, "context", "broad"), { recursive: true }),
-    mkdir(join(workspacePath, "resumes"), { recursive: true }),
-    mkdir(join(workspacePath, "jobs"), { recursive: true }),
-    mkdir(join(workspacePath, "debrief"), { recursive: true }),
-    mkdir(join(workspacePath, "fallback-references"), { recursive: true }),
+  // Logical names; the layout decides where each one sits on disk.
+  await Promise.all([...["profile", "context/structured", "context/broad", "resumes", "jobs", "debrief", "fallback-references"].map((folder) => mkdir(workspaceFile(workspacePath, folder), { recursive: true })),
     mkdir(join(workspacePath, ".sensei"), { recursive: true }),
   ]);
+  await healStrayPaths(workspacePath).catch(() => undefined);
 
   return syncWorkspaceAgentFiles(workspacePath);
 }
@@ -129,12 +128,41 @@ async function digest(path: string): Promise<string | null> {
  */
 export async function syncWorkspaceAgentFiles(workspacePath: string, options: { sourceRoots?: string[]; now?: Date } = {}): Promise<AgentSyncReport> {
   const report: AgentSyncReport = { sourceRoot: null, updated: [], added: [], removed: [], backupPath: null };
-  const source = await resolveAgentSource(options.sourceRoots);
-  if (!source) return report;
-  report.sourceRoot = source.root;
+  const original = await resolveAgentSource(options.sourceRoots);
+  if (!original) return report;
+  report.sourceRoot = original.root;
+  // Agy reads real files, so a tidy workspace gets a copy of the instructions that names its folders.
+  const version = layoutVersion(workspacePath);
+  const rendered = version === 1 ? null : await renderAgentSource(original, version);
+  const source = rendered?.source ?? original;
+  try {
+    return await syncFrom(source, workspacePath, report, options.now ?? new Date());
+  } finally {
+    if (rendered) await rm(rendered.root, { recursive: true, force: true });
+  }
+}
+
+/** A temporary copy of the Agy files with every workspace path rewritten for the layout. */
+async function renderAgentSource(source: AgentSource, version: LayoutVersion): Promise<{ root: string; source: AgentSource }> {
+  const root = await mkdtemp(join(tmpdir(), "sensei-agents-"));
+  const dirs: AgentSource["dirs"] = {};
+  for (const dir of MANAGED_AGENT_DIRS) {
+    const from = source.dirs[dir];
+    if (!from || !await exists(from)) continue;
+    const to = join(root, dir);
+    await cp(from, to, { recursive: true });
+    for (const file of await listFiles(to)) if (file.endsWith(".md")) await writeFile(file, agentTextForLayout(await readFile(file, "utf8"), version));
+    dirs[dir] = to;
+  }
+  let agentsMd: string | null = null;
+  if (source.agentsMd) { agentsMd = join(root, "AGENTS.md"); await writeFile(agentsMd, agentTextForLayout(await readFile(source.agentsMd, "utf8"), version)); }
+  return { root, source: { root: source.root, dirs, agentsMd } };
+}
+
+async function syncFrom(source: AgentSource, workspacePath: string, report: AgentSyncReport, now: Date): Promise<AgentSyncReport> {
 
   const agentsRoot = join(workspacePath, ".agents");
-  const stamp = (options.now ?? new Date()).toISOString().replace(/[:.]/g, "-");
+  const stamp = now.toISOString().replace(/[:.]/g, "-");
   const backupRoot = join(agentsRoot, ".backups", stamp);
 
   const backup = async (target: string, label: string) => {

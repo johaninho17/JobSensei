@@ -1,4 +1,5 @@
 import type { IPty } from "node-pty";
+import { workspaceFile } from "./layout";
 import { statSync } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
 import type { ContextManifest } from "../src/shared/schemas";
@@ -172,7 +173,7 @@ export class TerminalSession {
       SENSEI_SELECTED_STRUCTURED_CONTEXT: this.manifest?.selectedStructuredPaths.join(",") ?? "",
       SENSEI_SELECTED_BROAD_CONTEXT: this.manifest?.selectedBroadPaths.join(",") ?? "",
       SENSEI_CONTEXT_MANIFEST: this.manifest ? join(this.workspacePath, ".sensei", "active-context.json") : "",
-      SENSEI_CONTEXT_POLICY: this.manifest ? join(this.workspacePath, this.manifest.policyPaths[0] ?? "context/denylist.md") : "",
+      SENSEI_CONTEXT_POLICY: this.manifest ? workspaceFile(this.workspacePath, this.manifest.policyPaths[0] ?? "context/denylist.md") : "",
       SENSEI_FALLBACK_REFERENCES: this.manifest ? join(this.workspacePath, this.manifest.fallbackReferenceRoots[0] ?? "fallback-references") : "",
     };
   }

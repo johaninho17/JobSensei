@@ -1,5 +1,6 @@
 // Adds the user's files to career context from inside the app (Add files or drag-and-drop), so nobody has to find the
 // workspace folder in Finder or Explorer. Files are copied, never moved; the originals are left as they are.
+import { workspaceFile } from "./workspace";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { basename, extname, join, resolve, sep } from "node:path";
@@ -26,7 +27,7 @@ async function freeName(folder: string, name: string): Promise<string> {
 export async function importContextFiles(workspacePath: string, sources: string[], kind: ContextKind): Promise<ImportResult> {
   const root = resolve(workspacePath);
   const folderRelative = CONTEXT_FOLDERS[kind];
-  const folder = join(root, ...folderRelative.split("/"));
+  const folder = workspaceFile(root, folderRelative);
   await mkdir(folder, { recursive: true });
   const result: ImportResult = { added: [], skipped: [] };
   for (const source of sources) {

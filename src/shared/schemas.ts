@@ -272,6 +272,8 @@ export const jobTrackerSchema = z.object({
   appliedAt: trackerDateSchema.nullable().default(null),
   nextFollowUpAt: trackerDateSchema.nullable().default(null),
   notes: z.string().max(5000).default(""),
+  /** The user's own labels for the job ("referral", "dream job"); a filter on the Jobs page. */
+  tags: z.array(z.string().max(30)).max(12).default([]),
   history: z.array(trackerEventSchema).max(200).default([]),
   interviews: z.array(interviewEventSchema).max(30).default([]),
   outcome: jobOutcomeSchema.nullable().default(null),
@@ -283,6 +285,7 @@ export const jobTrackerUpdateSchema = z.object({
   appliedAt: trackerDateSchema.nullable().optional(),
   nextFollowUpAt: trackerDateSchema.nullable().optional(),
   notes: z.string().max(5000).optional(),
+  tags: z.array(z.string().max(30)).max(12).optional(),
   interviews: z.array(interviewEventSchema).max(30).optional(),
   outcome: jobOutcomeSchema.nullable().optional(),
 }).strict();
@@ -1230,6 +1233,12 @@ export interface SenseiApi {
     skip(paths: string[]): Promise<void>;
   };
   /** Today: what happened, what's due, insights, and questions (electron/today.ts). */
+  /** Workspace folders: preview the tidy layout, apply it, undo it. */
+  layout: {
+    plan(): Promise<LayoutPlan>;
+    apply(): Promise<LayoutPlan>;
+    undo(): Promise<{ restored: number; skipped: string[] }>;
+  };
   today: {
     get(): Promise<TodayData>;
     answer(id: string, answer: string): Promise<{ addedPath: string | null }>;
@@ -1371,3 +1380,7 @@ export interface SenseiApi {
     onExit(callback: (code: number) => void): () => void;
   };
 }
+
+export type LayoutMove = { from: string; to: string; kind: "move" | "archive"; reason: string };
+/** What tidying the workspace folders would do (version 2 = already tidy). */
+export type LayoutPlan = { version: 1 | 2; moves: LayoutMove[]; conflicts: string[]; notes: string[]; canUndo: boolean };

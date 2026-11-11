@@ -19,6 +19,11 @@ const api: SenseiApi = {
     undoUpdate: () => ipcRenderer.invoke("content:undo-update"),
     skip: (paths) => ipcRenderer.invoke("content:skip", paths),
   },
+  layout: {
+    plan: () => ipcRenderer.invoke("layout:plan"),
+    apply: () => ipcRenderer.invoke("layout:apply"),
+    undo: () => ipcRenderer.invoke("layout:undo"),
+  },
   today: {
     get: () => ipcRenderer.invoke("today:get"),
     answer: (id, answer) => ipcRenderer.invoke("today:answer", id, answer),

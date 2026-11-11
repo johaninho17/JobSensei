@@ -1,4 +1,5 @@
 import { readFile, readdir, stat } from "node:fs/promises";
+import { toLogical } from "../src/shared/workspace-layout";
 import { basename, join, normalize } from "node:path";
 import {
   challengePracticeSchema,
@@ -256,9 +257,11 @@ function safeRelativeArtifact(jobId: string, value: unknown): string | null {
   return normalized === path && canonical.startsWith(`jobs/${jobId}/interviews/`) ? canonical : null;
 }
 
-function safeDebriefSource(value: unknown): value is string {
-  if (typeof value !== "string" || value.includes("\\") || value.split("/").includes("..")) return false;
-  return normalize(value).replaceAll("\\", "/") === value && value.startsWith("debrief/");
+/** A recording path Agy saved, as its logical path (a tidy workspace's instructions name the disk path). */
+function debriefSource(value: unknown): string | null {
+  if (typeof value !== "string" || value.includes("\\") || value.split("/").includes("..")) return null;
+  const logical = toLogical(value, 2);
+  return normalize(value).replaceAll("\\", "/") === value && logical.startsWith("debrief/") ? logical : null;
 }
 
 function parseArtifactPaths(jobId: string, value: unknown): InterviewArtifactPaths {
@@ -296,7 +299,7 @@ function parseRound(jobId: string, value: unknown, index: number): InterviewRoun
   const stage = normalizeStage(record.stage);
   const artifactPaths = parseArtifactPaths(jobId, record.artifactPaths);
   const debriefSourcePaths = Array.isArray(record.debriefSourcePaths)
-    ? record.debriefSourcePaths.filter(safeDebriefSource)
+    ? record.debriefSourcePaths.map(debriefSource).filter((path): path is string => Boolean(path))
     : [];
   const storedDashboardBrief = interviewDashboardBriefSchema.safeParse(record.dashboardBrief);
   return {

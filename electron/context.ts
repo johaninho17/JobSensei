@@ -1,5 +1,5 @@
 import { readdir, stat } from "node:fs/promises";
-import { basename, extname, join, relative, normalize } from "node:path";
+import { basename, extname, join, normalize } from "node:path";
 import type { ContextManifest, ContextSelection } from "../src/shared/schemas";
 type ContextSelectionInput = Partial<ContextSelection> | string[];
 import { contextManifestSchema } from "../src/shared/schemas";
@@ -7,7 +7,7 @@ import { readCandidateProfile } from "./candidate-profile";
 import { listResumePaths } from "./files";
 import { listJobFolders } from "./job-folders";
 import { readJson, writeJsonAtomic } from "./persistence";
-import { assertInsideWorkspace } from "./workspace";
+import { assertInsideWorkspace, logicalPath, workspaceFile } from "./workspace";
 
 const CONTEXT_ROOTS = ["context/structured", "context/broad", "resumes", "cover-letters"];
 const PRIMARY_CONTEXT_ROOTS = ["context/structured"];
@@ -27,12 +27,12 @@ async function collectFiles(root: string, workspacePath: string, output: Context
   for (const entry of entries) {
     if (entry.name === ".DS_Store" || entry.name === ".sensei" || entry.name === "node_modules" || entry.name === "example_evals") continue;
     const path = join(root, entry.name);
-    const relativeCandidate = relative(workspacePath, path).replaceAll("\\", "/");
+    const relativeCandidate = logicalPath(workspacePath, path);
     if (relativeCandidate.startsWith("jobs/") && (relativeCandidate.endsWith("/emails") || relativeCandidate.includes("/emails/"))) continue;
     if (entry.isDirectory()) await collectFiles(path, workspacePath, output);
     else {
       const info = await stat(path).catch(() => null);
-      if (info?.isFile()) output.push({ path: relative(workspacePath, path).replaceAll("\\", "/"), modifiedAt: info.mtime.toISOString(), sizeBytes: info.size });
+      if (info?.isFile()) output.push({ path: relativeCandidate, modifiedAt: info.mtime.toISOString(), sizeBytes: info.size });
     }
   }
 }
@@ -40,10 +40,10 @@ async function collectFiles(root: string, workspacePath: string, output: Context
 async function collectRelativePath(workspacePath: string, relativePath: string, output: ContextManifest["sourceFiles"]): Promise<void> {
   if (relativePath === LEGACY_FALLBACK_PATH || relativePath.startsWith(`${LEGACY_FALLBACK_PATH}/`) || relativePath === FALLBACK_REFERENCE_ROOTS[0] || relativePath.startsWith(`${FALLBACK_REFERENCE_ROOTS[0]}/`)) return;
   if (relativePath.startsWith("jobs/") && (relativePath.endsWith("/emails") || relativePath.includes("/emails/"))) return;
-  const path = join(workspacePath, relativePath);
+  const path = workspaceFile(workspacePath, relativePath);
   const info = await stat(path).catch(() => null);
   if (info?.isDirectory()) return collectFiles(path, workspacePath, output);
-  if (info?.isFile()) output.push({ path: relative(workspacePath, path).replaceAll("\\", "/"), modifiedAt: info.mtime.toISOString(), sizeBytes: info.size });
+  if (info?.isFile()) output.push({ path: logicalPath(workspacePath, path), modifiedAt: info.mtime.toISOString(), sizeBytes: info.size });
 }
 
 export async function buildContextManifest(workspacePath: string, selection: ContextSelectionInput = {}, resumeConfig: { baseResumePath?: string | null; secondaryResumePaths?: string[]; linkedinProfilePath?: string | null } = {}): Promise<ContextManifest> {

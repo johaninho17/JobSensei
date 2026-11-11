@@ -2,6 +2,8 @@
 
 ## Canonical layout
 
+Paths below are **logical** paths: what code, saved data, and tests use. A workspace on the tidy layout keeps some of them under other folder names on disk; `src/shared/workspace-layout.ts` owns the mapping and `assertInsideWorkspace` / `workspaceFile` / `logicalPath` (`electron/layout.ts`) are the only way to cross it. Never `join(workspace, "context", …)` directly for `context/`, `debrief/`, or the story bank and voice files. See `docs/workspace-format.md` § Folder layouts.
+
 ```text
 data/
 ├── context/

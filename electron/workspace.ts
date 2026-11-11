@@ -1,5 +1,8 @@
 import { readdir, stat } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
+import { assertInsideWorkspace, logicalPath, workspaceFile } from "./layout";
+
+export { assertInsideWorkspace, forgetLayout, layoutVersion, logicalPath, workspaceFile } from "./layout";
 import { readJson, writeJsonAtomic } from "./persistence";
 import type { Settings } from "../src/shared/schemas";
 import { executableAvailable, profileHasBaseResume, readCandidateProfile } from "./candidate-profile";
@@ -9,13 +12,6 @@ const CONTEXT_DIR = "context";
 const JOBS_DIR = "jobs";
 const INDEX_FILE = ".sensei/index.db";
 const CONTEXT_INDEX_FILE = ".sensei/context-index.json";
-
-export function assertInsideWorkspace(workspacePath: string, candidatePath: string): string {
-  const root = resolve(workspacePath);
-  const candidate = resolve(candidatePath);
-  if (candidate !== root && !candidate.startsWith(`${root}${sep}`)) throw new Error("The requested path is outside the selected workspace.");
-  return candidate;
-}
 
 async function countFiles(path: string): Promise<number> {
   let count = 0;
@@ -45,7 +41,7 @@ export async function summarizeWorkspace(workspacePath: string, repositoryRoot =
     const rootStat = await stat(root);
     if (!rootStat.isDirectory()) throw new Error("Workspace path is not a directory.");
     const stored = await readJson<{ fileCount?: unknown }>(join(root, CONTEXT_INDEX_FILE));
-    const contextFileCount = typeof stored?.fileCount === "number" ? stored.fileCount : await countFiles(join(root, CONTEXT_DIR));
+    const contextFileCount = typeof stored?.fileCount === "number" ? stored.fileCount : await countFiles(workspaceFile(root, CONTEXT_DIR));
     const jobEntries = await readdir(join(root, JOBS_DIR), { withFileTypes: true }).catch(() => []);
     const profile = await readCandidateProfile(root);
     const effectiveSettings = settings ?? {
@@ -73,4 +69,4 @@ export async function summarizeWorkspace(workspacePath: string, repositoryRoot =
   }
 }
 
-export function relativePath(workspacePath: string, path: string): string { return relative(workspacePath, assertInsideWorkspace(workspacePath, path)).replaceAll("\\", "/"); }
+export function relativePath(workspacePath: string, path: string): string { return logicalPath(workspacePath, path); }

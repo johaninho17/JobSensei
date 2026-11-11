@@ -23,7 +23,9 @@ import { markdownSaveInputSchema, pdfExportRequestSchema } from "../src/shared/s
 import { SettingsStore } from "./settings";
 import { deleteWorkspacePath, getBaseResume, listFileTree, listResumePaths, previewFile, revealWorkspacePath, saveMarkdownFile } from "./files";
 import { invalidateJobCache, listJobArtifacts, listJobFolders, listJobTree } from "./job-folders";
-import { assertInsideWorkspace, indexContext, summarizeWorkspace } from "./workspace";
+import { assertInsideWorkspace, indexContext, layoutVersion, summarizeWorkspace } from "./workspace";
+import { toLogical } from "../src/shared/workspace-layout";
+import { applyMigration, healStrayPaths, planMigration, undoMigration } from "./layout-migration";
 import { capWorkspaceNpmCache, initializeWorkspace, syncWorkspaceAgentFiles, type AgentSyncReport } from "./workspace-init";
 import { TerminalSession, appRoot as terminalAppRoot, resolveAgyExecutable } from "./terminal";
 import { buildContextManifest, contextSources, readActiveContextManifest } from "./context";
@@ -164,12 +166,20 @@ function requireWorkspace(): string {
   return workspacePath;
 }
 
+let strayTimer: NodeJS.Timeout | null = null;
+
 function startWorkspaceWatcher(path: string): void {
   workspaceWatcher?.close();
   if (workspaceWatchTimer) clearTimeout(workspaceWatchTimer);
   try {
     workspaceWatcher = watch(path, { recursive: true }, (_eventType, filename) => {
-      const changedPath = filename?.toString().replaceAll("\\", "/") ?? "";
+      const rawPath = filename?.toString().replaceAll("\\", "/") ?? "";
+      // A tidy workspace has no original folders: a file appearing in one was written to an old path. Bring it home.
+      if (layoutVersion(path) === 2 && /^(context|debrief)\//.test(rawPath)) {
+        if (strayTimer) clearTimeout(strayTimer);
+        strayTimer = setTimeout(() => void healStrayPaths(path).catch(() => undefined), 2000);
+      }
+      const changedPath = toLogical(rawPath, layoutVersion(path));
       if (!changedPath || changedPath.startsWith(".sensei/") || changedPath.includes("/.sensei/") || changedPath.includes(".tmp-") || changedPath === "context/index.json") return;
       invalidateJobCache(path, changedPath);
       workspaceChangedPaths.add(changedPath);
@@ -616,6 +626,37 @@ async function readinessNow() {
 }
 ipcMain.handle("setup:readiness", async () => readinessNow());
 // Today: built from the user's own data (electron/today.ts). Closed postings are checked in the background once a day.
+// Workspace folders: preview, tidy, undo (electron/layout-migration.ts; names owned by src/shared/workspace-layout.ts).
+ipcMain.handle("layout:plan", async () => planMigration(requireWorkspace()));
+ipcMain.handle("layout:apply", async () => {
+  const workspace = requireWorkspace();
+  await closeAgyForLayoutChange(workspace);
+  const plan = await applyMigration(workspace);
+  await afterLayoutChange(workspace);
+  return plan;
+});
+ipcMain.handle("layout:undo", async () => {
+  const workspace = requireWorkspace();
+  await closeAgyForLayoutChange(workspace);
+  const result = await undoMigration(workspace);
+  await afterLayoutChange(workspace);
+  return result;
+});
+
+/** Agy holds the old folder names in its loaded instructions, so it is closed first; never in the middle of a job. */
+async function closeAgyForLayoutChange(workspace: string): Promise<void> {
+  const queue = await readJobQueue(workspace).catch(() => null);
+  if (queue?.items.some((item) => item.status === "running")) throw new Error("A job is running in Agy. Wait for it to finish, then try again.");
+  terminal.stop();
+}
+
+/** Agy's instructions name real folders, so they are rewritten for the new layout; every cache starts over. */
+async function afterLayoutChange(workspace: string): Promise<void> {
+  logAgentSync(await syncWorkspaceAgentFiles(workspace).catch((error) => { console.error("Agy skill sync failed:", error); return null; }));
+  invalidateSearchIndex(workspace);
+  mainWindow?.webContents.send("workspace:changed", ["context", "debrief", "profile"]);
+}
+
 ipcMain.handle("today:get", async () => {
   const workspace = requireWorkspace();
   const jobs = await listJobFolders(workspace);
@@ -657,7 +698,7 @@ ipcMain.handle("profile:save-voice", async (_event, text: unknown) => {
   const relativePath = profile?.sources.applicationVoicePath ?? "context/application_voice_profile.md";
   if (!/^context\/[^/]+\.md$/.test(relativePath)) throw new Error("The voice profile must be a Markdown file in the context folder.");
   const path = assertInsideWorkspace(workspace, join(workspace, relativePath));
-  await mkdir(join(workspace, "context"), { recursive: true });
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, text.endsWith("\n") ? text : `${text}\n`, "utf8");
   return relativePath;
 });
