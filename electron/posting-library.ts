@@ -11,6 +11,7 @@ import { candidatePath, readRoster } from "./candidates";
 import { STAGED_JDS_DIR, setStagedCompany, stageLinkJobDescription, stagePastedJobDescription } from "./jd-fetch";
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { postingRecordFor } from "./posting-record";
+import { loadCanonicalResumeBaseline } from "./canonical-resume";
 
 /** The library is laid out like a workspace, so the posting cleanup and staging code run on it unchanged. */
 export const libraryPath = (root: string) => join(root, RECRUITER_DIR, "library");
@@ -65,6 +66,14 @@ async function candidateTargets(folder: string): Promise<CandidateTargets> {
   return parsed.success ? parsed.data.preferences.targets : EMPTY_CANDIDATE_TARGETS;
 }
 
+/** The employer the base resume lists as present (e.g. "2023 - Present"), or null. */
+async function currentEmployer(folder: string, baseResumePath: string | null): Promise<string | null> {
+  if (!baseResumePath) return null;
+  const baseline = await loadCanonicalResumeBaseline(folder, baseResumePath).catch(() => null);
+  const first = baseline?.employers[0];
+  return first && /present|current|now/i.test(first.dateRange ?? "") ? first.name : null;
+}
+
 /** Every candidate who isn't archived, best match first, each with its reasons. */
 export async function suggestCandidates(root: string, id: string): Promise<CandidateSuggestion[]> {
   const markdown = await readFile(stagedFile(libraryPath(root), checkId(id), ".md"), "utf8");
@@ -75,7 +84,7 @@ export async function suggestCandidates(root: string, id: string): Promise<Candi
   const rows = await Promise.all(roster.candidates.filter((candidate) => candidate.status !== "archived").map(async (candidate) => {
     const folder = await candidatePath(root, candidate.id);
     const [targets, existing, settings] = await Promise.all([candidateTargets(folder), existingPostings(folder), readFile(join(folder, ".sensei", "app", "settings.json"), "utf8").then((raw) => JSON.parse(raw) as { baseResumePath?: string | null }, () => null)]);
-    const match = matchCandidate(posting, targets, existing);
+    const match = matchCandidate(posting, targets, existing, await currentEmployer(folder, settings?.baseResumePath ?? null));
     // A candidate without a base resume can't be tailored for yet; say so instead of queuing a run that would fail.
     if (!settings?.baseResumePath) {
       const blocker = "No base resume yet (open them, then Setup)";

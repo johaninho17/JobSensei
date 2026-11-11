@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { JobFolderSummary, JobTrackerUpdate } from "../shared/schemas";
 import type { ApplicationReview } from "../shared/review";
 import { effectiveAppliedAt, effectiveStatus, statusLabel } from "../shared/tracker";
+import { applicationFacts, type ApplicationFact } from "../shared/application-facts";
 
 const MUST_LABEL = { met: "Met", learnable: "To learn", blocker: "Blocker" } as const;
 
@@ -11,6 +12,8 @@ export function ReviewPanel({ job, onUpdateTracker, onOpenResume }: { job: JobFo
   const [review, setReview] = useState<ApplicationReview | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [changedOnly, setChangedOnly] = useState(false);
+  const [facts, setFacts] = useState<ApplicationFact[] | null>(null);
+  useEffect(() => { void window.sensei.profile.get().then((profile) => setFacts(applicationFacts(profile)), () => setFacts([])); }, [job.id]);
   useEffect(() => { setReview(undefined); void window.sensei.candidates.review(job.id).then(setReview, (caught: unknown) => setError(caught instanceof Error ? caught.message : "Couldn't read the drafts.")); }, [job.id, job.modifiedAt]);
   const status = effectiveStatus(job);
   const applied = status !== "saved";
@@ -33,6 +36,7 @@ export function ReviewPanel({ job, onUpdateTracker, onOpenResume }: { job: JobFo
         <p>{[job.company, job.title].filter(Boolean).join(" · ")}{job.rating !== null ? ` · fit ${job.rating.toFixed(1)} of 5` : ""}</p>
         {job.mustHaves.length > 0 && <ul className="review-musts">{job.mustHaves.map((item) => <li key={item.requirement} className={`is-${item.status}`}><span>{MUST_LABEL[item.status]}</span> {item.requirement}</li>)}</ul>}
         {job.requirementGaps.length > 0 && <><h4>Gaps</h4><ul>{job.requirementGaps.slice(0, 8).map((gap) => <li key={gap}>{gap}</li>)}</ul></>}
+        <FormAnswers facts={facts} />
       </div>
       <div className="review-resume">
         <div className="review-resume-head"><h3>Tailored resume</h3><label className="setup-check"><input type="checkbox" checked={changedOnly} onChange={(event) => setChangedOnly(event.target.checked)} /> Changed lines only</label></div>
@@ -47,4 +51,18 @@ export function ReviewPanel({ job, onUpdateTracker, onOpenResume }: { job: JobFo
       </div>
     </div>
   </section>;
+}
+
+/** The candidate's application facts with copy buttons, for filling in the employer's form (recruiter plan R8 P3). */
+function FormAnswers({ facts }: { facts: ApplicationFact[] | null }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  if (facts === null) return null;
+  const copy = (fact: ApplicationFact, index: number) => void navigator.clipboard.writeText(fact.value).then(() => { setCopied(`${index}`); window.setTimeout(() => setCopied(null), 1500); }, () => undefined);
+  return <div className="form-answers">
+    <h4>For the application form</h4>
+    {facts.length ? <ul>{facts.map((fact, index) => <li key={`${index}-${fact.label}`}>
+      <span><small>{fact.label}</small> {fact.value}</span>
+      <button className="btn-link" onClick={() => copy(fact, index)}>{copied === `${index}` ? "Copied" : "Copy"}</button>
+    </li>)}</ul> : <p className="muted">No form answers yet. Add them on the Candidate page under Application facts.</p>}
+  </div>;
 }

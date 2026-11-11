@@ -33,7 +33,16 @@ export function yearlyPay(pay: PostingFacts["pay"]): { min: number | null; max: 
 
 const NO_SPONSORSHIP = /\b(?:no|not|unable to|cannot|can't|will not|won't|do not|does not)\b[^.]{0,40}\bsponsor|\bwithout (?:the need for |current or future )?(?:visa )?sponsorship|\bcitizens? only\b|\bmust be a u\.?s\.? citizen|\bsecurity clearance\b|\bclearance required\b/i;
 
-export function matchCandidate(posting: PostingFacts, targets: CandidateTargets, existing: ExistingPosting[] = []): CandidateMatch {
+/** Same company, ignoring legal suffixes and punctuation ("Northstar Labs, Inc." = "northstar labs"). */
+export function sameCompany(a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (value: string | null | undefined) => (value ?? "").toLowerCase().replace(/\b(?:inc|llc|ltd|corp|corporation|co|company|gmbh|plc)\b\.?/g, "").replace(/[^a-z0-9]+/g, "");
+  const left = norm(a);
+  const right = norm(b);
+  return left.length >= 3 && right.length >= 3 && left === right;
+}
+
+/** `currentEmployer`: the employer the base resume lists as present; never applied to (recruiter plan R8 P3). */
+export function matchCandidate(posting: PostingFacts, targets: CandidateTargets, existing: ExistingPosting[] = [], currentEmployer: string | null = null): CandidateMatch {
   const reasons: MatchReason[] = [];
   let score = 0;
   const title = posting.title ?? "";
@@ -78,11 +87,14 @@ export function matchCandidate(posting: PostingFacts, targets: CandidateTargets,
     else { score -= 2; reasons.push({ good: false, text: `Pays up to ${money(top)}; their floor is ${money(targets.salaryFloor)}` }); }
   }
 
-  const blocker = targets.needsSponsorship && posting.workAuthorization && NO_SPONSORSHIP.test(posting.workAuthorization) ? "Needs sponsorship; this posting won't sponsor" : null;
+  const skipped = targets.skipCompanies.find((company) => sameCompany(company, posting.company));
+  const blocker = currentEmployer && sameCompany(currentEmployer, posting.company) ? `${posting.company} is their current employer`
+    : skipped ? `${posting.company} is on their companies to skip`
+    : targets.needsSponsorship && posting.workAuthorization && NO_SPONSORSHIP.test(posting.workAuthorization) ? "Needs sponsorship; this posting won't sponsor" : null;
   if (blocker) reasons.unshift({ good: false, text: blocker });
   if (duplicate) reasons.unshift({ good: false, text: duplicate });
   const hasTargets = Boolean(targets.roles.length || targets.workModes.length || targets.locations.length || targets.level || targets.salaryFloor);
-  if (!hasTargets) reasons.push({ good: false, text: "No job targets set yet (Setup → Job targets)" });
+  if (!hasTargets) reasons.push({ good: false, text: "No brief yet (Candidate → Brief)" });
   return { score, suggested: hasTargets && !blocker && !duplicate && score >= 1, blocker, duplicate, reasons };
 }
 

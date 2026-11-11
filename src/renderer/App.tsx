@@ -1439,7 +1439,7 @@ function SetupLine({ readiness, onOpen }: { readiness: Readiness | null; onOpen:
 }
 
 /** Setup items that are filled in right in the row instead of in Settings. */
-const INLINE_SETUP: ReadonlySet<ReadinessItem["action"]> = new Set(["story", "logistics", "private-names", "voice", "targets", "cover-letter"]);
+const INLINE_SETUP: ReadonlySet<ReadinessItem["action"]> = new Set(["story", "logistics", "private-names", "voice", "targets", "cover-letter", "facts"]);
 const VOICE_TEMPLATE = [
   "# Application voice profile",
   "- Plain words and short sentences; no buzzwords.",
@@ -1468,6 +1468,10 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
     locations: (profile?.preferences.targets.locations ?? []).join("\n"),
     level: profile?.preferences.targets.level ?? "",
     salaryFloor: profile?.preferences.targets.salaryFloor ? String(profile.preferences.targets.salaryFloor) : "",
+    skip: (profile?.preferences.targets.skipCompanies ?? []).join("\n"),
+    email: profile?.identity.email ?? "", phone: profile?.identity.phone ?? "", links: (profile?.identity.links ?? []).join("\n"),
+    factLocation: profile?.identity.location ?? profile?.preferences.interview.location ?? "",
+    extra: (profile?.preferences.applicationFacts.extra ?? []).map((fact) => `${fact.label}: ${fact.value}`).join("\n"),
   }));
   const [modes, setModes] = useState<string[]>(() => profile?.preferences.targets.workModes ?? []);
   const [sponsorship, setSponsorship] = useState(() => profile?.preferences.targets.needsSponsorship ?? false);
@@ -1496,12 +1500,19 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
         next = await window.sensei.profile.updateDetails({ confidentialNames: [...new Set(values.names!.split(/\n|,/).map((name) => name.trim()).filter(Boolean))] });
       } else if (action === "voice") {
         await window.sensei.profile.saveVoice(values.voice!);
+      } else if (action === "facts" && profile) {
+        next = await window.sensei.candidates.saveFacts({
+          email: values.email, phone: values.phone, location: values.factLocation,
+          links: values.links!.split("\n").map((line) => line.trim()).filter(Boolean),
+          workAuthorization: values.workAuthorization, compensation: values.compensation, noticePeriod: values.noticePeriod, workArrangement: values.workArrangement,
+          extra: values.extra!.split("\n").map((line) => { const at = line.indexOf(":"); return at > 0 ? { label: line.slice(0, at).trim(), value: line.slice(at + 1).trim() } : null; }).filter((fact): fact is { label: string; value: string } => Boolean(fact?.label && fact.value)),
+        });
       } else if (action === "cover-letter" && profile) {
         next = await window.sensei.profile.updatePreferences({ ...profile.preferences, coverLetter: { ...profile.preferences.coverLetter, enabled: lettersOn } });
       } else if (action === "targets" && profile) {
         const lines = (value: string) => [...new Set(value.split(/\n|,/).map((line) => line.trim()).filter(Boolean))].slice(0, 12);
         const floor = Number(values.salaryFloor!.replace(/[^0-9.]/g, ""));
-        next = await window.sensei.profile.updatePreferences({ ...profile.preferences, targets: { roles: lines(values.roles!), locations: lines(values.locations!), workModes: modes as CandidateProfile["preferences"]["targets"]["workModes"], level: (values.level || null) as CandidateProfile["preferences"]["targets"]["level"], salaryFloor: values.salaryFloor!.trim() && floor > 0 ? Math.round(floor) : null, needsSponsorship: sponsorship } });
+        next = await window.sensei.profile.updatePreferences({ ...profile.preferences, targets: { roles: lines(values.roles!), locations: lines(values.locations!), workModes: modes as CandidateProfile["preferences"]["targets"]["workModes"], level: (values.level || null) as CandidateProfile["preferences"]["targets"]["level"], salaryFloor: values.salaryFloor!.trim() && floor > 0 ? Math.round(floor) : null, needsSponsorship: sponsorship, skipCompanies: lines(values.skip!).slice(0, 40) } });
       }
       onSaved(next);
       onClose();
@@ -1536,6 +1547,18 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
       <p className="muted">A few lines about how you sound. Agy reads them before every letter and answer. Edit the starting lines so they sound like you.</p>
       <label className="setup-field"><span>{voicePath}</span><textarea rows={8} value={values.voice} onChange={set("voice")} /></label>
     </>}
+    {action === "facts" && <>
+      <p className="muted">What employer forms ask for. Each job shows these with copy buttons while you fill in its form. They are never sent to Agy and never guessed; leave anything blank you don't have.</p>
+      {field("email", "Email", "alex@example.com")}
+      {field("phone", "Phone", "(555) 010-0000")}
+      {field("factLocation", "Location", "Denver, CO")}
+      <label className="setup-field"><span>Links (one per line)</span><textarea rows={2} value={values.links} onChange={set("links")} placeholder={"https://linkedin.com/in/…\nhttps://portfolio.example.com"} /></label>
+      {field("workAuthorization", "Work authorization", "US citizen; no sponsorship needed")}
+      {field("compensation", "Pay expectation", "$90,000–$105,000 base")}
+      {field("noticePeriod", "Start date or notice", "Two weeks' notice")}
+      {field("workArrangement", "Work setup", "Hybrid or remote")}
+      <label className="setup-field"><span>Other answers (one per line, "Question: answer")</span><textarea rows={3} value={values.extra} onChange={set("extra")} placeholder={"Willing to relocate: No\nHow did you hear about us: Recruiter"} /></label>
+    </>}
     {action === "cover-letter" && <>
       <p className="muted">When on, each application also gets a cover letter about {profile?.identity.fullName ?? "the candidate"}: their career story, how they work, in their voice. A letter is written only when there is enough real material: the career story (direction plus two of the three questions), a writing voice, and at least two checked career files besides the base resume. Otherwise the job page says what's missing.</p>
       <label className="setup-check"><input type="checkbox" checked={lettersOn} onChange={(event) => setLettersOn(event.target.checked)} /> Write cover letters</label>
@@ -1548,6 +1571,7 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
       <label className="setup-field"><span>Level</span><select value={values.level} onChange={(event) => setValues((current) => ({ ...current, level: event.target.value }))}><option value="">Any</option>{["intern", "junior", "mid", "senior", "staff", "lead", "manager", "director", "executive"].map((level) => <option key={level} value={level}>{level[0]!.toUpperCase() + level.slice(1)}</option>)}</select></label>
       {field("salaryFloor", "Lowest yearly pay (US dollars)", "e.g. 90000")}
       <label className="setup-check"><input type="checkbox" checked={sponsorship} onChange={(event) => setSponsorship(event.target.checked)} /> Needs visa sponsorship</label>
+      <label className="setup-field"><span>Companies to skip (one per line; the current employer on the resume is always skipped)</span><textarea rows={2} value={values.skip} onChange={set("skip")} placeholder={"A former employer\nA company they've already applied to"} /></label>
     </>}
     {problem && <p className="inline-error" role="alert">{problem}</p>}
     <div className="onboarding-actions"><button className="btn-primary" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</button><button className="btn-quiet" onClick={onClose}>Cancel</button></div>

@@ -33,6 +33,7 @@ const api: SenseiApi = {
     nextQueued: () => ipcRenderer.invoke("candidates:next-queued"),
     pipeline: () => ipcRenderer.invoke("pipeline:list"),
     review: (jobId) => ipcRenderer.invoke("review:get", jobId),
+    saveFacts: (input) => ipcRenderer.invoke("candidates:save-facts", input),
     exportCandidate: (candidateId) => ipcRenderer.invoke("candidates:export", candidateId),
     deleteCandidate: (candidateId, typedName) => ipcRenderer.invoke("candidates:delete", candidateId, typedName),
     setPipelineStatus: (entries, status) => ipcRenderer.invoke("pipeline:set-status", entries, status),

@@ -58,7 +58,7 @@ describe("adding a candidate is the whole setup", () => {
     const { folder, outside, store } = await candidateFolder();
     await applyIntake(folder, store, { resumePath: join(outside, "Alex Morgan resume.md") });
     const readiness = await computeReadiness({ workspacePath: folder, profile: await readCandidateProfile(folder), settings: await store.get(), manifest: null, contextFileCount: 0, agy: { installed: true, signedIn: true }, features: featuresFor("recruiter") });
-    expect(readiness.items.map((item) => item.id)).toEqual(["resume", "agy", "context", "targets", "private-names", "cover-letter"]);
+    expect(readiness.items.map((item) => item.id)).toEqual(["resume", "agy", "context", "targets", "facts", "private-names", "cover-letter"]);
     expect(readiness.ready).toBe(true);
     expect(readiness.items.find((item) => item.id === "resume")?.title).toBe("Base resume");
   });
@@ -107,5 +107,31 @@ describe("no interview actions in the Recruiter Edition", () => {
     expect(featuresFor("recruiter").interviews).toBe(false);
     const source = await readFile(new URL("../src/renderer/job-actions.ts", import.meta.url), "utf8");
     expect(source).toMatch(/if \(FEATURES\.interviews\) \{[\s\S]*Prepare recruiter interview[\s\S]*Analyze latest debrief[\s\S]*\n {2}\}/);
+  });
+});
+
+describe("brief and application facts (plan R8 P3)", () => {
+  it("never suggests a company on the skip list or the candidate's current employer", async () => {
+    const { matchCandidate } = await import("../src/shared/candidate-match");
+    const { EMPTY_CANDIDATE_TARGETS } = await import("../src/shared/schemas");
+    const posting = { title: "Support Engineer", company: "Northstar Labs, Inc.", location: null, url: null, pay: null, workSetup: null, seniority: null, workAuthorization: null };
+    const targets = { ...EMPTY_CANDIDATE_TARGETS, roles: ["Support Engineer"] };
+    expect(matchCandidate(posting, targets, [], "Northstar Labs")).toMatchObject({ suggested: false, blocker: "Northstar Labs, Inc. is their current employer" });
+    expect(matchCandidate(posting, { ...targets, skipCompanies: ["northstar labs"] })).toMatchObject({ suggested: false, blocker: "Northstar Labs, Inc. is on their companies to skip" });
+    expect(matchCandidate(posting, targets, [], "Juniper Analytics").suggested).toBe(true);
+  });
+
+  it("saves the facts sheet to the profile's own fields and lists only what is filled in", async () => {
+    const { saveApplicationFacts } = await import("../electron/candidate-facts");
+    const { applicationFacts } = await import("../src/shared/application-facts");
+    const { folder } = await candidateFolder();
+    const profile = await saveApplicationFacts(folder, { email: "alex@example.com", phone: " ", workAuthorization: "US citizen", compensation: "$80,000 base", extra: [{ label: "Willing to relocate", value: "No" }, { label: "Empty", value: "" }], links: ["https://example.com/alex"] });
+    expect(profile.identity.email).toBe("alex@example.com");
+    expect(profile.identity.phone).toBeNull();
+    expect(profile.preferences.interview.workAuthorization).toBe("US citizen");
+    expect(applicationFacts(profile)).toEqual([
+      { label: "Full name", value: "Alex Morgan" }, { label: "Email", value: "alex@example.com" }, { label: "Links", value: "https://example.com/alex" },
+      { label: "Work authorization", value: "US citizen" }, { label: "Pay expectation", value: "$80,000 base" }, { label: "Willing to relocate", value: "No" },
+    ]);
   });
 });

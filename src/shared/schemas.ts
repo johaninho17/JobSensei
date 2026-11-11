@@ -95,9 +95,20 @@ export const candidateTargetsSchema = z.object({
   /** Lowest yearly pay they'd take, in US dollars. */
   salaryFloor: z.number().int().nonnegative().max(10_000_000).nullable().default(null),
   needsSponsorship: z.boolean().default(false),
+  /** Companies never to apply to (the current employer is added from the resume automatically). */
+  skipCompanies: z.array(z.string().trim().min(1).max(120)).max(40).default([]),
 });
 export type CandidateTargets = z.infer<typeof candidateTargetsSchema>;
-export const EMPTY_CANDIDATE_TARGETS: CandidateTargets = { roles: [], locations: [], workModes: [], level: null, salaryFloor: null, needsSponsorship: false };
+export const EMPTY_CANDIDATE_TARGETS: CandidateTargets = { roles: [], locations: [], workModes: [], level: null, salaryFloor: null, needsSponsorship: false, skipCompanies: [] };
+
+/**
+ * Answers the employer's form asks for that the profile doesn't already hold (Recruiter Edition, plan R8 P3): the
+ * recruiter enters them; they're shown with copy buttons while filling a form and are never sent to Agy.
+ */
+export const applicationFactsSchema = z.object({
+  extra: z.array(z.object({ label: z.string().trim().min(1).max(80), value: z.string().trim().max(500) })).max(30).default([]),
+});
+export type ApplicationFacts = z.infer<typeof applicationFactsSchema>;
 
 export const candidateProfileSchema = z.object({
   schemaVersion: z.literal(1),
@@ -160,6 +171,7 @@ export const candidateProfileSchema = z.object({
     }),
     interview: interviewLogisticsSchema.default(EMPTY_INTERVIEW_LOGISTICS),
     targets: candidateTargetsSchema.default(EMPTY_CANDIDATE_TARGETS),
+    applicationFacts: applicationFactsSchema.default({ extra: [] }),
   }),
   truth: z.object({
     factualAuthority: z.string().default("Selected structured career evidence"),
@@ -1300,6 +1312,8 @@ export interface SenseiApi {
     deleteCandidate(candidateId: string, typedName: string): Promise<{ name: string; removed: string[] }>;
     /** A drafted job's resume lines, what changed from the base, and the evidence behind each change (recruiter plan R8). */
     review(jobId: string): Promise<import("./review").ApplicationReview>;
+    /** Saves the open candidate's application facts sheet (recruiter plan R8 P3). */
+    saveFacts(input: { email?: string; phone?: string; location?: string; links?: string[]; workAuthorization?: string; compensation?: string; noticePeriod?: string; workArrangement?: string; extra?: Array<{ label: string; value: string }> }): Promise<CandidateProfile>;
     /** Every job across candidates (recruiter plan R5). */
     pipeline(): Promise<import("./candidate-match").PipelineRow[]>;
     /** Sets one status on several jobs; returns each job's status before, for Undo. */

@@ -854,3 +854,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .review-section li.is-changed > span { background: var(--leaf-tint); border-radius: var(--radius-s); padding: 0 var(--space-1); }
 .review-section details { margin-top: 2px; font-size: var(--fs-13); color: var(--muted); }
 .review-section details small { font-weight: 600; margin-right: var(--space-1); }
+.form-answers ul { list-style: none; padding: 0 !important; display: grid; gap: var(--space-1); }
+.form-answers li { display: flex; justify-content: space-between; gap: var(--space-2); align-items: baseline; padding: 2px 0; border-bottom: 1px solid var(--line); }
+.form-answers li small { display: block; color: var(--muted); font-size: var(--fs-13); }
+.form-answers li span { overflow-wrap: anywhere; }

@@ -49,7 +49,7 @@ describe("who a posting suits (matchCandidate)", () => {
   it("never suggests a candidate with no targets, and says how to add them", () => {
     const match = matchCandidate(posting, EMPTY_CANDIDATE_TARGETS);
     expect(match.suggested).toBe(false);
-    expect(match.reasons.at(-1)?.text).toMatch(/No job targets set yet/);
+    expect(match.reasons.at(-1)?.text).toMatch(/No brief yet/);
   });
 
   it("turns hourly and monthly pay into yearly pay", () => {

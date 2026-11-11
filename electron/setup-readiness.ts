@@ -127,12 +127,21 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
 
   if (features.candidates) {
     const targets = profile?.preferences.targets;
-    const set = targets ? [targets.roles.length && "roles", targets.workModes.length && "work setup", targets.locations.length && "locations", targets.level && "level", targets.salaryFloor && "pay floor"].filter(Boolean) as string[] : [];
+    const set = targets ? [targets.roles.length && "roles", targets.workModes.length && "work setup", targets.locations.length && "locations", targets.level && "level", targets.salaryFloor && "pay floor", targets.skipCompanies.length && "companies to skip"].filter(Boolean) as string[] : [];
     add({
       id: "targets", level: "recommended", state: set.length ? "done" : "missing", action: "targets", path: null,
-      title: "Job targets",
-      detail: set.length ? `Set: ${set.join(", ")}.` : "Not set yet: roles, work setup, locations, level, pay floor.",
-      improves: "\"Who is this for?\" suggests this candidate for postings that fit, and says why.",
+      title: "Brief",
+      detail: set.length ? `Set: ${set.join(", ")}.` : "Not set yet: roles, work setup, locations, level, pay floor, companies to skip.",
+      improves: "\"Who is this for?\" suggests this candidate for postings that fit, says why, and warns about companies to skip.",
+    });
+    const identity = profile?.identity;
+    const logistics = profile?.preferences.interview;
+    const facts = [identity?.email, identity?.phone, identity?.location || logistics?.location, logistics?.workAuthorization, logistics?.compensation, logistics?.noticePeriod].filter((value) => value && value.trim()).length;
+    add({
+      id: "facts", level: "recommended", state: facts >= 4 ? "done" : "missing", action: "facts", path: null,
+      title: "Application facts",
+      detail: facts ? `${facts} of 6 common form answers filled in.` : "Not filled in yet: email, phone, location, work authorization, pay expectation, start date.",
+      improves: "The details every employer form asks for, with copy buttons on each job. Never sent to Agy.",
     });
   }
 
