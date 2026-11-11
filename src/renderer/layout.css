@@ -957,6 +957,13 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .candidates-nav { display: flex; gap: var(--space-1); padding: var(--space-2) var(--space-5, 24px) 0; border-bottom: 1px solid var(--line); }
 .candidates-nav button { padding: var(--space-2) var(--space-3); border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: none; font: 600 var(--fs-13) var(--font-ui); cursor: pointer; }
 .candidates-nav button[aria-current="page"] { color: var(--ink); border-bottom-color: var(--brass); }
+.recruiter-settings { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 200px); margin-top: 0; overflow-y: auto; }
+.recruiter-settings-tabs { padding: 0; margin-bottom: var(--space-3); }
+.recruiter-settings-body section { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
+.recruiter-settings-body h3, .candidate-settings h3 { margin: 0; font: 600 var(--fs-15) var(--font-ui); }
+.recruiter-settings-body label:not(.settings-toggle-row), .candidate-settings > label { display: grid; gap: var(--space-1); }
+.recruiter-settings-body label small, .candidate-settings label small { color: var(--muted); font-weight: 400; }
+.candidate-settings { display: grid; gap: var(--space-3); max-width: 640px; }
 .base-resume-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 /* The base resume is shown to read; replacing it is the way to change it (no edit or export toolbar here). */
 .base-resume-tab .document-meta { display: none; }

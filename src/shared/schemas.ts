@@ -147,7 +147,8 @@ export const candidateProfileSchema = z.object({
   }),
   preferences: z.object({
     resume: z.object({
-      includeSummary: z.boolean().default(false),
+      // null = not chosen: off in the regular app, the recruiter's default in the Recruiter Edition.
+      includeSummary: z.boolean().nullable().default(null),
       totalExperienceBullets: z.object({ min: z.number().int().min(1), max: z.number().int().min(1) }).default({ min: 10, max: 14 }),
       currentEmployerBullets: z.object({ min: z.number().int().min(1), max: z.number().int().min(1) }).default({ min: 6, max: 8 }),
       skillsCategories: z.array(z.string()).default([]),
@@ -1277,6 +1278,9 @@ export interface SenseiApi {
     switchTo(id: string): Promise<void>;
     /** Closes the open candidate; reload to show the Candidates page. */
     showAll(): Promise<void>;
+    /** The recruiter's name, agency, and defaults for every candidate. */
+    recruiterSettings(): Promise<import("./candidates").RecruiterSettings>;
+    saveRecruiterSettings(input: { recruiterName?: string | null; agency?: string | null; defaults?: import("./candidates").RecruiterDefaults }): Promise<import("./candidates").RecruiterSettings>;
     rename(id: string, name: string): Promise<import("./candidates").CandidateEntry>;
     setStatus(id: string, status: import("./candidates").CandidateStatus): Promise<import("./candidates").CandidateEntry>;
     /** The open candidate's recruiter notes (recruiter plan R4). */

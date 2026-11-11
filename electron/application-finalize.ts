@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { recruiterDefaultsFor } from "./recruiter-defaults";
 import { postingRecordFor } from "./posting-record";
 import { basename, join, resolve } from "node:path";
 import {
@@ -321,7 +322,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
     throw new Error(`The job has no company name, so the resume can't be named. Rerun: sensei application:finalize ${jobId} --company "<employer name from the JD>"`);
   }
   const expandedBundle = bundle ? pruneBundleSkills(expandBundleBaselines(bundle, snapshot.canonicalResume, applicationContext), snapshot) : null;
-  const summaryEditable = summaryIsEditable(snapshot.canonicalResume, candidateProfile);
+  const summaryEditable = summaryIsEditable(snapshot.canonicalResume, candidateProfile, (await recruiterDefaultsFor(workspace))?.tailorSummary ?? false);
   const generated = expandedBundle
     ? materializeBundle(expandedBundle, snapshot, candidateProfile?.identity.artifactPrefix ?? "Candidate", jobCompany, summaryEditable)
     : null;

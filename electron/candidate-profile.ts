@@ -54,7 +54,7 @@ export async function createCandidateProfile(
     },
     preferences: {
       resume: {
-        includeSummary: false,
+        includeSummary: null,
         totalExperienceBullets: { min: 10, max: 14 },
         currentEmployerBullets: { min: 6, max: 8 },
         skillsCategories: [],

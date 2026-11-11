@@ -5,6 +5,7 @@ import type { CandidateEntry, CandidatesState } from "../shared/candidates";
 import type { CandidateSuggestion, LibraryPosting } from "../shared/candidate-match";
 import { PrivacyDialog } from "./Privacy";
 import { PipelineView } from "./Pipeline";
+import { RecruiterSettingsDialog } from "./RecruiterSettings";
 import { daysAgo, reportText, shortlistText, type Proposal, type ReportRow } from "../shared/recruiter-insight";
 
 const message = (caught: unknown) => (caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "Something went wrong.");
@@ -88,6 +89,7 @@ function AddCandidateForm({ autoFocus = false, onCancel }: { autoFocus?: boolean
  */
 function CandidatesHome({ state }: { state: CandidatesState }) {
   const [privacy, setPrivacy] = useState(false);
+  const [settings, setSettings] = useState(false);
   const [adding, setAdding] = useState(false);
   const [approving, setApproving] = useState<CandidateEntry | null>(null);
   const [reporting, setReporting] = useState<CandidateEntry | null>(null);
@@ -101,7 +103,7 @@ function CandidatesHome({ state }: { state: CandidatesState }) {
   return <main className="candidates-home" aria-labelledby="candidates-title">
     <header className="candidates-top">
       <span className="candidates-brand">{EDITION.productName}</span>
-      <button className="btn-link" onClick={() => setPrivacy(true)}>Privacy and terms</button>
+      <span><button className="btn-link" onClick={() => setSettings(true)}>Settings</button> · <button className="btn-link" onClick={() => setPrivacy(true)}>Privacy and terms</button></span>
     </header>
     {/* The recruiter's pages when no candidate is open (plan Q1); inside a candidate they are in the sidebar. */}
     <nav className="candidates-nav" aria-label="Recruiter">
@@ -140,6 +142,7 @@ function CandidatesHome({ state }: { state: CandidatesState }) {
       <div className="company-dialog intake-dialog" role="dialog" aria-modal="true" aria-labelledby="intake-home-title"><h2 id="intake-home-title">Add a candidate</h2><AddCandidateForm autoFocus onCancel={() => setAdding(false)} /></div>
     </div>}
     {privacy && <PrivacyDialog onClose={() => setPrivacy(false)} />}
+    {settings && <RecruiterSettingsDialog onClose={() => setSettings(false)} />}
     {approving && <ApprovalDialog candidate={approving} onClose={() => { setApproving(null); reloadForCandidate(); }} />}
     {reporting && <ReportDialog candidate={reporting} target={state.overview?.[reporting.id]?.weeklyTarget ?? null} onClose={() => setReporting(null)} />}
   </main>;

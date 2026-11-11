@@ -274,3 +274,42 @@ describe("the context fingerprint ignores how the files were chosen (found live 
     expect(currentManifestHash(explicit, legacy)).not.toBe(legacy);
   });
 });
+
+describe("recruiter defaults every candidate inherits (plan Q2, 2026-11-11)", () => {
+  it("the candidate's own choice wins, then the recruiter's default, then the app's", async () => {
+    const { effectiveSetting } = await import("../src/shared/candidates");
+    expect(effectiveSetting(true, false, false)).toBe(true);
+    expect(effectiveSetting(null, true, false)).toBe(true);
+    expect(effectiveSetting(undefined, null, false)).toBe(false);
+    expect(effectiveSetting(false, true, true)).toBe(false);
+  });
+
+  it("saves the recruiter's defaults and a candidate folder reads them; other workspaces get none", async () => {
+    const { saveRecruiterSettings } = await import("../electron/candidates");
+    const { recruiterDefaultsFor } = await import("../electron/recruiter-defaults");
+    const dir = await root();
+    await ensureRecruiterRoot(dir);
+    const entry = await addCandidate(dir, "Alex Morgan", { suffix: "7k2f" });
+    const saved = await saveRecruiterSettings(dir, { recruiterName: "Jordan Lee", agency: "", defaults: { coverLetters: true, tailorSummary: true, pdfTextSize: "auto" } });
+    expect(saved.agency).toBeNull();
+    expect(saved.recruiterName).toBe("Jordan Lee");
+    expect(await recruiterDefaultsFor(await candidatePath(dir, entry.id))).toEqual({ coverLetters: true, tailorSummary: true, pdfTextSize: "auto" });
+    expect(await recruiterDefaultsFor(dir)).toBeNull();
+    await expect(saveRecruiterSettings(dir, { defaults: { pdfTextSize: "huge" } })).rejects.toThrow();
+  });
+
+  it("cover letters and the resume summary follow the recruiter's default unless the candidate chose", async () => {
+    const { coverLetterPlanFor } = await import("../src/shared/cover-letter-policy");
+    const { summaryIsEditable } = await import("../electron/canonical-resume");
+    const profile = (enabled: boolean | null) => ({ identity: { fullName: "Alex Morgan" }, career: { transitionSummary: "Moving into sales.", narrativePillars: {} }, preferences: { coverLetter: { enabled, narrativePillars: { turningPoints: "a", workingStyle: "b" } } } });
+    const facts = { hasVoice: true, careerFiles: 3, optIn: true };
+    expect(coverLetterPlanFor(profile(null), facts).off).toBe(true);
+    expect(coverLetterPlanFor(profile(null), { ...facts, recruiterDefault: true }).write).toBe(true);
+    expect(coverLetterPlanFor(profile(false), { ...facts, recruiterDefault: true }).off).toBe(true);
+    const baseline = { summaryHeadingLine: "**SUMMARY**" } as never;
+    const withSummary = (includeSummary: boolean | null) => ({ preferences: { resume: { includeSummary } } });
+    expect(summaryIsEditable(baseline, withSummary(null))).toBe(false);
+    expect(summaryIsEditable(baseline, withSummary(null), true)).toBe(true);
+    expect(summaryIsEditable(baseline, withSummary(false), true)).toBe(false);
+  });
+});

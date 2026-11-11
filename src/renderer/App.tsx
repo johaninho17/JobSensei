@@ -31,7 +31,8 @@ import { SearchPalette, type PaletteAction } from "./SearchPalette";
 import { SettingsModal } from "./SettingsModal";
 import { InterviewView, LiveWindow } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
-import { BaseResumeTab, ProfilePage } from "./CandidateProfile";
+import { BaseResumeTab, CandidateSettingsTab, ProfilePage } from "./CandidateProfile";
+import { RecruiterSettingsDialog } from "./RecruiterSettings";
 import { CandidateGate, CandidateResumeCard, CandidateSwitcher, RecruiterNotes, WhoIsThisFor } from "./Candidates";
 import { PipelineView } from "./Pipeline";
 import { PrivacyDialog } from "./Privacy";
@@ -999,14 +1000,14 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         />
       </header>
       <SearchPalette open={searchOpen} actions={paletteActions} onClose={() => setSearchOpen(false)} onOpenResult={openSearchResult} />
-      <SettingsModal
+      {FEATURES.candidates ? settingsModalOpen && <RecruiterSettingsDialog onClose={() => setSettingsModalOpen(false)} /> : <SettingsModal
         open={settingsModalOpen}
         onClose={() => setSettingsModalOpen(false)}
         profile={candidateProfile}
         settings={resumeSettings}
         onProfileUpdated={(updated) => setCandidateProfile(updated)}
         onSettingsUpdated={(updated) => setResumeSettings(updated)}
-      />
+      />}
       <section className="viewer-panel">
         {needsSetup ? FEATURES.candidates ? <CandidateResumeCard name={candidateProfile?.identity.fullName ?? null} problem={readiness?.items.find((item) => item.id === "resume")?.state === "problem" ? readiness.items.find((item) => item.id === "resume")!.detail : null} onChoose={async () => { await chooseResume("base"); await loadReadiness(); }} /> : <Onboarding workspace={workspace} profile={candidateProfile} readiness={readiness} onProfileCreated={async (profile) => { setCandidateProfile(profile); await refresh(); await loadReadiness(); }} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onChooseBase={async () => { await chooseResume("base"); await loadReadiness(); }} onOpenAgy={() => setRightPanelOpen(true)} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onFinish={finishOnboarding} /> : preview ? <>
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
@@ -1034,6 +1035,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
             files={contextSourcesBlock}
             resumes={contextResumesBlock}
             notes={recruiterNotesBlock}
+            settings={<CandidateSettingsTab profile={candidateProfile} onSaved={(next) => { setCandidateProfile(next); void loadReadiness(); }} />}
           />
           : currentLocation.kind === "setup-home" ? <SetupHome onToast={showToast} readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome
@@ -2523,6 +2525,8 @@ function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: strin
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
   const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
+  // Recruiter Edition: start from the recruiter's default PDF text size (Settings → Defaults for every candidate).
+  useEffect(() => { if (FEATURES.candidates) void window.sensei.candidates.recruiterSettings().then((settings) => setTextSize(settings.defaults.pdfTextSize), () => undefined); }, []);
   // A job may have no cover letter (recruiter plan R7); the resume alone is then exported.
   const missing = !resumePath;
   async function exportApplicationPdfs() {
@@ -3192,6 +3196,8 @@ function MarkdownExportButton({ relativePath, onExported }: { relativePath: stri
   const [state, setState] = useState<"idle" | "working" | "done" | "warning" | "error">("idle");
   const [message, setMessage] = useState("");
   const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
+  // Recruiter Edition: start from the recruiter's default PDF text size (Settings → Defaults for every candidate).
+  useEffect(() => { if (FEATURES.candidates) void window.sensei.candidates.recruiterSettings().then((settings) => setTextSize(settings.defaults.pdfTextSize), () => undefined); }, []);
   async function exportPdf() {
     setState("working");
     try {

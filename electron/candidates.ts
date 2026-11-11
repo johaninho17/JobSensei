@@ -38,6 +38,15 @@ export async function readRecruiterSettings(root: string): Promise<RecruiterSett
   return raw ? recruiterSettingsSchema.parse(raw) : recruiterSettingsSchema.parse({ schemaVersion: 1, updatedAt: now() });
 }
 
+/** Saves the recruiter's name, agency, and defaults for every candidate (plan Q2); the open candidate stays open. */
+export async function saveRecruiterSettings(root: string, input: unknown): Promise<RecruiterSettings> {
+  const current = await readRecruiterSettings(root);
+  const patch = recruiterSettingsSchema.pick({ recruiterName: true, agency: true, defaults: true }).partial().parse(input);
+  const next = recruiterSettingsSchema.parse({ ...current, ...patch, recruiterName: patch.recruiterName === undefined ? current.recruiterName : patch.recruiterName || null, agency: patch.agency === undefined ? current.agency : patch.agency || null, updatedAt: now() });
+  await writeJsonAtomic(join(root, RECRUITER_SETTINGS_PATH), next);
+  return next;
+}
+
 async function saveRoster(root: string, roster: Roster): Promise<Roster> {
   const next = rosterSchema.parse({ ...roster, updatedAt: now() });
   await writeJsonAtomic(join(root, ROSTER_PATH), next);

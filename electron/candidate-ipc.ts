@@ -5,7 +5,7 @@ import { effectiveStatus, readyToSend } from "../src/shared/tracker";
 import { listJobFolders } from "./job-folders";
 import { readCandidateProfile } from "./candidate-profile";
 import { createCandidateProfile } from "./candidate-profile";
-import { addCandidate, candidatePath, clearActiveCandidate, deleteCandidate, readRecruiterNotes, saveRecruiterNotes, readRecruiterSettings, readRoster, renameCandidate, setActiveCandidate, setCandidateStatus } from "./candidates";
+import { addCandidate, candidatePath, clearActiveCandidate, deleteCandidate, readRecruiterNotes, saveRecruiterNotes, readRecruiterSettings, readRoster, saveRecruiterSettings, renameCandidate, setActiveCandidate, setCandidateStatus } from "./candidates";
 import { SettingsStore } from "./settings";
 import { readJobQueue } from "./job-queue";
 import { listPipeline, setPipelineStatus } from "./pipeline";
@@ -86,6 +86,9 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
   };
 
   ipcMain.handle("candidates:state", state);
+  // The recruiter's own settings (plan Q2): name, agency, and defaults every candidate inherits.
+  ipcMain.handle("recruiter:settings", async () => readRecruiterSettings(ctx.root()));
+  ipcMain.handle("recruiter:save-settings", async (_event, input: unknown) => saveRecruiterSettings(ctx.root(), input));
   /** Adds a candidate (their folder and profile with name and file prefix), then opens them. */
   ipcMain.handle("candidates:choose-files", async (_event, kind: unknown) => ctx.chooseFiles(kind === "resume" ? "resume" : kind === "image" ? "image" : "files"));
   /** Adds a candidate with everything the recruiter has (name, base resume, extra files, notes), then opens them. */

@@ -1,5 +1,6 @@
 // Computes setup readiness (src/shared/readiness.ts): the single owner of what JobSensei needs before it runs and
 // what improves its drafts. Read by Get Started, the Setup page, the job queue, and the evidence snapshot.
+import { recruiterDefaultsFor } from "./recruiter-defaults";
 import { workspaceFile } from "./workspace";
 import { countCareerFiles, coverLetterPlanFor } from "../src/shared/cover-letter-policy";
 import { readdir, stat } from "node:fs/promises";
@@ -175,7 +176,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
   if (features.coverLetterOptIn) {
     const secondary = (profile?.sources.secondaryResumePaths ?? settings?.secondaryResumePaths ?? []).length;
     const linkedin = Boolean(profile?.sources.linkedinProfilePath ?? settings?.linkedinProfilePath);
-    const plan = coverLetterPlanFor(profile, { hasVoice, careerFiles: countCareerFiles(manifest?.selectedCareerPaths ?? [], secondary, linkedin), optIn: true });
+    const plan = coverLetterPlanFor(profile, { recruiterDefault: (await recruiterDefaultsFor(input.workspacePath))?.coverLetters ?? null, hasVoice, careerFiles: countCareerFiles(manifest?.selectedCareerPaths ?? [], secondary, linkedin), optIn: true });
     add({
       id: "cover-letter", level: "recommended", state: plan.write || plan.off ? "done" : "problem", action: "cover-letter", path: null,
       title: "Cover letters",

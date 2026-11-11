@@ -245,9 +245,11 @@ export async function loadCanonicalResumeBaseline(workspacePath: string, relativ
 /** Summary tailoring applies only when the base resume has a summary and the user turned it on. */
 export function summaryIsEditable(
   baseline: CanonicalResumeBaseline,
-  profile: { preferences: { resume: { includeSummary?: boolean } } } | null | undefined,
+  profile: { preferences: { resume: { includeSummary?: boolean | null } } } | null | undefined,
+  /** The recruiter's default when the candidate hasn't chosen (Recruiter Edition); off otherwise. */
+  fallback = false,
 ): boolean {
-  return Boolean(baseline.summaryHeadingLine && profile?.preferences.resume.includeSummary);
+  return Boolean(baseline.summaryHeadingLine && (profile?.preferences.resume.includeSummary ?? fallback));
 }
 
 /**

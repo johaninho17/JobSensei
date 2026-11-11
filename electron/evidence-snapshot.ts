@@ -1,4 +1,5 @@
 import { readTextFile, writeCompressedJsonAtomic } from "./persistence";
+import { recruiterDefaultsFor } from "./recruiter-defaults";
 import { createHash } from "node:crypto";
 import { postingRecordFor, writePostingRecord } from "./posting-record";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
@@ -840,7 +841,10 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
   // Recruiter plan R7: whether this run writes a cover letter (src/shared/cover-letter-policy.ts owns the rule).
   const voicePath = candidateProfile?.sources.applicationVoicePath ?? APPLICATION_VOICE_PROFILE_PATH;
   const hasVoice = Boolean((await readFile(assertInsideWorkspace(workspace, join(workspace, voicePath)), "utf8").catch(() => "")).trim());
+  // The recruiter's defaults apply where the candidate hasn't chosen (Recruiter Edition; null in the regular app).
+  const recruiterDefaults = await recruiterDefaultsFor(workspace);
   const coverLetterPlan = coverLetterPlanFor(candidateProfile, {
+    recruiterDefault: recruiterDefaults?.coverLetters ?? null,
     hasVoice,
     careerFiles: countCareerFiles(manifest.selectedCareerPaths ?? [], manifest.secondaryResumePaths.length, Boolean(manifest.linkedinProfilePath)),
     optIn: featuresFor(currentEdition()).coverLetterOptIn,
@@ -1004,7 +1008,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
         ...(snapshot.canonicalResume.summaryHeadingLine ? {
           summary: {
             original: (snapshot.canonicalResume.originalSummaryLines ?? []).join("\n"),
-            editable: summaryIsEditable(snapshot.canonicalResume, candidateProfile),
+            editable: summaryIsEditable(snapshot.canonicalResume, candidateProfile, recruiterDefaults?.tailorSummary ?? false),
           },
         } : {}),
         originalSkillsLines: snapshot.canonicalResume.originalSkillsLines,
