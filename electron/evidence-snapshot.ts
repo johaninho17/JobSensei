@@ -33,6 +33,7 @@ import { readCandidateProfile } from "./candidate-profile";
 import { buildContextManifest, readActiveContextManifest } from "./context";
 import { deriveVoicePresets } from "../src/shared/voice-presets";
 import { readBulletBank } from "./bullet-bank";
+import { provenLinesFor } from "./proven-lines";
 import { FETCHED_FORM_PATH, readFetchedJobDescription } from "./jd-fetch";
 import { APPLICATION_FORM_FILE } from "./posting-clean";
 
@@ -1020,6 +1021,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       denylistRules: snapshot.denylistRules,
       styleRules: compactStyleRules(stylePolicy, candidateProfile),
       resumePlan,
+      provenLines: await provenLinesFor(workspace, new Set(snapshot.applicationRouting.selectedEvidenceIds), (id) => evidenceById.get(id)?.employer ?? null),
       coverLetterBrief: buildCoverLetterBrief(jobDescriptionText, canonicalJob, candidateProfile),
       instructions: [
         "Use only evidenceRows for candidate facts; preserve employer, timeline, scope, eligibility, and classification ceilings.",
@@ -1028,6 +1030,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
         "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. Never add an event, metric, tool, or ownership that did not happen.",
         ...profileInstructionLines(candidateProfile),
         "Maintain natural bullet length (~16-20 words) matching the baseline footprint; no word-by-word arithmetic.",
+        "provenLines (owner of this rule) are lines from tailored resumes that got the candidate a real interview, each with its evidenceIds (all routed to this job). When you rewrite a bullet at the same employer from the same evidence, prefer that proven wording, adjusted lightly for this job; never move a line to another employer.",
         "Cover letter: follow coverLetterBrief exactly. It owns the structure, opening, word range, and banned phrases. Do not use any other cover-letter structure.",
         "Only cite eligible evidence rows for standalone claims; do not cite a single corroboration-required row alone.",
         "Use direct, natural wording; denylistRules always win. Apply styleRules to wording only, never as evidence.",

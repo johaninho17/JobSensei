@@ -6,10 +6,11 @@ import { latestRun } from "./run-status";
 import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription } from "./jd-fetch";
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { RunWatcher } from "./run-watcher";
+import { answerQuestion, buildTodayData, checkClosedPostings, keepPosting, removeQuestion } from "./today";
 import { createAgyHomeCache, prepareAgyHome, writeSenseiLauncher } from "./agy-home";
 import { QuestionAgent, headlessAgy } from "./question-agent";
 import { ensureSchedule, scheduleInfo } from "./search-schedule";
-import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, jobsForSearch, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
+import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, jobsForSearch, searchLearning, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob } from "./job-search";
 import { jobKey, type SearchRun, type SearchStatus } from "../src/shared/job-search";
 import { boardRef } from "./job-boards";
 import { readPostingRecord } from "./posting-record";
@@ -436,9 +437,11 @@ ipcMain.handle("search:run", async (_event, mode: unknown) => {
     let result: { run: SearchRun } | null = null;
     try {
       const agyHome = agyPath ? await agyHomeFor(workspace) : null;
-      const { existingKeys, companies } = await jobsForSearch(workspace, await searchJobs(workspace));
+      const allJobs = await listJobFolders(workspace);
+      const { existingKeys, companies } = await jobsForSearch(workspace, allJobs.map((job) => ({ id: job.id, company: job.company, title: job.title, reachedInterview: reachedInterview(job) })));
       result = await runSearch({
         jobCompanies: companies,
+        learned: searchLearning(allJobs),
         workspace,
         profile: await readCandidateProfile(workspace).catch(() => null),
         runner: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }) : null,
@@ -612,6 +615,23 @@ async function readinessNow() {
   return computeReadiness({ workspacePath: workspace, profile, settings, manifest, contextFileCount: summary.contextFileCount, agy: { installed: summary.agyAvailable, signedIn: await agySignInState() } });
 }
 ipcMain.handle("setup:readiness", async () => readinessNow());
+// Today: built from the user's own data (electron/today.ts). Closed postings are checked in the background once a day.
+ipcMain.handle("today:get", async () => {
+  const workspace = requireWorkspace();
+  const jobs = await listJobFolders(workspace);
+  const readiness = await readinessNow().catch(() => null);
+  const today = await buildTodayData(workspace, { jobs, profile: await readCandidateProfile(workspace).catch(() => null), readiness });
+  void checkClosedPostings(workspace, jobs).then((state) => { if (state.closed.length !== today.due.closedPostings.length) mainWindow?.webContents.send("today:changed"); }).catch(() => undefined);
+  return today;
+});
+ipcMain.handle("today:answer", async (_event, id: unknown, answer: unknown) => answerQuestion(requireWorkspace(), String(id), String(answer ?? "")));
+ipcMain.handle("today:remove-question", async (_event, id: unknown) => removeQuestion(requireWorkspace(), String(id)));
+ipcMain.handle("today:keep-posting", async (_event, jobId: unknown) => keepPosting(requireWorkspace(), String(jobId)));
+ipcMain.handle("today:close-posting", async (_event, jobId: unknown) => {
+  const workspace = requireWorkspace();
+  await updateJobTracker(workspace, String(jobId), { status: "rejected", outcome: { stageReached: null, result: "no_reply", reason: "Posting closed", date: new Date().toISOString().slice(0, 10) } });
+  await keepPosting(workspace, String(jobId));
+});
 // Interview content refresh (electron/content-refresh.ts): new recordings, the update Agy runs, and its check.
 async function jobNames(): Promise<Record<string, string>> {
   const jobs = await listJobFolders(requireWorkspace()).catch(() => []);

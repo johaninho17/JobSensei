@@ -164,3 +164,19 @@ See [Privacy](docs/privacy.md), [Workspace Format](docs/workspace-format.md), an
 - **Search on a schedule:** Search settings → Schedule. The default runs one search a day, the first time your computer is on after your chosen time (for example 8:00), counted from that time to the same time the next day; searches you run yourself don't use it up. The page says whether it is on. Strong matches can be drafted automatically above a rating you choose.
 - **Cover letters:** Settings → Career story → Cover letter sets the length (default 200–280 words) and whether the letter leads with your career story (default) or with examples.
 
+## What runs in the background
+
+Agy (the AI) only runs for these, each with only what that task needs:
+
+| What | When | What Agy gets |
+|---|---|---|
+| Application drafts | A job you add, or a found job you send for drafts, reaches the front of the queue (one at a time; "Run automatically" can pause it) | The posting, the evidence rows routed to that job (about 20), your resume layout, style rules, and the cover-letter brief, about 30 KB |
+| Written application questions | Right after an application run starts, for Greenhouse, Ashby, and Lever postings | The questions, the posting, that job's evidence rows, your stories, voice, and the job's cover letter |
+| Job search | When you press Run now, or once a day on your schedule (if you turned it on) | Your search settings only: titles, places, setups, level, pay floor, words to leave out, boards. No resume or career files |
+| Light rating | After a search, for up to 10 of the best new matches (one call), or Rate with Agy | Each job's requirements and a short card: role titles and dates, skills lines, career story, target roles |
+| Interview prep, content updates | Only when you ask (Prepare a round; Update from new recordings) | The round's context: routed evidence, stories, voice, role memory, earlier rounds |
+
+Everything else is the app's own work, with no AI: reading companies' job lists from Ashby, Greenhouse, and Lever (plain web requests), checking whether your saved and applied postings are still listed (once a day, when Today opens and after the morning search), quick fit, the Today page's insights and questions, Learnings, readiness, and the schedule.
+
+Things you add are used the next time a task needs them; nothing rewrites past drafts. A new career file (or an answer to a Today question) is used by the next application once it's checked in Career context; a new story is used by the next interview prep; new recordings are used when you press Update.
+

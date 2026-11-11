@@ -2,6 +2,7 @@ import { z } from "zod";
 import { jobHealthSchema } from "./job-record";
 import type { Readiness } from "./readiness";
 import type { JobSearchSettings, JobSearchState, ScheduleInfo, SearchRun, SearchStatus, WatchedSuggestion } from "./job-search";
+import type { TodayData } from "./today";
 
 export const schemaVersion = 1;
 
@@ -1227,6 +1228,15 @@ export interface SenseiApi {
     finishUpdate(keepOld: string[]): Promise<{ restored: number }>;
     undoUpdate(): Promise<void>;
     skip(paths: string[]): Promise<void>;
+  };
+  /** Today: what happened, what's due, insights, and questions (electron/today.ts). */
+  today: {
+    get(): Promise<TodayData>;
+    answer(id: string, answer: string): Promise<{ addedPath: string | null }>;
+    removeQuestion(id: string): Promise<void>;
+    keepPosting(jobId: string): Promise<void>;
+    closePosting(jobId: string): Promise<void>;
+    onChanged(callback: () => void): () => void;
   };
   /** Job Search: settings, the inbox of found postings, and the search run (Agy finds links; the app checks them). */
   jobSearch: {

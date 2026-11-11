@@ -26,6 +26,9 @@ import { SettingsModal } from "./SettingsModal";
 import { InterviewView, LiveWindow } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { JobSearchView } from "./JobSearchView";
+import { Section } from "./Section";
+import { TodayView } from "./TodayView";
+import { nextInterviewStep } from "../shared/interview-progress";
 import { logisticsUpdate, parseNames, readLogistics, readStoryFields, storyUpdate, type StoryFields } from "../shared/profile-fields";
 import type { InterviewLogistics } from "../shared/schemas";
 import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
@@ -45,7 +48,7 @@ const VIEWER_PANEL_MIN = 320;
 type PromptRequest = { id: number; text: string; label: string };
 type JobWorkspaceTab = "overview" | "application" | "interview" | "files";
 type JobLocation = { kind: "job"; jobId: string; tab: JobWorkspaceTab; roundId?: string };
-type PageLocation = { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" };
+type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" };
 type WorkspaceLocation =
   | PageLocation
   | JobLocation
@@ -269,7 +272,7 @@ function WorkspaceApp() {
       if (event.key === "g") { goPrefix.current = Date.now(); return; }
       if (Date.now() - goPrefix.current < 1200) {
         goPrefix.current = 0;
-        const page = ({ j: "jobs-home", i: "interviews-home", c: "context-home" } as const)[event.key as "j" | "i" | "c"];
+        const page = ({ t: "today-home", j: "jobs-home", i: "interviews-home", c: "context-home" } as const)[event.key as "t" | "j" | "i" | "c"];
         if (page) { event.preventDefault(); showPage(page); }
         return;
       }
@@ -331,7 +334,7 @@ function WorkspaceApp() {
       return next;
     });
   }, [activeJobId]);
-  const [navigationHistory, setNavigationHistory] = useState<WorkspaceLocation[]>([{ kind: "jobs-home" }]);
+  const [navigationHistory, setNavigationHistory] = useState<WorkspaceLocation[]>([{ kind: "today-home" }]);
   const [navigationIndex, setNavigationIndex] = useState(0);
   const previewRequestId = useRef(0);
 
@@ -488,7 +491,7 @@ function WorkspaceApp() {
 
   function currentReturnLocation(jobId: string | null): JobLocation | PageLocation {
     const current = navigationHistory[navigationIndex];
-    if (current?.kind === "job" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home") return current;
+    if (current?.kind === "job" || current?.kind === "today-home" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home") return current;
     if (current?.kind === "document") return current.returnTo;
     return jobId ? { kind: "job", jobId, tab: "overview" } : { kind: "jobs-home" };
   }
@@ -541,7 +544,7 @@ function WorkspaceApp() {
     if (currentLocation.kind === kind) return;
     pushLocation({ kind });
   }
-  function showJobsHome() { showPage("jobs-home"); }
+  function showJobsHome() { showPage("today-home"); }
 
   function openJobView(jobId: string, tab: JobWorkspaceTab, roundId?: string) {
     const current = navigationHistory[navigationIndex];
@@ -791,6 +794,7 @@ function WorkspaceApp() {
   );
   const recentForStatus = recentJobIds.slice(0, 3).map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job) && job!.id !== viewedJob?.id);
   const paletteActions: PaletteAction[] = [
+    { id: "go-today", title: "Go to Today", subtitle: "Morning search, what's due, insights, and questions", keywords: "home day summary", shortcut: "g t", run: () => showPage("today-home") },
     { id: "go-jobs", title: "Go to Jobs", subtitle: "All jobs, the queue, and the status strip", keywords: "home list cards", shortcut: "g j", run: () => showPage("jobs-home") },
     { id: "go-interviews", title: "Go to Interviews", subtitle: "Every job with interview prep", keywords: "rounds prep", shortcut: "g i", run: () => showPage("interviews-home") },
     { id: "go-context", title: "Go to Career context", subtitle: "Resumes and sources Agy reads", keywords: "files sources resume", shortcut: "g c", run: () => showPage("context-home") },
@@ -858,6 +862,7 @@ function WorkspaceApp() {
     <nav className="app-sidebar" aria-label="Main" aria-hidden={!leftPanelOpen}>
       <button className="wordmark" aria-label="Sensei: all jobs" onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span><span>Sensei</span></button>
       <ul className="side-nav">
+        <li><button aria-current={activePage === "today-home" ? "page" : undefined} onClick={() => showPage("today-home")}><NavIcon name="today" />Today</button></li>
         <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
         <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" />Job Search{searchStatus.running ? <span className="side-due" title={searchProgressText(searchStatus)}>Searching…</span> : searchNew > 0 && <span className="side-count" title={`${searchNew} new match${searchNew === 1 ? "" : "es"}`}>{searchNew}</span>}</button></li>
         <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{interviewingJobs.length > 0 && <span className="side-count">{interviewingJobs.length}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>
@@ -911,6 +916,9 @@ function WorkspaceApp() {
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
           <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
+          : currentLocation.kind === "today-home" ? <TodayView onOpenJob={openJob} onToast={showToast}
+              onGo={(target) => showPage(({ setup: "setup-home", jobs: "jobs-home", "job-search": "search-home", interviews: "interviews-home", learnings: "interviews-home", context: "context-home" } as const)[target])}
+              onAnswerAddedFile={(path) => void updateContext([...new Set([...selectedCareerPaths, path])], selectedJobFiles)} />
           : currentLocation.kind === "search-home" ? <JobSearchView status={searchStatus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onOpenJob={openJob} onToast={showToast} />
           : currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
           : currentLocation.kind === "setup-home" ? <SetupHome readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
@@ -939,8 +947,9 @@ function WorkspaceApp() {
   </main>;
 }
 
-function NavIcon({ name }: { name: "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" }) {
+function NavIcon({ name }: { name: "today" | "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" }) {
   const paths: Record<typeof name, string> = {
+    today: "M5 6h14v14H5z M5 10h14 M9 4v4 M15 4v4 M9 14h2 M13 14h2 M9 17h2",
     jobs: "M4 8h16v11H4zM9 8V5h6v3M4 13h16",
     search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z M15.5 15.5L20 20",
     interviews: "M5 5h14v10H9l-4 4z M8.5 9.5h7 M8.5 12h4",
@@ -967,7 +976,7 @@ function ToastRegion({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: n
 
 const SHORTCUTS: Array<[string, string]> = [
   ["⌘K or Ctrl K", "Search jobs, files, and actions"],
-  ["g then j / i / c", "Go to Jobs, Interviews, or Career context"],
+  ["g then t / j / i / c", "Go to Today, Jobs, Interviews, or Career context"],
   ["[ and ]", "Previous or next job (on a job page)"],
   ["1 – 6", "Set the open job to Saved, Applied, Interviewing, Offer, Rejected, Withdrawn"],
   ["⌘J or Ctrl J", "Show or hide Agy"],
@@ -1463,8 +1472,9 @@ function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAction, on
   </li>;
   return <section className="setup-home">
     <header className="page-head"><div><h1>Setup</h1><p>{readiness.ready ? "JobSensei has what it needs. The recommended steps make drafts and interview prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button> · <button className="btn-link" onClick={() => onReveal("")}>Open your workspace folder</button></p></div></header>
-    <section className="iv-section"><h2>Required</h2><ol className="setup-list">{readiness.items.filter((item) => item.level === "required").map(row)}</ol></section>
-    <section className="iv-section"><h2>Recommended</h2><ol className="setup-list">{readiness.items.filter((item) => item.level === "recommended").map(row)}</ol></section>
+    {(["required", "recommended"] as const).map((level) => { const items = readiness.items.filter((item) => item.level === level); const done = items.filter((item) => item.state === "done").length; return <Section key={level} id={`setup-${level}`} title={level === "required" ? "Required" : "Recommended"} count={`${done} of ${items.length}`} defaultOpen={level === "recommended" || done < items.length}>
+      <ol className="setup-list">{items.map(row)}</ol>
+    </Section>; })}
   </section>;
 }
 
@@ -1649,7 +1659,10 @@ function InterviewsHome({ jobs, allJobs, newRecordings, onRecordingsChanged, onS
   }, [jobs]);
   const rows = jobs.map((job) => {
     const overview = overviews[job.id];
-    const round = overview?.rounds.find((candidate) => candidate.id === overview.currentRoundId) ?? overview?.rounds.at(-1) ?? null;
+    // The round that's actually next (after interviews the user recorded), else the one last opened.
+    const next = overview ? nextInterviewStep({ rounds: overview.rounds, knownProcess: overview.knownProcess, recorded: job.tracker?.interviews ?? [] }) : null;
+    const round = (next?.kind === "practice" ? overview?.rounds.find((candidate) => candidate.id === next.roundId) : null)
+      ?? overview?.rounds.find((candidate) => candidate.id === overview.currentRoundId) ?? overview?.rounds.at(-1) ?? null;
     return { job, overview, round };
   }).sort((a, b) => Number(["rejected", "withdrawn"].includes(effectiveStatus(a.job))) - Number(["rejected", "withdrawn"].includes(effectiveStatus(b.job))) || (a.round?.scheduledDate ?? "9999").localeCompare(b.round?.scheduledDate ?? "9999") || Date.parse(b.job.modifiedAt) - Date.parse(a.job.modifiedAt));
   const closed = (job: JobFolderSummary) => ["rejected", "withdrawn"].includes(effectiveStatus(job));
@@ -1711,52 +1724,44 @@ function LearningsView({ jobs, overviews, onOpenFile }: { jobs: JobFolderSummary
   const managerQuestions = section(texts.memory, /hiring manager/i);
   return <div className="learnings">
     {learn.unrecorded > 0 && <p className="learn-note" role="status">{plural(learn.unrecorded, "job")} with interview prep {learn.unrecorded === 1 ? "has" : "have"} no recorded interviews yet, so {learn.unrecorded === 1 ? "it isn't" : "they aren't"} counted below. Record them in each job's "What happened?" (Jobs ⋯ → Data health lists them).</p>}
-    <section className="iv-section">
-      <h3>How far applications got</h3>
+    <Section id="learn-1" title="How far applications got" defaultOpen={true}>
       <p className="learn-note">Real interviews only, as recorded in each job. Prep alone doesn't count.</p>
       <dl className="learn-stats">
         <div><dt>Applied</dt><dd className="tabular">{learn.applied}</dd></div>
         <div><dt>Got an interview</dt><dd className="tabular">{learn.interviewed}<small>{percent(learn.interviewed, learn.applied)}</small></dd></div>
         {learn.funnel.filter((row) => row.stage !== "recruiter").map((row) => <div key={row.stage}><dt>Reached {STAGE_LABELS[row.stage].toLowerCase()}</dt><dd className="tabular">{row.count}<small>{percent(row.count, learn.interviewed)}</small></dd></div>)}
       </dl>
-    </section>
-    <section className="iv-section">
-      <h3>Did fit predict how far you got?</h3>
+    </Section>
+    <Section id="learn-2" title="Did fit predict how far you got?" defaultOpen={true}>
       <table className="learn-table"><thead><tr><th>Furthest stage</th><th>Jobs</th><th>Average fit</th></tr></thead>
         <tbody>{learn.fitByStage.map((row) => <tr key={row.stage}><td>{STAGE_LABELS[row.stage]}</td><td className="tabular">{row.jobs}</td><td className="tabular">{row.averageFit?.toFixed(2) ?? "—"}</td></tr>)}</tbody></table>
-    </section>
-    {(learn.bySetup.length > 0 || learn.pay.interviewed !== null) && <section className="iv-section">
-      <h3>Which jobs gave interviews</h3>
+    </Section>
+    {(learn.bySetup.length > 0 || learn.pay.interviewed !== null) && <Section id="learn-3" title="Which jobs gave interviews" defaultOpen={false}>
       <table className="learn-table"><thead><tr><th>Jobs</th><th>Applied</th><th>Got an interview</th></tr></thead>
         <tbody>{learn.bySetup.map((row) => <tr key={row.label}><td>{row.label}</td><td className="tabular">{row.applied}</td><td className="tabular">{row.interviewed}{percent(row.interviewed, row.applied)}</td></tr>)}</tbody></table>
       <p className="learn-note">Median posted pay: <strong className="tabular">{money(learn.pay.interviewed)}</strong> for jobs with an interview, <strong className="tabular">{money(learn.pay.notInterviewed)}</strong> for the rest.</p>
-    </section>}
-    {learn.gapTerms.length > 0 && <section className="iv-section">
-      <h3>Gaps in applications that got no interview</h3>
+    </Section>}
+    {learn.gapTerms.length > 0 && <Section id="learn-4" title="Gaps in applications that got no interview" defaultOpen={false}>
       <p className="learn-note">Tools the posting asked for that your evidence didn't cover, counted per job.</p>
       <ul className="learn-fixes">{learn.gapTerms.map((row) => <li key={row.term}><span>{row.term}</span><small>{row.noInterview} with no interview · {row.interviewed} with one</small></li>)}</ul>
-    </section>}
-    {learn.reasons.length > 0 && <section className="iv-section">
-      <h3>Why it ended, in your words</h3>
+    </Section>}
+    {learn.reasons.length > 0 && <Section id="learn-5" title="Why it ended, in your words" defaultOpen={false}>
       <ul className="learn-fixes">{learn.reasons.map((row) => <li key={row.jobId}><span>{row.company}: {row.reason}</span><small>{row.stage}</small></li>)}</ul>
-    </section>}
-    <section className="iv-section">
-      <h3>Questions asked most</h3>
+    </Section>}
+    <Section id="learn-6" title="Questions asked most" defaultOpen={false}>
       <div className="learn-columns">
         <div><h4>Recruiter</h4><div className="iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(recruiterQuestions.split("\n").slice(0, 10).join("\n"), [], { readable: true }) }} /></div>
         <div><h4>Hiring manager</h4><div className="iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(managerQuestions.split("\n").slice(0, 8).join("\n"), [], { readable: true }) }} /></div>
       </div>
       {memoryPath && <button className="btn-link" onClick={() => onOpenFile(memoryPath)}>All patterns and interviewer feedback</button>}
-    </section>
-    {fixes.length > 0 && <section className="iv-section">
-      <h3>Delivery fixes</h3>
+    </Section>
+    {fixes.length > 0 && <Section id="learn-7" title="Delivery fixes" defaultOpen={false}>
       <ul className="learn-fixes">{fixes.map((item) => <li key={item.fix}><span>{item.fix}</span><small>{item.status || "no status"}</small></li>)}</ul>
       <button className="btn-link" onClick={() => onOpenFile("profile/interview_voice.md")}>Open interview voice</button>
-    </section>}
-    {storyCounts.size > 0 && <section className="iv-section">
-      <h3>Stories used most in prep</h3>
+    </Section>}
+    {storyCounts.size > 0 && <Section id="learn-8" title="Stories used most in prep" defaultOpen={false}>
       <ul className="learn-fixes">{[...storyCounts.entries()].sort((a, b) => b[1] - a[1]).map(([id, count]) => <li key={id}><span>{id}{texts.stories[id] ? ` · ${texts.stories[id]}` : ""}</span><small>{count} card{count === 1 ? "" : "s"}</small></li>)}</ul>
-    </section>}
+    </Section>}
   </div>;
 }
 

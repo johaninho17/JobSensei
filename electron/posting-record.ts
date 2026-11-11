@@ -10,7 +10,7 @@ import { parseJobDescriptionMetadata } from "./job-description";
 import { POSTING_BOARDS, POSTING_EXPECTED_FIELDS, POSTING_SCHEMA_VERSION, postingRecordSchema, type PostingPay, type PostingRecord, type PostingWorkSetup } from "../src/shared/posting";
 
 /** Bump when any parsing rule changes: saved records with an older version are rebuilt. */
-export const POSTING_PARSER_VERSION = 4;
+export const POSTING_PARSER_VERSION = 5;
 export const POSTING_RECORD_FILE = ".sensei/posting.json";
 
 type SectionKind = "requirements" | "responsibilities" | "preferred" | "benefits" | "pay" | "company" | "role" | "legal" | "other";
@@ -75,12 +75,46 @@ const amount = (value: string) => {
   return Number.isFinite(number) && number > 0 ? (/k\s*$/i.test(value) ? number * 1000 : number) : null;
 };
 
+const PAY_LABEL = /^(?:salary|pay|compensation|base salary|pay range|salary range)\b[^:]{0,20}:/i;
+const PAY_WORDS = /\b(?:salary|base|compensation|pay|wage|ote|on[- ]target|earnings|per (?:year|hour|annum)|annual(?:ly)?|hourly|\/\s?(?:yr|year|hr|hour))\b/i;
+/** Money that isn't pay: the company's revenue, funding, valuation, customers' numbers, perks. */
+const NOT_PAY = /\b(?:arr|mrr|revenue|raised|raise|funding|funded|series [a-e]|seed|valuation|valued|investors?|backed|customers?|users?|gmv|aum|saved|savings|401\(?k\)?|stipend|reimburse\w*|allowance|bonus of|referral|budget)\b/i;
+const MILLIONS = /^\s*(?:m|mm|b|bn|million|billion)\b/i;
+
+/**
+ * How likely a line is to state the job's pay: labeled pay lines and pay words count for it; company money (ARR,
+ * funding, revenue), perks, millions, and a $0 start count against it. Below 1 it isn't treated as pay.
+ */
+function payScore(line: string): number {
+  if (!/[$£€]\s?\d/.test(line)) return -Infinity;
+  const match = RANGE.exec(line) ?? new RegExp(AMOUNT).exec(line);
+  if (!match) return -Infinity;
+  const after = line.slice((match.index ?? 0) + match[0].length);
+  const first = amount(match[1] ?? match[0]);
+  let score = 0;
+  if (PAY_LABEL.test(line)) score += 5;
+  if (PAY_WORDS.test(line)) score += 3;
+  // Company-money words count only next to the amount ("$0 to $30M in ARR"), not elsewhere in a long pay sentence.
+  const start = match.index ?? 0;
+  if (NOT_PAY.test(line.slice(Math.max(0, start - 40), start + match[0].length + 40))) score -= 6;
+  if (MILLIONS.test(after) || /[$£€]\s?\d[\d,.]*\s*(?:m|b|bn|million|billion)\b/i.test(line)) score -= 8;
+  if (first === null) score -= 4;
+  else if (first >= 15_000 && first <= 2_000_000) score += 2;
+  else if (first >= 10 && first <= 500 && /\b(?:hour|hr|hourly)\b/i.test(line)) score += 2;
+  if (RANGE.test(line)) score += 1;
+  return score;
+}
+
 export function parsePay(posting: string): PostingPay | null {
   const lines = posting.split("\n").map((value) => clean(value.replace(BULLET, "$1"))).filter(Boolean);
-  // A labeled pay line first ("Salary: …"), then any sentence with a money range.
-  const line = lines.find((value) => /^(?:salary|pay|compensation|base salary|pay range|salary range)\b[^:]{0,20}:/i.test(value) && /[$£€]\s?\d/.test(value))
-    ?? lines.find((value) => RANGE.test(value) && !/\b(?:401|stipend|reimburse|bonus of|referral)\b/i.test(value));
-  if (!line) return null;
+  // The line most likely to state pay, never the first money in the posting ("scaled sales from $0 to $30M in ARR").
+  let line: string | null = null;
+  let best = 0;
+  for (const value of lines) {
+    const score = payScore(value);
+    if (score > best) { best = score; line = value; }
+  }
+  if (!line || best < 1) return null;
   const match = RANGE.exec(line);
   if (!match) {
     const single = new RegExp(AMOUNT).exec(line)?.[0];

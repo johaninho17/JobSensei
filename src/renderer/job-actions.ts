@@ -1,4 +1,5 @@
 import type { ApplicationStatus, InterviewOverview, InterviewStage, JobFolderSummary } from "../shared/schemas";
+import { nextInterviewStep } from "../shared/interview-progress";
 
 export type JobActionGroup = "Recommended" | "Interview" | "Application";
 
@@ -45,28 +46,25 @@ export function buildJobActions(job: JobFolderSummary | null, interview: Intervi
     }
   };
   const current = interview?.rounds.find((round) => round.id === interview.currentRoundId) ?? interview?.rounds.at(-1) ?? null;
-  const currentStepIndex = current
-    ? interview?.knownProcess.findIndex((step) => step.stage === current.stage || ("roundId" in step && step.roundId === current.id)) ?? -1
-    : -1;
-  const candidateSteps = currentStepIndex >= 0
-    ? interview?.knownProcess.slice(currentStepIndex + 1) ?? []
-    : interview?.knownProcess ?? [];
-  const next = candidateSteps.find((step) => !interview?.rounds.some((round) => round.stage === step.stage || ("roundId" in step && step.roundId && round.id === step.roundId)))
-    ?? interview?.knownProcess.find((step) => !interview?.rounds.some((round) => round.stage === step.stage || ("roundId" in step && step.roundId && round.id === step.roundId)))
-    ?? null;
+  // What comes next (src/shared/interview-progress.ts): after the furthest round done, counting interviews the user
+  // recorded in the tracker; earlier rounds that were skipped are never suggested.
+  const recorded = job.tracker?.interviews ?? [];
+  const next = nextInterviewStep({ rounds: interview?.rounds ?? [], knownProcess: interview?.knownProcess ?? [], recorded });
+  const nextRound = next.kind === "practice" ? interview?.rounds.find((round) => round.id === next.roundId) ?? null : null;
+  const debriefRound = [...(interview?.rounds ?? [])].reverse().find((round) => round.debriefSourcePaths.length && !round.artifactPaths.debriefAnalysis) ?? null;
 
-  if (current?.debriefSourcePaths.length && !current.artifactPaths.debriefAnalysis) {
+  if (debriefRound) {
     add("analyze-debrief", `Analyze ${company} debrief`, `${named} debrief`, "Recommended", true);
-  } else if (next) {
+  } else if (nextRound?.stage === "technical_challenge" && !nextRound.artifactPaths.practiceLabs) {
+    add("prepare-current-challenge", `Prepare ${company} technical challenge`, `${named} technical challenge`, "Recommended", true);
+  } else if (nextRound) {
+    const words = stageWords(nextRound.stage);
+    add("start-current-mock", `Practice ${words}`, `Start ${named} ${words} mock`, "Recommended", true);
+  } else if (next.kind === "prepare") {
     const words = stageWords(next.stage);
     add("prepare-next-round", `Prepare ${words}`, `Prepare ${named} ${words}`, "Recommended", true);
-  } else if (current?.stage === "technical_challenge" && !current.artifactPaths.practiceLabs) {
-    add("prepare-current-challenge", `Prepare ${company} technical challenge`, `${named} technical challenge`, "Recommended", true);
-  } else if (current?.status === "prep_ready") {
-    const words = stageWords(current.stage);
-    add("start-current-mock", `Start ${words} mock`, `Start ${named} ${words} mock`, "Recommended", true);
   } else {
-    add("prepare-recruiter", `Prepare ${company} recruiter interview`, `Prepare ${named} recruiter interview`, "Recommended", true);
+    add("evaluate-application", "Evaluate application", `Evaluate ${named} application`, "Recommended", true);
   }
 
   add("recruiter-interview", "Prepare recruiter interview", `Prepare ${named} recruiter interview`, "Interview");

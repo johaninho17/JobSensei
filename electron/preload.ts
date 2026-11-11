@@ -19,6 +19,14 @@ const api: SenseiApi = {
     undoUpdate: () => ipcRenderer.invoke("content:undo-update"),
     skip: (paths) => ipcRenderer.invoke("content:skip", paths),
   },
+  today: {
+    get: () => ipcRenderer.invoke("today:get"),
+    answer: (id, answer) => ipcRenderer.invoke("today:answer", id, answer),
+    removeQuestion: (id) => ipcRenderer.invoke("today:remove-question", id),
+    keepPosting: (jobId) => ipcRenderer.invoke("today:keep-posting", jobId),
+    closePosting: (jobId) => ipcRenderer.invoke("today:close-posting", jobId),
+    onChanged: (callback) => { const listener = () => callback(); ipcRenderer.on("today:changed", listener); return () => ipcRenderer.removeListener("today:changed", listener); },
+  },
   jobSearch: {
     get: () => ipcRenderer.invoke("search:get"),
     saveSettings: (settings) => ipcRenderer.invoke("search:save-settings", settings),

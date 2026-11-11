@@ -1,17 +1,18 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
-import type { CandidateProfile } from "../src/shared/schemas";
+import type { CandidateProfile, JobFolderSummary } from "../src/shared/schemas";
 import type { PostingRecord } from "../src/shared/posting";
 import {
   DEFAULT_JOB_SEARCH_SETTINGS, EMPTY_JOB_SEARCH_STATE, SEARCH_BOARDS, SKIPPED_BOARDS,
-  canonicalUrl, jobKey, jobSearchSettingsSchema, lightRatingPicks, locationFits, jobSearchStateSchema, skippedSite,
+  canonicalUrl, jobKey, jobSearchSettingsSchema, lightRatingPicks, locationFits, titleExcluded, jobSearchStateSchema, skippedSite,
   type InboxItem, type JobSearchSettings, type JobSearchState, type QuickFit, type SearchProgress, type SearchRun, type WatchedSuggestion,
 } from "../src/shared/job-search";
 import { readActiveContextManifest } from "./context";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
 import { fetchAndClean, postingFromBoard, stageCleanedPosting, suggestJobId } from "./jd-fetch";
-import { bestMatch, boardPostingHtml, fitsSearchTitles, listBoardJobs, type BoardJob } from "./job-boards";
+import { bestMatch, boardPostingHtml, fitsSearchTitles, listBoardJobs, titleSimilarity, type BoardJob } from "./job-boards";
+import { computeLearnings, furthestRecordedStage } from "../src/shared/learnings";
 import { boardKey, boardOf, boardRef, singlePosting, type BoardRef } from "../src/shared/boards";
 
 export { boardOf, singlePosting };
@@ -114,6 +115,7 @@ export function buildSearchPrompt(settings: JobSearchSettings, recent: string[],
     `- Hiring within the last ${settings.postedWithinDays} days (today is ${today.toISOString().slice(0, 10)}).`,
     settings.includeKeywords.length ? `- Should involve: ${settings.includeKeywords.join(", ")}` : "",
     settings.excludeKeywords.length ? `- Leave out roles about: ${settings.excludeKeywords.join(", ")}` : "",
+    settings.excludeTitleWords.length ? `- Leave out roles whose title includes: ${settings.excludeTitleWords.join(", ")}` : "",
     settings.skipCompanies.length ? `- Never these companies: ${settings.skipCompanies.join(", ")}` : "",
     knownCompanies.length ? `- Already known, find others: ${knownCompanies.slice(0, 60).join(", ")}` : "",
     "",
@@ -315,6 +317,8 @@ export type SearchDeps = {
   existingKeys: Set<string>;
   /** Companies of the user's jobs on Ashby/Greenhouse/Lever, watched automatically when `autoWatch` is on. */
   jobCompanies?: WatchedSuggestion[];
+  /** What the user's recorded interviews teach the search (see `searchLearning`). */
+  learned?: SearchLearning;
   onUpdate?: (state: JobSearchState) => void;
   onProgress?: (progress: SearchProgress) => void;
   /** Set by the scheduled runner. */
@@ -366,7 +370,9 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
 
   const candidates: Candidate[] = [];
   const fromBoard = (ref: BoardRef, job: BoardJob, name: string | undefined, source: Candidate["source"]) => {
-    if (fitsSearchTitles(job.title, settings.titles)) candidates.push({ link: { url: job.url, title: job.title, company: name || job.company || undefined, location: job.location ?? undefined, postedDate: job.postedAt ?? undefined }, source, board: { ref, job } });
+    if (!fitsSearchTitles(job.title, settings.titles)) return;
+    if (titleExcluded(job.title, settings.excludeTitleWords)) { skip("title has a word you left out"); return; }
+    candidates.push({ link: { url: job.url, title: job.title, company: name || job.company || undefined, location: job.location ?? undefined, postedDate: job.postedAt ?? undefined }, source, board: { ref, job } });
   };
 
   // 1. Watched companies (free): their live postings whose titles fit the search.
@@ -480,6 +486,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
     const key = jobKey(companyName, title);
     if (key && (seen.has(key) || checked.has(key))) { skip("already seen"); continue; }
     if (key) checked.add(key);
+    if (title && titleExcluded(title, settings.excludeTitleWords)) { skip("title has a word you left out"); continue; }
     if (companyName && skipCompanies.includes(companyName.toLowerCase())) { skip("skipped company"); continue; }
     const text = `${title ?? ""} ${record.summary.join(" ")}`.toLowerCase();
     if (settings.excludeKeywords.some((word) => text.includes(word.toLowerCase()))) { skip("excluded keyword"); continue; }
@@ -497,12 +504,13 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
       pay: record.pay?.text ?? null,
       workSetup: record.workSetup?.text ?? board?.job.workplace ?? record.workSetup?.mode ?? null,
       level: record.seniority,
-      fit: quickFit(record, vocab, settings),
+      fit: learnedFit(quickFit(record, vocab, settings), deps.learned),
       jobId: null,
       queuedAt: null,
       autoQueued: false,
       watched: candidate.source === "watched",
       agyFit: null,
+      likeInterviewed: title ? likeInterviewed(title, deps.learned) : null,
     };
     await writeTextAtomic(path(deps.workspace, `${POSTINGS_DIR}/${item.id}.md`), markdown);
     seen.add(url);
@@ -552,6 +560,29 @@ export async function jobsForSearch(workspace: string, jobs: Array<{ id: string;
   }
   const companies = [...found.values()].sort((a, b) => Number(b.interviewed) - Number(a.interviewed) || b.jobs - a.jobs || a.name.localeCompare(b.name));
   return { existingKeys, companies };
+}
+
+/**
+ * What recorded interviews teach the search: titles of jobs that got a real interview (matches like them rank a little
+ * higher) and gap terms that recur in applications with no interview (flagged on new matches). From Learnings (U31).
+ */
+export type SearchLearning = { interviewed: Array<{ title: string; company: string | null }>; rejectionGaps: string[] };
+
+export function searchLearning(jobs: JobFolderSummary[]): SearchLearning {
+  return {
+    interviewed: jobs.filter((job) => furthestRecordedStage(job) !== null && job.title).map((job) => ({ title: job.title!, company: job.company })),
+    rejectionGaps: computeLearnings(jobs).gapTerms.filter((term) => term.noInterview >= 2 && term.noInterview > term.interviewed).map((term) => term.term),
+  };
+}
+
+export function likeInterviewed(title: string, learned: SearchLearning | undefined): string | null {
+  const match = learned?.interviewed.find((job) => titleSimilarity(job.title, title) >= 0.6);
+  return match ? `Like ${match.company ? `your ${match.company} interview` : "a job that got you an interview"}` : null;
+}
+
+function learnedFit(fit: QuickFit, learned: SearchLearning | undefined): QuickFit {
+  const recurring = fit.gaps.filter((gap) => learned?.rejectionGaps.some((term) => term.toLowerCase() === gap.toLowerCase()));
+  return recurring.length ? { ...fit, flags: [...fit.flags, `Came up in applications without interviews: ${recurring.join(", ")}`] } : fit;
 }
 
 // ---------- One search at a time (the app and the scheduled runner share this lock) ----------

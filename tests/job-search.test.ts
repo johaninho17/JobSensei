@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_JOB_SEARCH_SETTINGS, autoDraftPicks, canonicalUrl, effectiveFit, jobKey, lightRatingPicks, locationFits, placesFor, rankInbox, skippedSite,
+  DEFAULT_JOB_SEARCH_SETTINGS, autoDraftPicks, canonicalUrl, effectiveFit, jobKey, lightRatingPicks, locationFits, placesFor, rankInbox, skippedSite, titleExcluded,
   type InboxItem, type JobSearchState,
 } from "../src/shared/job-search";
 import {
@@ -372,5 +372,31 @@ describe("job search: fixes from the first live check", () => {
     expect(jobKey("TribalScale", "Forward Deployed Engineer (Atlanta, Georgia)")).toBe(jobKey("TribalScale", "Forward Deployed Engineer (New York)"));
     expect(jobKey("Acme", "Solutions Engineer - Austin, TX")).toBe(jobKey("Acme", "Solutions Engineer"));
     expect(jobKey("Acme", "Solutions Engineer")).not.toBe(jobKey("Acme", "Solutions Architect"));
+  });
+});
+
+describe("job search: words to leave out of titles", () => {
+  it("leaves out titles with the user's words as whole words, including short forms", () => {
+    const words = ["Senior", "Principal", "Lead"];
+    expect(titleExcluded("Senior Solutions Engineer", words)).toBe("Senior");
+    expect(titleExcluded("Sr. Solutions Engineer", words)).toBe("Senior");
+    expect(titleExcluded("Forward Deployed Engineering Lead", words)).toBe("Lead");
+    expect(titleExcluded("Solutions Engineer, Lead Generation Tools", words)).toBe("Lead");
+    expect(titleExcluded("Solutions Engineer, Leading Accounts", words)).toBeNull();
+    expect(titleExcluded("Solutions Engineer II", words)).toBeNull();
+  });
+
+  it("tells Agy and skips matching board jobs", async () => {
+    expect(buildSearchPrompt({ ...settings, excludeTitleWords: ["Senior", "Staff"] }, [])).toContain("Leave out roles whose title includes: Senior, Staff");
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
+    await saveSearchSettings(workspace, { ...settings, excludeTitleWords: ["Senior"], watched: [{ board: "ashby", slug: "northstar", name: "Northstar Labs", source: "user" }] });
+    const body = `<ul><li>Strong SQL and Python for data troubleshooting</li><li>Technical discovery with customers</li></ul><p>${"Northstar Labs helps retail teams launch data tools. ".repeat(10)}</p>`;
+    const fetcher = (async () => Response.json({ jobs: [
+      { title: "Senior Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/northstar/s1", location: "Remote - US", workplaceType: "Remote", publishedAt: "2026-11-05T10:00:00Z", isListed: true, descriptionHtml: body },
+      { title: "Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/northstar/s2", location: "Remote - US", workplaceType: "Remote", publishedAt: "2026-11-05T10:00:00Z", isListed: true, descriptionHtml: body },
+    ] })) as typeof fetch;
+    const { run, state } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner: null, now: () => new Date("2026-11-10T12:00:00Z") });
+    expect(run).toMatchObject({ added: 1, leftOut: { "title has a word you left out": 1 } });
+    expect(state.items[0].title).toBe("Solutions Engineer");
   });
 });

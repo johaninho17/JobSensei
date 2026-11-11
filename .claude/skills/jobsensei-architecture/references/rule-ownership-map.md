@@ -65,3 +65,9 @@ Audit date: 2026-10-23, updated after Phase 4. ⚠ marks copies still known to c
 | Scheduled search window (once a day after the set time, scheduled runs only) | `dailyRunDue` / `windowStart` in `src/shared/job-search.ts`; OS triggers in `electron/search-schedule.ts` (`ensureSchedule`) | Wording on the Schedule section |
 | Profile fields edited in Settings and Setup (story, pillars, private names, logistics) | `src/shared/profile-fields.ts` | Both screens read and save through it (`tests/profile-fields.test.ts`) |
 | Latest run status | `RunWatcher` in `electron/run-watcher.ts` (pushes `runs:changed`) | The app's queue, notifications, and status bar all use the pushed value |
+| What comes next in interviews | `nextInterviewStep` / `roundDone` in `src/shared/interview-progress.ts` | Job actions, stepper, and Interviews list call it (`tests/interview-progress.test.ts`) |
+| Pay in a posting | `payScore` / `parsePay` in `electron/posting-record.ts` | None; every screen reads `posting.json` |
+| Proven lines (wording from resumes that got interviews) | `provenLinesFor` (`electron/proven-lines.ts`) + snapshot instruction "provenLines (owner of this rule)" | None |
+| Company research reuse | Interview pipeline SKILL step 4 (owner); `companyResearchFor` in `interview-context.ts` supplies the file | None |
+| Today questions, insights, closed postings, morning summary | `src/shared/today.ts`, `electron/today.ts` | None (`tests/today.test.ts`) |
+

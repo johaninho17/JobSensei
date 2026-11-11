@@ -163,6 +163,9 @@ describe("context-authoritative evidence", () => {
     expect(stored.length).toBeLessThan(Buffer.byteLength(hidden) / 2);
     const compactText = await readFile(join(workspace, "jobs", "sample-role", ".sensei", "application_context.json"), "utf8");
     const compact = JSON.parse(compactText);
+    // Agy gets a focused context per task, never every career file: a size budget so it can't grow unnoticed.
+    expect(Buffer.byteLength(compactText)).toBeLessThan(40_000);
+    expect(compact.evidenceRows.length).toBeLessThanOrEqual(40);
     expect(compact.schemaVersion).toBe(2);
     expect(compact.evidenceRows.map((row: { evidenceId: string }) => row.evidenceId)).toEqual(snapshot.applicationRouting?.selectedEvidenceIds);
     expect(compact).not.toHaveProperty("canonicalResume");

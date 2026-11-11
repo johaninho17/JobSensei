@@ -13,7 +13,8 @@ import { autoDraftPicks, dailyRunDue } from "../src/shared/job-search";
 import { prepareAgyHome } from "./agy-home";
 import { readCandidateProfile } from "./candidate-profile";
 import { listJobFolders } from "./job-folders";
-import { JOB_SEARCH_DIR, RATING_SCHEMA, jobsForSearch, SEARCH_SCHEMA, readSearchSettings, readSearchState, releaseSearchLock, runSearch, saveSearchState, takeSearchLock } from "./job-search";
+import { writeMorningSummary } from "./today";
+import { JOB_SEARCH_DIR, RATING_SCHEMA, jobsForSearch, searchLearning, SEARCH_SCHEMA, readSearchSettings, readSearchState, releaseSearchLock, runSearch, saveSearchState, takeSearchLock } from "./job-search";
 import { reachedInterview } from "../src/shared/tracker";
 import { headlessAgy } from "./question-agent";
 import { appRoot, resolveAgyExecutable } from "./terminal";
@@ -67,7 +68,8 @@ async function main(): Promise<number> {
   try {
     const agyPath = resolveAgyExecutable();
     const agyHome = agyPath ? await prepareAgyHome(userData, workspace, [], { appRoot: appRoot(), runtimePath: process.execPath }) : null;
-    const jobs = (await listJobFolders(workspace).catch(() => [])).map((job) => ({ id: job.id, company: job.company, title: job.title, reachedInterview: reachedInterview(job) }));
+    const allJobs = await listJobFolders(workspace).catch(() => []);
+    const jobs = allJobs.map((job) => ({ id: job.id, company: job.company, title: job.title, reachedInterview: reachedInterview(job) }));
     const { existingKeys, companies } = await jobsForSearch(workspace, jobs);
     const { run } = await runSearch({
       workspace,
@@ -75,6 +77,7 @@ async function main(): Promise<number> {
       scheduled: true,
       existingKeys,
       jobCompanies: companies,
+      learned: searchLearning(allJobs),
       runner: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 420, jsonSchema: SEARCH_SCHEMA }) : null,
       rater: agyPath && agyHome ? headlessAgy({ agyPath, agyHome, cwd: workspace, timeoutSeconds: 240, jsonSchema: RATING_SCHEMA }) : null,
     });
@@ -83,8 +86,10 @@ async function main(): Promise<number> {
     const picks = run.status === "done" ? autoDraftPicks({ ...state, items: state.items.filter((item) => item.runId === run.id) }, settings) : [];
     if (picks.length) await saveSearchState(workspace, { ...state, pendingDrafts: [...new Set([...state.pendingDrafts, ...picks.map((item) => item.id)])] });
     await log(`${run.status}: ${run.found} links, ${run.added} new, ${run.rated} rated, ${picks.length} marked for drafts${run.error ? `; ${run.error}` : ""}${agyPath ? "" : "; Agy not found, watched companies only"}`);
+    // Second step, after the search: the morning summary (closed postings, what's due, questions), no Agy.
+    const summary = await writeMorningSummary(workspace, { jobs: allJobs, profile }).catch((error) => { void log(`summary error: ${error instanceof Error ? error.message : String(error)}`); return null; });
     if (run.status === "failed") notify("JobSensei search didn't finish", run.error ?? "Open Job Search for details.");
-    else if (run.added) notify("JobSensei found new jobs", `${run.added} new match${run.added === 1 ? "" : "es"}${picks.length ? `; ${picks.length} will be drafted when you open the app` : ""}.`);
+    else notify("JobSensei: your day", `${summary?.line ?? `${run.added} new match${run.added === 1 ? "" : "es"}.`}${picks.length ? ` ${picks.length} will be drafted when you open the app.` : ""}`);
     return 0;
   } catch (error) {
     await log(`error: ${error instanceof Error ? error.message : String(error)}`);

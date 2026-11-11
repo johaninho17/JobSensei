@@ -10,6 +10,38 @@
 .btn-link { padding: 0; border: 0; color: var(--accent); background: none; text-align: left; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 3px; }
 .btn-link:hover:not(:disabled) { text-decoration-color: currentColor; }
 .btn-primary:disabled, .btn-quiet:disabled, .btn-link:disabled { opacity: .5; cursor: default; }
+
+/* Form controls, one look everywhere. :where() keeps zero specificity, so any component's own class still wins. */
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="hidden"]), select, textarea) {
+  box-sizing: border-box; min-height: 36px; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-s);
+  color: var(--ink); background: var(--raised); font: inherit; font-size: var(--fs-13); line-height: 1.4;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+:where(textarea) { min-height: 72px; resize: vertical; }
+:where(input, select, textarea)::placeholder { color: var(--muted); opacity: .85; }
+:where(input:not([type="checkbox"]):not([type="radio"]), select, textarea):hover:not(:disabled):not(:focus) { border-color: color-mix(in srgb, var(--ink) 38%, transparent); }
+:where(input:not([type="checkbox"]):not([type="radio"]), select, textarea):focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+:where(input, select, textarea):disabled { opacity: .55; cursor: not-allowed; }
+:where(select) {
+  appearance: none; padding-right: 30px; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%; background-size: 5px 5px; background-repeat: no-repeat;
+}
+:where(input[type="checkbox"], input[type="radio"]) { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+
+/* Collapsible sections (src/renderer/Section.tsx). */
+.section { margin-bottom: var(--space-4); }
+.section > summary { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; list-style: none; cursor: pointer; user-select: none; }
+.section > summary::-webkit-details-marker { display: none; }
+.section > summary:hover .section-title { color: var(--accent); }
+.section-chevron { width: 8px; height: 8px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); transition: transform .15s ease; flex: none; margin-right: 2px; }
+.section[open] > summary .section-chevron { transform: rotate(45deg); }
+.section-title { font: 650 var(--fs-15) var(--font-ui); color: var(--ink); }
+.section-count { min-width: 20px; padding: 0 7px; border-radius: var(--radius-pill); background: var(--hover); color: var(--muted); font-size: var(--fs-12); text-align: center; }
+.section-actions { margin-left: auto; display: inline-flex; gap: var(--space-2); }
+.section-body { padding: var(--space-1) 0 0 calc(8px + var(--space-3)); }
+.section-note { margin: 0 0 var(--space-2); color: var(--muted); font-size: var(--fs-13); }
+
 .muted { color: var(--muted); }
 
 .segmented { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: var(--radius-s); background: var(--sunken); }
@@ -699,7 +731,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .setup-editor p { margin: 0; font-size: var(--fs-13); }
 .setup-field { display: grid; gap: 4px; font-size: var(--fs-13); }
 .setup-field span { color: var(--muted); }
-.setup-field input, .setup-field textarea { padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-s); color: var(--ink); background: var(--canvas); font: inherit; }
+.setup-field input, .setup-field textarea { width: 100%; }
 .onboarding-better li .setup-row-editor { grid-column: 1 / -1; }
 
 .recording-list { display: grid; margin: 0; padding: 0; list-style: none; }
@@ -742,10 +774,52 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .watched-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; font-size: var(--fs-13); }
 .find-main .find-tag { margin-left: var(--space-2); }
 .fit-badge-source { display: block; font-size: 10px; font-weight: 500; line-height: 1; opacity: 0.8; }
-.find-callout { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; margin-bottom: var(--space-3); padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-m); background: var(--brass-tint); font-size: var(--fs-13); }
+.find-callout { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; margin-bottom: var(--space-3); padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-m); background: var(--raised); border-left: 3px solid var(--accent); font-size: var(--fs-13); }
 .find-schedule { margin: var(--space-2) 0 0; font-size: var(--fs-13); }
 .find-schedule.is-off { color: var(--ink); }
 .watched-details > summary { cursor: pointer; font-size: var(--fs-13); }
 .watched-details[open] > summary { margin-bottom: var(--space-2); }
 .watched-filter { max-width: 320px; margin-bottom: var(--space-2); }
 .watched-details .watched-list { max-height: 280px; overflow-y: auto; }
+
+/* Today (src/renderer/TodayView.tsx): two quiet columns of collapsible sections. */
+.today { max-width: 1180px; }
+.today .page-head { margin-bottom: var(--space-4); }
+.today-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 0 var(--space-6); align-items: start; }
+.today-col .section { padding-bottom: var(--space-2); border-bottom: 1px solid var(--line); }
+.today h3 { margin: var(--space-3) 0 var(--space-1); font: 600 var(--fs-12) var(--font-ui); color: var(--muted); }
+.today-list { display: grid; gap: 6px; margin: 0 0 var(--space-2); padding: 0; list-style: none; font-size: var(--fs-13); }
+.today-list li { display: flex; flex-wrap: wrap; gap: 2px var(--space-2); align-items: baseline; }
+.today-when { min-width: 92px; color: var(--muted); }
+.today-actions { display: inline-flex; gap: var(--space-3); }
+.today-insights { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; font-size: var(--fs-13); }
+.today-insights li { display: grid; gap: 2px; }
+.today-insights li .btn-link { justify-self: start; font-size: var(--fs-12); }
+.today-area { color: var(--muted); font-size: var(--fs-12); font-weight: 600; }
+.today-questions { display: grid; margin: 0; padding: 0; list-style: none; }
+.today-question { padding: var(--space-3) 0; border-top: 1px solid var(--line); font-size: var(--fs-13); }
+.today-question:first-child { border-top: 0; padding-top: 0; }
+.today-question-text { margin: 0; font-weight: 600; }
+.today-question-why { margin: 2px 0 var(--space-2); color: var(--muted); font-size: var(--fs-12); }
+.today-question-answer { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.today-inline { display: flex; flex: 1 1 280px; gap: var(--space-2); min-width: 0; }
+.today-inline input { flex: 1; min-width: 0; min-height: 32px; }
+.today-remove { margin-left: auto; font-size: var(--fs-12); color: var(--muted); }
+.btn-small { min-height: 30px; padding: 0 var(--space-3); font-size: var(--fs-12); }
+@media (max-width: 960px) { .today-grid { grid-template-columns: 1fr; } }
+.today-scored li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-2); align-items: baseline; }
+.today-actionable li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; }
+.today-actionable .today-actions { margin-left: 0; }
+
+/* Search settings: groups of options as toggle pills. */
+.search-settings .section { margin-bottom: 0; border-top: 1px solid var(--line); }
+.search-settings .section > summary { padding: var(--space-3) 0; }
+.search-settings .section-body { display: grid; gap: var(--space-3); padding-bottom: var(--space-4); }
+.search-checks label { gap: 6px; padding: 5px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--raised); cursor: pointer; transition: background .12s ease, border-color .12s ease; }
+.search-checks label:hover { border-color: color-mix(in srgb, var(--ink) 38%, transparent); }
+.search-checks label:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--raised)); }
+.search-checks input[type="checkbox"], .search-checks input[type="radio"] { width: 14px; height: 14px; }
+.search-field > span { font-size: var(--fs-12); font-weight: 600; letter-spacing: .01em; }
+.search-check { padding: 2px 0; }
+.find-tab-note { margin: 0 0 var(--space-3); font-size: var(--fs-13); }
+.search-field input[type="number"], .search-field input[type="time"] { max-width: 180px; }

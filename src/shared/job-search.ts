@@ -48,6 +48,8 @@ export const jobSearchSettingsSchema = z.object({
   /** Postings older than this are treated as stale. */
   postedWithinDays: z.number().int().min(1).max(90).default(30),
   includeKeywords: z.array(z.string().min(1)).default([]),
+  /** Words that rule a job out when they appear in its title (e.g. Senior, Principal, Lead), as whole words. */
+  excludeTitleWords: z.array(z.string().min(1)).default([]),
   excludeKeywords: z.array(z.string().min(1)).default([]),
   /** Built-in boards the user turned off (by id). */
   boardsOff: z.array(z.string()).default([]),
@@ -146,6 +148,8 @@ export const inboxItemSchema = z.object({
   /** Found on a watched company's board. */
   watched: z.boolean().default(false),
   agyFit: agyFitSchema.nullable().default(null),
+  /** A job like one that got the user a real interview (title), shown and ranked a little higher. */
+  likeInterviewed: z.string().nullable().default(null),
 });
 export type InboxItem = z.infer<typeof inboxItemSchema>;
 
@@ -326,12 +330,28 @@ export function locationFits(job: { locations: string[]; workplace: "remote" | "
   return inWanted ? { fits: true, reason: "in your area" } : { fits: false, reason: "outside your places" };
 }
 
+/** Whether a job title has one of the user's left-out words, as a whole word ("Lead" never matches "Leading"). */
+export function titleExcluded(title: string, words: string[]): string | null {
+  // Common short forms count as the same word ("Senior" also leaves out "Sr." titles).
+  const SHORT: Record<string, string[]> = { senior: ["sr"], junior: ["jr"], principal: ["princ"], manager: ["mgr"], director: ["dir"] };
+  for (const word of words) {
+    const forms = [word.trim(), ...(SHORT[word.trim().toLowerCase()] ?? [])];
+    for (const form of forms) {
+      const escaped = form.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (escaped && new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, "i").test(title)) return word.trim();
+    }
+  }
+  return null;
+}
+
 /** Inbox order: by fit (Agy's light rating, else quick fit; highest first), then newest. */
 export function rankInbox(items: InboxItem[], sort: "fit" | "newest" | "company" = "fit"): InboxItem[] {
   const time = (item: InboxItem) => Date.parse(item.postedAt ?? item.foundAt) || 0;
-  return [...items].sort((a, b) => sort === "company" ? (a.company ?? "").localeCompare(b.company ?? "") || effectiveFit(b) - effectiveFit(a)
-    : sort === "newest" ? time(b) - time(a) || effectiveFit(b) - effectiveFit(a)
-      : effectiveFit(b) - effectiveFit(a) || time(b) - time(a));
+  // Jobs like ones that got interviews rank a quarter point higher (the shown score doesn't change).
+  const rank = (item: InboxItem) => effectiveFit(item) + (item.likeInterviewed ? 0.25 : 0);
+  return [...items].sort((a, b) => sort === "company" ? (a.company ?? "").localeCompare(b.company ?? "") || rank(b) - rank(a)
+    : sort === "newest" ? time(b) - time(a) || rank(b) - rank(a)
+      : rank(b) - rank(a) || time(b) - time(a));
 }
 
 /** Which new items to queue for drafts by themselves: at or above the user's rating, within today's cap. */
