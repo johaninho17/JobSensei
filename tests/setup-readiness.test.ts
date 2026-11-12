@@ -64,7 +64,7 @@ describe("setup readiness", () => {
     // Removing the companion is noticed even though the PDF itself didn't change.
     await rm(join(dir, "resumes", "resume.md"));
     expect(item(await computeReadiness(input({ profile: profile({ sources: { baseResumePath: "resumes/resume.pdf" } }) })), "resume").state).toBe("problem");
-  });
+  }, 30_000); // Reads a PDF; took 14.6 s on a Windows release runner (2026-11-12).
 
   it("Agy must be installed; a sign-in screen is reported as a problem", async () => {
     await workspace();
