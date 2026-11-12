@@ -14,11 +14,29 @@ Agy stops until your quota resets. `/usage` shows when. Jobs stay in the queue a
 
 ## A draft says something that isn't true, or misses something real
 
+<!-- feature:!candidates -->
 Drafts only use your work records. Add or fix the record (Career context), then run the job again from its ⋯ menu. Editing the draft by hand fixes only that one job.
+<!-- /feature -->
+<!-- feature:candidates -->
+Drafts only use the candidate's files and your notes. Add a line to their notes or fix the file (Profile → Notes or Files), then run the job again from its ⋯ menu. Editing the draft by hand fixes only that one job. A rule for every job (wording, things never to write) goes in Instructions for Agy instead (Settings, or Profile → Settings for one candidate).
+<!-- /feature -->
 
 ## A posting can't be read
 
+<!-- feature:!candidates -->
 Some sites block reading. Paste the posting text into Add jobs instead of the link.
+<!-- /feature -->
+<!-- feature:candidates -->
+Some sites block reading. Paste the posting text on Postings (or in the candidate's Jobs) instead of the link.
+
+## A candidate isn't suggested for a posting
+
+Postings marks why: no base resume yet, the company is on their skip list or is their current employer, they already have this job, or the posting is outside their brief (roles, places, pay floor, sponsorship). You can still tick them.
+
+## A cover letter wasn't written
+
+Letters are off unless you turn them on (Settings, or Profile → Settings for one candidate), and they also need a career story, a writing voice, and two or more files besides the resume. The candidate's Overview says what's missing.
+<!-- /feature -->
 
 ## The base resume isn't accepted
 

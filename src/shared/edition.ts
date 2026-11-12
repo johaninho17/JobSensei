@@ -132,9 +132,16 @@ export function includedCommand(features: Features, name: string): boolean {
  * AGENTS.md, PRIVACY.md, and TERMS.md mark feature-only text with `<!-- feature:<name> -->` … `<!-- /feature -->`
  * (whole sections or a few words). Text whose feature is off is removed; the markers stay out of every copy.
  */
+/**
+ * Keeps each edition's own text: `<!-- feature:name -->…<!-- /feature -->` stays only when the feature is on, and
+ * `<!-- feature:!name -->…` only when it is off (e.g. the regular app's wording beside the Recruiter Edition's).
+ */
 export function featureText(features: Features, text: string): string {
   return text
-    .replace(/<!-- feature:(\w+) -->\n?([\s\S]*?)<!-- \/feature -->\n?/g, (_match, name: string, body: string) => (features[name as keyof Features] === false ? "" : body))
+    .replace(/<!-- feature:(!?)(\w+) -->\n?([\s\S]*?)<!-- \/feature -->\n?/g, (_match, not: string, name: string, body: string) => {
+      const on = features[name as keyof Features] !== false;
+      return (not ? !on : on) ? body : "";
+    })
     .replace(/\n{3,}/g, "\n\n");
 }
 export const agentsMdFor = featureText;

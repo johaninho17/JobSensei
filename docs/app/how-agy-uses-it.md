@@ -5,11 +5,20 @@ Agy gets only what a task needs, not everything you have. Each skill below is a 
 ## Application drafts
 
 **When:** a job reaches the front of the queue.
+<!-- feature:!candidates -->
 **Agy reads:** the posting, the rows of your work records that match it (usually about twenty), your base resume's layout, your writing voice, and your preferences.
 **It writes:** a tailored resume, a cover letter, and a fit rating against the posting's own requirements.
 **What helps most:** work records with clear dates and results; a base resume in the shape you want to send.
 - Bullets that already fit stay as they are; the rest are reworded from your records, never invented.
 - Your current role is written as current; earlier roles and earlier phases as past.
+<!-- /feature -->
+<!-- feature:candidates -->
+**Agy reads:** the posting, the lines from the open candidate's files and your notes that match it, their base resume's layout, and your instructions for Agy (Settings) with the candidate's own (Profile → Settings), which win over yours. Only that candidate's folder; never another candidate's.
+**It writes:** a tailored resume, a cover letter only when letters are on and the candidate has enough for one, and a fit rating against the posting's own requirements.
+**What helps most:** notes with where and when ("at Northstar Labs since 2022…"); a base resume in the shape you want to send.
+- At the current job, three or four bullets are reworded for the posting and the rest kept; earlier jobs stay as written.
+- The truth rules sit above your instructions: wording may be stronger, but nothing the files don't state is added.
+<!-- /feature -->
 
 ## Fit rating
 
@@ -50,4 +59,9 @@ Each requirement from the posting is rated against your records: met, close, lea
 
 ## What never uses Agy
 
+<!-- feature:!candidates -->
 Reading job boards, checking whether postings closed, quick fit scores, Setup checks, and Learnings are the app's own work, with no AI.
+<!-- /feature -->
+<!-- feature:candidates -->
+Reading postings, suggesting which candidates a posting fits, the Review screen, Mark applied, the Pipeline, and Reports are the app's own work, with no AI.
+<!-- /feature -->

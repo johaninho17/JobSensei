@@ -9,7 +9,7 @@ Type these in the Agy panel (Chat or Console). `/help` always shows the full cur
 | `/effort` | Sets how hard Agy thinks: lower is faster and uses less quota, higher is more careful |
 | `/usage` | Shows how much of your quota is left |
 | `/config` | Opens Agy's settings, including its colour scheme |
-| `/resume` | Opens an earlier conversation |
+| `/resume` | Opens an earlier conversation<!-- feature:candidates --> (only the open candidate's)<!-- /feature --> |
 | `/clear` | Starts a fresh conversation (useful between jobs) |
 | `/skills` | Lists the skills Agy has (JobSensei's come with the app) |
 | `/permissions` | Shows what Agy may do. JobSensei sets these for you; leave them as they are |
