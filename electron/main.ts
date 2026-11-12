@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, session, shell } from "electron";
+import { recruiterInstructionsFor } from "./recruiter-defaults";
 import { textContextMenu } from "./context-menu";
 import { EDITION_INFO, featuresFor } from "../src/shared/edition";
 import { currentEdition, prepareEditionFolder } from "./edition";
@@ -183,7 +184,7 @@ ipcMain.handle("profile:preview", async () => {
   const baseline = basePath ? await loadCanonicalResumeBaseline(workspace, basePath).catch(() => null) : null;
   return {
     styleRules: compactStyleRules(voiceText, profile),
-    instructions: profileInstructionLines(profile),
+    instructions: profileInstructionLines(profile, true, await recruiterInstructionsFor(workspace)),
     baseResumeHasSummary: baseline ? Boolean(baseline.originalSummaryLines?.length) : null,
     interviewLogistics: Object.entries(profile?.preferences.interview ?? {})
       .map(([key, value]) => `${key}: ${value || "⚠ not set (prep will ask you to fill it in)"}`),

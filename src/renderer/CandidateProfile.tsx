@@ -3,7 +3,8 @@
 // separate Candidate and Career context pages of the regular app. Only rendered when FEATURES.candidates is on.
 import { useEffect, useState, type ReactNode } from "react";
 import type { RecruiterDefaults } from "../shared/candidates";
-import type { CandidateProfile } from "../shared/schemas";
+import { instructionLines, type CandidateProfile } from "../shared/schemas";
+import { instructionProblem } from "./RecruiterSettings";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 
 export type ProfileTab = "overview" | "resume" | "files" | "resumes" | "notes" | "settings";
@@ -66,6 +67,7 @@ export function CandidateSettingsTab({ profile, onSaved }: { profile: CandidateP
   const [defaults, setDefaults] = useState<RecruiterDefaults | null>(null);
   const [letters, setLetters] = useState<Choice>(choiceOf(profile?.preferences.coverLetter.enabled));
   const [summary, setSummary] = useState<Choice>(choiceOf(profile?.preferences.resume.includeSummary));
+  const [instructions, setInstructions] = useState((profile?.preferences.agyInstructions ?? []).join("\n"));
   const [preview, setPreview] = useState<{ styleRules: string[]; instructions: string[]; baseResumeHasSummary: boolean | null } | null>(null);
   const [state, setState] = useState<"ready" | "saving" | "saved">("ready");
   const [error, setError] = useState<string | null>(null);
@@ -77,9 +79,12 @@ export function CandidateSettingsTab({ profile, onSaved }: { profile: CandidateP
   const onOff = (value: boolean | undefined) => value === undefined ? "" : value ? " (on)" : " (off)";
   async function save() {
     if (!profile) return;
+    const lines = instructionLines(instructions);
+    const problem = instructionProblem(lines);
+    if (problem) { setError(problem); return; }
     setState("saving"); setError(null);
     try {
-      const next = await window.sensei.profile.updatePreferences({ ...profile.preferences, coverLetter: { ...profile.preferences.coverLetter, enabled: valueOf(letters) }, resume: { ...profile.preferences.resume, includeSummary: valueOf(summary) } });
+      const next = await window.sensei.profile.updatePreferences({ ...profile.preferences, coverLetter: { ...profile.preferences.coverLetter, enabled: valueOf(letters) }, resume: { ...profile.preferences.resume, includeSummary: valueOf(summary) }, agyInstructions: lines });
       onSaved(next);
       setPreview(await window.sensei.profile.preview().catch(() => null));
       setState("saved");
@@ -94,6 +99,7 @@ export function CandidateSettingsTab({ profile, onSaved }: { profile: CandidateP
     <label><span>Tailor the resume summary {preview?.baseResumeHasSummary === false && <small>(their base resume has no summary, so this has no effect)</small>}</span><select value={summary} onChange={(event) => { setSummary(event.target.value as Choice); setState("ready"); }}>
       <option value="default">Your default{onOff(defaults?.tailorSummary)}</option><option value="on">On</option><option value="off">Off</option>
     </select></label>
+    <label><span>Instructions for Agy <small>one per line; for this candidate only. They win over your instructions for every candidate, and can't override the truth rules.</small></span><textarea rows={4} value={instructions} placeholder={"Lead with their B2B SaaS work.\nKeep the 2019–2020 career break out of bullets."} onChange={(event) => { setInstructions(event.target.value); setState("ready"); }} /></label>
     <div className="onboarding-actions">
       <button className="btn-primary" disabled={state === "saving"} onClick={() => void save()}>{state === "saving" ? "Saving…" : "Save"}</button>
       {state === "saved" && <span className="muted" role="status">Saved</span>}

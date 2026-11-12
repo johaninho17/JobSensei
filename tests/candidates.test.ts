@@ -293,7 +293,14 @@ describe("recruiter defaults every candidate inherits (plan Q2, 2026-11-11)", ()
     const saved = await saveRecruiterSettings(dir, { recruiterName: "Jordan Lee", agency: "", defaults: { coverLetters: true, tailorSummary: true, pdfTextSize: "auto" } });
     expect(saved.agency).toBeNull();
     expect(saved.recruiterName).toBe("Jordan Lee");
+    // Read from the copy inside the candidate's folder (Agy's sandbox can't reach the recruiter folder; found live).
     expect(await recruiterDefaultsFor(await candidatePath(dir, entry.id))).toEqual({ coverLetters: true, tailorSummary: true, pdfTextSize: "auto" });
+    const { recruiterInstructionsFor } = await import("../electron/recruiter-defaults");
+    await saveRecruiterSettings(dir, { agyInstructions: ["Use US spelling."] });
+    expect(await recruiterInstructionsFor(await candidatePath(dir, entry.id))).toEqual(["Use US spelling."]);
+    const later = await addCandidate(dir, "Sam Rivera", { suffix: "q9w3" });
+    await setActiveCandidate(dir, later.id);
+    expect(await recruiterInstructionsFor(await candidatePath(dir, later.id))).toEqual(["Use US spelling."]);
     expect(await recruiterDefaultsFor(dir)).toBeNull();
     await expect(saveRecruiterSettings(dir, { defaults: { pdfTextSize: "huge" } })).rejects.toThrow();
   });

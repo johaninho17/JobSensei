@@ -115,6 +115,14 @@ export const applicationFactsSchema = z.object({
 });
 export type ApplicationFacts = z.infer<typeof applicationFactsSchema>;
 
+/** Instructions a recruiter writes for Agy (plan Q3): at most 12 lines of 300 characters, so Agy's context stays small. */
+export const AGY_INSTRUCTION_LIMITS = { lines: 12, characters: 300 } as const;
+export const agyInstructionsSchema = z.array(z.string().trim().min(1).max(AGY_INSTRUCTION_LIMITS.characters)).max(AGY_INSTRUCTION_LIMITS.lines);
+/** Splits a text box into instruction lines (one per line, list markers removed, blanks dropped). */
+export function instructionLines(text: string): string[] {
+  return text.split(/\r?\n/).map((line) => line.replace(/^\s*[-*•]\s*/, "").trim()).filter(Boolean);
+}
+
 export const candidateProfileSchema = z.object({
   schemaVersion: z.literal(1),
   identity: z.object({
@@ -178,6 +186,8 @@ export const candidateProfileSchema = z.object({
     interview: interviewLogisticsSchema.default(EMPTY_INTERVIEW_LOGISTICS),
     targets: candidateTargetsSchema.default(EMPTY_CANDIDATE_TARGETS),
     applicationFacts: applicationFactsSchema.default({ extra: [] }),
+    /** Recruiter Edition (plan Q3): the recruiter's instructions to Agy for this candidate; they win over the recruiter's own. */
+    agyInstructions: agyInstructionsSchema.default([]),
   }),
   truth: z.object({
     factualAuthority: z.string().default("Selected structured career evidence"),
@@ -1280,7 +1290,7 @@ export interface SenseiApi {
     showAll(): Promise<void>;
     /** The recruiter's name, agency, and defaults for every candidate. */
     recruiterSettings(): Promise<import("./candidates").RecruiterSettings>;
-    saveRecruiterSettings(input: { recruiterName?: string | null; agency?: string | null; defaults?: import("./candidates").RecruiterDefaults }): Promise<import("./candidates").RecruiterSettings>;
+    saveRecruiterSettings(input: { recruiterName?: string | null; agency?: string | null; defaults?: import("./candidates").RecruiterDefaults; agyInstructions?: string[] }): Promise<import("./candidates").RecruiterSettings>;
     rename(id: string, name: string): Promise<import("./candidates").CandidateEntry>;
     setStatus(id: string, status: import("./candidates").CandidateStatus): Promise<import("./candidates").CandidateEntry>;
     /** The open candidate's recruiter notes (recruiter plan R4). */

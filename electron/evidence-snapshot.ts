@@ -1,5 +1,5 @@
 import { readTextFile, writeCompressedJsonAtomic } from "./persistence";
-import { recruiterDefaultsFor } from "./recruiter-defaults";
+import { recruiterDefaultsFor, recruiterInstructionsFor } from "./recruiter-defaults";
 import { createHash } from "node:crypto";
 import { postingRecordFor, writePostingRecord } from "./posting-record";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
@@ -525,7 +525,8 @@ export function narrativeStoryLines(profile?: CandidateProfile | null): string[]
 }
 
 /** Profile-driven run instructions (truth boundaries, anti-slop strictness, confidential names). */
-export function profileInstructionLines(profile?: CandidateProfile | null, writeLetter = true): string[] {
+export function profileInstructionLines(profile?: CandidateProfile | null, writeLetter = true, recruiterInstructions: string[] = []): string[] {
+  const forCandidate = profile?.preferences.agyInstructions ?? [];
   const boundaries = (profile?.truth.boundaries ?? []).map((line) => line.trim()).filter(Boolean);
   const confidentialNames = profile?.truth.confidentialNames ?? [];
   const relaxed = profile?.preferences.voice.antiSlopStrictness === "standard";
@@ -539,6 +540,10 @@ export function profileInstructionLines(profile?: CandidateProfile | null, write
     relaxed
       ? "Avoid the banned phrases in coverLetterBrief.prohibitedPatterns; otherwise ordinary professional wording is fine."
       : "Avoid AI filler (delve, leverage, utilize, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, synergy, beacon, intersection) unless styleRules list a phrase as the candidate's own.",
+    // Recruiter Edition (plan Q3, owner of this rule): the recruiter's instructions, for every candidate and for this
+    // one. The candidate's win over the recruiter's; neither may break the truth and evidence rules above.
+    ...(recruiterInstructions.length ? [`The recruiter's instructions for every candidate (follow them unless this candidate's instructions say otherwise; never against the evidence rules): ${recruiterInstructions.join(" | ")}`] : []),
+    ...(forCandidate.length ? [`The recruiter's instructions for this candidate (they win over the instructions for every candidate; never against the evidence rules): ${forCandidate.join(" | ")}`] : []),
   ];
 }
 
@@ -549,7 +554,9 @@ export function compactStyleRules(markdown: string, profile?: CandidateProfile |
     .filter((line) => !/^source|^updated|^purpose|^application voice profile$/i.test(line))
     .slice(0, 14);
 
-  const voice = profile?.preferences.voice;
+  // The Recruiter Edition never shows the regular app's tone presets, so they aren't sent either (plan Q3); the
+  // recruiter's own instructions take their place (profileInstructionLines).
+  const voice = featuresFor(currentEdition()).candidates ? undefined : profile?.preferences.voice;
   const activePresetGuidance: string[] = [];
   if (voice?.tonePreset) {
     const presets = deriveVoicePresets(profile ?? null);
@@ -1045,7 +1052,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
         "Length and skills follow the base resume (owner of this rule): every role keeps at least its baseline number of bullets (resumePlan.employerTargets); a weaker bullet may be replaced by a stronger supported one, never dropped. Keep every skills item from the base resume: lead with what this job needs, add supported items, and remove an item only when nothing supports it. Skills the posting does not ask for still show the candidate's range, so they stay. The resume keeps the base resume's page count.",
         "Unchanged baseline bullets are the candidate's own approved claims: copy them word for word with the evidenceIds listed in baselineBullets (often none). Never attach an unrelated evidence ID to make a bullet look supported.",
         "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. The base resume is evidence too (owner of this rule): rows with `base:` IDs are its own lines, so a base line reworded for this job may cite its own `base:` row, and a candidate with only a base resume still gets a close tailoring. Whatever a line cites, it may not add an event, metric, tool, or ownership the cited rows do not state. " + (baseEarnsFitCredit() ? "`base:` rows also count when rating requirements." : "`base:` rows earn no fit credit; rate requirements from the other rows."),
-        ...profileInstructionLines(candidateProfile, snapshot.coverLetterPlan?.write !== false),
+        ...profileInstructionLines(candidateProfile, snapshot.coverLetterPlan?.write !== false, await recruiterInstructionsFor(workspace)),
         "Maintain natural bullet length (~16-20 words) matching the baseline footprint; no word-by-word arithmetic.",
         "provenLines (owner of this rule) are lines from tailored resumes that got the candidate a real interview, each with its evidenceIds (all routed to this job). When you rewrite a bullet at the same employer from the same evidence, prefer that proven wording, adjusted lightly for this job; never move a line to another employer.",
         snapshot.coverLetterPlan?.write === false
