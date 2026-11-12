@@ -373,6 +373,8 @@ ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
   // A candidate's Agy never runs outside the app's home: that would mix their history with the user's own Agy.
   if (!agyHome && agyHomeName) throw new Error("Agy couldn't be prepared for this candidate. Close and reopen the candidate, then try again.");
   terminal.setAgyHome(agyHome);
+  // A candidate's Agy picks up their own last conversation (their history is the only one in the home).
+  terminal.setContinueConversation(Boolean(agyHomeName));
   // The terminal start rewrote the home's settings; background runs reuse it for this workspace.
   if (agyHome) agyHomes.set(workspace, agyHome);
   return terminal.start(cwd, workspace, manifest);

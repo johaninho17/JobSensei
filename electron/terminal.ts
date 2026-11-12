@@ -57,6 +57,14 @@ export function resolveAgyExecutable(): string | null {
   return null;
 }
 
+/**
+ * Agy's start flags: `--sandbox` keeps its shell commands inside the workspace (macOS/Linux; untested on Windows);
+ * `--continue` resumes the open candidate's last conversation (Recruiter Edition).
+ */
+export function agyArgs(windows: boolean, continueConversation: boolean): string[] {
+  return [...(windows ? [] : ["--sandbox"]), ...(continueConversation ? ["--continue"] : [])];
+}
+
 /** Repository root holding package.json (compiled: dist-electron/electron → ../..; source: electron → ..). */
 export function appRoot(): string {
   for (const candidate of [resolve(__dirname, "..", ".."), resolve(__dirname, "..")]) {
@@ -93,6 +101,14 @@ export class TerminalSession {
 
   setAgyHome(home: string | null): void { this.agyHome = home; }
 
+  /**
+   * Recruiter Edition: start Agy in the open candidate's most recent conversation (`--continue`). Each candidate's
+   * history is swapped into the shared home when they are opened, so "most recent" is always their own; a later job
+   * for the same candidate starts from what Agy already read for them, which is much faster (2026-11-12: 114 s → 33 s).
+   */
+  setContinueConversation(on: boolean): void { this.continueConversation = on; }
+  private continueConversation = false;
+
   start(cwd: string, workspacePath: string, manifest: ContextManifest | null = null): { cwd: string; agyStarted: boolean } {
     this.stop();
     this.cwd = resolve(cwd);
@@ -109,8 +125,7 @@ export class TerminalSession {
     const shell = windows ? process.env.ComSpec || "powershell.exe" : process.env.SHELL || "/bin/zsh";
     const agyPath = resolveAgyExecutable();
     const executable = agyPath ?? shell;
-    // --sandbox keeps Agy's shell commands from writing outside the workspace (macOS/Linux; untested on Windows).
-    const args = agyPath ? (windows ? [] : ["--sandbox"]) : (windows ? [] : ["-l"]);
+    const args = agyPath ? agyArgs(windows, this.continueConversation) : (windows ? [] : ["-l"]);
     this.process = ptyModule.spawn(executable, args, { name: "xterm-256color", cols: 100, rows: 28, cwd: this.cwd, env: this.environment(Boolean(agyPath)) });
     this.startedAt = Date.now();
     this.runningAgy = Boolean(agyPath);
