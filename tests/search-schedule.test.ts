@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { launchdPlist, scheduleLabel, windowsTaskXml } from "../electron/search-schedule";
 import { runnerArgs, waitForNetwork } from "../electron/job-search-runner";
@@ -44,7 +44,8 @@ describe("search schedule files", () => {
   });
 
   it("reads the runner's arguments", () => {
-    expect(runnerArgs(["--workspace", "/w", "--user-data", "/u"])).toEqual({ workspace: "/w", userData: "/u" });
+    // The runner resolves both paths, so on Windows "/w" becomes "D:\\w" (found on Windows CI, 2026-11-12).
+    expect(runnerArgs(["--workspace", "/w", "--user-data", "/u"])).toEqual({ workspace: resolve("/w"), userData: resolve("/u") });
     expect(runnerArgs(["--workspace", "/w"])).toBeNull();
   });
 });

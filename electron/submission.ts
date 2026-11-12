@@ -3,7 +3,7 @@
 // resume version was sent, and marks the job applied. A confirmation screenshot can be added later.
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
+import { basename, extname, join, relative, sep } from "node:path";
 import type { ExportedPdf } from "../src/shared/schemas";
 import { submissionSchema, type Submission } from "../src/shared/submission";
 import { readJson, writeJsonAtomic } from "./persistence";
@@ -72,7 +72,8 @@ export async function attachConfirmation(folder: string, jobId: string, sourcePa
   const dir = join(folder, current.files[0] ? current.files[0].split("/").slice(0, -1).join("/") : `jobs/${jobId}/submitted/${current.date}`);
   await mkdir(dir, { recursive: true });
   await copyFile(sourcePath, join(dir, `confirmation${extension}`));
-  const next = submissionSchema.parse({ ...current, screenshot: `${dir.slice(folder.length + 1)}/confirmation${extension}` });
+  // Stored with "/" on every platform, like every other workspace path (Windows CI found backslashes, 2026-11-12).
+  const next = submissionSchema.parse({ ...current, screenshot: `${relative(folder, dir).split(sep).join("/")}/confirmation${extension}` });
   await writeJsonAtomic(recordPath(job), next);
   return next;
 }

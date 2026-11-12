@@ -61,8 +61,13 @@ jobs:
       - name: Fetch and bundle Antigravity CLI for ${{ matrix.platform }}
         run: node scripts/prepare-bundled-binaries.mjs --platform=${{ matrix.platform }}
 
+      # The suite covers both editions itself, so it runs without the job's edition (as in ci.yml); only the
+      # build and packaging below use it. Forcing the whole suite into the Recruiter Edition fails the regular
+      # app's own tests by design.
       - name: Run test suite
         run: npm run test
+        env:
+          JOBSENSEI_EDITION: ""
 
       - name: Build application bundle
         run: npm run build

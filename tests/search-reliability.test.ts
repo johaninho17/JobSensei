@@ -115,7 +115,8 @@ describe("Ashby pay is kept", () => {
 });
 
 describe("headless Agy", () => {
-  it("ends a run on the wall clock even when timers were paused (sleep)", async () => {
+  // A shell-script stand-in for Agy can't be spawned on Windows; the wall-clock rule is the same code on every OS.
+  it.skipIf(process.platform === "win32")("ends a run on the wall clock even when timers were paused (sleep)", async () => {
     const folder = await mkdtemp(join(tmpdir(), "sensei-agy-"));
     const fake = join(folder, "agy");
     await writeFile(fake, "#!/bin/sh\nsleep 30\n");

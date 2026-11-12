@@ -1,0 +1,3 @@
+# Text files are stored and checked out with LF on every platform, so Windows builds read the same resume
+# fixtures, AGENTS.md, and docs as macOS (tests compare exact text). Git detects binary files by itself.
+* text=auto eol=lf
