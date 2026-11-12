@@ -125,3 +125,37 @@ describe("PDF export default (ledger R10)", () => {
     expect(pdfExportRequestSchema.parse({ relativePath: "jobs/a/resume.md" }).textSize).toBe("large");
   });
 });
+
+describe("the recruiter's instructions reach Agy (Recruiter Edition plan Q3, 2026-11-11)", () => {
+  it("sends the recruiter's and the candidate's instructions, the candidate's winning, under the evidence rules", () => {
+    const withOwn = { ...profile(), preferences: { ...profile().preferences, agyInstructions: ["Lead with their B2B SaaS work."] } } as CandidateProfile;
+    const lines = profileInstructionLines(withOwn, true, ["Use US spelling.", "Keep each bullet to one line."]);
+    const every = lines.find((line) => line.startsWith("The recruiter's instructions for every candidate"));
+    const own = lines.find((line) => line.startsWith("The recruiter's instructions for this candidate"));
+    expect(every).toContain("Use US spelling. | Keep each bullet to one line.");
+    expect(every).toContain("never against the evidence rules");
+    expect(own).toContain("Lead with their B2B SaaS work.");
+    expect(own).toContain("win over the instructions for every candidate");
+    expect(lines.indexOf(every!)).toBeLessThan(lines.indexOf(own!));
+    expect(profileInstructionLines(profile()).some((line) => line.includes("recruiter's instructions"))).toBe(false);
+  });
+
+  it("keeps instruction lists small and leaves the regular app's tone presets out of the Recruiter Edition", async () => {
+    const { agyInstructionsSchema, instructionLines } = await import("../src/shared/schemas");
+    expect(instructionLines("- Use US spelling.\n\n• Keep bullets short.\n")).toEqual(["Use US spelling.", "Keep bullets short."]);
+    expect(agyInstructionsSchema.safeParse(Array.from({ length: 13 }, (_, i) => `Line ${i}`)).success).toBe(false);
+    expect(agyInstructionsSchema.safeParse(["x".repeat(301)]).success).toBe(false);
+    const solo = compactStyleRules("", profile());
+    expect(solo.some((rule) => rule.startsWith("Tone & Positioning Style"))).toBe(true);
+    const previous = process.env.JOBSENSEI_EDITION;
+    process.env.JOBSENSEI_EDITION = "recruiter";
+    try {
+      const recruiter = compactStyleRules("", profile());
+      expect(recruiter.some((rule) => /^Tone & Positioning Style|^Narrative Framing|^Custom Tone Guidance/.test(rule))).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.JOBSENSEI_EDITION; else process.env.JOBSENSEI_EDITION = previous;
+    }
+    // currentEdition() also sets the edition-wide draft rule; put it back for the tests after this one.
+    (await import("../electron/edition")).currentEdition();
+  });
+});

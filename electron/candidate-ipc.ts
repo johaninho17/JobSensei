@@ -5,7 +5,7 @@ import { effectiveStatus, readyToSend } from "../src/shared/tracker";
 import { listJobFolders } from "./job-folders";
 import { readCandidateProfile } from "./candidate-profile";
 import { createCandidateProfile } from "./candidate-profile";
-import { addCandidate, candidatePath, clearActiveCandidate, deleteCandidate, readRecruiterNotes, saveRecruiterNotes, readRecruiterSettings, readRoster, renameCandidate, setActiveCandidate, setCandidateStatus } from "./candidates";
+import { addCandidate, candidatePath, clearActiveCandidate, deleteCandidate, readRecruiterNotes, saveRecruiterNotes, readRecruiterSettings, readRoster, saveRecruiterSettings, renameCandidate, setActiveCandidate, setCandidateStatus } from "./candidates";
 import { SettingsStore } from "./settings";
 import { readJobQueue } from "./job-queue";
 import { listPipeline, setPipelineStatus } from "./pipeline";
@@ -19,7 +19,7 @@ import { approveProposal, declineProposal, readProposals } from "./proposals";
 import { candidateInsight, reportRows } from "../src/shared/recruiter-insight";
 import { statusLabel } from "../src/shared/tracker";
 import { removeCandidateHistory } from "./agy-home";
-import { nextQueuedCandidate, sendPosting, setLibraryCompany, stageLibraryLink, stageLibraryPaste, suggestCandidates } from "./posting-library";
+import { nextQueuedCandidate, sendPosting, setLibraryCompany, stageLibraryLink, stageLibraryPaste, suggestCandidates, listLibrary } from "./posting-library";
 import { join } from "node:path";
 
 export type CandidateContext = {
@@ -86,6 +86,9 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
   };
 
   ipcMain.handle("candidates:state", state);
+  // The recruiter's own settings (plan Q2): name, agency, and defaults every candidate inherits.
+  ipcMain.handle("recruiter:settings", async () => readRecruiterSettings(ctx.root()));
+  ipcMain.handle("recruiter:save-settings", async (_event, input: unknown) => saveRecruiterSettings(ctx.root(), input));
   /** Adds a candidate (their folder and profile with name and file prefix), then opens them. */
   ipcMain.handle("candidates:choose-files", async (_event, kind: unknown) => ctx.chooseFiles(kind === "resume" ? "resume" : kind === "image" ? "image" : "files"));
   /** Adds a candidate with everything the recruiter has (name, base resume, extra files, notes), then opens them. */
@@ -146,6 +149,7 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
   ipcMain.handle("library:stage-paste", async (_event, text: unknown, postingId: unknown) => stageLibraryPaste(ctx.root(), text, id(postingId)));
   ipcMain.handle("library:set-company", async (_event, postingId: unknown, company: unknown) => setLibraryCompany(ctx.root(), id(postingId), id(company)));
   ipcMain.handle("library:suggest", async (_event, postingId: unknown) => suggestCandidates(ctx.root(), id(postingId)));
+  ipcMain.handle("library:list", async () => listLibrary(ctx.root()));
   ipcMain.handle("library:send", async (_event, postingId: unknown, candidateIds: unknown) => {
     if (!Array.isArray(candidateIds) || !candidateIds.length || candidateIds.length > 100) throw new Error("Choose at least one candidate.");
     return sendPosting(ctx.root(), id(postingId), candidateIds.map(id), (await state()).activeId);

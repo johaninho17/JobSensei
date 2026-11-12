@@ -1,11 +1,18 @@
 // Recruiter Edition data contract (recruiter plan R1): the recruiter's own settings and the candidate roster.
 // Each candidate's folder is a normal single-candidate workspace; only these two files sit above them.
 import { z } from "zod";
+import { DEFAULT_PDF_TEXT_SIZE, agyInstructionsSchema, pdfTextSizeSchema, type PdfTextSize } from "./schemas";
 
 export const RECRUITER_DIR = "recruiter";
 export const CANDIDATES_DIR = "candidates";
 export const RECRUITER_SETTINGS_PATH = `${RECRUITER_DIR}/settings.json`;
 export const ROSTER_PATH = `${RECRUITER_DIR}/candidates.json`;
+/**
+ * The copy of the recruiter's defaults and Agy instructions inside each candidate's folder (plan Q3). Agy builds its
+ * snapshot from inside the candidate's folder and can't read the recruiter folder, so the app writes this copy when
+ * the recruiter saves settings and when a candidate is opened; recruiter/settings.json stays the owner.
+ */
+export const RECRUITER_COPY_PATH = ".sensei/recruiter.json";
 
 /** Name slug plus a short random suffix, so two candidates with the same name never share a folder. */
 export const CANDIDATE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*-[a-z0-9]{4}$/;
@@ -30,9 +37,31 @@ export const rosterSchema = z.object({
 });
 export type Roster = z.infer<typeof rosterSchema>;
 
+/**
+ * What every candidate gets unless their own Settings say otherwise (recruiter plan Q2). `effectiveSetting` is the one
+ * rule for which value wins: the candidate's own, then the recruiter's default, then the app's.
+ */
+export const recruiterDefaultsSchema = z.object({
+  coverLetters: z.boolean().default(false),
+  tailorSummary: z.boolean().default(false),
+  pdfTextSize: pdfTextSizeSchema.default(DEFAULT_PDF_TEXT_SIZE),
+});
+export type RecruiterDefaults = z.infer<typeof recruiterDefaultsSchema>;
+export const APP_RECRUITER_DEFAULTS: RecruiterDefaults = { coverLetters: false, tailorSummary: false, pdfTextSize: DEFAULT_PDF_TEXT_SIZE };
+
+export function effectiveSetting<T>(own: T | null | undefined, recruiter: T | null | undefined, app: T): T {
+  return own ?? recruiter ?? app;
+}
+export type { PdfTextSize };
+
 export const recruiterSettingsSchema = z.object({
   schemaVersion: z.literal(1),
   recruiterName: z.string().trim().max(120).nullable().default(null),
+  /** Shown in reports and client updates. */
+  agency: z.string().trim().max(120).nullable().default(null),
+  defaults: recruiterDefaultsSchema.default(APP_RECRUITER_DEFAULTS),
+  /** The recruiter's instructions to Agy for every candidate (plan Q3). */
+  agyInstructions: agyInstructionsSchema.default([]),
   activeCandidateId: z.string().regex(CANDIDATE_ID).nullable().default(null),
   updatedAt: z.string(),
 });

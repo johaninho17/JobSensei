@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
-  CANDIDATES_DIR, RECRUITER_DIR, RECRUITER_SETTINGS_PATH, ROSTER_PATH, candidateFolder, candidateIdFor,
+  CANDIDATES_DIR, RECRUITER_COPY_PATH, RECRUITER_DIR, RECRUITER_SETTINGS_PATH, ROSTER_PATH, candidateFolder, candidateIdFor,
   recruiterSettingsSchema, rosterSchema, type CandidateEntry, type CandidateStatus, type RecruiterSettings, type Roster,
 } from "../src/shared/candidates";
 import { featuresFor } from "../src/shared/edition";
@@ -36,6 +36,22 @@ export async function readRoster(root: string): Promise<Roster> {
 export async function readRecruiterSettings(root: string): Promise<RecruiterSettings> {
   const raw = await readJson<unknown>(join(root, RECRUITER_SETTINGS_PATH));
   return raw ? recruiterSettingsSchema.parse(raw) : recruiterSettingsSchema.parse({ schemaVersion: 1, updatedAt: now() });
+}
+
+/** Saves the recruiter's name, agency, and defaults for every candidate (plan Q2); the open candidate stays open. */
+export async function saveRecruiterSettings(root: string, input: unknown): Promise<RecruiterSettings> {
+  const current = await readRecruiterSettings(root);
+  const patch = recruiterSettingsSchema.pick({ recruiterName: true, agency: true, defaults: true, agyInstructions: true }).partial().parse(input);
+  const next = recruiterSettingsSchema.parse({ ...current, ...patch, recruiterName: patch.recruiterName === undefined ? current.recruiterName : patch.recruiterName || null, agency: patch.agency === undefined ? current.agency : patch.agency || null, updatedAt: now() });
+  await writeJsonAtomic(join(root, RECRUITER_SETTINGS_PATH), next);
+  const roster = await readRoster(root);
+  await Promise.all(roster.candidates.map(async (candidate) => writeRecruiterCopy(await candidatePath(root, candidate.id), next)));
+  return next;
+}
+
+/** Writes the recruiter's defaults and instructions into a candidate's folder (see RECRUITER_COPY_PATH). */
+export async function writeRecruiterCopy(folder: string, settings: RecruiterSettings): Promise<void> {
+  await writeJsonAtomic(join(folder, ...RECRUITER_COPY_PATH.split("/")), { defaults: settings.defaults, agyInstructions: settings.agyInstructions, updatedAt: settings.updatedAt });
 }
 
 async function saveRoster(root: string, roster: Roster): Promise<Roster> {
@@ -105,6 +121,7 @@ export async function setActiveCandidate(root: string, id: string): Promise<stri
   const settings = await readRecruiterSettings(root);
   await writeJsonAtomic(join(root, RECRUITER_SETTINGS_PATH), recruiterSettingsSchema.parse({ ...settings, activeCandidateId: id, updatedAt: now() }));
   await updateCandidate(root, id, (current) => ({ ...current, lastUsedAt: now() }));
+  await writeRecruiterCopy(folder, settings);
   return folder;
 }
 

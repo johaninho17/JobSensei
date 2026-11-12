@@ -6,6 +6,10 @@ import { SENIORITY_LEVELS, type PostingRecord } from "./posting";
 export type PostingFacts = Pick<PostingRecord, "title" | "company" | "location" | "url" | "pay" | "workSetup" | "seniority" | "workAuthorization">;
 export type ExistingPosting = { jobId: string | null; url: string | null; company: string | null; title: string | null };
 export type LibraryPosting = { id: string; title: string | null; company: string | null; location: string | null; url: string | null };
+/** Who a library posting went to (plan Q4): queued for tailoring, or proposed to a candidate who approves jobs first. */
+export type PostingSend = { candidateId: string; kind: "queued" | "proposed"; at: string };
+/** A posting on the Postings page: what it is, when it was added, and who it went to (names from the roster). */
+export type LibraryEntry = LibraryPosting & { addedAt: string | null; sentTo: Array<PostingSend & { name: string }> };
 export type MatchReason = { good: boolean; text: string };
 export type CandidateMatch = {
   score: number;
@@ -94,7 +98,7 @@ export function matchCandidate(posting: PostingFacts, targets: CandidateTargets,
   if (blocker) reasons.unshift({ good: false, text: blocker });
   if (duplicate) reasons.unshift({ good: false, text: duplicate });
   const hasTargets = Boolean(targets.roles.length || targets.workModes.length || targets.locations.length || targets.level || targets.salaryFloor);
-  if (!hasTargets) reasons.push({ good: false, text: "No brief yet (Candidate → Brief)" });
+  if (!hasTargets) reasons.push({ good: false, text: "No brief yet (Profile → Overview → Brief)" });
   return { score, suggested: hasTargets && !blocker && !duplicate && score >= 1, blocker, duplicate, reasons };
 }
 

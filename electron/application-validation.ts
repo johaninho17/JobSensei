@@ -607,26 +607,27 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
     // bullet per role is optional, so only going over it is reported.
     const baseEmployers = loaded.snapshot?.canonicalResume?.employers ?? [];
     const baseTotal = baseEmployers.reduce((sum, employer) => sum + employer.originalBulletCount, 0);
-    if (resumePlan && (stats.bulletCount < baseTotal || stats.bulletCount > resumePlan.targetTotalBullets)) {
+    const plannedMax = resumePlan ? resumePlan.targetTotalBullets ?? resumePlan.employerTargets.reduce((sum, target) => sum + target.maxBullets, 0) : 0;
+    if (resumePlan && (stats.bulletCount < baseTotal || stats.bulletCount > plannedMax)) {
       issues.push(issue(
         "RESUME_BULLET_PLAN_MISMATCH",
         loaded.resumeName,
         "bulletCount",
         stats.bulletCount < baseTotal
           ? `The resume has ${stats.bulletCount} experience bullets; the base resume has ${baseTotal}, so lines were dropped.`
-          : `The resume has ${stats.bulletCount} experience bullets; this run planned at most ${resumePlan.targetTotalBullets}.`,
+          : `The resume has ${stats.bulletCount} experience bullets; this run planned at most ${plannedMax}.`,
         "In the next explicit run, keep every role's bullet count from the base resume; replace a weaker bullet instead of dropping or adding beyond the plan.",
         "warning",
       ));
     }
     const currentEmployerTarget = resumePlan?.employerTargets[0];
     const currentBase = baseEmployers[0]?.originalBulletCount ?? 0;
-    if (currentEmployerTarget && (stats.currentEmployerBulletCount < currentBase || stats.currentEmployerBulletCount > currentEmployerTarget.targetBullets)) {
+    if (currentEmployerTarget && (stats.currentEmployerBulletCount < currentBase || stats.currentEmployerBulletCount > currentEmployerTarget.maxBullets)) {
       issues.push(issue(
         "RESUME_EMPLOYER_PLAN_MISMATCH",
         loaded.resumeName,
         "currentEmployerBulletCount",
-        `The resume has ${stats.currentEmployerBulletCount} current-employer bullets; the base resume has ${currentBase} and this run allows up to ${currentEmployerTarget.targetBullets}.`,
+        `The resume has ${stats.currentEmployerBulletCount} current-employer bullets; the base resume has ${currentBase} and this run allows up to ${currentEmployerTarget.maxBullets}.`,
         "In the next explicit run, keep the current role's bullets from the base resume, replacing weaker ones with stronger supported bullets.",
         "warning",
       ));

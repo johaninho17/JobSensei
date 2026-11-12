@@ -4,6 +4,10 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import type { CandidateEntry, CandidatesState } from "../shared/candidates";
 import type { CandidateSuggestion, LibraryPosting } from "../shared/candidate-match";
 import { PrivacyDialog } from "./Privacy";
+import { PipelineView } from "./Pipeline";
+import { RecruiterSettingsDialog } from "./RecruiterSettings";
+import { PostingsView } from "./Postings";
+import { ReportsView } from "./Reports";
 import { daysAgo, reportText, shortlistText, type Proposal, type ReportRow } from "../shared/recruiter-insight";
 
 const message = (caught: unknown) => (caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "Something went wrong.");
@@ -87,26 +91,39 @@ function AddCandidateForm({ autoFocus = false, onCancel }: { autoFocus?: boolean
  */
 function CandidatesHome({ state }: { state: CandidatesState }) {
   const [privacy, setPrivacy] = useState(false);
+  const [settings, setSettings] = useState(false);
   const [adding, setAdding] = useState(false);
   const [approving, setApproving] = useState<CandidateEntry | null>(null);
-  const [reporting, setReporting] = useState<CandidateEntry | null>(null);
-  const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"candidates" | "pipeline" | "postings" | "reports">("candidates");
+  const [toast, setToast] = useState<string | null>(null);
   const listed = state.candidates.filter((candidate) => candidate.status !== "archived");
   const archived = state.candidates.filter((candidate) => candidate.status === "archived");
   const open = (id: string) => void window.sensei.candidates.switchTo(id).then(reloadForCandidate, (caught) => setError(message(caught)));
+  const openJob = (id: string, jobId: string) => { try { window.sessionStorage.setItem("sensei-open-job", jobId); } catch { /* storage unavailable */ } open(id); };
   return <main className="candidates-home" aria-labelledby="candidates-title">
     <header className="candidates-top">
       <span className="candidates-brand">{EDITION.productName}</span>
-      <button className="btn-link" onClick={() => setPrivacy(true)}>Privacy and terms</button>
+      <span><button className="btn-link" onClick={() => setSettings(true)}>Settings</button> · <button className="btn-link" onClick={() => setPrivacy(true)}>Privacy and terms</button></span>
     </header>
-    <section className="candidates-page">
+    {/* The recruiter's pages when no candidate is open (plan Q1); inside a candidate they are in the sidebar. */}
+    <nav className="candidates-nav" aria-label="Recruiter">
+      <button aria-current={view === "candidates" ? "page" : undefined} onClick={() => setView("candidates")}>Candidates</button>
+      <button aria-current={view === "pipeline" ? "page" : undefined} onClick={() => setView("pipeline")}>Pipeline</button>
+      <button aria-current={view === "postings" ? "page" : undefined} onClick={() => setView("postings")}>Postings</button>
+      <button aria-current={view === "reports" ? "page" : undefined} onClick={() => setView("reports")}>Reports</button>
+    </nav>
+    {view === "postings" && <section className="candidates-page"><PostingsView activeId={null} onToast={(text) => setToast(text)} />{toast && <p className="muted" role="status">{toast}</p>}</section>}
+    {view === "reports" && <section className="candidates-page"><ReportsView initial={state} /></section>}
+    {view === "pipeline" && <section className="candidates-page"><PipelineView activeId={null} onOpenJob={openJob} onOpenCandidate={open} onToast={(text) => setToast(text)} />{toast && <p className="muted" role="status">{toast}</p>}</section>}
+    {view === "candidates" && <section className="candidates-page">
       <div className="page-head candidates-head">
         <div><h1 id="candidates-title">Candidates</h1><p>{listed.length ? `${listed.length} candidate${listed.length === 1 ? "" : "s"}. Open one to add jobs and review tailored resumes.` : "No candidates yet."}</p></div>
         <button className="btn-primary" onClick={() => setAdding(true)}>Add candidate</button>
       </div>
       {error && <p className="inline-error" role="alert">{error}</p>}
       <table className="pipeline-table candidates-table">
-        <thead><tr><th scope="col">Candidate</th><th scope="col">Status</th><th scope="col">Resume</th><th scope="col">Jobs</th><th scope="col">To approve</th><th scope="col">Ready to send</th><th scope="col">This week</th><th scope="col">Responses</th><th scope="col">Waiting</th><th scope="col">Last opened</th><th scope="col"><span className="sr-only">Report</span></th></tr></thead>
+        <thead><tr><th scope="col">Candidate</th><th scope="col">Status</th><th scope="col">Resume</th><th scope="col">Jobs</th><th scope="col">To approve</th><th scope="col">Ready to send</th><th scope="col">This week</th><th scope="col">Responses</th><th scope="col">Waiting</th><th scope="col">Last opened</th></tr></thead>
         <tbody>
           {listed.map((candidate) => { const info = state.overview?.[candidate.id]; return <tr key={candidate.id}>
             <td><button className="btn-link" onClick={() => open(candidate.id)}>{candidate.displayName}</button></td>
@@ -119,19 +136,18 @@ function CandidatesHome({ state }: { state: CandidatesState }) {
             <td title={info?.insight ? `${info.insight.responses} of ${info.insight.applied} applications got a reply; ${info.insight.interviews} interview${info.insight.interviews === 1 ? "" : "s"}, ${info.insight.offers} offer${info.insight.offers === 1 ? "" : "s"}` : undefined}>{info?.insight?.responseRate === null || info?.insight?.responseRate === undefined ? "—" : `${Math.round(info.insight.responseRate * 100)}%`}{info?.insight?.interviews ? ` · ${info.insight.interviews} int.` : ""}</td>
             <td>{state.waiting?.[candidate.id] ?? 0}</td>
             <td>{candidate.lastUsedAt ? new Date(candidate.lastUsedAt).toLocaleDateString() : "Never"}</td>
-            <td><button className="btn-link" onClick={() => setReporting(candidate)}>Report</button></td>
           </tr>; })}
-          {!listed.length && <tr><td colSpan={11} className="muted">Add a candidate with their resume and anything else you have for them.</td></tr>}
+          {!listed.length && <tr><td colSpan={10} className="muted">Add a candidate with their resume and anything else you have for them.</td></tr>}
         </tbody>
       </table>
       {archived.length > 0 && <ArchivedList candidates={archived} />}
-    </section>
+    </section>}
     {adding && <div className="search-overlay" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") setAdding(false); }}>
       <div className="company-dialog intake-dialog" role="dialog" aria-modal="true" aria-labelledby="intake-home-title"><h2 id="intake-home-title">Add a candidate</h2><AddCandidateForm autoFocus onCancel={() => setAdding(false)} /></div>
     </div>}
     {privacy && <PrivacyDialog onClose={() => setPrivacy(false)} />}
+    {settings && <RecruiterSettingsDialog onClose={() => setSettings(false)} />}
     {approving && <ApprovalDialog candidate={approving} onClose={() => { setApproving(null); reloadForCandidate(); }} />}
-    {reporting && <ReportDialog candidate={reporting} target={state.overview?.[reporting.id]?.weeklyTarget ?? null} onClose={() => setReporting(null)} />}
   </main>;
 }
 
@@ -321,7 +337,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 }
 
 /** Jobs waiting for the candidate's approval: send them the shortlist, then record each answer (plan R8 P5). */
-function ApprovalDialog({ candidate, onClose }: { candidate: CandidateEntry; onClose: () => void }) {
+export function ApprovalDialog({ candidate, onClose }: { candidate: CandidateEntry; onClose: () => void }) {
   const [items, setItems] = useState<Proposal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = () => void window.sensei.candidates.proposals(candidate.id).then(setItems, (caught) => setError(message(caught)));
@@ -344,7 +360,7 @@ function ApprovalDialog({ candidate, onClose }: { candidate: CandidateEntry; onC
 }
 
 /** The weekly report for one candidate: applications sent in a date range, ready to paste into an email (plan R8 P5). */
-function ReportDialog({ candidate, target, onClose }: { candidate: CandidateEntry; target: number | null; onClose: () => void }) {
+export function ReportDialog({ candidate, target, onClose }: { candidate: CandidateEntry; target: number | null; onClose: () => void }) {
   const now = new Date();
   const [from, setFrom] = useState(daysAgo(now, 6));
   const [to, setTo] = useState(daysAgo(now, 0));

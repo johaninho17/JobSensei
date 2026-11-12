@@ -117,17 +117,15 @@ describe("resume plan follows the base resume (ledger R3)", () => {
       Array.from({ length: [20, 12, 9][index]! }, (_, n) => ({ evidenceId: `${employer}-${n}`, employer, recencyBand: "recent", text: "work", classification: "direct" })));
     const plan = buildResumePlan(rows as never, baseline as never, baseline.footprint, "Charge nurse role", null);
     const base = baseline.employers.map((employer) => employer.originalBulletCount);
-    const targets = plan.employerTargets.map((target) => target.targetBullets);
+    const targets = plan.employerTargets.map((target) => target.maxBullets);
     targets.forEach((target, index) => expect(target - base[index]!).toBeGreaterThanOrEqual(0));
     expect(targets.reduce((sum, value) => sum + value, 0) - base.reduce((sum, value) => sum + value, 0)).toBeLessThanOrEqual(2);
-    expect(plan.targetTotalBullets).toBe(targets.reduce((sum, value) => sum + value, 0));
   });
 
   it("gives a half-page resume a half-page plan, not the old 10–14 bullets", async () => {
     const { buildResumePlan } = await import("../electron/evidence-snapshot");
     const baseline = await load("half-page-retail.md");
     const plan = buildResumePlan([] as never, baseline as never, baseline.footprint, "Operations coordinator", null);
-    expect(plan.targetTotalBullets).toBe(5);
-    expect(plan.employerTargets.map((target) => target.targetBullets)).toEqual([3, 2]);
+    expect(plan.employerTargets.map((target) => target.maxBullets)).toEqual([3, 2]);
   });
 });

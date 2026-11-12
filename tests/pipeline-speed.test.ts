@@ -162,3 +162,31 @@ describe("slim application context", () => {
     expect(slim.evidenceRows[0].evidenceId).toBe("context:a");
   });
 });
+
+describe("one plain bullet instruction (speed, 2026-11-11)", () => {
+  it("tells Agy per role what to rewrite and keep, with no competing targets", async () => {
+    const { bulletPlanLine } = await import("../electron/evidence-snapshot");
+    const { applicationResumePlanSchema } = await import("../src/shared/schemas");
+    const plan = applicationResumePlanSchema.parse({
+      employerTargets: [
+        // An older plan's "targetBullets" still reads as the maximum.
+        { employer: "Northstar Labs", baseBullets: 5, targetBullets: 6, rewriteUpTo: 4 },
+        { employer: "Acme Corp", baseBullets: 3, maxBullets: 3, rewriteUpTo: 0 },
+      ],
+      // Fields the old plan sent are dropped, so Agy never sees them again.
+      targetTailoredBulletMin: 4, targetCareerAnchorBullets: 7,
+    });
+    expect(Object.keys(plan)).not.toContain("targetTailoredBulletMin");
+    expect(Object.keys(plan)).not.toContain("targetCareerAnchorBullets");
+    const line = bulletPlanLine(plan);
+    expect(line).toContain("Northstar Labs has 5 base bullets: rewrite 3–4 of them");
+    expect(line).toContain("you may add 1 new supported bullet (6 at most, not required)");
+    expect(plan.employerTargets[0]).toMatchObject({ maxBullets: 6 });
+    expect(line).toContain("Acme Corp: leave out of the bundle");
+    const { readFileSync } = await import("node:fs");
+    const skill = readFileSync(new URL("../.agents/skills/jobsensei-application-pipeline/SKILL.md", import.meta.url), "utf8");
+    expect(skill).not.toMatch(/16[–-]20 words/);
+    expect(skill).toContain("The app writes the Must-Have table");
+    expect(skill).not.toMatch(/create only `\.sensei\/application_bundle\.json`/);
+  });
+});

@@ -31,7 +31,11 @@ import { SearchPalette, type PaletteAction } from "./SearchPalette";
 import { SettingsModal } from "./SettingsModal";
 import { InterviewView, LiveWindow } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
-import { CandidateGate, CandidateResumeCard, CandidateSwitcher, RecruiterNotes, WhoIsThisFor } from "./Candidates";
+import { BaseResumeTab, CandidateSettingsTab, ProfilePage } from "./CandidateProfile";
+import { RecruiterSettingsDialog } from "./RecruiterSettings";
+import { PostingsView } from "./Postings";
+import { ReportsView } from "./Reports";
+import { CandidateGate, CandidateResumeCard, CandidateSwitcher, RecruiterNotes } from "./Candidates";
 import { PipelineView } from "./Pipeline";
 import { PrivacyDialog } from "./Privacy";
 import { ReviewPanel } from "./Review";
@@ -64,7 +68,7 @@ const VIEWER_PANEL_MIN = 320;
 type PromptRequest = { id: number; text: string; label: string };
 type JobWorkspaceTab = "overview" | "application" | "interview" | "files";
 type JobLocation = { kind: "job"; jobId: string; tab: JobWorkspaceTab; roundId?: string };
-type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" } | { kind: "docs-home" };
+type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" } | { kind: "docs-home" } | { kind: "postings-home" } | { kind: "reports-home" };
 type WorkspaceLocation =
   | PageLocation
   | JobLocation
@@ -151,11 +155,6 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const [companyAsk, setCompanyAsk] = useState<{ title: string | null; resolve: (company: string | null) => void } | null>(null);
   /** Asks which company a pasted posting is for; null when the user skips. */
   const askCompany = (title: string | null) => new Promise<string | null>((resolve) => setCompanyAsk({ title, resolve }));
-  // Recruiter Edition: which candidates a new posting is for (recruiter plan R5).
-  const [whoAsk, setWhoAsk] = useState<{ posting: LibraryPosting; remaining: number; resolve: (ids: string[] | null, forRest: boolean) => void } | null>(null);
-  // Several links pasted at once: the recruiter may choose candidates once for the rest of the batch.
-  const batchChoice = useRef<string[] | null>(null);
-  const askWho = (posting: LibraryPosting, remaining = 0) => new Promise<string[] | null>((resolve) => setWhoAsk({ posting, remaining, resolve: (ids, forRest) => { if (forRest && ids) batchChoice.current = ids; resolve(ids); } }));
   const runningItem = jobQueue.items.find((item) => item.status === "running");
   const busyJobLabel = runningItem ? runningItem.label ?? runningItem.url ?? "a queued job" : null;
   /**
@@ -192,11 +191,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         const company = await askCompany(posting.title ?? firstLine);
         if (company) posting = await window.sensei.candidates.setPostingCompany(item.id, company);
       }
-      const batch = input.kind === "link" ? input.batch : undefined;
-      if (!batch || batch.index === 0) batchChoice.current = null;
-      const chosen = batchChoice.current ?? await askWho(posting, batch ? batch.size - batch.index - 1 : 0);
-      if (!chosen) { const stop = new Error("No candidate chosen, so nothing was queued."); stop.name = "NotQueued"; throw stop; }
-      const sent = await window.sensei.candidates.send(item.id, chosen);
+      // Inside a candidate, a job is for that candidate (plan Q4): no question. Sending one posting to several
+      // candidates happens on the recruiter's Postings page.
+      if (!candidates?.activeId) throw new Error("Open a candidate first, or add the posting on the Postings page.");
+      const sent = await window.sensei.candidates.send(item.id, [candidates.activeId]);
       if (sent.queued.length) showToast(`Queued for ${plural(sent.queued.length, "other candidate")}; their jobs run after this candidate's queue`);
       if (sent.proposed.length) showToast(`Waiting for approval from ${plural(sent.proposed.length, "candidate")}; send them the shortlist from All candidates`);
       if (!sent.active) return 0;
@@ -223,6 +221,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       if (!confirmNotDuplicate({ company: meta.company, title: meta.title ?? firstLine })) throw new Error("Not added: you already have this job.");
       item.label = [meta.company, meta.title ?? firstLine].filter(Boolean).join(", ") || null;
     }
+    return addToQueue(item);
+  }
+  /** Adds a staged posting to this window's queue; returns how many jobs are ahead of it. */
+  async function addToQueue(item: JobQueue["items"][number]): Promise<number> {
     const current = queueRef.current;
     const ahead = current.items.filter((candidate) => candidate.status === "queued" || candidate.status === "running").length;
     // The queue holds 50 items: make room by dropping the oldest finished ones.
@@ -552,7 +554,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
 
   function currentReturnLocation(jobId: string | null): JobLocation | PageLocation {
     const current = navigationHistory[navigationIndex];
-    if (current?.kind === "job" || current?.kind === "today-home" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home" || current?.kind === "docs-home") return current;
+    if (current?.kind === "job" || current?.kind === "today-home" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home" || current?.kind === "docs-home" || current?.kind === "postings-home" || current?.kind === "reports-home") return current;
     if (current?.kind === "document") return current.returnTo;
     return jobId ? { kind: "job", jobId, tab: "overview" } : { kind: "jobs-home" };
   }
@@ -882,7 +884,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     { id: "go-docs", title: "Go to Docs", subtitle: "How to get the best results, your data, how Agy uses it, Agy commands", keywords: "help guide documentation commands model theme", run: () => showPage("docs-home") },
     { id: "go-jobs", title: "Go to Jobs", subtitle: "All jobs, the queue, and the status strip", keywords: "home list cards", shortcut: "g j", run: () => showPage("jobs-home") },
     ...(FEATURES.interviews ? [{ id: "go-interviews", title: "Go to Interviews", subtitle: "Every job with interview prep", keywords: "rounds prep", shortcut: "g i", run: () => showPage("interviews-home") }] : []),
-    { id: "go-context", title: "Go to Career context", subtitle: "Resumes and sources Agy reads", keywords: "files sources resume", shortcut: "g c", run: () => showPage("context-home") },
+    { id: "go-context", title: FEATURES.candidates ? "Go to the candidate's files" : "Go to Career context", subtitle: FEATURES.candidates ? "Their resume, files, and your notes" : "Resumes and sources Agy reads", keywords: "files sources resume", shortcut: "g c", run: () => showPage("context-home") },
     ...[["interviewing", "Interviewing"], ["applied", "Applied"], ["offer", "Offer"], ["closed", "Closed"], ["saved", "Saved"]].map(([group, label]) => ({ id: `filter:${group}`, title: `Show ${label.toLowerCase()} jobs`, subtitle: "Filter the Jobs page by status", keywords: `status:${group} filter`, run: () => { setJobsStatusGroup(group!); showPage("jobs-home"); } })),
     ...recentForStatus.flatMap((job) => TRACKER_STATUSES.filter((status) => status !== effectiveStatus(job)).map((status) => ({ id: `tracker:${job.id}:${status}`, title: `Mark ${job.company ?? displayJobName(job.name)} as ${TRACKER_LABELS[status].toLowerCase()}`, subtitle: job.title ?? "Recent job", keywords: `status ${status}`, run: () => void updateTracker(job.id, { status }) }))),
     { id: "export-csv", title: "Export all jobs to CSV", subtitle: "Save a spreadsheet of every job", keywords: "csv excel spreadsheet download", run: () => void window.sensei.jobs.exportCsv(jobsToCsv(jobs, CSV_COLUMNS)).then((path) => { if (path) showToast(`Saved ${jobs.length} jobs to ${path.split(/[\\/]/).pop()}`); }) },
@@ -929,8 +931,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     {
       id: "open-settings",
       shortcut: IS_MAC ? "⌘," : "Ctrl ,",
-      title: "Preferences & Voice Settings",
-      subtitle: "Customize tone, resume tailoring, reusable bullets, and identity",
+      title: FEATURES.candidates ? "Settings" : "Preferences & Voice Settings",
+      subtitle: FEATURES.candidates ? "Candidate details, resume tailoring, what Agy sees, privacy" : "Customize tone, resume tailoring, reusable bullets, and identity",
       keywords: "settings preferences tone voice bullets summary",
       run: () => setSettingsModalOpen(true),
     },
@@ -943,20 +945,32 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     "--right-panel-width": `${rightPanelOpen ? rightPanelWidth : 0}px`,
     "--right-resizer-width": rightPanelOpen ? "7px" : "0px",
   } as CSSProperties;
+  const contextSourcesBlock = <section className="context-block"><h2>{FEATURES.candidates ? "Candidate files" : "Career sources"}</h2><p>{FEATURES.candidates ? "Checked files are what Agy may use for this candidate." : "Checked files are what Agy reads as facts about you. Structured files are the strongest evidence."}</p><ContextAdder onAdd={(kind, paths) => void addContextFiles(kind, paths)} onReveal={() => void window.sensei.files.reveal("context").catch(() => undefined)} /><div className="context-tree">{tree.length ? tree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedCareerPaths} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No career context folders found.</p>}</div></section>;
+  const contextResumesBlock = <section className="context-block"><h2>Resumes</h2><ResumeSources settings={resumeSettings} selectedPath={selectedPath} onSelect={selectFile} onChoose={chooseResume} onRemoveSecondary={removeSecondary} /></section>;
+  const recruiterNotesBlock = FEATURES.candidates ? <RecruiterNotes name={candidateProfile?.identity.fullName ?? null} onSaved={(path) => void checkContextPath(path)} /> : null;
   return <main className={`shell ${leftPanelOpen ? "" : "is-sidebar-closed"}`} style={shellStyle}>
     <nav className="app-sidebar" aria-label="Main" aria-hidden={!leftPanelOpen}>
       <button className="wordmark" aria-label={`${EDITION.productName}: all jobs`} onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span><span className="wordmark-name">Sensei{EDITION.subtitle && <small className="wordmark-edition">{EDITION.subtitle}</small>}</span></button>
-      {FEATURES.candidates && candidates && <CandidateSwitcher state={candidates} />}
+      {FEATURES.candidates && candidates && <>
+        {/* Recruiter Edition (plan Q1): the recruiter's own pages, then the open candidate's workspace. */}
+        <h2 className="side-group-title">Recruiter</h2>
+        <ul className="side-nav">
+          <li><button onClick={() => void window.sensei.candidates.showAll().then(() => window.location.reload())}><NavIcon name="people" />Candidates<span className="side-count">{candidates.candidates.filter((candidate) => candidate.status !== "archived").length}</span></button></li>
+          <li><button aria-current={activePage === "pipeline-home" ? "page" : undefined} onClick={() => showPage("pipeline-home")}><NavIcon name="pipeline" />Pipeline</button></li>
+          <li><button aria-current={activePage === "postings-home" ? "page" : undefined} onClick={() => showPage("postings-home")}><NavIcon name="jobs" />Postings</button></li>
+          <li><button aria-current={activePage === "reports-home" ? "page" : undefined} onClick={() => showPage("reports-home")}><NavIcon name="today" />Reports</button></li>
+        </ul>
+        <CandidateSwitcher state={candidates} />
+      </>}
       <ul className="side-nav">
         {FEATURES.today && <li><button aria-current={activePage === "today-home" ? "page" : undefined} onClick={() => showPage("today-home")}><NavIcon name="today" />Today</button></li>}
         <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
-        {FEATURES.candidates && <li><button aria-current={activePage === "pipeline-home" ? "page" : undefined} onClick={() => showPage("pipeline-home")}><NavIcon name="pipeline" />Pipeline</button></li>}
         {FEATURES.jobSearch && <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" />Job Search{searchStatus.running ? <span className="side-due" title={searchProgressText(searchStatus)}>Searching…</span> : searchNew > 0 && <span className="side-count" title={`${searchNew} new match${searchNew === 1 ? "" : "es"}`}>{searchNew}</span>}</button></li>}
         {FEATURES.interviews && <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{interviewingJobs.length > 0 && <span className="side-count">{interviewingJobs.length}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>}
-        <li><button aria-current={activePage === "setup-home" ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />{FEATURES.candidates ? "Candidate" : "Setup"}{readiness && (FEATURES.candidates ? <span className={readiness.ready ? "side-count" : "side-due"}>{readiness.ready ? "Ready" : "Needs a resume"}</span> : <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>)}</button></li>
-        <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context{FEATURES.nudges && newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>
+        <li><button aria-current={activePage === "setup-home" ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />{FEATURES.candidates ? "Profile" : "Setup"}{readiness && (FEATURES.candidates ? <span className={readiness.ready ? "side-count" : "side-due"}>{readiness.ready ? "Ready" : "Needs a resume"}</span> : <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>)}</button></li>
+        {!FEATURES.candidates && <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context{FEATURES.nudges && newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>}
       </ul>
-      {recentJobs.length > 0 && <section className="side-recent" aria-labelledby="side-recent-title">
+      {!FEATURES.candidates && recentJobs.length > 0 && <section className="side-recent" aria-labelledby="side-recent-title">
         <h2 id="side-recent-title">Recent jobs</h2>
         <ul>{recentJobs.map((job) => <li key={job.id}><button aria-current={activePage === "job" && viewedJobId === job.id ? "page" : undefined} onClick={() => openJob(job.id)}><strong>{job.company ?? displayJobName(job.name)}</strong><small>{job.title ?? "Role not recorded"}</small></button></li>)}</ul>
       </section>}
@@ -991,14 +1005,14 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         />
       </header>
       <SearchPalette open={searchOpen} actions={paletteActions} onClose={() => setSearchOpen(false)} onOpenResult={openSearchResult} />
-      <SettingsModal
+      {FEATURES.candidates ? settingsModalOpen && <RecruiterSettingsDialog onClose={() => setSettingsModalOpen(false)} /> : <SettingsModal
         open={settingsModalOpen}
         onClose={() => setSettingsModalOpen(false)}
         profile={candidateProfile}
         settings={resumeSettings}
         onProfileUpdated={(updated) => setCandidateProfile(updated)}
         onSettingsUpdated={(updated) => setResumeSettings(updated)}
-      />
+      />}
       <section className="viewer-panel">
         {needsSetup ? FEATURES.candidates ? <CandidateResumeCard name={candidateProfile?.identity.fullName ?? null} problem={readiness?.items.find((item) => item.id === "resume")?.state === "problem" ? readiness.items.find((item) => item.id === "resume")!.detail : null} onChoose={async () => { await chooseResume("base"); await loadReadiness(); }} /> : <Onboarding workspace={workspace} profile={candidateProfile} readiness={readiness} onProfileCreated={async (profile) => { setCandidateProfile(profile); await refresh(); await loadReadiness(); }} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onChooseBase={async () => { await chooseResume("base"); await loadReadiness(); }} onOpenAgy={() => setRightPanelOpen(true)} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onFinish={finishOnboarding} /> : preview ? <>
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
@@ -1009,25 +1023,45 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
               onAnswerAddedFile={(path) => void updateContext([...new Set([...selectedCareerPaths, path])], selectedJobFiles)} />
           : FEATURES.jobSearch && currentLocation.kind === "search-home" ? <JobSearchView status={searchStatus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onOpenJob={openJob} onToast={showToast} />
           : FEATURES.interviews && currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
+          : FEATURES.candidates && currentLocation.kind === "postings-home" ? <PostingsView activeId={candidates?.activeId ?? null} onToast={showToast} onActive={async (pasteId, label, url) => {
+            const item = newQueueItem({ kind: "paste", label }, new Date(), false);
+            item.id = pasteId;
+            item.url = url;
+            await addToQueue(item);
+          }} />
+          : FEATURES.candidates && currentLocation.kind === "reports-home" ? <ReportsView />
           : FEATURES.candidates && currentLocation.kind === "pipeline-home" ? <PipelineView activeId={candidates?.activeId ?? null} onToast={showToast} onOpenJob={(candidateId, jobId) => {
             if (candidateId === candidates?.activeId) { openJob(jobId); return; }
             // Another candidate's job: open that candidate (the window reloads), then the job.
             try { window.sessionStorage.setItem("sensei-open-job", jobId); } catch { /* storage unavailable */ }
             void window.sensei.candidates.switchTo(candidateId).then(() => window.location.reload(), (caught) => setError(messageOf(caught, "Couldn't open that candidate.")));
+          }} onOpenCandidate={(candidateId) => {
+            if (candidateId === candidates?.activeId) { showPage("jobs-home"); return; }
+            void window.sensei.candidates.switchTo(candidateId).then(() => window.location.reload(), (caught) => setError(messageOf(caught, "Couldn't open that candidate.")));
           }} />
           : currentLocation.kind === "docs-home" ? <DocsView />
+          : FEATURES.candidates && (currentLocation.kind === "setup-home" || currentLocation.kind === "context-home") ? <ProfilePage key={currentLocation.kind}
+            name={candidateProfile?.identity.fullName ?? candidates?.candidates.find((candidate) => candidate.id === candidates.activeId)?.displayName ?? "Candidate"}
+            initial={currentLocation.kind === "context-home" ? "files" : "overview"}
+            overview={<SetupHome onToast={showToast} readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />}
+            resume={<BaseResumeTab path={baseResume} read={readiness?.items.find((item) => item.id === "resume")?.lines ?? []} viewer={<DocInline path={baseResume} label="base resume" />} onReplace={() => void chooseResume("base").then(() => loadReadiness())} />}
+            files={contextSourcesBlock}
+            resumes={contextResumesBlock}
+            notes={recruiterNotesBlock}
+            settings={<CandidateSettingsTab profile={candidateProfile} onSaved={(next) => { setCandidateProfile(next); void loadReadiness(); }} />}
+          />
           : currentLocation.kind === "setup-home" ? <SetupHome onToast={showToast} readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome
             onOpen={(path) => void selectFile(path)}
-            notes={FEATURES.candidates ? <RecruiterNotes name={candidateProfile?.identity.fullName ?? null} onSaved={(path) => void checkContextPath(path)} /> : null}
+            notes={recruiterNotesBlock}
             notice={FEATURES.nudges && newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">
               <h2 id="new-files-title">New since you last looked</h2>
               <p>Check each one, then tick it below if Agy should use it as evidence.</p>
               <ul>{newContextFiles.map((path) => <li key={path}><button className="btn-link" onClick={() => void selectFile(path)}>{path.replace(/^context\//, "")}</button>{selectedCareerPaths.includes(path) ? <span className="doc-state is-ready">Used by Agy</span> : <span className="doc-state">Not used yet</span>}</li>)}</ul>
               <button className="btn-quiet" onClick={markContextReviewed}>Mark as reviewed</button>
             </section>}
-            resumes={<section className="context-block"><h2>Resumes</h2><ResumeSources settings={resumeSettings} selectedPath={selectedPath} onSelect={selectFile} onChoose={chooseResume} onRemoveSecondary={removeSecondary} /></section>}
-            sources={<section className="context-block"><h2>{FEATURES.candidates ? "Candidate files" : "Career sources"}</h2><p>{FEATURES.candidates ? "Checked files are what Agy may use for this candidate." : "Checked files are what Agy reads as facts about you. Structured files are the strongest evidence."}</p><ContextAdder onAdd={(kind, paths) => void addContextFiles(kind, paths)} onReveal={() => void window.sensei.files.reveal("context").catch(() => undefined)} /><div className="context-tree">{tree.length ? tree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedCareerPaths} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No career context folders found.</p>}</div></section>}
+            resumes={contextResumesBlock}
+            sources={contextSourcesBlock}
             jobFiles={<section className="context-block"><h2>Job files in context</h2><p>Add a job's files when you want Agy to use them outside that job, for example an earlier letter that worked well.</p><button className="btn-link" onClick={() => { setSelectedJobFiles([]); void updateContext(selectedCareerPaths, []); }} disabled={!selectedJobFiles.length}>Clear job files ({selectedJobFiles.length})</button><div className="context-tree">{jobTree.length ? jobTree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedJobFiles} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No job folders yet.</p>}</div></section>}
           />
           : <JobsHome jobs={jobs} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} onUpdateTracker={updateTracker} onToast={showToast} statusGroup={jobsStatusGroup} onStatusGroup={setJobsStatusGroup} queue={jobQueue} agyReady={agyReady} onOpenAgy={() => setRightPanelOpen(true)} onSaveQueue={(next) => void saveQueue(next)} onQueueJob={queueJob} setup={<SetupLine readiness={readiness} onOpen={() => showPage("setup-home")} />} />}
@@ -1038,14 +1072,14 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     <div className={`panel-resizer is-right ${rightPanelOpen ? "" : "is-collapsed"}`} role="separator" aria-label="Resize terminal panel" aria-orientation="vertical" aria-valuemin={RIGHT_PANEL_MIN} aria-valuemax={panelMaximum("right")} aria-valuenow={rightPanelWidth} tabIndex={rightPanelOpen ? 0 : -1} onPointerDown={(event) => beginPanelResize("right", event)} onKeyDown={(event) => resizePanelWithKeyboard("right", event)} />
     <ToastRegion toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
     {shortcutsOpen && <ShortcutsPanel onClose={() => setShortcutsOpen(false)} />}
-    {FEATURES.candidates && whoAsk && <WhoIsThisFor posting={whoAsk.posting} remaining={whoAsk.remaining} activeId={candidates?.activeId ?? null} onDone={(ids, forRest) => { whoAsk.resolve(ids, forRest); setWhoAsk(null); }} />}
     {companyAsk && <CompanyDialog title={companyAsk.title} onDone={(company) => { companyAsk.resolve(company); setCompanyAsk(null); }} />}
     <TerminalPanel latestRun={latestRun} onQueueJob={queueJob} busyLabel={busyJobLabel} cwd={workspace.repositoryRoot || workspace.path} selectedJobFiles={selectedJobFiles} selectedCareerPaths={selectedCareerPaths} theme={theme} visible={rightPanelOpen && !needsSetup} onClose={() => setRightPanelOpen(false)} jobActions={jobActions} promptRequest={promptRequest} onPromptHandled={(id) => setPromptRequest((request) => request?.id === id ? null : request)} onInsertPrompt={insertJobPrompt} onOpenRun={(run) => { if (run.jobId && jobs.some((job) => job.id === run.jobId)) openJobView(run.jobId, run.kind === "interview" ? "interview" : "application", run.roundId ?? undefined); }} />
   </main>;
 }
 
-function NavIcon({ name }: { name: "today" | "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" | "pipeline" | "docs" }) {
+function NavIcon({ name }: { name: "today" | "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" | "pipeline" | "docs" | "people" }) {
   const paths: Record<typeof name, string> = {
+    people: "M9 11a3 3 0 1 0 0-6a3 3 0 1 0 0 6z M3 19c0-3 2.7-5 6-5s6 2 6 5 M16 11a2.5 2.5 0 1 0 0-5 M17 14c2.2.4 4 2.2 4 5",
     today: "M5 6h14v14H5z M5 10h14 M9 4v4 M15 4v4 M9 14h2 M13 14h2 M9 17h2",
     jobs: "M4 8h16v11H4zM9 8V5h6v3M4 13h16",
     search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z M15.5 15.5L20 20",
@@ -1641,7 +1675,7 @@ function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAction, on
     {editing === item.action && <div className="setup-row-editor"><SetupEditor action={item.action} profile={profile} onSaved={(next) => { onProfileSaved(next); onRefresh(); }} onClose={() => setEditing(null)} /></div>}
   </li>;
   return <section className="setup-home">
-    <header className="page-head"><div><h1>{FEATURES.candidates ? profile?.identity.fullName ?? "Candidate" : "Setup"}</h1><p>{FEATURES.candidates ? (readiness.ready ? "Ready for jobs. The optional items below help Agy tailor more closely." : "Add the base resume to start tailoring.") : readiness.ready ? "JobSensei has what it needs. The recommended steps make drafts and interview prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button> · <button className="btn-link" onClick={() => onReveal("")}>Open your workspace folder</button></p></div></header>
+    <header className="page-head"><div>{!FEATURES.candidates && <h1>Setup</h1>}<p>{FEATURES.candidates ? (readiness.ready ? "Ready for jobs. The optional items below help Agy tailor more closely." : "Add the base resume to start tailoring.") : readiness.ready ? "JobSensei has what it needs. The recommended steps make drafts and interview prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button> · <button className="btn-link" onClick={() => onReveal("")}>Open your workspace folder</button></p></div></header>
     {(["required", "recommended"] as const).map((level) => { const items = readiness.items.filter((item) => item.level === level); const done = items.filter((item) => item.state === "done").length; return <Section key={level} id={`setup-${level}`} title={level === "required" ? "Required" : "Recommended"} count={`${done} of ${items.length}`} defaultOpen={level === "recommended" || done < items.length}>
       <ol className="setup-list">{items.map(row)}</ol>
     </Section>; })}
@@ -2504,6 +2538,8 @@ function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: strin
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
   const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
+  // Recruiter Edition: start from the recruiter's default PDF text size (Settings → Defaults for every candidate).
+  useEffect(() => { if (FEATURES.candidates) void window.sensei.candidates.recruiterSettings().then((settings) => setTextSize(settings.defaults.pdfTextSize), () => undefined); }, []);
   // A job may have no cover letter (recruiter plan R7); the resume alone is then exported.
   const missing = !resumePath;
   async function exportApplicationPdfs() {
@@ -3173,6 +3209,8 @@ function MarkdownExportButton({ relativePath, onExported }: { relativePath: stri
   const [state, setState] = useState<"idle" | "working" | "done" | "warning" | "error">("idle");
   const [message, setMessage] = useState("");
   const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
+  // Recruiter Edition: start from the recruiter's default PDF text size (Settings → Defaults for every candidate).
+  useEffect(() => { if (FEATURES.candidates) void window.sensei.candidates.recruiterSettings().then((settings) => setTextSize(settings.defaults.pdfTextSize), () => undefined); }, []);
   async function exportPdf() {
     setState("working");
     try {

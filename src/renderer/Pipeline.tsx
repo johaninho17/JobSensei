@@ -10,7 +10,7 @@ import { TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, statusLabel } from
 const keyOf = (row: Pick<PipelineRow, "candidateId" | "id">) => `${row.candidateId}/${row.id}`;
 const postingKey = (row: PipelineRow) => `${(row.company ?? row.name).toLowerCase()}|${(row.title ?? "").toLowerCase()}`;
 
-export function PipelineView({ activeId, onOpenJob, onToast }: { activeId: string | null; onOpenJob: (candidateId: string, jobId: string) => void; onToast: (message: string, undo?: () => void) => void }) {
+export function PipelineView({ activeId, onOpenJob, onOpenCandidate, onToast }: { activeId: string | null; onOpenJob: (candidateId: string, jobId: string) => void; onOpenCandidate: (candidateId: string) => void; onToast: (message: string, undo?: () => void) => void }) {
   const [rows, setRows] = useState<PipelineRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [candidate, setCandidate] = useState("all");
@@ -90,7 +90,7 @@ export function PipelineView({ activeId, onOpenJob, onToast }: { activeId: strin
         const key = keyOf(row);
         return [header, <tr key={key} className={selected.has(key) ? "is-selected" : undefined}>
           <td><input type="checkbox" aria-label={`Select ${row.candidateName}: ${row.company ?? row.name}`} checked={selected.has(key)} onChange={() => undefined} onClick={(event) => toggle(row, event.shiftKey)} /></td>
-          <td>{row.candidateName}{row.candidateId === activeId && <small className="muted"> · open</small>}</td>
+          <td><button className="btn-link" title={`Open ${row.candidateName}`} onClick={() => onOpenCandidate(row.candidateId)}>{row.candidateName}</button>{row.candidateId === activeId && <small className="muted"> · open</small>}</td>
           <td><button className="btn-link" onClick={() => onOpenJob(row.candidateId, row.id)}>{row.company ?? row.name}</button></td>
           <td>{row.title ?? ""}</td>
           <td>{row.rating === null ? "—" : row.rating.toFixed(1)}</td>

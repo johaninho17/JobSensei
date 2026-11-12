@@ -115,6 +115,14 @@ export const applicationFactsSchema = z.object({
 });
 export type ApplicationFacts = z.infer<typeof applicationFactsSchema>;
 
+/** Instructions a recruiter writes for Agy (plan Q3): at most 12 lines of 300 characters, so Agy's context stays small. */
+export const AGY_INSTRUCTION_LIMITS = { lines: 12, characters: 300 } as const;
+export const agyInstructionsSchema = z.array(z.string().trim().min(1).max(AGY_INSTRUCTION_LIMITS.characters)).max(AGY_INSTRUCTION_LIMITS.lines);
+/** Splits a text box into instruction lines (one per line, list markers removed, blanks dropped). */
+export function instructionLines(text: string): string[] {
+  return text.split(/\r?\n/).map((line) => line.replace(/^\s*[-*•]\s*/, "").trim()).filter(Boolean);
+}
+
 export const candidateProfileSchema = z.object({
   schemaVersion: z.literal(1),
   identity: z.object({
@@ -147,7 +155,8 @@ export const candidateProfileSchema = z.object({
   }),
   preferences: z.object({
     resume: z.object({
-      includeSummary: z.boolean().default(false),
+      // null = not chosen: off in the regular app, the recruiter's default in the Recruiter Edition.
+      includeSummary: z.boolean().nullable().default(null),
       totalExperienceBullets: z.object({ min: z.number().int().min(1), max: z.number().int().min(1) }).default({ min: 10, max: 14 }),
       currentEmployerBullets: z.object({ min: z.number().int().min(1), max: z.number().int().min(1) }).default({ min: 6, max: 8 }),
       skillsCategories: z.array(z.string()).default([]),
@@ -177,6 +186,8 @@ export const candidateProfileSchema = z.object({
     interview: interviewLogisticsSchema.default(EMPTY_INTERVIEW_LOGISTICS),
     targets: candidateTargetsSchema.default(EMPTY_CANDIDATE_TARGETS),
     applicationFacts: applicationFactsSchema.default({ extra: [] }),
+    /** Recruiter Edition (plan Q3): the recruiter's instructions to Agy for this candidate; they win over the recruiter's own. */
+    agyInstructions: agyInstructionsSchema.default([]),
   }),
   truth: z.object({
     factualAuthority: z.string().default("Selected structured career evidence"),
@@ -766,21 +777,25 @@ export const evidenceSnapshotSchema = z.object({
 });
 export type EvidenceSnapshot = z.infer<typeof evidenceSnapshotSchema>;
 
+// What Agy gets about bullets (changed 2026-11-11): per role, how many bullets the base has, how many it may rewrite,
+// and the most it may have. The earlier tailored/anchor/word targets contradicted the per-role counts and Agy spent most
+// of a run reconciling them (live Recruiter Edition run: ~19,600 thinking tokens on bullet counts).
 export const applicationResumePlanSchema = z.object({
-  targetTotalBullets: z.number().int().min(1).max(30),
-  targetTailoredBulletMin: z.number().int().min(1).max(30).default(5),
-  targetTailoredBulletMax: z.number().int().min(1).max(30).default(7),
-  targetCareerAnchorBullets: z.number().int().min(1).max(30).default(6),
-  targetExperienceWordMin: z.number().int().nonnegative().nullable(),
-  targetExperienceWordMax: z.number().int().nonnegative().nullable(),
+  /** Older plans only; the checks now add up employerTargets[].maxBullets. */
+  targetTotalBullets: z.number().int().min(1).max(30).optional(),
   customerFacingRole: z.boolean().default(false),
   targetCurrentEmployerCustomerBullets: z.number().int().min(0).max(4).default(0),
   customerFacingEvidenceIds: z.array(z.string().min(1)).max(10).default([]),
-  employerTargets: z.array(z.object({
+  // Older plans called maxBullets "targetBullets", which Agy read as a number to reach (2026-11-11).
+  employerTargets: z.array(z.preprocess((value) => value && typeof value === "object" && "targetBullets" in value && !("maxBullets" in value) ? { ...(value as Record<string, unknown>), maxBullets: (value as { targetBullets: unknown }).targetBullets } : value, z.object({
     employer: z.string().min(1),
-    targetBullets: z.number().int().min(1).max(30),
-    routedEvidenceCount: z.number().int().nonnegative(),
-  })).min(1),
+    /** Bullets in the base resume for this role. */
+    baseBullets: z.number().int().nonnegative().optional(),
+    /** The most bullets this role may have (base, or one more when more evidence is routed than it has bullets). */
+    maxBullets: z.number().int().min(1).max(30),
+    /** How many of its bullets may be rewritten for this job (the current role); the rest stay as written. */
+    rewriteUpTo: z.number().int().nonnegative().optional(),
+  }))).min(1),
 });
 export type ApplicationResumePlan = z.infer<typeof applicationResumePlanSchema>;
 
@@ -1277,6 +1292,9 @@ export interface SenseiApi {
     switchTo(id: string): Promise<void>;
     /** Closes the open candidate; reload to show the Candidates page. */
     showAll(): Promise<void>;
+    /** The recruiter's name, agency, and defaults for every candidate. */
+    recruiterSettings(): Promise<import("./candidates").RecruiterSettings>;
+    saveRecruiterSettings(input: { recruiterName?: string | null; agency?: string | null; defaults?: import("./candidates").RecruiterDefaults; agyInstructions?: string[] }): Promise<import("./candidates").RecruiterSettings>;
     rename(id: string, name: string): Promise<import("./candidates").CandidateEntry>;
     setStatus(id: string, status: import("./candidates").CandidateStatus): Promise<import("./candidates").CandidateEntry>;
     /** The open candidate's recruiter notes (recruiter plan R4). */
@@ -1315,6 +1333,8 @@ export interface SenseiApi {
     suggest(postingId: string): Promise<import("./candidate-match").CandidateSuggestion[]>;
     /** Returns the open candidate's queue item (the window adds it) and who else got it. */
     send(postingId: string, candidateIds: string[]): Promise<{ active: { pasteId: string; label: string | null } | null; queued: string[]; proposed: string[] }>;
+    /** Every posting in the library with who it went to (Postings page). */
+    library(): Promise<import("./candidate-match").LibraryEntry[]>;
   };
   setup: {
     readiness(): Promise<Readiness>;

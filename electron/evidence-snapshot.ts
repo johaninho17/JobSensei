@@ -1,4 +1,5 @@
 import { readTextFile, writeCompressedJsonAtomic } from "./persistence";
+import { recruiterDefaultsFor, recruiterInstructionsFor } from "./recruiter-defaults";
 import { createHash } from "node:crypto";
 import { postingRecordFor, writePostingRecord } from "./posting-record";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
@@ -356,6 +357,22 @@ export function buildApplicationRouting(
   });
 }
 
+/**
+ * The one bullet instruction Agy gets (owner of this rule, decisions R1 and R3): per role, how many bullets to rewrite
+ * and keep, in plain words, from resumePlan.employerTargets. Replaces several targets that contradicted each other.
+ */
+export function bulletPlanLine(plan: NonNullable<ApplicationContext["resumePlan"]>): string {
+  const [current, ...earlier] = plan.employerTargets;
+  if (!current) return "Bullets: keep every base-resume bullet as written.";
+  const base = current.baseBullets ?? current.maxBullets;
+  const extra = Math.max(0, current.maxBullets - base);
+  const rewrite = current.rewriteUpTo ?? Math.min(4, base);
+  const parts = [`Bullets (owner of this rule): ${current.employer} has ${base} base bullets: rewrite ${rewrite >= 4 ? "3–4" : `up to ${rewrite}`} of them for this job (as text) and keep the rest as {"baseline": N}${extra ? `; you may add ${extra} new supported bullet${extra === 1 ? "" : "s"} (${current.maxBullets} at most, not required)` : ""}.`];
+  if (earlier.length) parts.push(`${earlier.map((target) => target.employer).join(", ")}: leave out of the bundle; the app keeps them exactly as in the base resume.`);
+  parts.push("A role never ends with fewer bullets than its base; replace a weaker bullet instead of dropping it.");
+  return parts.join(" ");
+}
+
 export function buildResumePlan(
   rows: EvidenceSnapshotRow[],
   canonicalResume: NonNullable<EvidenceSnapshot["canonicalResume"]>,
@@ -372,17 +389,19 @@ export function buildResumePlan(
     if (row.employer) routedCounts.set(row.employer, (routedCounts.get(row.employer) ?? 0) + 1);
   }
   const currentEmployer = canonicalResume.employers[0]?.name ?? null;
-  const targets = canonicalResume.employers.map((employer) => ({
+  const targets = canonicalResume.employers.map((employer, index) => ({
     employer: employer.name,
-    targetBullets: employer.originalBulletCount,
-    routedEvidenceCount: routedCounts.get(employer.name) ?? 0,
+    baseBullets: employer.originalBulletCount,
+    maxBullets: employer.originalBulletCount,
+    // The current role is where tailoring happens (3-4 bullets, decision R1); earlier roles keep their lines.
+    rewriteUpTo: index === 0 ? Math.min(4, employer.originalBulletCount) : 0,
   }));
   let added = 0;
   for (const target of targets) {
     if (added >= 2) break;
-    if (target.targetBullets > 0 && target.routedEvidenceCount > target.targetBullets) { target.targetBullets += 1; added += 1; }
+    if (target.maxBullets > 0 && (routedCounts.get(target.employer) ?? 0) > target.maxBullets) { target.maxBullets += 1; added += 1; }
   }
-  const targetTotalBullets = Math.max(1, baselineTotal + added);
+  void baselineTotal;
   const customerTarget = customerFacingTarget(jobDescription);
   const customerFacingEvidenceIds = rows
     .filter((row) => row.employer === currentEmployer)
@@ -391,12 +410,6 @@ export function buildResumePlan(
     .slice(0, 10)
     .map((row) => row.evidenceId);
   return {
-    targetTotalBullets: targets.reduce((sum, target) => sum + target.targetBullets, 0),
-    targetTailoredBulletMin: Math.max(4, Math.floor(targetTotalBullets * 0.3)),
-    targetTailoredBulletMax: Math.min(6, Math.max(4, Math.floor(targetTotalBullets * 0.45))),
-    targetCareerAnchorBullets: Math.max(6, Math.ceil(targetTotalBullets * 0.6)),
-    targetExperienceWordMin: footprint?.targetExperienceWordMin ?? null,
-    targetExperienceWordMax: footprint?.targetExperienceWordMax ?? null,
     customerFacingRole: customerTarget > 0,
     targetCurrentEmployerCustomerBullets: customerFacingEvidenceIds.length >= customerTarget ? customerTarget : Math.min(customerTarget, customerFacingEvidenceIds.length),
     customerFacingEvidenceIds,
@@ -524,7 +537,8 @@ export function narrativeStoryLines(profile?: CandidateProfile | null): string[]
 }
 
 /** Profile-driven run instructions (truth boundaries, anti-slop strictness, confidential names). */
-export function profileInstructionLines(profile?: CandidateProfile | null, writeLetter = true): string[] {
+export function profileInstructionLines(profile?: CandidateProfile | null, writeLetter = true, recruiterInstructions: string[] = []): string[] {
+  const forCandidate = profile?.preferences.agyInstructions ?? [];
   const boundaries = (profile?.truth.boundaries ?? []).map((line) => line.trim()).filter(Boolean);
   const confidentialNames = profile?.truth.confidentialNames ?? [];
   const relaxed = profile?.preferences.voice.antiSlopStrictness === "standard";
@@ -538,6 +552,10 @@ export function profileInstructionLines(profile?: CandidateProfile | null, write
     relaxed
       ? "Avoid the banned phrases in coverLetterBrief.prohibitedPatterns; otherwise ordinary professional wording is fine."
       : "Avoid AI filler (delve, leverage, utilize, empower, enhance, showcase, facilitate, unlock, propel, pivotal, robust, tapestry, realm, synergy, beacon, intersection) unless styleRules list a phrase as the candidate's own.",
+    // Recruiter Edition (plan Q3, owner of this rule): the recruiter's instructions, for every candidate and for this
+    // one. The candidate's win over the recruiter's; neither may break the truth and evidence rules above.
+    ...(recruiterInstructions.length ? [`The recruiter's instructions for every candidate (follow them unless this candidate's instructions say otherwise; never against the evidence rules): ${recruiterInstructions.join(" | ")}`] : []),
+    ...(forCandidate.length ? [`The recruiter's instructions for this candidate (they win over the instructions for every candidate; never against the evidence rules): ${forCandidate.join(" | ")}`] : []),
   ];
 }
 
@@ -548,7 +566,9 @@ export function compactStyleRules(markdown: string, profile?: CandidateProfile |
     .filter((line) => !/^source|^updated|^purpose|^application voice profile$/i.test(line))
     .slice(0, 14);
 
-  const voice = profile?.preferences.voice;
+  // The Recruiter Edition never shows the regular app's tone presets, so they aren't sent either (plan Q3); the
+  // recruiter's own instructions take their place (profileInstructionLines).
+  const voice = featuresFor(currentEdition()).candidates ? undefined : profile?.preferences.voice;
   const activePresetGuidance: string[] = [];
   if (voice?.tonePreset) {
     const presets = deriveVoicePresets(profile ?? null);
@@ -844,7 +864,10 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
   // Recruiter plan R7: whether this run writes a cover letter (src/shared/cover-letter-policy.ts owns the rule).
   const voicePath = candidateProfile?.sources.applicationVoicePath ?? APPLICATION_VOICE_PROFILE_PATH;
   const hasVoice = Boolean((await readFile(assertInsideWorkspace(workspace, join(workspace, voicePath)), "utf8").catch(() => "")).trim());
+  // The recruiter's defaults apply where the candidate hasn't chosen (Recruiter Edition; null in the regular app).
+  const recruiterDefaults = await recruiterDefaultsFor(workspace);
   const coverLetterPlan = coverLetterPlanFor(candidateProfile, {
+    recruiterDefault: recruiterDefaults?.coverLetters ?? null,
     hasVoice,
     careerFiles: countCareerFiles(manifest.selectedCareerPaths ?? [], manifest.secondaryResumePaths.length, Boolean(manifest.linkedinProfilePath)),
     optIn: featuresFor(currentEdition()).coverLetterOptIn,
@@ -1009,7 +1032,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
         ...(snapshot.canonicalResume.summaryHeadingLine ? {
           summary: {
             original: (snapshot.canonicalResume.originalSummaryLines ?? []).join("\n"),
-            editable: summaryIsEditable(snapshot.canonicalResume, candidateProfile),
+            editable: summaryIsEditable(snapshot.canonicalResume, candidateProfile, recruiterDefaults?.tailorSummary ?? false),
           },
         } : {}),
         originalSkillsLines: snapshot.canonicalResume.originalSkillsLines,
@@ -1042,12 +1065,12 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       ...(snapshot.coverLetterPlan?.write === false ? {} : { coverLetterBrief: buildCoverLetterBrief(jobDescriptionText, canonicalJob, candidateProfile) }),
       instructions: [
         "Use only evidenceRows for candidate facts; preserve employer, timeline, scope, eligibility, and classification ceilings.",
-        "Resume scope: keep earlier, less relevant roles verbatim from resumeTemplate.employers[i].baselineBullets. At the current employer, rework the 3-4 bullets that matter most for this job and keep the rest of its baseline bullets as anchors.",
-        "Length and skills follow the base resume (owner of this rule): every role keeps at least its baseline number of bullets (resumePlan.employerTargets); a weaker bullet may be replaced by a stronger supported one, never dropped. Keep every skills item from the base resume: lead with what this job needs, add supported items, and remove an item only when nothing supports it. Skills the posting does not ask for still show the candidate's range, so they stay. The resume keeps the base resume's page count.",
+        bulletPlanLine(resumePlan),
+        "Skills and length follow the base resume (owner of this rule): keep every skills item from the base resume: lead with what this job needs, add supported items, and remove an item only when nothing supports it. Skills the posting does not ask for still show the candidate's range, so they stay. The resume keeps the base resume's page count.",
         "Unchanged baseline bullets are the candidate's own approved claims: copy them word for word with the evidenceIds listed in baselineBullets (often none). Never attach an unrelated evidence ID to make a bullet look supported.",
         "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. The base resume is evidence too (owner of this rule): rows with `base:` IDs are its own lines, so a base line reworded for this job may cite its own `base:` row, and a candidate with only a base resume still gets a close tailoring. Whatever a line cites, it may not add an event, metric, tool, or ownership the cited rows do not state. " + (baseEarnsFitCredit() ? "`base:` rows also count when rating requirements." : "`base:` rows earn no fit credit; rate requirements from the other rows."),
-        ...profileInstructionLines(candidateProfile, snapshot.coverLetterPlan?.write !== false),
-        "Maintain natural bullet length (~16-20 words) matching the baseline footprint; no word-by-word arithmetic.",
+        ...profileInstructionLines(candidateProfile, snapshot.coverLetterPlan?.write !== false, await recruiterInstructionsFor(workspace)),
+        `Keep bullets about as long as the base resume's (about ${Math.round(snapshot.baseResumeFootprint?.averageExperienceBulletWords ?? 16)} words); no word counting.`,
         "provenLines (owner of this rule) are lines from tailored resumes that got the candidate a real interview, each with its evidenceIds (all routed to this job). When you rewrite a bullet at the same employer from the same evidence, prefer that proven wording, adjusted lightly for this job; never move a line to another employer.",
         snapshot.coverLetterPlan?.write === false
           ? `No cover letter for this job (owner of this rule): ${snapshot.coverLetterPlan.reason} Leave coverLetter out of the bundle; never write a generic letter.`
@@ -1056,9 +1079,8 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
           ? ["Every checked candidate file is evidence on its own: rows from other resumes, LinkedIn, notes, and recruiter notes (`file:` IDs among them) are eligible and may back a claim alone, as written."]
           : ["Only cite eligible evidence rows for standalone claims; do not cite a single corroboration-required row alone."]),
         "Use direct, natural wording; denylistRules always win. Apply styleRules to wording only, never as evidence.",
-        resumePlan.customerFacingRole
-          ? `Include ${resumePlan.targetCurrentEmployerCustomerBullets} supported current-employer customer-facing bullets and retain a technical foundation.`
-          : "Retain one supported customer-facing career anchor when relevant without displacing stronger technical evidence.",
+        // Only when the posting is customer-facing; otherwise there is nothing for Agy to weigh.
+        ...(resumePlan.customerFacingRole ? [`Include ${resumePlan.targetCurrentEmployerCustomerBullets} supported current-employer customer-facing bullets and retain a technical foundation.`] : []),
         "Write one application_bundle.json with evidence IDs beside each generated claim, then finalize once.",
       ],
     });
@@ -1159,7 +1181,7 @@ if (require.main === module) {
           snapshotId: snapshot.snapshotId,
           canonicalBaselineId: snapshot.canonicalResume?.baselineId ?? null,
           routedEvidenceCount: snapshot.applicationRouting?.selectedEvidenceIds.length ?? 0,
-          next: `Read jobs/${jobId}/.sensei/application_context.json once (the whole file), then write the bundle.`,
+          next: `Read jobs/${jobId}/.sensei/application_context.json once (the whole file), write jobs/${jobId}/.sensei/application_bundle.json once, then run: sensei application:finalize ${jobId}`,
         }, null, 2)}\n`);
       })
       .catch((error: unknown) => {

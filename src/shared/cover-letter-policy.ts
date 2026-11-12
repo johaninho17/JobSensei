@@ -50,12 +50,13 @@ export function coverLetterPlanFor(profile: {
   identity: { fullName: string };
   career: { transitionSummary: string; narrativePillars: Record<string, string> };
   preferences: { coverLetter: { enabled?: boolean | null; narrativePillars: Record<string, string> } };
-} | null, facts: { hasVoice: boolean; careerFiles: number; optIn: boolean }): CoverLetterPlan {
+} | null, facts: { hasVoice: boolean; careerFiles: number; optIn: boolean; recruiterDefault?: boolean | null }): CoverLetterPlan {
   const own = profile?.preferences.coverLetter.narrativePillars ?? {};
   const old = profile?.career.narrativePillars ?? {};
   const pillars = ["turningPoints", "workingStyle", "personalValues"].map((key) => own[key] || old[key] || "");
   return coverLetterPlan({
-    enabled: profile?.preferences.coverLetter.enabled ?? null,
+    // The candidate's own choice, then the recruiter's default (Recruiter Edition), then the edition's.
+    enabled: profile?.preferences.coverLetter.enabled ?? facts.recruiterDefault ?? null,
     optIn: facts.optIn,
     name: profile?.identity.fullName || "this candidate",
     transitionSummary: profile?.career.transitionSummary ?? "",

@@ -39,6 +39,8 @@ const api: SenseiApi = {
     chooseFiles: (kind) => ipcRenderer.invoke("candidates:choose-files", kind),
     switchTo: (id) => ipcRenderer.invoke("candidates:switch", id),
     showAll: () => ipcRenderer.invoke("candidates:show-all"),
+    recruiterSettings: () => ipcRenderer.invoke("recruiter:settings"),
+    saveRecruiterSettings: (input) => ipcRenderer.invoke("recruiter:save-settings", input),
     rename: (id, name) => ipcRenderer.invoke("candidates:rename", id, name),
     setStatus: (id, status) => ipcRenderer.invoke("candidates:set-status", id, status),
     notes: () => ipcRenderer.invoke("candidates:notes"),
@@ -63,6 +65,7 @@ const api: SenseiApi = {
     setPostingCompany: (postingId, company) => ipcRenderer.invoke("library:set-company", postingId, company),
     suggest: (postingId) => ipcRenderer.invoke("library:suggest", postingId),
     send: (postingId, candidateIds) => ipcRenderer.invoke("library:send", postingId, candidateIds),
+    library: () => ipcRenderer.invoke("library:list"),
   },
   jobSearch: {
     get: () => ipcRenderer.invoke("search:get"),
