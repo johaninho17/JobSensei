@@ -41,6 +41,7 @@ import { JobSearchView } from "./JobSearchView";
 import { Section } from "./Section";
 import { TodayView } from "./TodayView";
 import { WorkspaceFolders } from "./WorkspaceFolders";
+import { DocsView } from "./DocsView";
 import { CompanyStrip, JobFilters, SavedViews, TagEditor, storeJobViews, storedJobViews } from "./JobOrganize";
 import { GROUPINGS, NO_FACETS, findDuplicateJob, groupJobs, matchesFacets, type Grouping, type JobFacets, type JobView } from "../shared/job-organize";
 import { nextInterviewStep } from "../shared/interview-progress";
@@ -63,7 +64,7 @@ const VIEWER_PANEL_MIN = 320;
 type PromptRequest = { id: number; text: string; label: string };
 type JobWorkspaceTab = "overview" | "application" | "interview" | "files";
 type JobLocation = { kind: "job"; jobId: string; tab: JobWorkspaceTab; roundId?: string };
-type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" };
+type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" } | { kind: "docs-home" };
 type WorkspaceLocation =
   | PageLocation
   | JobLocation
@@ -551,7 +552,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
 
   function currentReturnLocation(jobId: string | null): JobLocation | PageLocation {
     const current = navigationHistory[navigationIndex];
-    if (current?.kind === "job" || current?.kind === "today-home" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home") return current;
+    if (current?.kind === "job" || current?.kind === "today-home" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home" || current?.kind === "docs-home") return current;
     if (current?.kind === "document") return current.returnTo;
     return jobId ? { kind: "job", jobId, tab: "overview" } : { kind: "jobs-home" };
   }
@@ -878,6 +879,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const recentForStatus = recentJobIds.slice(0, 3).map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job) && job!.id !== viewedJob?.id);
   const paletteActions: PaletteAction[] = [
     ...(FEATURES.today ? [{ id: "go-today", title: "Go to Today", subtitle: "Morning search, what's due, insights, and questions", keywords: "home day summary", shortcut: "g t", run: () => showPage("today-home") }] : []),
+    { id: "go-docs", title: "Go to Docs", subtitle: "How to get the best results, your data, how Agy uses it, Agy commands", keywords: "help guide documentation commands model theme", run: () => showPage("docs-home") },
     { id: "go-jobs", title: "Go to Jobs", subtitle: "All jobs, the queue, and the status strip", keywords: "home list cards", shortcut: "g j", run: () => showPage("jobs-home") },
     ...(FEATURES.interviews ? [{ id: "go-interviews", title: "Go to Interviews", subtitle: "Every job with interview prep", keywords: "rounds prep", shortcut: "g i", run: () => showPage("interviews-home") }] : []),
     { id: "go-context", title: "Go to Career context", subtitle: "Resumes and sources Agy reads", keywords: "files sources resume", shortcut: "g c", run: () => showPage("context-home") },
@@ -959,6 +961,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         <ul>{recentJobs.map((job) => <li key={job.id}><button aria-current={activePage === "job" && viewedJobId === job.id ? "page" : undefined} onClick={() => openJob(job.id)}><strong>{job.company ?? displayJobName(job.name)}</strong><small>{job.title ?? "Role not recorded"}</small></button></li>)}</ul>
       </section>}
       <div className="side-foot">
+        <button aria-current={activePage === "docs-home" ? "page" : undefined} onClick={() => showPage("docs-home")}><NavIcon name="docs" />Docs</button>
         <button onClick={() => setSettingsModalOpen(true)} disabled={!configured}><NavIcon name="settings" />Settings</button>
       </div>
     </nav>
@@ -1012,6 +1015,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
             try { window.sessionStorage.setItem("sensei-open-job", jobId); } catch { /* storage unavailable */ }
             void window.sensei.candidates.switchTo(candidateId).then(() => window.location.reload(), (caught) => setError(messageOf(caught, "Couldn't open that candidate.")));
           }} />
+          : currentLocation.kind === "docs-home" ? <DocsView />
           : currentLocation.kind === "setup-home" ? <SetupHome onToast={showToast} readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome
             onOpen={(path) => void selectFile(path)}
@@ -1040,13 +1044,14 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   </main>;
 }
 
-function NavIcon({ name }: { name: "today" | "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" | "pipeline" }) {
+function NavIcon({ name }: { name: "today" | "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" | "pipeline" | "docs" }) {
   const paths: Record<typeof name, string> = {
     today: "M5 6h14v14H5z M5 10h14 M9 4v4 M15 4v4 M9 14h2 M13 14h2 M9 17h2",
     jobs: "M4 8h16v11H4zM9 8V5h6v3M4 13h16",
     search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z M15.5 15.5L20 20",
     interviews: "M5 5h14v10H9l-4 4z M8.5 9.5h7 M8.5 12h4",
     context: "M5 4h10l4 4v12H5z M15 4v4h4 M8 12h8 M8 16h6",
+    docs: "M6 3h9l3 3v15H6z M15 3v3h3 M9 11h6 M9 15h6",
     settings: "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1",
     sidebar: "M4 5h16v14H4z M9 5v14",
     setup: "M5 6h14 M5 12h14 M5 18h14 M8 4v4 M15 10v4 M10 16v4",
