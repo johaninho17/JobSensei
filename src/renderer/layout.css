@@ -964,6 +964,10 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .recruiter-settings-body label:not(.settings-toggle-row), .candidate-settings > label { display: grid; gap: var(--space-1); }
 .recruiter-settings-body label small, .candidate-settings label small { color: var(--muted); font-weight: 400; }
 .candidate-settings { display: grid; gap: var(--space-3); max-width: 640px; }
+.postings-add { display: grid; gap: var(--space-2); max-width: 720px; margin-bottom: var(--space-4); }
+.postings-add label { font-weight: 600; }
+.postings-add textarea { width: 100%; }
+.postings-add .onboarding-actions { justify-content: flex-start; }
 .base-resume-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 /* The base resume is shown to read; replacing it is the way to change it (no edit or export toolbar here). */
 .base-resume-tab .document-meta { display: none; }

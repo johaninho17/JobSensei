@@ -19,7 +19,7 @@ import { approveProposal, declineProposal, readProposals } from "./proposals";
 import { candidateInsight, reportRows } from "../src/shared/recruiter-insight";
 import { statusLabel } from "../src/shared/tracker";
 import { removeCandidateHistory } from "./agy-home";
-import { nextQueuedCandidate, sendPosting, setLibraryCompany, stageLibraryLink, stageLibraryPaste, suggestCandidates } from "./posting-library";
+import { nextQueuedCandidate, sendPosting, setLibraryCompany, stageLibraryLink, stageLibraryPaste, suggestCandidates, listLibrary } from "./posting-library";
 import { join } from "node:path";
 
 export type CandidateContext = {
@@ -149,6 +149,7 @@ export function registerCandidateIpc(ctx: CandidateContext): void {
   ipcMain.handle("library:stage-paste", async (_event, text: unknown, postingId: unknown) => stageLibraryPaste(ctx.root(), text, id(postingId)));
   ipcMain.handle("library:set-company", async (_event, postingId: unknown, company: unknown) => setLibraryCompany(ctx.root(), id(postingId), id(company)));
   ipcMain.handle("library:suggest", async (_event, postingId: unknown) => suggestCandidates(ctx.root(), id(postingId)));
+  ipcMain.handle("library:list", async () => listLibrary(ctx.root()));
   ipcMain.handle("library:send", async (_event, postingId: unknown, candidateIds: unknown) => {
     if (!Array.isArray(candidateIds) || !candidateIds.length || candidateIds.length > 100) throw new Error("Choose at least one candidate.");
     return sendPosting(ctx.root(), id(postingId), candidateIds.map(id), (await state()).activeId);

@@ -207,3 +207,26 @@ describe("approving a proposal with a very long title", () => {
     expect(await readProposals(folder)).toEqual([]);
   });
 });
+
+describe("Postings page list (plan Q4, 2026-11-11)", () => {
+  it("records who each posting went to and shows a posting added twice once", async () => {
+    const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { ensureRecruiterRoot, addCandidate } = await import("../electron/candidates");
+    const { libraryPath, listLibrary, sendPosting } = await import("../electron/posting-library");
+    const root = await mkdtemp(join(tmpdir(), "postings-"));
+    await ensureRecruiterRoot(root);
+    const alex = await addCandidate(root, "Alex Morgan", { suffix: "7k2f" });
+    const dir = join(libraryPath(root), ".sensei", "staged-jds");
+    await mkdir(dir, { recursive: true });
+    for (const id of ["paste-aaaa1", "paste-bbbb2"]) {
+      await writeFile(join(dir, `${id}.md`), "# Account Executive\n\nNorthstar Labs");
+      await writeFile(join(dir, `${id}.json`), JSON.stringify({ title: "Account Executive", company: "Northstar Labs", location: null, url: "https://jobs.example.com/ae" }));
+    }
+    await sendPosting(root, "paste-aaaa1", [alex.id], null);
+    const list = await listLibrary(root);
+    expect(list).toHaveLength(1);
+    expect(list[0]!.sentTo.map((send) => [send.name, send.kind])).toEqual([["Alex Morgan", "queued"]]);
+  });
+});

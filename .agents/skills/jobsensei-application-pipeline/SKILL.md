@@ -24,11 +24,11 @@ For a JD pasted in the app ("Evaluate the job description I pasted (paste ID <id
 3. Use the `suggestedJobId` from `jd:fetch`. Never run `ls` or create folders, `pdfs/`, or metadata files yourself.
 4. Run the snapshot exactly once, then read `jobs/<job-id>/.sensei/application_context.json` once in a single full read:
    `sensei context:snapshot <job-id> --from-fetched` (it creates the job folder and `original_jd.md` from the staged posting). If `jd:fetch` printed `"company": null`, add `--company "<employer>"` only when the JD names the hiring employer itself, and start the job ID with that name in kebab-case. A business unit, team, division, brand line, or recruiting agency is never the company; if the JD names no employer, ask the user for the company and stop.
-5. In one file-writing turn, create only `.sensei/application_bundle.json` (contract below). Keep it short; the finalizer fills in everything unchanged:
+5. In one file-writing turn, create only `jobs/<job-id>/.sensei/application_bundle.json` (contract below; the snapshot's `next` line gives the exact path). Keep it short; the finalizer fills in everything unchanged:
    - Leave out earlier employers entirely. They are kept exactly as in the base resume.
-   - For the current employer, write the 3–4 reworked bullets as text, and keep each remaining bullet as `{ "baseline": N }` (N = its position in `baselineBullets`, starting at 1), in the order you want.
+   - For the current employer, follow the `Bullets` line in `instructions` (it says how many to rewrite and whether one may be added): write reworked bullets as text and keep each remaining bullet as `{ "baseline": N }` (N = its position in `baselineBullets`, starting at 1), in the order you want.
    - Skills lines: start from `resumeTemplate.editableSkillCategories` and follow the snapshot `instructions` (keep the base resume's items).
-   - `evaluationMarkdown`: the scoring table, the must-have table, and at most three one-line bullets (top strength, main gap, apply recommendation).
+   - `evaluationMarkdown`: the Requirement Scoring table and at most three one-line bullets (top strength, main gap, apply recommendation). The app writes the Must-Have table (only when `requirements` is empty do you write it; see Evaluation Table).
    - Draft the cover letter exactly as `coverLetterBrief` specifies. If the application context has no `coverLetterBrief`, its instructions say why: leave `coverLetter` out of the bundle.
 6. Run `sensei application:finalize <job-id>` exactly once. Report its `fitScore`, `fitConfidence`, `gateStatus`, `durationSeconds`, and warnings, then stop. Never inspect code, patch output, or retry after finalization.
 
@@ -41,7 +41,7 @@ For an explicit regeneration, the saved JD is the only job-specific input. Exist
 - Follow `resumePlan`, `resumeTemplate`, `footprint`, `denylistRules`, and the local candidate preferences. The finalizer restores protected identity, contact details, chronology, titles, dates, locations, education, and layout.
 - Unchanged base-resume bullets are the candidate's own approved claims: copy them word for word. A *rewritten* bullet must trace every claim to `evidenceRows` (the base resume's own lines count as evidence (`base:` rows; the snapshot instructions own this rule)); the baseline wording shows the confidence level to match, not new facts to add.
 - Resume summary: only if `resumeTemplate.summary.editable` is true, add `"summary": { "text": ..., "evidenceIds": [...] }` to `resume` in the bundle (at most 3 lines, same truth rules as bullets). Otherwise leave it out; the base resume's own summary, if any, stays verbatim.
-- Surgical tailoring (principle owned by `AGENTS.md`): earlier roles stay out of the bundle unless evidence makes them directly relevant; skills and length follow the snapshot `instructions`; rework only 3–4 current-role bullets toward the JD's core work; keep bullets about 16–20 words. Within ±15% of the footprint needs no manual counting.
+- Surgical tailoring (principle owned by `AGENTS.md`): earlier roles stay out of the bundle unless evidence makes them directly relevant; skills and length follow the snapshot `instructions`; rework only the current-role bullets the `Bullets` line allows, toward the JD's core work; keep bullets as long as the base resume's (the instructions give the number). No manual word counting.
 - Align bullet emphasis with the core discipline of the target role (e.g., leadership, operations, commercial, technical, or people enablement) based on the candidate's supported background without exaggerating scope or ownership.
 - Plain professional language for the candidate's field (`$jobsensei-anti-slop`): an accurate action, a concrete method or tool, and a supported purpose or result.
 - Keep the cover letter candidate-first. `coverLetterBrief` in the application context is the only cover-letter specification (structure, opening, word range, banned phrases); follow it and nothing else.
@@ -69,7 +69,7 @@ If `requirements` is empty, use the same five columns and write six rows of your
 
 ## Single Bundle Contract
 
-Write `.sensei/application_bundle.json` only. Put exact evidence IDs beside each generated claim so the finalizer can derive the legacy draft and evidence map without another model pass.
+Write `jobs/<job-id>/.sensei/application_bundle.json` only. Put exact evidence IDs beside each generated claim so the finalizer can derive the legacy draft and evidence map without another model pass.
 
 ```json
 {

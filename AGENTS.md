@@ -24,7 +24,7 @@ JobSensei is a local-first career workspace. Candidate identity, chronology, pre
 
 ## New job flow
 
-Use `$jobsensei-application-pipeline` as the sole orchestrator for a pasted JD or job URL. It owns the steps: `jd:fetch` for a URL or a JD pasted in the app, one snapshot (which prints the context), one `.sensei/application_bundle.json` write, one finalize, then stop. Target: under 60 seconds.
+Use `$jobsensei-application-pipeline` as the sole orchestrator for a pasted JD or job URL. It owns the steps: `jd:fetch` for a URL or a JD pasted in the app, one snapshot (which prints the context), one `jobs/<job-id>/.sensei/application_bundle.json` write, one finalize, then stop. Target: under 60 seconds.
 
 Do not inspect implementation code, validators, schemas, package metadata, or other skills during a routine application. Do not use subagents, scratch scripts, manual word-count commands, converter searches, or repair loops. A finalization warning means the drafts are ready for human review.
 

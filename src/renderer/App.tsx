@@ -33,7 +33,9 @@ import { InterviewView, LiveWindow } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { BaseResumeTab, CandidateSettingsTab, ProfilePage } from "./CandidateProfile";
 import { RecruiterSettingsDialog } from "./RecruiterSettings";
-import { CandidateGate, CandidateResumeCard, CandidateSwitcher, RecruiterNotes, WhoIsThisFor } from "./Candidates";
+import { PostingsView } from "./Postings";
+import { ReportsView } from "./Reports";
+import { CandidateGate, CandidateResumeCard, CandidateSwitcher, RecruiterNotes } from "./Candidates";
 import { PipelineView } from "./Pipeline";
 import { PrivacyDialog } from "./Privacy";
 import { ReviewPanel } from "./Review";
@@ -65,7 +67,7 @@ const VIEWER_PANEL_MIN = 320;
 type PromptRequest = { id: number; text: string; label: string };
 type JobWorkspaceTab = "overview" | "application" | "interview" | "files";
 type JobLocation = { kind: "job"; jobId: string; tab: JobWorkspaceTab; roundId?: string };
-type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" };
+type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" } | { kind: "postings-home" } | { kind: "reports-home" };
 type WorkspaceLocation =
   | PageLocation
   | JobLocation
@@ -152,11 +154,6 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const [companyAsk, setCompanyAsk] = useState<{ title: string | null; resolve: (company: string | null) => void } | null>(null);
   /** Asks which company a pasted posting is for; null when the user skips. */
   const askCompany = (title: string | null) => new Promise<string | null>((resolve) => setCompanyAsk({ title, resolve }));
-  // Recruiter Edition: which candidates a new posting is for (recruiter plan R5).
-  const [whoAsk, setWhoAsk] = useState<{ posting: LibraryPosting; remaining: number; resolve: (ids: string[] | null, forRest: boolean) => void } | null>(null);
-  // Several links pasted at once: the recruiter may choose candidates once for the rest of the batch.
-  const batchChoice = useRef<string[] | null>(null);
-  const askWho = (posting: LibraryPosting, remaining = 0) => new Promise<string[] | null>((resolve) => setWhoAsk({ posting, remaining, resolve: (ids, forRest) => { if (forRest && ids) batchChoice.current = ids; resolve(ids); } }));
   const runningItem = jobQueue.items.find((item) => item.status === "running");
   const busyJobLabel = runningItem ? runningItem.label ?? runningItem.url ?? "a queued job" : null;
   /**
@@ -193,11 +190,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         const company = await askCompany(posting.title ?? firstLine);
         if (company) posting = await window.sensei.candidates.setPostingCompany(item.id, company);
       }
-      const batch = input.kind === "link" ? input.batch : undefined;
-      if (!batch || batch.index === 0) batchChoice.current = null;
-      const chosen = batchChoice.current ?? await askWho(posting, batch ? batch.size - batch.index - 1 : 0);
-      if (!chosen) { const stop = new Error("No candidate chosen, so nothing was queued."); stop.name = "NotQueued"; throw stop; }
-      const sent = await window.sensei.candidates.send(item.id, chosen);
+      // Inside a candidate, a job is for that candidate (plan Q4): no question. Sending one posting to several
+      // candidates happens on the recruiter's Postings page.
+      if (!candidates?.activeId) throw new Error("Open a candidate first, or add the posting on the Postings page.");
+      const sent = await window.sensei.candidates.send(item.id, [candidates.activeId]);
       if (sent.queued.length) showToast(`Queued for ${plural(sent.queued.length, "other candidate")}; their jobs run after this candidate's queue`);
       if (sent.proposed.length) showToast(`Waiting for approval from ${plural(sent.proposed.length, "candidate")}; send them the shortlist from All candidates`);
       if (!sent.active) return 0;
@@ -224,6 +220,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       if (!confirmNotDuplicate({ company: meta.company, title: meta.title ?? firstLine })) throw new Error("Not added: you already have this job.");
       item.label = [meta.company, meta.title ?? firstLine].filter(Boolean).join(", ") || null;
     }
+    return addToQueue(item);
+  }
+  /** Adds a staged posting to this window's queue; returns how many jobs are ahead of it. */
+  async function addToQueue(item: JobQueue["items"][number]): Promise<number> {
     const current = queueRef.current;
     const ahead = current.items.filter((candidate) => candidate.status === "queued" || candidate.status === "running").length;
     // The queue holds 50 items: make room by dropping the oldest finished ones.
@@ -553,7 +553,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
 
   function currentReturnLocation(jobId: string | null): JobLocation | PageLocation {
     const current = navigationHistory[navigationIndex];
-    if (current?.kind === "job" || current?.kind === "today-home" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home") return current;
+    if (current?.kind === "job" || current?.kind === "today-home" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home" || current?.kind === "postings-home" || current?.kind === "reports-home") return current;
     if (current?.kind === "document") return current.returnTo;
     return jobId ? { kind: "job", jobId, tab: "overview" } : { kind: "jobs-home" };
   }
@@ -955,6 +955,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         <ul className="side-nav">
           <li><button onClick={() => void window.sensei.candidates.showAll().then(() => window.location.reload())}><NavIcon name="people" />Candidates<span className="side-count">{candidates.candidates.filter((candidate) => candidate.status !== "archived").length}</span></button></li>
           <li><button aria-current={activePage === "pipeline-home" ? "page" : undefined} onClick={() => showPage("pipeline-home")}><NavIcon name="pipeline" />Pipeline</button></li>
+          <li><button aria-current={activePage === "postings-home" ? "page" : undefined} onClick={() => showPage("postings-home")}><NavIcon name="jobs" />Postings</button></li>
+          <li><button aria-current={activePage === "reports-home" ? "page" : undefined} onClick={() => showPage("reports-home")}><NavIcon name="today" />Reports</button></li>
         </ul>
         <CandidateSwitcher state={candidates} />
       </>}
@@ -1018,6 +1020,13 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
               onAnswerAddedFile={(path) => void updateContext([...new Set([...selectedCareerPaths, path])], selectedJobFiles)} />
           : FEATURES.jobSearch && currentLocation.kind === "search-home" ? <JobSearchView status={searchStatus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onOpenJob={openJob} onToast={showToast} />
           : FEATURES.interviews && currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
+          : FEATURES.candidates && currentLocation.kind === "postings-home" ? <PostingsView activeId={candidates?.activeId ?? null} onToast={showToast} onActive={async (pasteId, label, url) => {
+            const item = newQueueItem({ kind: "paste", label }, new Date(), false);
+            item.id = pasteId;
+            item.url = url;
+            await addToQueue(item);
+          }} />
+          : FEATURES.candidates && currentLocation.kind === "reports-home" ? <ReportsView />
           : FEATURES.candidates && currentLocation.kind === "pipeline-home" ? <PipelineView activeId={candidates?.activeId ?? null} onToast={showToast} onOpenJob={(candidateId, jobId) => {
             if (candidateId === candidates?.activeId) { openJob(jobId); return; }
             // Another candidate's job: open that candidate (the window reloads), then the job.
@@ -1059,7 +1068,6 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     <div className={`panel-resizer is-right ${rightPanelOpen ? "" : "is-collapsed"}`} role="separator" aria-label="Resize terminal panel" aria-orientation="vertical" aria-valuemin={RIGHT_PANEL_MIN} aria-valuemax={panelMaximum("right")} aria-valuenow={rightPanelWidth} tabIndex={rightPanelOpen ? 0 : -1} onPointerDown={(event) => beginPanelResize("right", event)} onKeyDown={(event) => resizePanelWithKeyboard("right", event)} />
     <ToastRegion toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
     {shortcutsOpen && <ShortcutsPanel onClose={() => setShortcutsOpen(false)} />}
-    {FEATURES.candidates && whoAsk && <WhoIsThisFor posting={whoAsk.posting} remaining={whoAsk.remaining} activeId={candidates?.activeId ?? null} onDone={(ids, forRest) => { whoAsk.resolve(ids, forRest); setWhoAsk(null); }} />}
     {companyAsk && <CompanyDialog title={companyAsk.title} onDone={(company) => { companyAsk.resolve(company); setCompanyAsk(null); }} />}
     <TerminalPanel latestRun={latestRun} onQueueJob={queueJob} busyLabel={busyJobLabel} cwd={workspace.repositoryRoot || workspace.path} selectedJobFiles={selectedJobFiles} selectedCareerPaths={selectedCareerPaths} theme={theme} visible={rightPanelOpen && !needsSetup} onClose={() => setRightPanelOpen(false)} jobActions={jobActions} promptRequest={promptRequest} onPromptHandled={(id) => setPromptRequest((request) => request?.id === id ? null : request)} onInsertPrompt={insertJobPrompt} onOpenRun={(run) => { if (run.jobId && jobs.some((job) => job.id === run.jobId)) openJobView(run.jobId, run.kind === "interview" ? "interview" : "application", run.roundId ?? undefined); }} />
   </main>;

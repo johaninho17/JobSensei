@@ -2,8 +2,9 @@
 // copied into each chosen candidate's own folder and queue. Agy only ever reads the copy inside the candidate's
 // folder, so a run never reaches another candidate's files.
 import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { writeJsonAtomic } from "./persistence";
 import { join } from "node:path";
-import { matchCandidate, type CandidateSuggestion, type ExistingPosting, type LibraryPosting } from "../src/shared/candidate-match";
+import { matchCandidate, type CandidateSuggestion, type ExistingPosting, type LibraryEntry, type LibraryPosting, type PostingSend } from "../src/shared/candidate-match";
 import { RECRUITER_DIR } from "../src/shared/candidates";
 import { newQueueItem } from "../src/shared/job-queue";
 import { EMPTY_CANDIDATE_TARGETS, candidateProfileSchema, type CandidateTargets } from "../src/shared/schemas";
@@ -137,7 +138,46 @@ export async function sendPosting(root: string, id: string, candidateIds: string
     await saveJobQueue(folder, { ...queue, items: [...queue.items.filter((existing) => existing.status !== "done").slice(-49), item] });
     queued.push(candidateId);
   }
+  const at = now.toISOString();
+  const sends: PostingSend[] = [
+    ...[...(active && activeId ? [activeId] : []), ...queued].map((candidateId): PostingSend => ({ candidateId, kind: "queued", at })),
+    ...proposed.map((candidateId): PostingSend => ({ candidateId, kind: "proposed", at })),
+  ];
+  await recordSends(root, id, sends);
   return { active, queued, proposed };
+}
+
+/** Notes who a posting went to in its library record (plan Q4), so the Postings page can show it. */
+async function recordSends(root: string, id: string, sends: PostingSend[]): Promise<void> {
+  if (!sends.length) return;
+  const path = stagedFile(libraryPath(root), checkId(id), ".json");
+  const meta = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown> & { sentTo?: PostingSend[] };
+  await writeJsonAtomic(path, { ...meta, sentTo: [...(meta.sentTo ?? []), ...sends] });
+}
+
+/** Every posting in the library, newest first, with who it went to (plan Q4). */
+export async function listLibrary(root: string): Promise<LibraryEntry[]> {
+  const dir = join(libraryPath(root), ...STAGED_JDS_DIR.split("/"));
+  const names = (await readdir(dir).catch(() => [] as string[])).filter((name) => POSTING_ID.test(name.replace(/\.json$/, "")) && name.endsWith(".json") && !name.endsWith(".form.json"));
+  const roster = await readRoster(root);
+  const nameOf = new Map(roster.candidates.map((candidate) => [candidate.id, candidate.displayName]));
+  const entries = await Promise.all(names.map(async (name) => {
+    const id = name.replace(/\.json$/, "");
+    const [meta, raw, added] = await Promise.all([libraryMeta(root, id).catch(() => null), readFile(join(dir, name), "utf8").then((text) => JSON.parse(text) as { sentTo?: PostingSend[] }, () => null), stat(join(dir, `${id}.md`)).catch(() => null)]);
+    if (!meta) return null;
+    const sentTo = (raw?.sentTo ?? []).filter((send) => nameOf.has(send.candidateId)).map((send) => ({ ...send, name: nameOf.get(send.candidateId)! }));
+    return { ...meta, addedAt: added ? added.mtime.toISOString() : null, sentTo } satisfies LibraryEntry;
+  }));
+  // The same posting added more than once (same link, or same company and title) shows once: newest first, with
+  // everyone it went to across those copies.
+  const merged = new Map<string, LibraryEntry>();
+  for (const entry of entries.filter((item): item is LibraryEntry => Boolean(item)).sort((a, b) => (b.addedAt ?? "").localeCompare(a.addedAt ?? ""))) {
+    const key = entry.url ?? `${(entry.company ?? "").toLowerCase()}|${(entry.title ?? "").toLowerCase()}`;
+    const seen = merged.get(key);
+    if (seen) seen.sentTo = [...seen.sentTo, ...entry.sentTo];
+    else merged.set(key, { ...entry, sentTo: [...entry.sentTo] });
+  }
+  return [...merged.values()];
 }
 
 /** The first other candidate with jobs waiting to run, so the queue can move on to them. */

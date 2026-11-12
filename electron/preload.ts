@@ -65,6 +65,7 @@ const api: SenseiApi = {
     setPostingCompany: (postingId, company) => ipcRenderer.invoke("library:set-company", postingId, company),
     suggest: (postingId) => ipcRenderer.invoke("library:suggest", postingId),
     send: (postingId, candidateIds) => ipcRenderer.invoke("library:send", postingId, candidateIds),
+    library: () => ipcRenderer.invoke("library:list"),
   },
   jobSearch: {
     get: () => ipcRenderer.invoke("search:get"),

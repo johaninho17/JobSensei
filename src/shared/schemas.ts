@@ -777,21 +777,25 @@ export const evidenceSnapshotSchema = z.object({
 });
 export type EvidenceSnapshot = z.infer<typeof evidenceSnapshotSchema>;
 
+// What Agy gets about bullets (changed 2026-11-11): per role, how many bullets the base has, how many it may rewrite,
+// and the most it may have. The earlier tailored/anchor/word targets contradicted the per-role counts and Agy spent most
+// of a run reconciling them (live Recruiter Edition run: ~19,600 thinking tokens on bullet counts).
 export const applicationResumePlanSchema = z.object({
-  targetTotalBullets: z.number().int().min(1).max(30),
-  targetTailoredBulletMin: z.number().int().min(1).max(30).default(5),
-  targetTailoredBulletMax: z.number().int().min(1).max(30).default(7),
-  targetCareerAnchorBullets: z.number().int().min(1).max(30).default(6),
-  targetExperienceWordMin: z.number().int().nonnegative().nullable(),
-  targetExperienceWordMax: z.number().int().nonnegative().nullable(),
+  /** Older plans only; the checks now add up employerTargets[].maxBullets. */
+  targetTotalBullets: z.number().int().min(1).max(30).optional(),
   customerFacingRole: z.boolean().default(false),
   targetCurrentEmployerCustomerBullets: z.number().int().min(0).max(4).default(0),
   customerFacingEvidenceIds: z.array(z.string().min(1)).max(10).default([]),
-  employerTargets: z.array(z.object({
+  // Older plans called maxBullets "targetBullets", which Agy read as a number to reach (2026-11-11).
+  employerTargets: z.array(z.preprocess((value) => value && typeof value === "object" && "targetBullets" in value && !("maxBullets" in value) ? { ...(value as Record<string, unknown>), maxBullets: (value as { targetBullets: unknown }).targetBullets } : value, z.object({
     employer: z.string().min(1),
-    targetBullets: z.number().int().min(1).max(30),
-    routedEvidenceCount: z.number().int().nonnegative(),
-  })).min(1),
+    /** Bullets in the base resume for this role. */
+    baseBullets: z.number().int().nonnegative().optional(),
+    /** The most bullets this role may have (base, or one more when more evidence is routed than it has bullets). */
+    maxBullets: z.number().int().min(1).max(30),
+    /** How many of its bullets may be rewritten for this job (the current role); the rest stay as written. */
+    rewriteUpTo: z.number().int().nonnegative().optional(),
+  }))).min(1),
 });
 export type ApplicationResumePlan = z.infer<typeof applicationResumePlanSchema>;
 
@@ -1329,6 +1333,8 @@ export interface SenseiApi {
     suggest(postingId: string): Promise<import("./candidate-match").CandidateSuggestion[]>;
     /** Returns the open candidate's queue item (the window adds it) and who else got it. */
     send(postingId: string, candidateIds: string[]): Promise<{ active: { pasteId: string; label: string | null } | null; queued: string[]; proposed: string[] }>;
+    /** Every posting in the library with who it went to (Postings page). */
+    library(): Promise<import("./candidate-match").LibraryEntry[]>;
   };
   setup: {
     readiness(): Promise<Readiness>;
