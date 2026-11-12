@@ -1,9 +1,10 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { fileAnswers, readAnswerInbox } from "../electron/answer-filing";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildToday, candidateQuestions, mergeQuestions, ratingAccuracy } from "../src/shared/today";
-import { answerQuestion, checkClosedPostings, keepPosting, readClosedPostings, removeQuestion, ANSWERS_FILE } from "../electron/today";
+import { answerQuestion, checkClosedPostings, keepPosting, readClosedPostings, removeQuestion } from "../electron/today";
 import { provenLinesFor } from "../electron/proven-lines";
 import { companyResearchFor } from "../electron/interview-context";
 import { likeInterviewed, searchLearning } from "../electron/job-search";
@@ -53,15 +54,43 @@ describe("Today questions", () => {
 });
 
 describe("Today answers go to their owners", () => {
-  it("saves a skill answer as a career record row in the evidence table format", async () => {
+  it("queues a skill answer, and Agy's filing puts it in the right career record (never a separate answers file)", async () => {
     const root = await workspace();
-    await writeFile(join(root, ".sensei/today-questions.json"), JSON.stringify({ questions: mergeQuestions([], [{ id: "skill:salesforce", kind: "skill", subject: "Salesforce", options: [], text: "?", why: "" }], NOW) }));
+    await mkdir(join(root, "context/structured"), { recursive: true });
+    await writeFile(join(root, "context/structured/northstar.md"), [
+      "# Evidence: Northstar Labs work", "", "- years: 2024-present", "", "## Evidence Inventory", "",
+      "| Evidence ID | Year | Project | Explicit claim | Scope note | Source locator | Confidence | Public use |",
+      "| --- | --- | --- | --- | --- | --- | --- | --- |",
+      "| context:northstar:onboarding | 2025 | Onboarding | Onboarded customers. | | Work email | high | eligible |", "",
+    ].join("\n"));
+    await writeFile(join(root, ".sensei/today-questions.json"), JSON.stringify({ questions: mergeQuestions([], [{ id: "skill:salesforce", kind: "skill", subject: "Salesforce", options: [], text: "Have you used Salesforce?", why: "" }], NOW) }));
     const result = await answerQuestion(root, "skill:salesforce", "Built reports and dashboards in Salesforce for a customer success team at Northstar Labs.", NOW);
-    expect(result.addedPath).toBe(ANSWERS_FILE);
-    const file = await readFile(join(root, ANSWERS_FILE), "utf8");
-    expect(file).toContain("- source_role: candidate-confirmed-work-record");
-    expect(file).toContain("| context:today-answers:salesforce | 2026 | Salesforce | Built reports and dashboards in Salesforce");
+    expect(result).toMatchObject({ addedPath: null, queued: true });
+    expect(await readFile(join(root, "context/structured/answers-from-today.md"), "utf8").catch(() => null)).toBeNull();
+    expect((await readAnswerInbox(root)).map((answer) => answer.status)).toEqual(["pending"]);
     await expect(answerQuestion(root, "skill:salesforce", "again", NOW)).rejects.toThrow("already answered");
+
+    // Agy (stubbed) picks the Northstar work record; the app writes the row there, after a backup.
+    let prompt = "";
+    const runner = async (text: string) => {
+      prompt = text;
+      const [answer] = await readAnswerInbox(root);
+      return { conversationId: null, response: JSON.stringify({ skipped: [], filings: [{ answerId: answer!.id, file: "context/structured/northstar.md", evidenceId: "context:northstar:salesforce-reports", year: "2025", project: "Northstar Labs", claim: "Built Salesforce reports and dashboards for the customer success team.", scope: "Reports and dashboards only.", publicUse: "eligible" }] }) };
+    };
+    const filed = await fileAnswers(root, runner, NOW);
+    expect(prompt).toContain(".agents/workflows/jobsensei-file-answers.md");
+    expect(prompt).toContain("context/structured/northstar.md");
+    expect(filed.filed.map((answer) => answer.filedTo)).toEqual(["context/structured/northstar.md"]);
+    const record = await readFile(join(root, "context/structured/northstar.md"), "utf8");
+    expect(record).toContain("| context:northstar:salesforce-reports | 2025 | Northstar Labs | Built Salesforce reports and dashboards for the customer success team. |");
+    expect(record.indexOf("salesforce-reports")).toBeGreaterThan(record.indexOf("context:northstar:onboarding"));
+    expect((await readAnswerInbox(root))[0]).toMatchObject({ status: "filed", evidenceId: "context:northstar:salesforce-reports" });
+    // A file Agy invents is refused; the answer waits for the next run.
+    await writeFile(join(root, ".sensei/today-questions.json"), JSON.stringify({ questions: mergeQuestions([], [{ id: "skill:kotlin", kind: "skill", subject: "Kotlin", options: [], text: "Kotlin?", why: "" }], NOW) }));
+    await answerQuestion(root, "skill:kotlin", "Coursework only.", NOW);
+    const second = await fileAnswers(root, async () => ({ conversationId: null, response: JSON.stringify({ skipped: [], filings: [{ answerId: (await readAnswerInbox(root))[1]!.id, file: "context/structured/made-up.md", evidenceId: "x", year: "2020", project: "x", claim: "x", scope: "x", publicUse: "eligible" }] }) }), NOW);
+    expect(second.filed).toEqual([]);
+    expect((await readAnswerInbox(root))[1]!.status).toBe("pending");
   });
 
   it("records an outcome in the tracker, and a removed question stays removed", async () => {

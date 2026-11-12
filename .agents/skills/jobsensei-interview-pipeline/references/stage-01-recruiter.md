@@ -23,6 +23,8 @@ Some recruiters also ask one or two light judgment scenarios (prioritizing sever
 7. Logistics (from `logistics` only).
 8. Optional: one light judgment scenario, per above.
 
+Recruiters press less, but two of these become pressure questions (pipeline `SKILL.md` § Question mix): 5 asks for one specific example (with "give me one specific example" as the follow-up), and 6 probes the posting's hardest must-have tool at working depth.
+
 `## Questions to ask`: 3–4 recruiter questions (process and timeline, why the role is open, how the team works, what successful new hires do in the first months).
 
 ## `prep.md` sections

@@ -4,6 +4,7 @@
 import { autoDraftPicks, dailyRunDue, scheduledAgyToday, type SearchRun } from "../src/shared/job-search";
 import { reachedInterview } from "../src/shared/tracker";
 import { pruneHeadlessConversations } from "./agy-home";
+import { FILING_SCHEMA, fileAnswers, readAnswerInbox } from "./answer-filing";
 import { readCandidateProfile } from "./candidate-profile";
 import { listJobFolders } from "./job-folders";
 import { RATING_SCHEMA, SEARCH_SCHEMA, SEARCH_TIMEOUT_SECONDS, jobsForSearch, readSearchSettings, readSearchState, releaseSearchLock, runSearch, saveSearchState, searchLearning, takeSearchLock } from "./job-search";
@@ -65,6 +66,14 @@ export async function runScheduledSearch(deps: {
     await log(`${agyOnly ? "Agy retry " : ""}${run.status}: ${run.found} links, ${run.added} new, ${run.rated} rated, ${picks.length} marked for drafts${run.error ? `; ${run.error}` : ""}${withAgy ? (agyPath ? "" : "; Agy not found, watched companies only") : "; watched companies only (Search settings)"}`);
     // Second step, after the search: the morning summary (closed postings, what's due, questions), no Agy.
     const summary = await writeMorningSummary(workspace, { jobs: allJobs, profile }).catch((error) => { void log(`summary error: ${error instanceof Error ? error.message : String(error)}`); return null; });
+    // Third step: answers to Today questions still waiting are filed into the career records (one small Agy call).
+    const pendingAnswers = (await readAnswerInbox(workspace).catch(() => [])).some((answer) => answer.status === "pending");
+    const filingAgy = pendingAnswers ? resolveAgyExecutable() : null;
+    if (filingAgy) {
+      const home = agyHome ?? await deps.agyHome().catch(() => null);
+      if (home) await fileAnswers(workspace, headlessAgy({ agyPath: filingAgy, agyHome: home, cwd: workspace, timeoutSeconds: 180, jsonSchema: FILING_SCHEMA }))
+        .then((result) => log(`answers filed: ${result.filed.length}, skipped: ${result.skipped.length}`)).catch((error) => log(`answer filing error: ${error instanceof Error ? error.message : String(error)}`));
+    }
     if (agyHome) await pruneHeadlessConversations(agyHome).catch(() => undefined);
     return { ran: true, run, picks: picks.length, summaryLine: summary?.line ?? null };
   } finally {

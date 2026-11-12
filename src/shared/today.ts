@@ -40,6 +40,8 @@ export type TodayData = {
   due: { followUps: Array<{ id: string; label: string; days: number }>; interviewsThisWeek: Array<{ id: string; label: string; date: string; round: string }>; closedPostings: ClosedPosting[]; stale: Array<{ id: string; label: string; days: number }> };
   insights: Insight[];
   questions: TodayQuestion[];
+  /** Recent answers to Today questions and where Agy filed them (newest first; pending ones wait for the background run). */
+  answers?: Array<{ id: string; subject: string; status: "pending" | "filed" | "skipped"; filedTo: string | null; note: string | null; answeredAt: string }>;
 };
 
 const label = (job: Pick<JobFolderSummary, "company" | "title" | "name">) => [job.company ?? job.name, job.title].filter(Boolean).join(", ");

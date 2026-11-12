@@ -22,6 +22,8 @@ The scenarios are **generic versions of the JD's own work**. Build each one from
 
 Use the family whose responsibilities match the JD best; mix two only when the JD clearly spans both.
 
+Include at least two failure-mode scenarios in the posting's own domain and data (pipeline `SKILL.md` § Question mix): a feed or import that breaks with bad, missing, or duplicate records; a security, privacy, or compliance review that halts go-live; scope creep found in acceptance testing. Each gets a **Likely follow-up** that pushes one level deeper ("how do you stop it running twice?", "what do you tell the customer today?").
+
 ## `question_bank.md` primary content (6–8)
 
 Practical scenarios and live-design prompts as question cards. Use **Your approach** for every scenario; add **Proof** only when a true story fits, and a **Likely follow-up** on the scenarios an interviewer will push on.

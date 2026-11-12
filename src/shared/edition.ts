@@ -75,6 +75,7 @@ export const FEATURE_AGENT_ENTRIES: Record<string, keyof Features> = {
   "workflows/jobsensei-challenge.md": "interviews",
   "workflows/jobsensei-interview-review.md": "contentRefresh",
   "workflows/jobsensei-story-bank.md": "interviewProfile",
+  "workflows/jobsensei-file-answers.md": "today",
 };
 
 /** `sensei` pipeline commands that belong to a feature (all others are in every edition). */
@@ -97,6 +98,7 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   "content-refresh": "contentRefresh",
   "today-ipc": "today",
   "today": "today",
+  "answer-filing": "today",
   "search-ipc": "jobSearch",
   "job-search": "jobSearch",
   "job-search-runner": "jobSearch",

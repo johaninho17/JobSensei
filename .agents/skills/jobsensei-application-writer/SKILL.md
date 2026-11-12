@@ -21,7 +21,7 @@ Write the letter exactly as `.sensei/application_context.json.coverLetterBrief` 
 - Never explain the employer's business, market, or the role's responsibilities back to them.
 - Frame real work with confidence, but every factual sentence must trace to the evidence rows and be defensible in an interview. Never add an event, metric, tool, or ownership that did not happen.
 - Never name clients or partners; describe them by industry instead (naming the industry is fine).
-- Use present tense only for evidence with `isOngoing: true`; completed work is past tense.
+- Tense and order follow the timing rule in the career-evidence skill (owner): present tense only for the current phase.
 - Apply `styleRules` (the candidate's voice) after the facts are settled. The voice pass may simplify wording but never changes facts, scope, ownership, timeline, tools, metrics, or evidence mappings.
 - Never write or alter the contact block or signature; finalization inserts them.
 

@@ -17,6 +17,8 @@ Fit with the company's direction, accountability and learning from mistakes, wor
 6. What you would want to learn or build here in your first year.
 7. What you expect from your manager and team (culture fit, honestly).
 
+About half are pressure questions (pipeline `SKILL.md` § Question mix): 2 and 3 as one specific case with what changed, 4 as a compound example, plus what you'd do differently.
+
 `## Questions to ask`: 3–4 leadership questions (where the company is heading, the bets behind it, what would make this hire a success, how the team will change).
 
 ## `prep.md` sections

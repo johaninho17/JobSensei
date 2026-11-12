@@ -203,6 +203,17 @@ describe("interview:check", () => {
     expect(codes).toEqual(expect.arrayContaining(["UNKNOWN_EVIDENCE_ID", "UNKNOWN_STORY_ID", "CARD_NO_EVIDENCE", "QUESTION_COUNT"]));
   });
 
+  it("flags a process list on an experience question and a prep without a story map", async () => {
+    const { root, write } = await workspace();
+    await write(`jobs/${JOB}/interviews/01-recruiter-screen/prep.md`, "## Before you start\n");
+    await write(`jobs/${JOB}/interviews/01-recruiter-screen/question_bank.md`, bank([
+      "### Question 1: Tell me about a time a customer pushed back on a timeline?\n- **Why they ask:** judgment\n- **Say:** a partner wanted a faster go-live · agreed a smaller first step · went live on the new date\n- **Your approach:** 1) listen 2) explain 3) agree\n- **Land on:** a smaller first step",
+      ...passingCards(5).slice(1),
+    ]));
+    const codes = (await checkInterviewRound(root, JOB, "01-recruiter-screen")).issues.map((item) => item.code);
+    expect(codes).toEqual(expect.arrayContaining(["APPROACH_ON_EXPERIENCE", "PREP_NO_STORY_MAP"]));
+  });
+
   it("blocks a story reused from an earlier round", async () => {
     const { root, write } = await workspace();
     await write(`jobs/${JOB}/interviews/01-recruiter-screen/question_bank.md`, bank(passingCards(6)));
@@ -353,7 +364,7 @@ describe("interview parsing and shared rules", () => {
     // Card v3: Say / Proof, follow-ups only where likely, no follow-ups section.
     expect(skill).toContain("**Say:**");
     expect(skill).toContain("**Proof:**");
-    expect(skill).toMatch(/Likely follow-up\*\*: only on the cards/);
+    expect(skill).toMatch(/Likely follow-up\*\*: always on pressure cards; on the other cards only where/);
     expect(skill).not.toContain("**Real example:**");
     expect(skill).not.toContain("## Likely follow-ups");
     expect(await read(".agents/skills/jobsensei-interview-pipeline/references/research.md")).toContain("## Requirement match");
@@ -370,5 +381,16 @@ describe("interview parsing and shared rules", () => {
       expect(await read(file), file).not.toMatch(/`data\//);
     }
     expect(skill).toContain("`profile/story_bank.md`");
+  });
+});
+
+describe("pressure questions", () => {
+  it("are part of every round's rules, with story fit and a story map", async () => {
+    const { readFileSync } = await import("node:fs");
+    const skill = readFileSync(".agents/skills/jobsensei-interview-pipeline/SKILL.md", "utf8");
+    for (const text of ["## Question mix: common and pressure", "**Depth probe**", "**Failure-mode scenario**", "**Pain to product:**", "**Story fit.**", "## Story map", "**Your approach** belongs only on hypotheticals and depth probes"]) expect(skill).toContain(text);
+    for (const stage of ["stage-01-recruiter", "stage-02-hiring-manager", "stage-03-practical", "stage-04-final-panel"]) {
+      expect(readFileSync(`.agents/skills/jobsensei-interview-pipeline/references/${stage}.md`, "utf8"), stage).toMatch(/pressure questions|failure-mode scenarios/i);
+    }
   });
 });

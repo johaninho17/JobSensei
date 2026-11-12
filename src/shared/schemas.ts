@@ -1337,7 +1337,7 @@ export interface SenseiApi {
   };
   today: {
     get(): Promise<TodayData>;
-    answer(id: string, answer: string): Promise<{ addedPath: string | null }>;
+    answer(id: string, answer: string): Promise<{ addedPath: string | null; queued: boolean }>;
     removeQuestion(id: string): Promise<void>;
     keepPosting(jobId: string): Promise<void>;
     closePosting(jobId: string): Promise<void>;

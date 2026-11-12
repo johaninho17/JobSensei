@@ -720,7 +720,11 @@ export function serializeCompactApplicationContext(input: ApplicationContext): s
   return baseJson.replace(`"${marker}"`, formattedRows);
 }
 
-export async function createEvidenceSnapshot(workspacePath: string, jobId: string, options: { company?: string | null } = {}): Promise<EvidenceSnapshot> {
+/**
+ * Builds the job's evidence snapshot from the current career files. `stateDir` (inside the job folder) writes only the
+ * snapshot there and nothing else: interview prep uses it for fresh evidence without touching the application's files.
+ */
+export async function createEvidenceSnapshot(workspacePath: string, jobId: string, options: { company?: string | null; stateDir?: string } = {}): Promise<EvidenceSnapshot> {
   if (!/^[a-z0-9][a-z0-9-]*$/i.test(jobId)) throw new Error("The canonical job ID is invalid.");
   const workspace = resolve(workspacePath);
   let manifest = await readActiveContextManifest(workspace);
@@ -738,7 +742,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
 
   const jobPath = assertInsideWorkspace(workspace, join(workspace, "jobs", jobId));
   if (!(await stat(jobPath).catch(() => null))?.isDirectory()) throw new Error(`The canonical job workspace does not exist: jobs/${jobId}.`);
-  const statePath = assertInsideWorkspace(workspace, join(jobPath, ".sensei"));
+  const statePath = assertInsideWorkspace(jobPath, join(jobPath, options.stateDir ?? ".sensei"));
   await mkdir(statePath, { recursive: true });
 
   const evidencePaths = manifest.sourceFiles
@@ -879,6 +883,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
   const snapshot = existingVersion?.snapshotId === snapshotId ? existingVersion : candidateSnapshot;
   // The full record of what the model saw for this job (~250 KB as text) is kept compressed (~10x smaller).
   await writeCompressedJsonAtomic(currentPath, snapshot);
+  if (options.stateDir) return snapshot;
   const hiddenJobPath = assertInsideWorkspace(jobPath, join(statePath, "job.json"));
   let canonicalJob: { title?: string | null; company?: string | null; location?: string | null } | null = await readFile(hiddenJobPath, "utf8")
     .catch(() => readFile(join(jobPath, "job.json"), "utf8"))

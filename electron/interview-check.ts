@@ -11,6 +11,7 @@ import {
   parseStoryBank,
   questionBankUsage,
   stageForRoundId,
+  interviewEvidence,
 } from "./interview-context";
 import { writeJsonAtomic, readTextFile } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
@@ -41,6 +42,11 @@ const SLOGAN_WORDS = /\b(?:bridge|full[- ]lifecycle|high[- ]reliability|seamless
 const SLOGAN_PHRASES = /\b(?:aligned with|role requirements|value[- ]add|perfect fit)\b/i;
 const MAX_SAY_WORDS = 10;
 /** Words that carry no fact on their own: a Say point made only of these names nothing the candidate did. */
+/** "Tell me about a time…", "describe a time…", "give me an example…": questions that want one real case. */
+/** The first Say point of an experience question names the situation. */
+const MAX_SITUATION_WORDS = 15;
+const EXPERIENCE_QUESTION = /^(?:(?:tell me about|describe|give me|share|walk me through)\b.{0,40}\b(?:time|situation|project|customer|client|partner|implementation|onboarding|example|instance|engagement|integration|deployment)\b|how have you (?:handled|dealt with|managed))/i;
+
 const ABSTRACT_WORDS = new Set("a an and the of to for in on with as at by from into it its my our your their i we you they is are be being clear clearly strong strongly good great effective effectively communication communicate communicating technical technically bridge bridging alignment aligned aligning grounded keeping keep ownership owning own collaboration collaborative cross-functional stakeholder stakeholders value impact impactful solutions solution focus focused passion passionate driven results-driven experience experienced expertise skills skill approach mindset quality excellence deep depth both sides internal external requirements needs customer-centric problem-solving problem solving".split(" "));
 /** Praise words that make a key point sound like a cover letter instead of a fact. */
 const PREP_PRAISE = /\b(?:proven track record|solid (?:background|foundation)|extensive experience|deep expertise|seasoned)\b/i;
@@ -112,7 +118,8 @@ export async function checkInterviewRound(workspacePath: string, jobId: string, 
     readText(workspace, STORY_BANK_PATH),
     readText(workspace, `jobs/${jobId}/evaluation.md`),
     readText(workspace, "profile/candidate.json"),
-    readText(workspace, `jobs/${jobId}/.sensei/evidence_snapshot.json`),
+    // The same evidence the prep was written from (a fresh copy when the career files changed since the application).
+    interviewEvidence(workspace, jobId).then((snapshot) => snapshot ? JSON.stringify(snapshot) : ""),
     readText(workspace, `${roundRoot}/challenge/practice_labs.json`),
     readText(workspace, `jobs/${jobId}/.sensei/job.json`),
     readText(workspace, `jobs/${jobId}/original_jd.md`),
@@ -176,7 +183,9 @@ export async function checkInterviewRound(workspacePath: string, jobId: string, 
       if (points.length < 3 || points.length > 5) {
         add("warning", "SAY_POINT_COUNT", "question_bank.md", `"${label}": **Say:** has ${points.length} point(s); use 3–5.`);
       }
-      const long = points.find((point) => words(point).length > MAX_SAY_WORDS);
+      // On experience questions the first point names the situation (who, what, when) and may run a little longer.
+      const firstLimit = EXPERIENCE_QUESTION.test(card.heading.replace(/^Question\s+\d+:\s*/i, "")) ? MAX_SITUATION_WORDS : MAX_SAY_WORDS;
+      const long = points.find((point, index) => words(point).length > (index === 0 ? firstLimit : MAX_SAY_WORDS));
       if (long) add("warning", "SAY_POINT_TOO_LONG", "question_bank.md", `"${label}": "${long.slice(0, 60)}" is over ${MAX_SAY_WORDS} words; a point is a memory trigger, not a sentence.`);
       if (abstract.length >= 2 || (points.length && abstract.length === points.length)) {
         add("warning", "SAY_TOO_VAGUE", "question_bank.md", `"${label}": ${abstract.map((point) => `"${point}"`).join(", ")} name nothing concrete; name the tool, team, step, or result.`);
@@ -195,9 +204,17 @@ export async function checkInterviewRound(workspacePath: string, jobId: string, 
     }
   }
 
-  if (primary.length && followUps > Math.ceil(primary.length / 2)) {
-    add("warning", "FOLLOWUP_EVERYWHERE", "question_bank.md", `${followUps} of ${primary.length} cards have a **Likely follow-up:**; keep it to the questions most likely to get one.`);
+  // Pressure questions always carry a follow-up (about half the round); every card having one means it wasn't chosen.
+  if (primary.length > 3 && followUps >= primary.length) {
+    add("warning", "FOLLOWUP_EVERYWHERE", "question_bank.md", `${followUps} of ${primary.length} cards have a **Likely follow-up:**; keep it to the pressure questions and the ones most likely to get one.`);
   }
+  // Experience questions are answered with a story, not a process list (the list gets recited instead of the example).
+  for (const card of primary) {
+    if (EXPERIENCE_QUESTION.test(card.heading.replace(/^Question\s+\d+:\s*/i, "")) && field(card.body, /approach/i) !== null) {
+      add("warning", "APPROACH_ON_EXPERIENCE", "question_bank.md", `"${card.heading.slice(0, 70)}" asks for a real example; give the story in **Say:**, not a **Your approach:** list.`);
+    }
+  }
+  if (prep && !/^##\s+Story map/im.test(prep)) add("warning", "PREP_NO_STORY_MAP", "prep.md", "prep.md should have `## Story map`: each kind of question → the story to use.");
 
   // Key points: one short line each, IDs only in trailing parentheses, no praise words.
   for (const item of (section(prep, /things to get across/i) ?? "").split("\n").map((line) => /^\s*(?:[-*]|\d+[.)])\s+(.+)$/.exec(line)?.[1] ?? "").filter(Boolean)) {

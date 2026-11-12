@@ -27,6 +27,15 @@ Read [the workflow contract](../jobsensei-application-pipeline/references/workfl
 10. Preserve normalized start/end years, ongoing status, and recency band in the snapshot. Recency is a ranking signal only after a claim is relevant and eligible; it never upgrades confidence, directness, ownership, or truthfulness.
 11. Treat `data/context/application_voice_profile.md` as always-on style policy. It has no factual authority and cannot create an evidence row, score credit, chronology, metric, ownership, or outcome.
 
+## Timing: then and now (owner of this rule)
+
+Resumes, letters, answers, and interview prep must know when each thing happened. Dates rarely need to be shown; order and tense must be right.
+
+- Every evidence row has a time (its year or year range, `timeline` in the snapshot). Place each fact in the candidate's history: an earlier employer or school, an earlier phase at the current employer, or the current phase. When the candidate has a career timeline file (roles and phases with dates), its phases decide; otherwise use the employers and dates in `candidate.json` and the base resume.
+- "What I do now" and present tense come only from the current phase (rows still ongoing and within it). Everything else is past and told as earlier work ("at <employer> I built…", "in my master's I studied…"), even at the same employer: work from an earlier phase never becomes a current responsibility.
+- A career story goes in order, oldest first, naming each employer, school, or phase once, and ends with the current phase.
+- A story or example says roughly when it happened ("last spring", "in my first year there", "in 2024") when that helps the listener, and never mixes two periods into one event.
+
 Use old cover letters only as voice, tone, and phrasing references. They are not factual evidence and cannot establish career chronology, employer motivation, resume content, or an application claim.
 
 ## Workflow

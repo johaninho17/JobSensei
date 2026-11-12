@@ -20,6 +20,8 @@ How the candidate actually operates: ownership, judgment under ambiguity, handli
 9. Something that did not go as planned and what you changed.
 10. A JD-based hypothetical framed generically ("a customer needs help using an API they don't understand"), answered with a real case if one exists, otherwise the approach.
 
+About half of these are pressure questions (pipeline `SKILL.md` § Question mix). For a hiring manager the strongest are: a compound example (2 with several stakeholders and a deadline), pain to product (5 as one specific customer problem that became a change), a failure-mode scenario in the posting's domain (8 or 10), a depth probe on the hardest must-have, and what you'd do differently (9).
+
 `## Questions to ask`: 4–5 manager questions (what success looks like in 6 months, how work reaches the team, biggest current challenge, how the team works with product or engineering, next steps).
 
 ## `prep.md` sections

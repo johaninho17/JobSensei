@@ -60,6 +60,10 @@ export function TodayView({ onOpenJob, onGo, onToast, onAnswerAddedFile }: {
           <ul className="today-questions">{today.questions.map((question) => <QuestionCard key={question.id} question={question} onDone={(message, addedPath) => { onToast(message); if (addedPath) onAnswerAddedFile(addedPath); load(); }} />)}</ul>
         </Section>}
 
+        {(today.answers?.length ?? 0) > 0 && <Section id="today-answers" title="Your answers" count={today.answers!.filter((answer) => answer.status === "pending").length || null} defaultOpen={false} note="Agy adds each answer to the right career record in the background; drafts and interview prep use it from there.">
+          <ul className="today-list">{today.answers!.map((answer) => <li key={answer.id}><strong>{answer.subject}</strong> <span className="muted">· {answer.status === "pending" ? "waiting to be added" : answer.status === "filed" ? `added to ${(answer.filedTo ?? "").split("/").pop()?.replace(/\.md$/, "")}` : `not added: ${answer.note ?? "nothing to record"}`}</span></li>)}</ul>
+        </Section>}
+
         <Section id="today-search" title="New matches" count={today.search.newCount} actions={<button className="btn-link" onClick={() => onGo("job-search")}>Open Job Search</button>}>
           {today.search.top.length ? <ul className="today-list today-scored">{today.search.top.map((item) => { const score = item.agyFit?.score ?? item.fit.score; return <li key={item.id}>
             <span className={`fit-badge ${score >= 4 ? "is-high" : score >= 3 ? "is-mid" : "is-low"}`}>{score.toFixed(1)}</span>
@@ -99,7 +103,7 @@ function QuestionCard({ question, onDone }: { question: TodayQuestion; onDone: (
     setProblem("");
     try {
       const result = await window.sensei.today.answer(question.id, value);
-      onDone(result.addedPath ? "Saved to your career records and checked for Agy." : "Saved.", result.addedPath);
+      onDone(result.queued ? "Saved. Agy will add it to the right career record shortly." : "Saved.", result.addedPath);
     } catch (reason) {
       setProblem(reason instanceof Error ? reason.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(reason));
     } finally { setBusy(false); }

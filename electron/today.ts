@@ -1,4 +1,5 @@
 import { appendFile, readFile, stat } from "node:fs/promises";
+import { queueAnswer, readAnswerInbox } from "./answer-filing";
 import { join } from "node:path";
 import type { CandidateProfile, JobFolderSummary } from "../src/shared/schemas";
 import { canonicalUrl } from "../src/shared/job-search";
@@ -26,7 +27,6 @@ import { parseInterviewVoice } from "./interview-context";
 const CLOSED_FILE = ".sensei/closed-postings.json";
 const QUESTIONS_FILE = ".sensei/today-questions.json";
 const SUMMARY_FILE = ".sensei/today.json";
-export const ANSWERS_FILE = "context/structured/answers-from-today.md";
 
 const path = (workspace: string, relative: string) => assertInsideWorkspace(workspace, join(workspace, relative));
 const day = (date: Date) => date.toISOString().slice(0, 10);
@@ -84,15 +84,16 @@ async function readQuestions(workspace: string): Promise<TodayQuestion[]> {
 const saveQuestions = (workspace: string, questions: TodayQuestion[]) => writeJsonAtomic(path(workspace, QUESTIONS_FILE), { questions });
 
 /** Answers a Today question: the answer goes to its owner (career record, tracker, search settings, profile). */
-export async function answerQuestion(workspace: string, id: string, answer: string, now = new Date()): Promise<{ addedPath: string | null }> {
+export async function answerQuestion(workspace: string, id: string, answer: string, now = new Date()): Promise<{ addedPath: string | null; queued: boolean }> {
   const questions = await readQuestions(workspace);
   const question = questions.find((candidate) => candidate.id === id && candidate.status === "open");
   if (!question) throw new Error("That question was already answered or removed.");
   const text = answer.trim();
   if (!text) throw new Error("Write an answer, or remove the question.");
-  let addedPath: string | null = null;
+  const addedPath: string | null = null;
   if (question.kind === "skill") {
-    addedPath = await addAnswerEvidence(workspace, question.subject, text, now);
+    // Filed into the right career record by Agy in the background (electron/answer-filing.ts), never read raw by drafts.
+    await queueAnswer(workspace, { subject: question.subject, question: question.text, answer: text }, now);
   } else if (question.kind === "outcome") {
     const result = { Rejected: "rejected", Offer: "offer", "I withdrew": "withdrew" }[text] as "rejected" | "offer" | "withdrew" | undefined;
     if (result) {
@@ -108,46 +109,12 @@ export async function answerQuestion(workspace: string, id: string, answer: stri
     await updateCandidateProfileDetails(workspace, { interviewLogistics: { [question.subject]: text } });
   }
   await saveQuestions(workspace, questions.map((candidate) => candidate.id === id ? { ...candidate, status: "answered" as const, answer: text, answeredAt: now.toISOString() } : candidate));
-  return { addedPath };
+  return { addedPath, queued: question.kind === "skill" };
 }
 
 export async function removeQuestion(workspace: string, id: string): Promise<void> {
   const questions = await readQuestions(workspace);
   await saveQuestions(workspace, questions.map((candidate) => candidate.id === id ? { ...candidate, status: "removed" as const } : candidate));
-}
-
-/**
- * A skill answer becomes a career record row (the user's own first-hand statement, dated), in the same table format as
- * other structured evidence, so the snapshot can route it like any work record.
- */
-async function addAnswerEvidence(workspace: string, term: string, answer: string, now: Date): Promise<string> {
-  const file = path(workspace, ANSWERS_FILE);
-  if (!(await stat(file).catch(() => null))) {
-    await writeTextAtomic(file, [
-      "# Evidence: Answers to Today questions",
-      "",
-      "- source_path: `context/structured/answers-from-today.md`",
-      "- source_family: `today-answers`",
-      "- source_role: candidate-confirmed-work-record",
-      "- confidence: high",
-      "- source_locator: Evidence table rows keyed by Evidence ID",
-      "",
-      "Each row is the candidate's own answer to a question JobSensei asked on the Today page, in their words.",
-      "",
-      "## Evidence Inventory",
-      "",
-      "| Evidence ID | Year | Project | Explicit claim | Scope note | Source locator | Confidence | Public use |",
-      "| --- | --- | --- | --- | --- | --- | --- | --- |",
-      "",
-    ].join("\n"));
-  }
-  const slug = term.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "answer";
-  const cell = (value: string) => value.replace(/\|/g, "/").replace(/\s+/g, " ").trim();
-  const existing = await readFile(file, "utf8");
-  let id = `context:today-answers:${slug}`;
-  for (let n = 2; existing.includes(`| ${id} |`); n += 1) id = `context:today-answers:${slug}-${n}`;
-  await appendFile(file, `| ${id} | ${now.getFullYear()} | ${cell(term)} | ${cell(answer)} | The candidate's own answer on ${day(now)}; scope as stated. | Today question ${day(now)} | high | eligible |\n`);
-  return ANSWERS_FILE;
 }
 
 // ---------- Insights ----------
@@ -231,7 +198,10 @@ export async function buildTodayData(workspace: string, input: { jobs: JobFolder
     questions = [];
   }
   const insights = insightsFor({ jobs: input.jobs, readiness: input.readiness, deliveryFixes: parseInterviewVoice(voiceText).deliveryFixes, accuracy: ratingAccuracy(pairs), scheduleOn: settings.schedule.enabled, searchTitles: settings.titles.length, knownTerms });
-  return buildToday({ jobs: input.jobs, search, closedPostings: closed.closed, interviewDates: dates, insights, questions, now });
+  const answers = (await readAnswerInbox(workspace).catch(() => [])).filter((answer) => answer.status === "pending" || Date.parse(answer.filedAt ?? answer.answeredAt) > now.getTime() - 7 * 86_400_000)
+    .sort((a, b) => b.answeredAt.localeCompare(a.answeredAt)).slice(0, 6)
+    .map(({ id, subject, status, filedTo, note, answeredAt }) => ({ id, subject, status, filedTo, note, answeredAt }));
+  return { ...buildToday({ jobs: input.jobs, search, closedPostings: closed.closed, interviewDates: dates, insights, questions, now }), answers };
 }
 
 // ---------- Morning summary (C7) ----------

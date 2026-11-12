@@ -2,7 +2,8 @@ import { mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { postingRecordFor } from "./posting-record";
 import { basename, join, resolve } from "node:path";
 import { candidateProfileSchema, type CandidateProfile, type EvidenceSnapshot, type InterviewLogistics } from "../src/shared/schemas";
-import { BANNED_PHRASES, narrativeStoryLines } from "./evidence-snapshot";
+import { BANNED_PHRASES, createEvidenceSnapshot, narrativeStoryLines } from "./evidence-snapshot";
+import { readActiveContextManifest } from "./context";
 import { bestEvidenceForRequirement, parseMustHaves } from "./fit-scoring";
 import { writeJsonAtomic, readTextFile } from "./persistence";
 import { toDisk } from "../src/shared/workspace-layout";
@@ -139,6 +140,37 @@ async function readJsonFile<T>(workspace: string, relativePath: string): Promise
   try { return JSON.parse(text) as T; } catch { return null; }
 }
 
+export const INTERVIEW_SNAPSHOT_DIR = "interviews/.sensei";
+
+/**
+ * The evidence interview prep reads. The application's snapshot is used while it is newer than every selected career
+ * file and the selection itself; once the user changes their context (new dates, stories, files), a fresh snapshot is
+ * built under `interviews/.sensei/` so prep never tells old facts, and the application's own files stay as they are.
+ */
+export async function interviewEvidence(workspace: string, jobId: string): Promise<EvidenceSnapshot | null> {
+  const jobRoot = `jobs/${jobId}`;
+  const changed = await newestContextChange(workspace);
+  const modified = async (relativePath: string) => (await stat(assertInsideWorkspace(workspace, join(workspace, relativePath))).catch(() => null))?.mtimeMs ?? -1;
+  for (const path of [`${jobRoot}/.sensei/evidence_snapshot.json`, `${jobRoot}/${INTERVIEW_SNAPSHOT_DIR}/evidence_snapshot.json`]) {
+    if (await modified(path) >= changed) return readJsonFile<EvidenceSnapshot>(workspace, path);
+  }
+  try {
+    return await createEvidenceSnapshot(workspace, jobId, { stateDir: INTERVIEW_SNAPSHOT_DIR });
+  } catch {
+    // Without a manifest or base resume, prep falls back to whatever snapshot the job has.
+    return readJsonFile<EvidenceSnapshot>(workspace, `${jobRoot}/.sensei/evidence_snapshot.json`);
+  }
+}
+
+/** When the user's selected career files (or the selection) last changed. */
+async function newestContextChange(workspace: string): Promise<number> {
+  const manifest = await readActiveContextManifest(workspace).catch(() => null);
+  if (!manifest) return 0;
+  const paths = [".sensei/active-context.json", "profile/candidate.json", ...manifest.sourceFiles.map((source) => source.path).filter((path) => !path.startsWith("jobs/"))];
+  const times = await Promise.all(paths.map(async (path) => (await stat(assertInsideWorkspace(workspace, join(workspace, path))).catch(() => null))?.mtimeMs ?? 0));
+  return Math.max(0, ...times);
+}
+
 /** Reads the matching generalized role memory (see interview-memory-contract.md). */
 async function roleMemoryFor(workspace: string, title: string): Promise<{ family: string; path: string; patterns: string } | null> {
   const index = await readJsonFile<{ roles?: Array<{ family?: string; aliases?: string[]; path?: string }> }>(workspace, `${INTERVIEW_MEMORY_ROOT}/role-index.json`);
@@ -187,7 +219,7 @@ export async function buildInterviewContext(workspacePath: string, jobId: string
   // Fetched postings may leave job.json without a title; the JD's first heading is the fallback.
   const title = job.title ?? job.role ?? /^#\s+(.+)$/m.exec(jobDescription)?.[1]?.replace(/[*_]/g, "").trim() ?? "";
 
-  const snapshot = await readJsonFile<EvidenceSnapshot>(workspace, `${jobRoot}/.sensei/evidence_snapshot.json`);
+  const snapshot = await interviewEvidence(workspace, jobId);
   const selected = new Set(snapshot?.applicationRouting?.selectedEvidenceIds ?? []);
   const allRows = snapshot?.evidenceRows ?? [];
   const eligible = allRows.filter((row) => row.eligibility === "eligible" && !row.evidenceId.startsWith("job:"));

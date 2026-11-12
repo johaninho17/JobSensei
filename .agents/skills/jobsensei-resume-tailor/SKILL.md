@@ -24,6 +24,7 @@ Requirements:
 - Follow `.sensei/application_context.json.resumePlan` as the run's deterministic allocation. Length, bullet counts, and keeping the base resume's skills are owned by the snapshot `instructions` ("Length and skills follow the base resume").
 - If `resumePlan.customerFacingRole` is true, satisfy `targetCurrentEmployerCustomerBullets` using only `customerFacingEvidenceIds`. Balance those bullets with technical current-employer work.
 - Follow the plan's allocation and profile preferences while preserving employer boundaries, timeline scope, and denylist limits.
+- Which work is current and which is earlier follows the timing rule in the career-evidence skill (owner): bullets for an earlier phase never describe current responsibilities.
 - Resume summary: follow the pipeline skill's summary rule (`resumeTemplate.summary.editable`).
 - Consult the candidate's Reusable Bullet Bank (`data/profile/bullet_bank.json`) when available. Where the candidate has pre-verified, high-impact bullets matching the role's themes, prioritize reusing or adapting those bullets to preserve proven wording, save compute, and maintain consistency across applications.
 - Do not add a duplicate or unsupported bullet merely to reach a target.
