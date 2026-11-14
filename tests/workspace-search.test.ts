@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { invalidateSearchIndex, searchWorkspace } from "../electron/search";
 import { buildJobActions } from "../src/renderer/job-actions";
 import type { InterviewOverview, JobFolderSummary } from "../src/shared/schemas";
+import { rendererPagesSource } from "./renderer-source";
 
 async function fixtureWorkspace(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "sensei-search-"));
@@ -177,7 +178,7 @@ describe("Job Actions", () => {
   });
 
   it("keeps the trimmed top bar: search, job chip, terminal toggle, one settings menu", async () => {
-    const app = await readFile(join(process.cwd(), "src/renderer/App.tsx"), "utf8");
+    const app = await rendererPagesSource(process.cwd());
     const header = app.slice(app.indexOf('<header className="topbar">'), app.indexOf("</header>", app.indexOf('<header className="topbar">')));
 
     expect(header).toContain('className="search-trigger"');
@@ -201,7 +202,7 @@ describe("design system (Phase 3)", () => {
   });
 
   it("keeps one navigation model and one interview view", async () => {
-    const app = await readFile(join(process.cwd(), "src/renderer/App.tsx"), "utf8");
+    const app = await rendererPagesSource(process.cwd());
     const sidebar = app.slice(app.indexOf('className="app-sidebar"'), app.indexOf("</nav>", app.indexOf('className="app-sidebar"')));
     for (const page of ["jobs-home", "interviews-home", "context-home"]) expect(sidebar).toContain(`showPage("${page}")`);
     expect(app.match(/<InterviewView /g)?.length).toBe(2); // job tab and pop-out window
@@ -210,7 +211,7 @@ describe("design system (Phase 3)", () => {
   });
 
   it("lets the user track status from the job page and the board", async () => {
-    const app = await readFile(join(process.cwd(), "src/renderer/App.tsx"), "utf8");
+    const app = await rendererPagesSource(process.cwd());
     expect(app).toContain('className={`tracker-select is-${trackerStatus}`}');
     // Status subtabs (Active by default) replaced the status strip; Closed splits jobs that reached interviews.
     expect(app).toMatch(/const JOB_TABS[\s\S]*id: "active"[\s\S]*id: "closed"/);

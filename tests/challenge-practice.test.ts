@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { challengePracticeSchema } from "../src/shared/schemas";
 import { filterChallengeExercises, parseChallengePractice } from "../src/renderer/challenge-practice";
+import { rendererPagesSource } from "./renderer-source";
 
 const root = process.cwd();
 
@@ -96,7 +97,7 @@ describe("technical challenge practice", () => {
   });
 
   it("keeps hints and solutions collapsed until the user reveals them", async () => {
-    const app = await readFile(join(root, "src/renderer/App.tsx"), "utf8");
+    const app = await rendererPagesSource(root);
 
     expect(app).toContain('const [revealedHints, setRevealedHints] = useState<string[]>([])');
     expect(app).toContain("const [solutionOpen, setSolutionOpen] = useState(false)");

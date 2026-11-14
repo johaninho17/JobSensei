@@ -2,20 +2,10 @@
 
 Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; change the issue on GitHub and regenerate.
 
-## P0
-
-| # | Issue | Features | Blocked |
-|---|---|---|---|
-| #1 | Set up the GitHub flow: labels, tasks files, issue scripts, flow rules | FEAT-011 |  |
-
 ## P1
 
 | # | Issue | Features | Blocked |
 |---|---|---|---|
-| #2 | A drafted job is not an applied job | FEAT-001 |  |
-| #3 | A saved job can be drafted | FEAT-001, FEAT-004 |  |
-| #4 | Links in a job's Role section open in the browser | FEAT-002 |  |
-| #6 | Opening an interview question closes the one that was open | FEAT-005 |  |
 | #7 | Interview count matches what is shown as active | FEAT-005 |  |
 | #8 | New matches on Today can be opened, queued, or saved | FEAT-004, FEAT-007 |  |
 | #9 | Today and Your content agree on new recordings | FEAT-005, FEAT-007 |  |
@@ -28,6 +18,11 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #35 | Agy page: Behavior settings and the settings score | FEAT-003, FEAT-012 |  |
 | #36 | Behavior: framing dial | FEAT-003, FEAT-012 |  |
 | #37 | Behavior: fit weights, credit, and gate | FEAT-003, FEAT-012 |  |
+| #47 | Recruiter Edition reads PDF base resumes | FEAT-010 |  |
+| #49 | Workday postings are read from Workday's job API | FEAT-013 |  |
+| #50 | Company career pages with an embedded Greenhouse or Ashby board are read from the board | FEAT-013 |  |
+| #54 | Every saved posting uses the same template | FEAT-013 | yes |
+| #55 | Read job links from any company careers site | FEAT-006, FEAT-010 |  |
 
 ## P2
 
@@ -40,7 +35,6 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #17 | Run Agy actions from the app and show what each recording was used for | FEAT-005, FEAT-006 |  |
 | #18 | Setting: mock interview transcripts count as career evidence | FEAT-003, FEAT-008 |  |
 | #19 | Investigate one continuing Agy conversation in the regular app | FEAT-006 |  |
-| #20 | A document edited after its PDF was made shows 'PDF out of date' | FEAT-002 |  |
 | #21 | Job posting, evaluation, and files open inside the job page | FEAT-002 |  |
 | #22 | Settings and Setup share one form per field | FEAT-008 |  |
 | #23 | Safer shortcuts: status keys, job cycling, missing page chords | FEAT-009 |  |
@@ -52,6 +46,9 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #39 | Behavior: Job Search ranking | FEAT-004, FEAT-012 |  |
 | #40 | Agy page: How it works | FEAT-012 |  |
 | #41 | Agy page: Memory | FEAT-012 |  |
+| #51 | JPMorgan and other Oracle Cloud career links: company name and site links | FEAT-013 |  |
+| #52 | Read postings on any careers site: structured data, main text, then the app's own browser | FEAT-013 |  |
+| #53 | One normal form for posting fields: company, title, location, pay, work setup, dates | FEAT-013 |  |
 
 ## P3
 
@@ -63,4 +60,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #28 | Checks tab shows checks only | FEAT-002 |  |
 | #30 | Chat history survives a reload or workspace switch | FEAT-006 |  |
 
-41 open.
+43 open.
