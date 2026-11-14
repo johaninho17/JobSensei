@@ -11,7 +11,8 @@ import { activeCandidatePath, ensureRecruiterRoot, readRoster } from "./candidat
 import { watch, type FSWatcher } from "node:fs";
 import { updateJobTracker } from "./tracker";
 import { latestRun } from "./run-status";
-import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription, stageSavedJob } from "./jd-fetch";
+import { setPageRenderer, setStagedCompany, stagePastedJobDescription, stageLinkJobDescription, stageSavedJob } from "./jd-fetch";
+import { renderPage } from "./page-render";
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { RunWatcher } from "./run-watcher";
 import { createAgyHomeCache, prepareAgyHome, pruneHeadlessConversations, writeSenseiLauncher } from "./agy-home";
@@ -661,6 +662,7 @@ async function resolveInitialWorkspacePath(store: SettingsStore): Promise<string
 }
 
 app.whenReady().then(async () => {
+  setPageRenderer(renderPage);
   // A morning search the computer slept through runs when it wakes or unlocks (the check decides if it's due).
   if (features.jobSearch) {
     let wakeTimer: NodeJS.Timeout | null = null;
