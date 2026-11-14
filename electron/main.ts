@@ -88,7 +88,12 @@ function createWindow(): void {
  * workflow runs it on each platform before the draft is published.
  */
 function runSmokeCheck(window: BrowserWindow, outPath: string): void {
+  // Finishes once: on Windows the closing window reports "renderer gone" during the quit, which used to finish a
+  // second time with a failure and exit code 1 after the check had passed (release run 2026-11-14).
+  let finished = false;
   const finish = (result: { ok: boolean; detail: string }) => {
+    if (finished) return;
+    finished = true;
     void writeFile(outPath, `${JSON.stringify({ ...result, platform: process.platform, version: app.getVersion() })}\n`).finally(() => app.exit(result.ok ? 0 : 1));
   };
   const timer = setTimeout(() => finish({ ok: false, detail: "The window did not finish loading within 60 seconds." }), 60_000);
