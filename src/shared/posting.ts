@@ -59,6 +59,12 @@ export const postingRecordSchema = z.object({
   travel: z.string().nullable(),
   experience: z.string().nullable(),
   seniority: z.enum(SENIORITY_LEVELS).nullable(),
+  /** Full-time, Part-time, Contract, Temporary, or Internship (src/shared/posting-fields.ts). */
+  employmentType: z.enum(["Full-time", "Part-time", "Contract", "Temporary", "Internship"]).nullable().default(null),
+  /** When the posting went up (YYYY-MM-DD), when it says. */
+  postedAt: z.string().nullable().default(null),
+  /** The employer's own job or requisition ID. */
+  jobId: z.string().nullable().default(null),
   /** The posting's line about sponsorship, work authorization, citizenship, or clearance. */
   workAuthorization: z.string().nullable(),
   /** Tools and named skills in the requirements, each with the requirement IDs that name it. */

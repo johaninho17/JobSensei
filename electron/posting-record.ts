@@ -2,6 +2,7 @@
 // posting's structure: requirements, pay, work setup, and the rest. Screens and checks call `postingRecordFor`
 // (memoized by content) or `readPostingRecord` (also saves `.sensei/posting.json`), never their own regexes.
 import { boardOf } from "../src/shared/boards";
+import { normalCompany, normalEmploymentType, normalLocation, normalPostedDate, normalTitle } from "../src/shared/posting-fields";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -10,7 +11,7 @@ import { parseJobDescriptionMetadata } from "./job-description";
 import { POSTING_BOARDS, POSTING_EXPECTED_FIELDS, POSTING_SCHEMA_VERSION, postingRecordSchema, type PostingPay, type PostingRecord, type PostingWorkSetup } from "../src/shared/posting";
 
 /** Bump when any parsing rule changes: saved records with an older version are rebuilt. */
-export const POSTING_PARSER_VERSION = 5;
+export const POSTING_PARSER_VERSION = 6;
 export const POSTING_RECORD_FILE = ".sensei/posting.json";
 
 type SectionKind = "requirements" | "responsibilities" | "preferred" | "benefits" | "pay" | "company" | "role" | "legal" | "other";
@@ -234,6 +235,16 @@ function postingBoard(url: string | null): PostingRecord["board"] {
 export const postingHash = (text: string) => createHash("sha256").update(text.replaceAll("\r\n", "\n")).digest("hex");
 
 /** Reads a posting into the record. Pure: the same text always gives the same record. */
+/** A labeled fact line ("Employment type: Full time", "**Job ID:** R123"), the value only. */
+function labeled(body: string, label: RegExp): string | null {
+  for (const raw of body.split("\n")) {
+    const line = raw.replace(/\*\*/g, "").replace(/^\s*[-*•]\s*/, "").trim();
+    const match = line.match(new RegExp(`^(?:${label.source})\\s*:\\s*(.+)$`, "i"));
+    if (match) return match[1]!.trim();
+  }
+  return null;
+}
+
 export function buildPostingRecord(posting: string): PostingRecord {
   const body = postingBody(posting);
   const metadata = parseJobDescriptionMetadata(posting);
@@ -241,7 +252,8 @@ export function buildPostingRecord(posting: string): PostingRecord {
   const required = extractRequiredItems(posting);
   const responsibilities = extractResponsibilityItems(posting).map(clean);
   const requirements = jobRequirements(posting).map((item) => ({ ...item, text: clean(item.text) }));
-  const companyName = metadata.company;
+  // One normal form per field (src/shared/posting-fields.ts), whatever the source.
+  const companyName = normalCompany(metadata.company);
   const companySection = all.find((section) => section.kind === "company")?.prose.find((line) => line.length > 40) ?? null;
   const companyPara = companySection ?? body.split("\n").filter((line) => !META_LINE.test(line.trim()) && !BULLET.test(line)).map(clean).find((line) => line.length > 60 && !/\b(?:opportunity|role|position|candidate)\b/i.test(line.slice(0, 80)) && !/^(?:as an? |you\b|in this role)|\b(?:is|are) (?:seeking|looking|hiring)\b/i.test(line)
     && !/\b(?:committed to|equal opportunity|inclusive|accommodations?|diversity|recruitment process|apply)\b/i.test(line)
@@ -255,9 +267,9 @@ export function buildPostingRecord(posting: string): PostingRecord {
     schemaVersion: POSTING_SCHEMA_VERSION,
     parserVersion: POSTING_PARSER_VERSION,
     sourceHash: postingHash(posting),
-    title: metadata.title,
+    title: normalTitle(metadata.title, companyName),
     company: companyName,
-    location: metadata.location,
+    location: normalLocation(metadata.location),
     url: metadata.url,
     board: postingBoard(metadata.url),
     summary: rolePara.slice(0, 3).map(short),
@@ -272,6 +284,9 @@ export function buildPostingRecord(posting: string): PostingRecord {
     travel: lines.find((line) => TRAVEL.test(line) && line.length <= 200 && !/\b(?:stipend|reimburse|benefit)/i.test(line)) ?? null,
     experience,
     seniority: seniorityOf(metadata.title, experience),
+    employmentType: normalEmploymentType(labeled(posting, /employment type|job type|time type|type/) ?? lines.find((line) => line.length <= 120 && /\b(?:full[- ]time|part[- ]time|internship|contract role|contract position)\b/i.test(line)) ?? metadata.title),
+    postedAt: normalPostedDate(labeled(posting, /posted(?: on)?|date posted|posting date/)),
+    jobId: labeled(posting, /job id|requisition id|req(?:uisition)? ?(?:id|#|number)|job number/)?.slice(0, 40) ?? null,
     workAuthorization: lines.find((line) => AUTHORIZATION.test(line) && line.length <= 300 && !LEGAL.test(line.slice(0, 60))) ?? null,
     tools: toolsOf(requirements, companyName),
     missing: [],
