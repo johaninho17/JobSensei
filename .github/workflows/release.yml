@@ -11,6 +11,11 @@ on:
         required: false
         default: false
         type: boolean
+      test_only:
+        description: 'Build and smoke-test every installer without publishing anything'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -104,7 +109,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
-          npx electron-builder --config build-config/edition.cjs --publish always
+          npx electron-builder --config build-config/edition.cjs --publish ${{ inputs.test_only && 'never' || 'always' }}
 
       # Opens the packaged app on this OS with an empty workspace and fails if the window doesn't render.
       # The release stays a draft until this passes on both platforms.

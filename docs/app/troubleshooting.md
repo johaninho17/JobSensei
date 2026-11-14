@@ -4,6 +4,10 @@
 
 Agy shows its own screens (sign-in, colour scheme, terms, "allow access to this file?") only in **Console**. The panel switches there by itself when Agy is waiting; answer the screen, then go back to Chat. Queued jobs wait until Agy is ready.
 
+## The Agy panel stays empty or says Agy didn't start
+
+The panel says why in red. Use **Restart** in the Agy panel. If it keeps failing, send the app's log: <!-- feature:!candidates -->`JobSensei/logs/main.log`<!-- /feature --><!-- feature:candidates -->`JobSensei Recruiter Edition/logs/main.log`<!-- /feature --> in your app data folder (Mac: `~/Library/Application Support/`; Windows: `%APPDATA%\`).
+
 ## "Not signed in" or a sign-in loop
 
 Open the Agy panel and follow the sign-in in Console. If it keeps asking, close the app, open it again, and sign in once more.

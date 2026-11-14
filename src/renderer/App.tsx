@@ -3638,7 +3638,10 @@ function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareerPaths, 
     }).catch((caught: unknown) => {
       terminalReadyRef.current = false;
       setTerminalReady(false);
-      setStatus(messageOf(caught, "Terminal failed to start"));
+      const problem = messageOf(caught, "Agy failed to start");
+      setStatus(problem);
+      // Said in the panel itself, not only the status line, so a failed start is never a blank panel.
+      terminal.write(`\r\n\x1b[31mAgy didn't start: ${problem}\x1b[0m\r\nUse Restart to try again. The app's log (Docs → Troubleshooting) has the details.\r\n`);
     });
     const initialResize = window.setTimeout(resize, 80);
     return () => { terminalReadyRef.current = false; resizeObserver.disconnect(); window.removeEventListener("resize", resize); hostRef.current?.removeEventListener("click", focusTerminal); window.clearTimeout(initialResize); if (resizeFrame !== null) cancelAnimationFrame(resizeFrame); removeData(); removeExit(); void window.sensei.terminal.stop(); terminal.dispose(); terminalRef.current = null; fitRef.current = null; };

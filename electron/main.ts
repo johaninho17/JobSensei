@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, session, shell } from "electron";
+import { installLogFile } from "./log-file";
 import { recruiterInstructionsFor } from "./recruiter-defaults";
 import { textContextMenu } from "./context-menu";
 import { EDITION_INFO, featuresFor } from "../src/shared/edition";
@@ -44,6 +45,7 @@ const features = featuresFor(edition);
 // The recruiter edition keeps its own settings folder and Agy homes; solo keeps the name it always had.
 if (edition !== "solo") app.setName(EDITION_INFO[edition].productName);
 if (process.env.SENSEI_USER_DATA) app.setPath("userData", resolve(process.env.SENSEI_USER_DATA));
+installLogFile(join(app.getPath("userData"), "logs", "main.log"));
 if (process.argv.includes("--dev") && !process.env.VITE_DEV_SERVER_URL) {
   process.env.VITE_DEV_SERVER_URL = DEV_URL;
 }
@@ -99,12 +101,47 @@ function runSmokeCheck(window: BrowserWindow, outPath: string): void {
         const workspace = await window.sensei.workspace.getSummary().then((value) => value.status).catch((error) => "error: " + error.message);
         // A new, empty workspace must open on the first-run steps.
         return { rendered: Boolean(root && root.childElementCount > 0 && document.body.innerText.trim().length > 20), firstRun: Boolean(document.querySelector(${JSON.stringify(features.candidates ? ".candidates-home" : ".onboarding [aria-current=step]")})), workspace, text: document.body.innerText.slice(0, 120) };
-      })()`).then((check: { rendered: boolean; firstRun: boolean; workspace: string; text: string }) => {
+      })()`).then(async (check: { rendered: boolean; firstRun: boolean; workspace: string; text: string }) => {
         clearTimeout(timer);
-        finish({ ok: check.rendered && check.firstRun && !String(check.workspace).startsWith("error"), detail: JSON.stringify(check) });
+        const windowOk = check.rendered && check.firstRun && !String(check.workspace).startsWith("error");
+        if (!windowOk) { finish({ ok: false, detail: JSON.stringify(check) }); return; }
+        // Then Agy itself (2026-11-13: the Windows Recruiter Edition's terminal never started and nothing caught it).
+        const agy = await smokeStartAgy();
+        finish({ ok: agy.ok, detail: JSON.stringify({ window: check, agy }) });
       }, (error: unknown) => { clearTimeout(timer); finish({ ok: false, detail: String(error) }); });
     }, 4000);
   });
+}
+
+/**
+ * Smoke test, part two: starts Agy the way the app does (in the Recruiter Edition, for a new test candidate) and
+ * waits up to 45 s for Agy's own welcome or sign-in screen. Fails with the start error or Agy's last output.
+ */
+async function smokeStartAgy(): Promise<{ ok: boolean; detail: string }> {
+  try {
+    if (features.candidates && recruiterRoot) {
+      const { addCandidate, setActiveCandidate } = await import("./candidates.js");
+      const entry = await addCandidate(recruiterRoot, "Smoke Test");
+      await openCandidateFolder(await setActiveCandidate(recruiterRoot, entry.id));
+    }
+    const started = await startAgyTerminal();
+    if (!started.agyStarted) return { ok: false, detail: "Agy was not found; a plain shell started instead." };
+    const end = Date.now() + 45_000;
+    while (Date.now() < end) {
+      const status = terminal.status();
+      if (/Antigravity|sign in|signed in|login method/i.test(status.recentOutput)) {
+        await terminal.stopAndWait(5_000);
+        return { ok: true, detail: `Agy started: ${status.recentOutput.replace(/\s+/g, " ").slice(0, 160)}` };
+      }
+      if (!status.running) return { ok: false, detail: `Agy exited right away. Last output: ${status.recentOutput.replace(/\s+/g, " ").slice(-400)}` };
+      await new Promise((done) => setTimeout(done, 500));
+    }
+    const tail = terminal.status().recentOutput.replace(/\s+/g, " ").slice(-400);
+    await terminal.stopAndWait(5_000);
+    return { ok: false, detail: `Agy showed no welcome screen within 45 s. Last output: ${tail || "(none)"}` };
+  } catch (error) {
+    return { ok: false, detail: `Agy could not start: ${error instanceof Error ? error.message : String(error)}` };
+  }
 }
 
 function logAgentSync(report: AgentSyncReport | null): void {
@@ -359,26 +396,30 @@ ipcMain.handle("context:get-manifest", async (_event, selection) => { const sett
 ipcMain.handle("context:get-active-manifest", async () => readActiveContextManifest(requireWorkspace()));
 ipcMain.handle("context:get-sources", async () => contextSources());
 
-ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => {
+ipcMain.handle("terminal:start", async (_event, input: { cwd?: string }) => startAgyTerminal(input?.cwd));
+
+/** Starts Agy in the open workspace (the app's terminal and the release smoke test both use this). */
+async function startAgyTerminal(requestedCwd?: string): Promise<{ cwd: string; agyStarted: boolean }> {
   const workspace = requireWorkspace();
-  if (input?.cwd && input.cwd !== ".") assertInsideWorkspace(workspace, resolve(workspace, input.cwd));
-  const cwd = input?.cwd && input.cwd !== "." ? resolve(workspace, input.cwd) : workspace;
+  if (requestedCwd && requestedCwd !== ".") assertInsideWorkspace(workspace, resolve(workspace, requestedCwd));
+  const cwd = requestedCwd && requestedCwd !== "." ? resolve(workspace, requestedCwd) : workspace;
   logAgentSync(await syncWorkspaceAgentFiles(workspace).catch((error) => { console.error("Agy skill sync failed:", error); return null; }));
   if (await capWorkspaceNpmCache(workspace).catch(() => false)) console.info("Agy npm cache passed its size limit and was cleared.");
   const manifest = await buildContextManifest(workspace, {}, await settingsStore.get());
   // Agy runs with an app-owned home whose rules keep its file tools inside the workspace.
+  let homeError: string | null = null;
   const agyHome = await prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath }, agyHomeName)
     .then(async (home) => { await writeSenseiLauncher(home, { appRoot: terminalAppRoot(), packaged: app.isPackaged, runtimePath: process.execPath }); return home; })
-    .catch((error) => { console.error("Agy home setup failed:", error); return null; });
+    .catch((error) => { console.error("Agy home setup failed:", error); homeError = error instanceof Error ? error.message : String(error); return null; });
   // A candidate's Agy never runs outside the app's home: that would mix their history with the user's own Agy.
-  if (!agyHome && agyHomeName) throw new Error("Agy couldn't be prepared for this candidate. Close and reopen the candidate, then try again.");
+  if (!agyHome && agyHomeName) throw new Error(`Agy couldn't be prepared for this candidate (${homeError ?? "unknown error"}). Close and reopen the candidate, then try again.`);
   terminal.setAgyHome(agyHome);
   // A candidate's Agy picks up their own last conversation (their history is the only one in the home).
   terminal.setContinueConversation(Boolean(agyHomeName));
   // The terminal start rewrote the home's settings; background runs reuse it for this workspace.
   if (agyHome) agyHomes.set(workspace, agyHome);
   return terminal.start(cwd, workspace, manifest);
-});
+}
 ipcMain.handle("terminal:set-context", async (_event, input) => {
   const manifest = await buildContextManifest(requireWorkspace(), input ?? {}, await settingsStore.get());
   terminal.setContext(manifest);
