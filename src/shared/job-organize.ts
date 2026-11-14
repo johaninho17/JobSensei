@@ -152,3 +152,9 @@ export function findDuplicateJob(jobs: JobFolderSummary[], incoming: { url?: str
   if (!company || !title) return null;
   return jobs.find((job) => companyKey(companyOf(job)) === company && norm(job.title) === title) ?? null;
 }
+
+/** How many of the jobs in view each quick filter keeps: the number on a filter equals the rows it shows. */
+export function countWithin<J, F extends string>(jobs: J[], inView: (job: J) => boolean, filters: F[], matches: (job: J, filter: F) => boolean): Record<F, number> {
+  const shown = jobs.filter(inView);
+  return Object.fromEntries(filters.map((filter) => [filter, shown.filter((job) => matches(job, filter)).length])) as Record<F, number>;
+}
