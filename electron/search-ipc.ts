@@ -1,5 +1,6 @@
 // Job Search IPC. Loaded only when the edition has `features.jobSearch` (src/shared/edition.ts).
 import { ipcMain, shell } from "electron";
+import { externalLink } from "./open-link";
 import { join } from "node:path";
 import { readCandidateProfile } from "./candidate-profile";
 import type { FeatureContext } from "./feature-context";
@@ -160,7 +161,8 @@ export function registerSearchIpc(ctx: FeatureContext): void {
   ipcMain.handle("search:open-posting", async (_event, id: unknown) => {
     const [itemId] = foundIds(id);
     const item = (await readSearchState(ctx.requireWorkspace())).items.find((candidate) => candidate.id === itemId);
-    if (item && /^https?:\/\//i.test(item.url)) await shell.openExternal(item.url);
+    const link = externalLink(item?.url);
+    if (link) await shell.openExternal(link);
   });
   ipcMain.handle("search:stage", async (_event, id: unknown, pasteId: unknown, auto: unknown) => {
     const [itemId] = foundIds(id);
