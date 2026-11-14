@@ -2,7 +2,7 @@
 html, body, #root { width: 100%; height: 100%; overflow: hidden}
 body { margin: 0; min-width: 0; background: var(--canvas)}
 button { font: inherit}
-.eyebrow, .terminal-status, .file-icon, .base-mark { color: var(--term-muted); font: var(--fs-12) var(--font-ui); letter-spacing: .09em}.terminal-action { padding: 7px 10px; border: 1px solid var(--term-line); border-radius: 5px; color: var(--term-ink); background: transparent; cursor: pointer; font: var(--fs-12) var(--font-ui)}.terminal-action:hover { border-color: var(--term-leaf); color: var(--term-leaf)}.panel, .terminal-panel { min-height: 0; background: rgba(12, 16, 14, .72)}.count { padding: 2px 6px; border-radius: 8px; color: var(--muted); background: var(--raised)}.tree-directory, .tree-file { display: flex; align-items: center; gap: 8px; width: 100%; border: 1px solid transparent; color: var(--muted); background: transparent; text-align: left; cursor: pointer}.tree-directory { padding-top: 7px; padding-bottom: 7px; font-size: var(--fs-12); font-weight: 600}.tree-directory:hover, .tree-file:hover, .tree-file.is-selected { border-color: var(--line); background: var(--canvas)}.tree-chevron { width: 11px; color: var(--leaf)}.tree-directory small { margin-left: auto; color: var(--muted); font: var(--fs-12) var(--font-ui)}.tree-file { min-height: 28px; padding-top: 5px; padding-bottom: 5px}.file-icon { flex: 0 0 24px; color: var(--muted); font-size: var(--fs-12); letter-spacing: 0}.tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-12)}.base-mark { margin-left: auto; color: var(--leaf); font-size: var(--fs-12)}
+.eyebrow, .terminal-status, .file-icon, .base-mark { color: var(--term-muted); font: var(--fs-12) var(--font-ui); letter-spacing: .09em}.terminal-action { padding: 7px 10px; border: 1px solid var(--term-line); border-radius: 5px; color: var(--term-ink); background: transparent; cursor: pointer; font: var(--fs-12) var(--font-ui)}.terminal-action:hover { border-color: var(--term-leaf); color: var(--term-leaf)}.panel, .terminal-panel { min-height: 0; background: color-mix(in srgb, var(--term-bg) 72%, transparent)}.count { padding: 2px 6px; border-radius: 8px; color: var(--muted); background: var(--raised)}.tree-directory, .tree-file { display: flex; align-items: center; gap: 8px; width: 100%; border: 1px solid transparent; color: var(--muted); background: transparent; text-align: left; cursor: pointer}.tree-directory { padding-top: 7px; padding-bottom: 7px; font-size: var(--fs-12); font-weight: 600}.tree-directory:hover, .tree-file:hover, .tree-file.is-selected { border-color: var(--line); background: var(--canvas)}.tree-chevron { width: 11px; color: var(--leaf)}.tree-directory small { margin-left: auto; color: var(--muted); font: var(--fs-12) var(--font-ui)}.tree-file { min-height: 28px; padding-top: 5px; padding-bottom: 5px}.file-icon { flex: 0 0 24px; color: var(--muted); font-size: var(--fs-12); letter-spacing: 0}.tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-12)}.base-mark { margin-left: auto; color: var(--leaf); font-size: var(--fs-12)}
 .panel-resizer { position: relative; z-index: 8; min-width: 0; cursor: col-resize; touch-action: none; background: var(--canvas)}
 .panel-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--raised); transform: translateX(-50%); transition: width .15s, background-color .15s}
 .panel-resizer:hover::after, .panel-resizer:focus-visible::after { width: 3px; background: var(--accent); color: var(--on-accent)}
@@ -12,24 +12,24 @@ body.is-resizing-panels { cursor: col-resize; user-select: none}
 .get-started { width: min(980px, 100%); margin: auto; padding: clamp(28px, 5vw, 72px); color: var(--ink)}
 .get-started-copy h1 { margin: 8px 0 10px; color: var(--ink); font: 560 var(--fs-35)/1.1 var(--font-display)}
 .get-started-copy p { max-width: 650px; font-size: var(--fs-15); line-height: 1.6}
-.setup-card { padding: 22px; border: 1px solid var(--line, var(--line)); border-radius: 10px; background: var(--raised, var(--hover))}
+.setup-card { padding: 22px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised)}
 .setup-card h2 { margin: 0 0 8px; color: var(--ink)}
 .setup-card label { display: grid; gap: 6px; margin-top: 14px; font-size: var(--fs-12); font-weight: 700}
 .setup-card input { padding: 10px 11px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--ink); background: transparent}
 .setup-story-accordion {
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid var(--line, var(--line));
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--hover)}
 .setup-story-accordion summary {
   font-size: var(--fs-13);
   font-weight: 600;
-  color: var(--accent, var(--leaf));
+  color: var(--accent);
   cursor: pointer}
 .setup-story-hint {
   font-size: var(--fs-12);
-  color: var(--muted, var(--muted));
+  color: var(--muted);
   margin: 8px 0 12px;
   line-height: 1.4}
 .setup-story-accordion label {
@@ -38,13 +38,13 @@ body.is-resizing-panels { cursor: col-resize; user-select: none}
   gap: 4px;
   margin-top: 10px;
   font-size: var(--fs-12);
-  color: var(--ink, var(--ink))}
+  color: var(--ink)}
 .setup-story-accordion textarea {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
-  color: var(--ink, var(--ink));
+  color: var(--ink);
   background: var(--hover);
   font-size: var(--fs-12);
   font-family: inherit;
@@ -135,7 +135,7 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
 .challenge-mode span { color: var(--muted); text-transform: capitalize; font: var(--fs-12) var(--font-ui)}
 .challenge-notice { margin: 0 0 14px; padding: 10px 12px; border-left: 3px solid var(--leaf); color: var(--muted); background: var(--canvas); font: var(--fs-12)/1.55 var(--font-ui)}
 .challenge-notice strong { color: var(--ink)}
-.challenge-toolbar { position: sticky; top: -1px; z-index: 12; display: grid; gap: 9px; margin-bottom: 17px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(16, 22, 18, .97); box-shadow: var(--shadow); backdrop-filter: blur(12px)}
+.challenge-toolbar { position: sticky; top: -1px; z-index: 12; display: grid; gap: 9px; margin-bottom: 17px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--raised) 97%, transparent); box-shadow: var(--shadow); backdrop-filter: blur(12px)}
 .challenge-filters { display: flex; flex-wrap: wrap; gap: 6px}
 .challenge-filters button, .challenge-stepper button, .challenge-reset { padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); background: transparent; cursor: pointer; font: var(--fs-12) var(--font-ui)}
 .challenge-filters button:hover, .challenge-filters button:focus-visible, .challenge-filters button.is-active, .challenge-stepper button:hover:not(:disabled), .challenge-stepper button:focus-visible, .challenge-reset:hover:not(:disabled), .challenge-reset:focus-visible { border-color: var(--accent); color: var(--accent); outline: none}
@@ -183,7 +183,7 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
 .challenge-score p { margin: 0; color: var(--muted)}
 .challenge-back-top { right: max(24px, calc(var(--right-panel-width) + 24px)); bottom: 50px}
 @media (max-width: 900px) { .challenge-hero { flex-direction: column}.challenge-mode { width: 100%}.challenge-navigation { grid-template-columns: 1fr}.challenge-stepper { justify-content: space-between}.challenge-reset { justify-self: start}.challenge-relevance { grid-template-columns: 1fr; gap: 5px}.challenge-review-grid { grid-template-columns: 1fr}.challenge-review-grid .challenge-section { border-right: 0; border-bottom: 1px solid var(--line)}.challenge-score > div { grid-template-columns: 42px 1fr}.challenge-score p { grid-column: 2}.challenge-back-top { right: 24px} }
-.search-overlay { position: fixed; z-index: 1800; inset: 64px 0 34px; display: grid; align-items: start; justify-items: center; padding: min(8vh, 72px) 24px 24px; background: rgba(5, 8, 6, .58); backdrop-filter: blur(8px)}
+.search-overlay { position: fixed; z-index: 1800; inset: 64px 0 34px; display: grid; align-items: start; justify-items: center; padding: min(8vh, 72px) 24px 24px; background: var(--scrim); backdrop-filter: blur(8px)}
 .search-palette { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; width: min(760px, calc(100vw - 48px)); max-height: min(680px, calc(100vh - 150px)); overflow: hidden; border: 1px solid var(--line-strong); border-radius: 11px; background: var(--canvas); box-shadow: var(--shadow)}
 .search-input-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 14px 16px; border-bottom: 1px solid var(--line)}
 .search-input-row > span { color: var(--accent); font: var(--fs-18) var(--font-ui)}
@@ -570,15 +570,15 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(8, 12, 10, 0.72);
+  background: var(--scrim);
   backdrop-filter: blur(12px)}
 .settings-modal {
   width: min(840px, 94vw);
   max-height: 88vh;
   display: flex;
   flex-direction: column;
-  background: var(--raised, var(--canvas));
-  border: 1px solid var(--line, var(--line));
+  background: var(--raised);
+  border: 1px solid var(--line);
   border-radius: 12px;
   box-shadow: var(--shadow);
   overflow: hidden}
@@ -587,37 +587,37 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
   justify-content: space-between;
   align-items: flex-start;
   padding: 20px 24px 16px;
-  border-bottom: 1px solid var(--line, var(--line))}
+  border-bottom: 1px solid var(--line)}
 .settings-header h2 { margin: 4px 0 0; font-size: 1.25rem}
 .settings-close-btn {
   background: transparent;
   border: none;
   font-size: var(--fs-18);
-  color: var(--muted, var(--muted));
+  color: var(--muted);
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 4px}
-.settings-close-btn:hover { color: var(--ink, var(--ink)); background: var(--hover)}
+.settings-close-btn:hover { color: var(--ink); background: var(--hover)}
 
 .settings-nav {
   display: flex;
   gap: 8px;
   padding: 8px 24px;
-  background: var(--hover, var(--hover));
-  border-bottom: 1px solid var(--line, var(--line))}
+  background: var(--hover);
+  border-bottom: 1px solid var(--line)}
 .settings-nav button {
   background: transparent;
   border: none;
   padding: 8px 14px;
   font-size: 0.85rem;
   font-weight: 500;
-  color: var(--muted, var(--muted));
+  color: var(--muted);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease}
-.settings-nav button:hover { color: var(--ink, var(--ink)); background: var(--hover)}
+.settings-nav button:hover { color: var(--ink); background: var(--hover)}
 .settings-nav button.is-active {
-  color: var(--accent, var(--leaf));
+  color: var(--accent);
   background: var(--leaf-tint);
   font-weight: 600}
 
@@ -628,7 +628,7 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
 .settings-section { display: flex; flex-direction: column; gap: 24px}
 .settings-group { display: flex; flex-direction: column; gap: 8px}
 .settings-group-title { margin: 0 0 var(--space-1); color: var(--ink); font: 600 var(--fs-18)/1.3 var(--font-display)}
-.settings-group-desc { font-size: 0.8rem; color: var(--muted, var(--muted)); margin: 0 0 6px}
+.settings-group-desc { font-size: 0.8rem; color: var(--muted); margin: 0 0 6px}
 .settings-preview-list { margin: 4px 0 14px; padding-left: 18px; font-size: 0.8rem; line-height: 1.45}
 .settings-preview-list li { margin-bottom: 4px; overflow-wrap: anywhere}
 
@@ -641,18 +641,18 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
   flex-direction: column;
   gap: 6px;
   padding: 14px;
-  background: var(--hover, var(--hover));
-  border: 1px solid var(--line, var(--line));
+  background: var(--hover);
+  border: 1px solid var(--line);
   border-radius: 8px;
   text-align: left;
   cursor: pointer;
   transition: all 0.15s ease}
 .settings-card:hover { border-color: var(--line); background: var(--hover)}
 .settings-card.is-selected {
-  border-color: var(--accent, var(--leaf));
+  border-color: var(--accent);
   background: var(--leaf-tint)}
-.settings-card strong { font-size: 0.88rem; color: var(--ink, var(--ink))}
-.settings-card p { font-size: 0.78rem; color: var(--muted, var(--muted)); margin: 0; line-height: 1.4}
+.settings-card strong { font-size: 0.88rem; color: var(--ink)}
+.settings-card p { font-size: 0.78rem; color: var(--muted); margin: 0; line-height: 1.4}
 
 .settings-radio-row { display: flex; flex-direction: column; gap: 8px}
 .settings-radio-label {
@@ -660,7 +660,7 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
   align-items: flex-start;
   gap: 10px;
   font-size: 0.84rem;
-  color: var(--ink, var(--ink));
+  color: var(--ink);
   cursor: pointer}
 .settings-radio-label input { margin-top: 3px}
 
@@ -669,13 +669,13 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
   align-items: flex-start;
   gap: 12px;
   padding: 12px;
-  background: var(--hover, var(--hover));
-  border: 1px solid var(--line, var(--line));
+  background: var(--hover);
+  border: 1px solid var(--line);
   border-radius: 8px;
   cursor: pointer}
 .settings-toggle-row input { margin-top: 3px; width: 16px; height: 16px}
 .settings-toggle-row span { display: flex; flex-direction: column; gap: 2px}
-.settings-toggle-row small { color: var(--muted, var(--muted)); font-size: 0.78rem}
+.settings-toggle-row small { color: var(--muted); font-size: 0.78rem}
 
 .settings-textarea {
   width: 100%;
@@ -703,7 +703,7 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
   flex-direction: column;
   gap: 4px;
   font-size: 0.82rem;
-  color: var(--muted, var(--muted))}
+  color: var(--muted)}
 .settings-inputs-grid input {
   width: 100%}
 
@@ -711,36 +711,36 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
 .theme-chip {
   padding: 6px 12px;
   font-size: 0.8rem;
-  border: 1px solid var(--line, var(--line));
+  border: 1px solid var(--line);
   background: transparent;
-  color: var(--muted, var(--muted));
+  color: var(--muted);
   border-radius: 20px;
   cursor: pointer}
 .theme-chip.is-active {
-  background: var(--accent, var(--leaf));
+  background: var(--accent);
   color: var(--on-accent);
-  border-color: var(--accent, var(--leaf));
+  border-color: var(--accent);
   font-weight: 600}
 
 .add-bullet-card {
   padding: 14px;
   background: var(--hover);
-  border: 1px dashed var(--line, var(--line));
+  border: 1px dashed var(--line);
   border-radius: 8px;
   margin-bottom: 16px}
-.add-bullet-card h4 { margin: 0 0 10px; font-size: 0.86rem; color: var(--ink, var(--ink))}
+.add-bullet-card h4 { margin: 0 0 10px; font-size: 0.86rem; color: var(--ink)}
 .add-bullet-inputs { display: flex; flex-direction: column; gap: 8px}
 .add-bullet-inputs input, .add-bullet-inputs textarea {
   padding: 8px 10px;
   background: var(--hover);
-  border: 1px solid var(--line, var(--line));
+  border: 1px solid var(--line);
   border-radius: 6px;
-  color: var(--ink, var(--ink));
+  color: var(--ink);
   font-size: 0.82rem}
 .primary-action-btn {
   align-self: flex-start;
   padding: 6px 14px;
-  background: var(--accent, var(--leaf));
+  background: var(--accent);
   color: var(--on-accent);
   font-weight: 600;
   border: none;
@@ -749,22 +749,22 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
   cursor: pointer}
 
 .bullet-bank-list { display: flex; flex-direction: column; gap: 8px}
-.bullet-bank-list h4 { margin: 8px 0 4px; font-size: 0.86rem; color: var(--muted, var(--muted))}
+.bullet-bank-list h4 { margin: 8px 0 4px; font-size: 0.86rem; color: var(--muted)}
 .bullet-bank-item {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
   padding: 10px 12px;
-  background: var(--hover, var(--hover));
-  border: 1px solid var(--line, var(--line));
+  background: var(--hover);
+  border: 1px solid var(--line);
   border-radius: 6px}
-.bullet-item-content strong { font-size: 0.8rem; color: var(--accent, var(--leaf)); display: block; margin-bottom: 2px}
-.bullet-item-content p { font-size: 0.82rem; color: var(--ink, var(--ink)); margin: 0; line-height: 1.4}
+.bullet-item-content strong { font-size: 0.8rem; color: var(--accent); display: block; margin-bottom: 2px}
+.bullet-item-content p { font-size: 0.82rem; color: var(--ink); margin: 0; line-height: 1.4}
 .bullet-delete-btn {
   background: transparent;
   border: none;
-  color: var(--muted, var(--muted));
+  color: var(--muted);
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px}
@@ -776,17 +776,17 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
   gap: 8px;
   padding: 14px;
   background: var(--hover);
-  border: 1px solid var(--line, var(--line));
+  border: 1px solid var(--line);
   border-radius: 8px}
 .identity-summary-card > div { display: flex; justify-content: space-between; font-size: 0.84rem}
-.identity-summary-card span { color: var(--muted, var(--muted))}
-.identity-summary-card strong { color: var(--ink, var(--ink))}
+.identity-summary-card span { color: var(--muted)}
+.identity-summary-card strong { color: var(--ink)}
 .identity-actions { display: flex; gap: 10px; margin-top: 10px}
 .secondary-btn {
   padding: 8px 12px;
   background: var(--hover);
-  border: 1px solid var(--line, var(--line));
-  color: var(--ink, var(--ink));
+  border: 1px solid var(--line);
+  color: var(--ink);
   border-radius: 6px;
   font-size: 0.82rem;
   cursor: pointer}
@@ -798,25 +798,25 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
   align-items: center;
   gap: 12px;
   padding: 14px 24px;
-  border-top: 1px solid var(--line, var(--line));
-  background: var(--hover, var(--hover))}
+  border-top: 1px solid var(--line);
+  background: var(--hover)}
 .settings-success-indicator {
   margin-right: auto;
   font-size: 0.82rem;
-  color: var(--accent, var(--leaf));
+  color: var(--accent);
   font-weight: 500}
 .settings-cancel-btn {
   padding: 7px 16px;
   background: transparent;
-  border: 1px solid var(--line, var(--line));
-  color: var(--muted, var(--muted));
+  border: 1px solid var(--line);
+  color: var(--muted);
   border-radius: 6px;
   font-size: 0.84rem;
   cursor: pointer}
-.settings-cancel-btn:hover { color: var(--ink, var(--ink))}
+.settings-cancel-btn:hover { color: var(--ink)}
 .settings-save-btn {
   padding: 7px 18px;
-  background: var(--accent, var(--leaf));
+  background: var(--accent);
   color: var(--on-accent);
   font-weight: 600;
   border: none;
