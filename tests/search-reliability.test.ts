@@ -98,7 +98,7 @@ describe("Ashby pay is kept", () => {
 
   it("puts board pay in the posting header, where the posting record reads it", () => {
     const { extracted } = postingFromBoard({ url: "https://jobs.ashbyhq.com/northstar/abc", title: "Customer Data Analyst", company: "Northstar Labs", location: "Remote", html: "<p>Work with customers.</p>", pay: "$145K – $175K" });
-    expect(extracted.markdown).toContain("**Compensation:** $145K – $175K");
+    expect(extracted.markdown).toContain("**Pay:** $145K–$175K/year");
     expect(parsePay(extracted.markdown)).toMatchObject({ min: 145000, max: 175000 });
   });
 

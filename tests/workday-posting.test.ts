@@ -37,8 +37,11 @@ describe("Workday postings", () => {
       expect(meta).toMatchObject({ title: "Customer Success Manager", company: "Northstar", location: "Remote, USA", url: link });
       const text = await readFile(join(root, ".sensei", "staged-jds", "paste-workday1.md"), "utf8");
       expect(text).toContain("onboarding stage 10");
-      expect(text).toContain("Work setup: Remote");
-      expect(text).toContain("Posted: 2026-11-10");
+      // The shared posting layout (#54) puts these facts in the header.
+      expect(text).toContain("**Work setup:** Remote");
+      expect(text).toContain("**Employment type:** Full-time");
+      expect(text).toContain("**Posted:** 2026-11-10");
+      expect(text).toContain("**Job ID:** R1234");
     });
   }
 
