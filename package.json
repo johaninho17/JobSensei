@@ -16,6 +16,8 @@
     "build": "npm run clean && tsc -b && vite build && tsc -p tsconfig.electron.json && node scripts/write-pipeline-scripts.mjs",
     "typecheck": "tsc -b --pretty false && tsc -p tsconfig.electron.json --noEmit",
     "test": "vitest run",
+    "issues:new": "node scripts/create-issue.mjs",
+    "issues:index": "node scripts/issues-index.mjs",
     "context:snapshot": "tsc -p tsconfig.electron.json && node dist-electron/electron/evidence-snapshot.js",
     "application:finalize": "tsc -p tsconfig.electron.json && node dist-electron/electron/application-finalize.js",
     "jd:fetch": "tsc -p tsconfig.electron.json && node dist-electron/electron/jd-fetch.js",
