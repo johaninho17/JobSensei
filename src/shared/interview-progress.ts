@@ -1,4 +1,5 @@
-import type { InterviewRoundKind, InterviewStage } from "./schemas";
+import type { InterviewRoundKind, InterviewStage, JobFolderSummary } from "./schemas";
+import { effectiveStatus } from "./tracker";
 
 /**
  * Where a job's interviews stand and what comes next, one owner for the job actions, the round stepper, and the
@@ -62,4 +63,14 @@ export function nextInterviewStep(input: { rounds: Round[]; knownProcess: Step[]
   if (knownProcess.length && furthest >= Math.max(...knownProcess.map((step) => STAGE_RANK[step.stage] ?? 0))) return { kind: "none" };
   const fallback = DEFAULT_NEXT.find((step) => step.rank > furthest && !rounds.some((round) => (STAGE_RANK[round.stage] ?? 0) === step.rank));
   return fallback ? { kind: "prepare", stage: fallback.stage } : { kind: "none" };
+}
+
+/** A job with interview prep whose process is over (rejected or withdrawn): shown under Past, not counted as active. */
+export function interviewIsPast(job: JobFolderSummary): boolean {
+  return ["rejected", "withdrawn"].includes(effectiveStatus(job));
+}
+
+/** The Interviews page's Active list; the sidebar's Interviews number counts exactly these (#7). */
+export function activeInterviews(jobs: JobFolderSummary[]): JobFolderSummary[] {
+  return jobs.filter((job) => job.interviewRoundLabel && !interviewIsPast(job));
 }

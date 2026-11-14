@@ -6,7 +6,7 @@ import { type JobAction } from "./job-actions";
 import { markdownHtml } from "./markdown";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { Section } from "./Section";
-import { nextInterviewStep } from "../shared/interview-progress";
+import { interviewIsPast, nextInterviewStep } from "../shared/interview-progress";
 import { storyTitles } from "./interview-cards";
 import { TrackerPill, displayJobName, messageOf, plural } from "./app-shared";
 
@@ -26,10 +26,10 @@ export function InterviewsHome({ jobs, allJobs, newRecordings, onRecordingsChang
     const round = (next?.kind === "practice" ? overview?.rounds.find((candidate) => candidate.id === next.roundId) : null)
       ?? overview?.rounds.find((candidate) => candidate.id === overview.currentRoundId) ?? overview?.rounds.at(-1) ?? null;
     return { job, overview, round };
-  }).sort((a, b) => Number(["rejected", "withdrawn"].includes(effectiveStatus(a.job))) - Number(["rejected", "withdrawn"].includes(effectiveStatus(b.job))) || (a.round?.scheduledDate ?? "9999").localeCompare(b.round?.scheduledDate ?? "9999") || Date.parse(b.job.modifiedAt) - Date.parse(a.job.modifiedAt));
-  const closed = (job: JobFolderSummary) => ["rejected", "withdrawn"].includes(effectiveStatus(job));
+  }).sort((a, b) => Number(interviewIsPast(a.job)) - Number(interviewIsPast(b.job)) || (a.round?.scheduledDate ?? "9999").localeCompare(b.round?.scheduledDate ?? "9999") || Date.parse(b.job.modifiedAt) - Date.parse(a.job.modifiedAt));
+  const closed = interviewIsPast;
   const renderRows = (list: typeof rows) => <>
-    {list.length > 0 && <ul className="interview-rows">{list.map(({ job, overview, round }) => <li key={job.id} className={["rejected", "withdrawn"].includes(effectiveStatus(job)) ? "is-closed" : ""}>
+    {list.length > 0 && <ul className="interview-rows">{list.map(({ job, overview, round }) => <li key={job.id} className={interviewIsPast(job) ? "is-closed" : ""}>
       <button className="interview-row" onClick={() => onOpen(job.id, round?.id)}>
         <span className="interview-row-main"><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></span>
         <TrackerPill status={effectiveStatus(job)} job={job} />

@@ -41,3 +41,12 @@ describe("what comes next in interviews", () => {
     expect(buildJobActions({ ...(saved as object), hasApplicationMaterials: true } as never, null, null).some((action) => action.id === DRAFT_ACTION_ID)).toBe(false);
   });
 });
+
+describe("Interviews count (#7)", () => {
+  it("the sidebar number counts the Active list only: prepared jobs not rejected or withdrawn", async () => {
+    const { activeInterviews } = await import("../src/shared/interview-progress");
+    const job = (id: string, status: string | null, round: string | null) => ({ id, name: id, interviewRoundLabel: round, tracker: status ? { status, history: [], interviews: [] } : null, createdAt: "2026-11-01T00:00:00.000Z", modifiedAt: "2026-11-01T00:00:00.000Z" }) as unknown as import("../src/shared/schemas").JobFolderSummary;
+    const jobs = [job("a", "interviewing", "Recruiter"), job("b", "rejected", "Hiring manager"), job("c", "withdrawn", "Recruiter"), job("d", "applied", "Recruiter"), job("e", "interviewing", null)];
+    expect(activeInterviews(jobs).map((entry) => entry.id)).toEqual(["a", "d"]);
+  });
+});
