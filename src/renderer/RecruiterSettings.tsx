@@ -1,6 +1,7 @@
 // Recruiter Edition (plan Q2): the recruiter's own settings: name and agency (for reports), the defaults every
 // candidate inherits unless their Profile → Settings says otherwise, and privacy. Opened from the sidebar, ⌘, and
 // the Candidates page. Only rendered when FEATURES.candidates is on.
+import { BrowserSetting } from "./BrowserSetting";
 import { useEffect, useState } from "react";
 import { APP_RECRUITER_DEFAULTS, type RecruiterDefaults } from "../shared/candidates";
 import { AGY_INSTRUCTION_LIMITS, instructionLines, type PdfTextSize } from "../shared/schemas";
@@ -59,7 +60,7 @@ export function RecruiterSettingsDialog({ onClose, onSaved }: { onClose: () => v
           <label><span>PDF text size</span><select value={defaults.pdfTextSize} onChange={(event) => set({ pdfTextSize: event.target.value as PdfTextSize })}>{(Object.keys(PDF_SIZE_LABEL) as PdfTextSize[]).map((size) => <option key={size} value={size}>{PDF_SIZE_LABEL[size]}</option>)}</select></label>
         </section>
       </div>}
-      {tab === "privacy" && <div className="recruiter-settings-body"><PrivacyAndTerms /></div>}
+      {tab === "privacy" && <div className="recruiter-settings-body"><BrowserSetting /><PrivacyAndTerms /></div>}
       {error && <p className="inline-error" role="alert">{error}</p>}
       <div className="onboarding-actions">
         {tab === "recruiter" && <button className="btn-primary" disabled={state === "loading" || state === "saving"} onClick={() => void save()}>{state === "saving" ? "Saving…" : "Save"}</button>}

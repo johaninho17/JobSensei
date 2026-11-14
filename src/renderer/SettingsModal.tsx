@@ -1,4 +1,5 @@
 import { logisticsUpdate, parseNames, readLogistics, readStoryFields, storyUpdate } from "../shared/profile-fields";
+import { BrowserSetting } from "./BrowserSetting";
 import { PrivacyAndTerms } from "./Privacy";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { EMPTY_INTERVIEW_LOGISTICS, type BulletBank, type BulletBankItem, type CandidateProfile, type InterviewLogistics, type Settings, type VoiceSettings } from "../shared/schemas";
@@ -607,7 +608,7 @@ export function SettingsModal({
             </div>
           )}
 
-          {activeTab === "privacy" && <div className="settings-section"><PrivacyAndTerms /></div>}
+          {activeTab === "privacy" && <div className="settings-section"><BrowserSetting /><PrivacyAndTerms /></div>}
           {activeTab === "preview" && (
             <div className="settings-section">
               <div className="settings-group">

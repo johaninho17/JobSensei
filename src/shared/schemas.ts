@@ -1394,6 +1394,9 @@ export interface SenseiApi {
     /** A newer GitHub release, or null (also null for builds without a recorded release source). */
     checkUpdate(): Promise<{ version: string; url: string } | null>;
     openRelease(url: string): Promise<void>;
+    /** Where web links open on this computer, and the browsers installed. */
+    browser(): Promise<{ choice: string; options: Array<{ id: string; name: string }> }>;
+    setBrowser(choice: string): Promise<string>;
   };
   workspace: {
     getSummary(): Promise<WorkspaceSummary>;

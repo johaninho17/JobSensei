@@ -6,6 +6,8 @@ import type { FeatureContext } from "./feature-context";
 import { getInterviewOverview, listInterviewRounds, refreshInterviewDashboard, setCurrentInterviewRound } from "./interviews";
 
 let interviewWindow: BrowserWindow | undefined;
+/** Set when the IPC is registered: web links open in the browser chosen in Settings. */
+let openLink: (url: string) => Promise<unknown> = (url) => shell.openExternal(url);
 
 /** The interview window also needs context updates; main sends them through this. */
 export function interviewWindows(): BrowserWindow[] {
@@ -30,7 +32,7 @@ async function openInterviewWorkspaceWindow(jobId: string, roundId: string): Pro
     backgroundColor: "#f4f6f8",
     webPreferences: { preload: join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
-  handleLinks(interviewWindow.webContents, process.env.VITE_DEV_SERVER_URL ?? "", (url) => shell.openExternal(url));
+  handleLinks(interviewWindow.webContents, process.env.VITE_DEV_SERVER_URL ?? "", openLink);
   const query = `interviewWorkspace=1&jobId=${encodeURIComponent(jobId)}&roundId=${encodeURIComponent(roundId)}`;
   if (process.env.VITE_DEV_SERVER_URL) await interviewWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?${query}`);
   else await interviewWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"), { search: `?${query}` });
@@ -56,7 +58,7 @@ async function openLiveWindow(jobId: string, roundId: string): Promise<void> {
       webPreferences: { preload: join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     liveWindow.setAlwaysOnTop(true, "floating");
-    handleLinks(liveWindow.webContents, process.env.VITE_DEV_SERVER_URL ?? "", (url) => shell.openExternal(url));
+    handleLinks(liveWindow.webContents, process.env.VITE_DEV_SERVER_URL ?? "", openLink);
     liveWindow.on("closed", () => { liveWindow = undefined; });
   }
   if (process.env.VITE_DEV_SERVER_URL) await liveWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?${query}`);
@@ -65,6 +67,7 @@ async function openLiveWindow(jobId: string, roundId: string): Promise<void> {
 }
 
 export function registerInterviewIpc(ctx: FeatureContext): void {
+  openLink = ctx.openLink;
   ipcMain.handle("interviews:get-overview", async (_event, jobId: string) => getInterviewOverview(ctx.requireWorkspace(), jobId));
   ipcMain.handle("interviews:list-rounds", async (_event, jobId: string) => listInterviewRounds(ctx.requireWorkspace(), jobId));
   ipcMain.handle("interviews:set-current-round", async (_event, input: { jobId: string; roundId: string }) => setCurrentInterviewRound(ctx.requireWorkspace(), input?.jobId, input?.roundId));
