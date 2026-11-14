@@ -42,9 +42,36 @@ describe("job links from any company site", () => {
     expect(meta).toMatchObject({ title: "Customer Onboarding Specialist", company: "Northstar Labs", url: company });
   });
 
+  it("reads an embedded Greenhouse posting from the board's job API, keeping the company page as its link (#50)", async () => {
+    const company = "https://careers.northstar.example/detail/88/?gh_jid=88";
+    const page = `<script src="https://boards.greenhouse.io/embed/job_board/js?for=northstarlabs"></script>`;
+    const api = { title: "Renewals Manager", company_name: "Northstar Labs", location: { name: "Denver, CO" }, content: `&lt;ul&gt;${DESCRIPTION.replaceAll("<", "&lt;").replaceAll(">", "&gt;")}&lt;/ul&gt;` };
+    const root = await workspace();
+    const meta = await stageLinkJobDescription(root, company, "paste-case6", fakeFetch({ [company]: page, "https://boards-api.greenhouse.io/v1/boards/northstarlabs/jobs/88": JSON.stringify(api) }));
+    expect(meta).toMatchObject({ title: "Renewals Manager", company: "Northstar Labs", location: "Denver, CO" });
+    const text = await readFile(join(root, ".sensei", "staged-jds", "paste-case6.md"), "utf8");
+    expect(text).toContain(`**Source:** ${company}`);
+    expect(text).toContain("onboarding step 12");
+  });
+
   it("follows an embedded application frame that names the board and the job", () => {
     const page = `<iframe src="https://boards.greenhouse.io/embed/job_app?for=northstarlabs&amp;token=777"></iframe>`;
     expect(embeddedPostingUrl(page, "https://northstar.example/role")).toBe("https://job-boards.greenhouse.io/northstarlabs/jobs/777");
+  });
+
+  it("follows an Ashby posting embedded with ashby_jid (#50)", () => {
+    const page = `<div id="ashby_embed"></div><script src="https://jobs.ashbyhq.com/northstar/embed?version=2"></script>`;
+    expect(embeddedPostingUrl(page, "https://northstar.example/careers?ashby_jid=1b2c3d4e-0000-4000-8000-00000000abcd"))
+      .toBe("https://jobs.ashbyhq.com/northstar/1b2c3d4e-0000-4000-8000-00000000abcd");
+  });
+
+  it("follows gh_jid when the page links the board by its plain address (#50)", () => {
+    expect(embeddedPostingUrl(`<a href="https://boards.greenhouse.io/northstarlabs">All jobs</a>`, "https://northstar.example/role?gh_jid=55"))
+      .toBe("https://job-boards.greenhouse.io/northstarlabs/jobs/55");
+  });
+
+  it("reads the page as before when no board can be found (#50)", () => {
+    expect(embeddedPostingUrl("<html><body>Our careers</body></html>", "https://northstar.example/role?gh_jid=55")).toBeNull();
   });
 
   it("doesn't follow a list page that links many postings", () => {

@@ -193,6 +193,13 @@ export function embeddedPostingUrl(html: string, pageUrl: string): string | null
   const ghFor = embed.match(/[?&]for=([A-Za-z0-9_-]+)/)?.[1];
   const token = embed.match(/[?&]token=(\d+)/)?.[1] ?? new URL(pageUrl).searchParams.get("gh_jid");
   if (ghFor && token) return `https://job-boards.greenhouse.io/${ghFor}/jobs/${token}`;
+  // Ashby's embed: `?ashby_jid=<posting id>` on the company page and the board's embed script names the slug.
+  const ashbyJid = new URL(pageUrl).searchParams.get("ashby_jid");
+  const ashbySlug = html.match(/jobs\.ashbyhq\.com\/([A-Za-z0-9_.%-]+)\/embed/i)?.[1];
+  if (ashbyJid && ashbySlug && /^[0-9a-f-]{36}$/i.test(ashbyJid)) return `https://jobs.ashbyhq.com/${ashbySlug}/${ashbyJid}`;
+  // A plain board link for the same job id (`gh_jid` pages that link `boards.greenhouse.io/<slug>`).
+  const ghSlug = token ? html.match(/(?:boards|job-boards)\.greenhouse\.io\/(?!embed\b)([A-Za-z0-9_-]+)/i)?.[1] : null;
+  if (token && ghSlug) return `https://job-boards.greenhouse.io/${ghSlug}/jobs/${token}`;
   const direct = html.match(/https:\/\/(?:jobs\.lever\.co\/[A-Za-z0-9_.-]+\/[0-9a-f-]{36}|jobs\.ashbyhq\.com\/[A-Za-z0-9_.%-]+\/[0-9a-f-]{36}|(?:boards|job-boards)\.greenhouse\.io\/[A-Za-z0-9_-]+\/jobs\/\d+)/i)?.[0];
   return direct && singlePostingOnPage(html, direct) ? direct : null;
 }
@@ -212,6 +219,8 @@ async function readPage(target: string, fetcher: typeof fetch, render: boolean, 
   const tryEmbedded = async (page: string): Promise<Extracted | null> => {
     const embedded = depth === 0 ? embeddedPostingUrl(page, target) : null;
     if (!embedded || embedded === target) return null;
+    const fromApi = await postingFromApi(postingUrl(embedded), fetcher, target).catch(() => null);
+    if (fromApi && bodyLength(fromApi) >= MIN_DESCRIPTION_CHARS) return fromApi;
     const inner = await readPage(postingUrl(embedded), fetcher, render, depth + 1).catch(() => null);
     return inner && bodyLength(inner) >= MIN_DESCRIPTION_CHARS ? { ...inner, url: target } : null;
   };
@@ -237,8 +246,26 @@ async function readPage(target: string, fetcher: typeof fetch, render: boolean, 
  */
 export async function fetchAndClean(url: string, fetcher: typeof fetch, options: { render?: boolean } = {}): Promise<{ extracted: Extracted; form: string | null }> {
   const target = postingUrl(url);
-  const fromApi = await fetchWorkdayPosting(target, fetcher) ?? await fetchOracleCloudPosting(target, fetcher);
+  const fromApi = await postingFromApi(target, fetcher);
   return fromApi ? cleanExtracted(fromApi) : cleanExtracted(await readPage(target, fetcher, options.render ?? true));
+}
+
+/** Postings a job board serves as JSON (Greenhouse, Workday, Oracle Cloud), shown with `source` as their link. */
+async function postingFromApi(url: string, fetcher: typeof fetch, source = url): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
+  return await fetchGreenhouseJob(url, fetcher, source) ?? await fetchWorkdayPosting(url, fetcher) ?? await fetchOracleCloudPosting(url, fetcher);
+}
+
+const GREENHOUSE_JOB = /^https:\/\/(?:boards|job-boards)\.greenhouse\.io\/([A-Za-z0-9_-]+)\/jobs\/(\d+)/i;
+
+/** A Greenhouse posting from the board's job API: title, company, location, and the description only. */
+async function fetchGreenhouseJob(url: string, fetcher: typeof fetch, source: string): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
+  const match = GREENHOUSE_JOB.exec(url);
+  if (!match) return null;
+  const response = await fetcher(`https://boards-api.greenhouse.io/v1/boards/${match[1]}/jobs/${match[2]}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
+  if (!response?.ok) return null;
+  const data = await response.json().catch(() => null) as { title?: string; content?: string; company_name?: string; location?: { name?: string } } | null;
+  if (!data?.title || !data.content) return null;
+  return postingFromBoard({ url: source, title: decodeEntities(data.title), company: data.company_name?.trim() || null, location: data.location?.name?.trim() || null, html: data.content }).extracted;
 }
 
 const WORKDAY = /^https:\/\/([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com\/(?:[a-z]{2}-[A-Z]{2}\/)?([^/?#]+)\/job\/([^?#]+?)(?:\/apply(?:\/[^?#]*)?)?\/?(?:[?#].*)?$/i;
