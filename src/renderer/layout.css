@@ -752,6 +752,10 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .find-row:has(> input[type="checkbox"]) { grid-template-columns: auto auto 1fr; cursor: pointer; }
 .find-row.is-selected { border-color: var(--line-strong); box-shadow: inset 3px 0 0 var(--brass); }
 .find-main { min-width: 0; }
+/* A match's title opens it (Job Search: the posting; Today: the match in Job Search). */
+.find-title { padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.find-title:hover { text-decoration: underline; text-underline-offset: 2px; }
+.find-row.is-focused { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
 .find-main p { margin: var(--space-1) 0 0; }
 .find-facts { color: var(--muted); font-size: var(--fs-13); }
 .find-why { font-size: var(--fs-13); }
@@ -812,7 +816,8 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .today-remove { margin-left: auto; font-size: var(--fs-12); color: var(--muted); }
 .btn-small { min-height: 30px; padding: 0 var(--space-3); font-size: var(--fs-12); }
 @media (max-width: 960px) { .today-grid { grid-template-columns: 1fr; } }
-.today-scored li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-2); align-items: baseline; }
+.today-scored li { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: var(--space-2); align-items: baseline; }
+.today-row-actions { display: flex; gap: var(--space-2); white-space: nowrap; }
 .today-actionable li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; }
 .today-actionable .today-actions { margin-left: 0; }
 

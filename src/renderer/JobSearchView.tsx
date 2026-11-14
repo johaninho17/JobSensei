@@ -7,6 +7,7 @@ import {
 } from "../shared/job-search";
 import { SubTabs } from "./SubTabs";
 import { Section } from "./Section";
+import { draftFound, foundError, foundRowId, saveFound } from "./found-actions";
 import { boardName, boardRef } from "../shared/boards";
 
 type Tab = "matches" | "drafting" | "saved" | "dismissed" | "settings" | "runs";
@@ -32,7 +33,9 @@ export function runSummary(run: SearchRun): string {
   return `${head}${notes ? ` (${notes})` : ""}.`;
 }
 
-export function JobSearchView({ status, onQueueFound, onQueueSaved, onOpenJob, onToast }: {
+export function JobSearchView({ status, focusId, onQueueFound, onQueueSaved, onOpenJob, onToast }: {
+  /** A match to show and scroll to when the page opens (from Today). */
+  focusId?: string;
   /** The run's live status, kept by the app so it survives leaving this page. */
   status: SearchStatus;
   /** Sends a found job to the application queue; returns how many jobs are ahead of it. */
@@ -56,6 +59,14 @@ export function JobSearchView({ status, onQueueFound, onQueueSaved, onOpenJob, o
     void window.sensei.jobSearch.get().then((result) => { setSettings(result.settings); setState(result.state); }).catch((reason) => setError(String(reason?.message ?? reason)));
     return window.sensei.jobSearch.onUpdated(setState);
   }, []);
+
+  // Opened on one match (from Today): show its tab and scroll it into view once the list is loaded.
+  const focusItem = focusId ? state?.items.find((item) => item.id === focusId) ?? null : null;
+  useEffect(() => {
+    if (!focusItem) return;
+    setTab(focusItem.status === "queued" ? "drafting" : focusItem.status === "saved" ? "saved" : focusItem.status === "dismissed" ? "dismissed" : "matches");
+    window.requestAnimationFrame(() => document.getElementById(foundRowId(focusItem.id))?.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
+  }, [focusItem?.id]);
 
   // Matches are only new finds; jobs sent for drafts, saved, or dismissed each get their own tab.
   const live = useMemo(() => rankInbox((state?.items ?? []).filter((item) => item.status === "new"), sort), [state, sort]);
@@ -134,25 +145,24 @@ export function JobSearchView({ status, onQueueFound, onQueueSaved, onOpenJob, o
   async function save(ids: string[]) {
     setBusy(true);
     try {
-      for (const id of ids) await window.sensei.jobSearch.saveJob(id);
+      const message = await saveFound(ids);
       setState((await window.sensei.jobSearch.get()).state);
       setSelected(new Set());
-      onToast(`Saved ${plural(ids.length, "job")} to Jobs.`);
+      onToast(message);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(foundError(reason));
     } finally { setBusy(false); }
   }
 
   async function queue(ids: string[]) {
     setBusy(true);
     try {
-      let ahead = 0;
-      for (const id of ids) ahead = await onQueueFound(id, false);
+      const message = await draftFound(ids, (id) => onQueueFound(id, false));
       setState((await window.sensei.jobSearch.get()).state);
       setSelected(new Set());
-      onToast(`Sent ${plural(ids.length, "job")} for drafts${ahead ? ` (${ahead} ahead in the queue)` : ""}.`);
+      onToast(message);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(reason));
+      setError(foundError(reason));
     } finally { setBusy(false); }
   }
 
@@ -171,11 +181,11 @@ export function JobSearchView({ status, onQueueFound, onQueueSaved, onOpenJob, o
   function renderItem(item: InboxItem) {
     const isSelected = selected.has(item.id);
     const facts = [item.location, item.workSetup, item.pay, capital(item.level), item.postedAt ? `Posted ${item.postedAt}` : null, boardName(item.board)].filter(Boolean);
-    return <li key={item.id} className={`find-row${isSelected ? " is-selected" : ""}`} onClick={selecting ? () => toggle(item.id) : undefined}>
+    return <li key={item.id} id={foundRowId(item.id)} className={`find-row${isSelected ? " is-selected" : ""}${item.id === focusId ? " is-focused" : ""}`} onClick={selecting ? () => toggle(item.id) : undefined}>
       {selecting && <input type="checkbox" checked={isSelected} onChange={() => toggle(item.id)} onClick={(event) => event.stopPropagation()} aria-label={`Select ${item.company ?? ""} ${item.title ?? ""}`} />}
       <span className={`fit-badge ${fitClass(effectiveFit(item))}`} title={item.agyFit ? `Agy's light rating (quick fit ${item.fit.score.toFixed(1)}); the full rating runs when you draft` : "Quick fit: the app's own check of your files against the posting, not a full rating"}>{effectiveFit(item).toFixed(1)}{item.agyFit && <small className="fit-badge-source">Agy</small>}</span>
       <div className="find-main">
-        <strong>{item.title ?? "Untitled role"}</strong> <span className="muted">· {item.company ?? "Company not named"}</span>{item.watched && <span className="find-tag">Watched company</span>}{item.likeInterviewed && <span className="find-tag" title="Ranked a little higher: similar to a job where you got a real interview">{item.likeInterviewed}</span>}
+        {selecting ? <strong>{item.title ?? "Untitled role"}</strong> : <button className="find-title" title="Open the posting in your browser" onClick={() => void window.sensei.jobSearch.openPosting(item.id)}>{item.title ?? "Untitled role"}</button>} <span className="muted">· {item.company ?? "Company not named"}</span>{item.watched && <span className="find-tag">Watched company</span>}{item.likeInterviewed && <span className="find-tag" title="Ranked a little higher: similar to a job where you got a real interview">{item.likeInterviewed}</span>}
         {facts.length > 0 && <p className="find-facts">{facts.join(" · ")}</p>}
         {item.agyFit && <p className="find-why">{item.agyFit.why}{item.agyFit.gaps.length > 0 && <span className="muted"> Gaps: {item.agyFit.gaps.join("; ")}.</span>}</p>}
         <p className={item.agyFit ? "find-why muted" : "find-why"}>{item.agyFit ? `Quick check: ${item.fit.why}` : item.fit.why}</p>

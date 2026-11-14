@@ -68,7 +68,7 @@ const VIEWER_PANEL_MIN = 320;
 type PromptRequest = { id: number; text: string; label: string };
 type JobWorkspaceTab = "overview" | "application" | "interview" | "files";
 type JobLocation = { kind: "job"; jobId: string; tab: JobWorkspaceTab; roundId?: string };
-type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home" } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" } | { kind: "docs-home" } | { kind: "postings-home" } | { kind: "reports-home" };
+type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home"; focus?: string } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" } | { kind: "docs-home" } | { kind: "postings-home" } | { kind: "reports-home" };
 type WorkspaceLocation =
   | PageLocation
   | JobLocation
@@ -1049,9 +1049,11 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
           <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} />
           : FEATURES.today && currentLocation.kind === "today-home" ? <TodayView onOpenJob={openJob} onToast={showToast}
+              onOpenMatch={(id) => pushLocation({ kind: "search-home", focus: id })}
+              onQueueFound={(id) => queueJob({ kind: "found", id, auto: false }, true)}
               onGo={(target) => showPage(({ setup: "setup-home", jobs: "jobs-home", "job-search": "search-home", interviews: "interviews-home", learnings: "interviews-home", context: "context-home" } as const)[target])}
               onAnswerAddedFile={(path) => void updateContext([...new Set([...selectedCareerPaths, path])], selectedJobFiles)} />
-          : FEATURES.jobSearch && currentLocation.kind === "search-home" ? <JobSearchView status={searchStatus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onQueueSaved={(jobId) => queueJob({ kind: "saved", jobId }, true)} onOpenJob={openJob} onToast={showToast} />
+          : FEATURES.jobSearch && currentLocation.kind === "search-home" ? <JobSearchView key={currentLocation.focus ?? ""} status={searchStatus} focusId={currentLocation.focus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onQueueSaved={(jobId) => queueJob({ kind: "saved", jobId }, true)} onOpenJob={openJob} onToast={showToast} />
           : FEATURES.interviews && currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
           : FEATURES.candidates && currentLocation.kind === "postings-home" ? <PostingsView activeId={candidates?.activeId ?? null} onToast={showToast} onActive={async (pasteId, label, url) => {
             const item = newQueueItem({ kind: "paste", label }, new Date(), false);
