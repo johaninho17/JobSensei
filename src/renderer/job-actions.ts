@@ -33,6 +33,9 @@ function stageWords(stage: InterviewStage): string {
   return map[stage] ?? "interview";
 }
 
+/** The action the app runs itself (the job goes to the queue) instead of sending its text to Agy. */
+export const DRAFT_ACTION_ID = "draft-application";
+
 export function buildJobActions(job: JobFolderSummary | null, interview: InterviewOverview | null, application: ApplicationStatus | null): JobAction[] {
   if (!job) return [];
   const company = companyName(job);
@@ -52,6 +55,10 @@ export function buildJobActions(job: JobFolderSummary | null, interview: Intervi
   const next = nextInterviewStep({ rounds: interview?.rounds ?? [], knownProcess: interview?.knownProcess ?? [], recorded });
   const nextRound = next.kind === "practice" ? interview?.rounds.find((round) => round.id === next.roundId) ?? null : null;
   const debriefRound = [...(interview?.rounds ?? [])].reverse().find((round) => round.debriefSourcePaths.length && !round.artifactPaths.debriefAnalysis) ?? null;
+
+  // A job with a posting and no drafts yet (saved for later): drafting it is the next step, through the queue.
+  const neverDrafted = !job.hasApplicationMaterials;
+  if (neverDrafted && !interview?.rounds.length) add(DRAFT_ACTION_ID, "Draft application", `Draft the application for ${named}`, "Recommended", true);
 
   // Interview prep, mocks, and debriefs exist only where interviews do (the Recruiter Edition stops at applying).
   if (FEATURES.interviews) {
@@ -78,6 +85,7 @@ export function buildJobActions(job: JobFolderSummary | null, interview: Intervi
     if (current?.debriefSourcePaths.length) add("debrief", "Analyze latest debrief", `${named} debrief`, "Interview");
   }
 
+  if (neverDrafted) add(DRAFT_ACTION_ID, "Draft application", `Draft the application for ${named}`, "Application");
   if (application?.publicResumePath) add("review-resume", "Review tailored resume", `${named} resume`, "Application");
   add("review-cover-letter", "Review cover letter", `${named} cover letter`, "Application");
   add("evaluate-application", "Evaluate application", `Evaluate ${named} application`, "Application");

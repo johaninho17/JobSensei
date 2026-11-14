@@ -127,6 +127,7 @@ const api: SenseiApi = {
     updateTracker: (jobId, update) => ipcRenderer.invoke("jobs:update-tracker", jobId, update),
     stagePastedJd: (text, id) => ipcRenderer.invoke("jobs:stage-pasted-jd", text, id),
     stageLink: (url, id) => ipcRenderer.invoke("jobs:stage-link", url, id),
+    stageSaved: (jobId, id) => ipcRenderer.invoke("jobs:stage-saved", jobId, id),
     setStagedCompany: (id, company) => ipcRenderer.invoke("jobs:set-staged-company", id, company),
     exportCsv: (csv) => ipcRenderer.invoke("jobs:export-csv", csv),
   },

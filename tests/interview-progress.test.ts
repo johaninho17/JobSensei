@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { nextInterviewStep, roundDone } from "../src/shared/interview-progress";
-import { buildJobActions } from "../src/renderer/job-actions";
+import { DRAFT_ACTION_ID, buildJobActions } from "../src/renderer/job-actions";
 
 const round = (id: string, stage: string, status = "prep_ready") => ({ id, stage, status }) as never;
 
@@ -32,5 +32,12 @@ describe("what comes next in interviews", () => {
     const interview = { currentRoundId: "01", knownProcess: [], rounds: [{ id: "01", stage: "recruiter_screen", status: "prep_ready", debriefSourcePaths: [], artifactPaths: {} }] } as never;
     const main = buildJobActions(job, interview, null).find((action) => action.recommended)!;
     expect(main.label).toBe("Prepare hiring manager interview");
+  });
+
+  it("makes drafting the next step for a saved job that has no drafts and no interview rounds", () => {
+    const saved = { id: "northstar-se", company: "Northstar Labs", title: "Solutions Engineer", name: "northstar-se", tracker: null, hasApplicationMaterials: false } as never;
+    const [first] = buildJobActions(saved, null, null);
+    expect(first).toMatchObject({ id: DRAFT_ACTION_ID, label: "Draft application", recommended: true, jobId: "northstar-se" });
+    expect(buildJobActions({ ...(saved as object), hasApplicationMaterials: true } as never, null, null).some((action) => action.id === DRAFT_ACTION_ID)).toBe(false);
   });
 });

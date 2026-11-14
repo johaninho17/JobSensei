@@ -1,9 +1,9 @@
-import { mkdtemp, readFile, readdir } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { loadStagedJobDescription, pruneStagedJobDescriptions, stagePastedJobDescription } from "../electron/jd-fetch";
+import { loadStagedJobDescription, pruneStagedJobDescriptions, stagePastedJobDescription, stageSavedJob } from "../electron/jd-fetch";
 import { stageFetchedJobDescription } from "../electron/evidence-snapshot";
 import { pastedJdPrompt } from "../src/shared/job-queue";
 
@@ -25,6 +25,23 @@ describe("pasted JD staging", () => {
     await stageFetchedJobDescription(root, "northstar-labs-support-analyst");
     expect(await readFile(join(root, "jobs", "northstar-labs-support-analyst", "original_jd.md"), "utf8")).toContain("Help customers connect");
     expect((await loadStagedJobDescription(root, "paste-second")).meta.title).toBe("Data Analyst");
+  });
+
+  it("sends a saved job's own posting to the queue so its drafts land in that job's folder", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sensei-saved-"));
+    const jobId = "northstar-labs-support-analyst-2";
+    await mkdir(join(root, "jobs", jobId), { recursive: true });
+    await writeFile(join(root, "jobs", jobId, "original_jd.md"), JD);
+    const meta = await stageSavedJob(root, jobId, "paste-saved01", new Date("2026-11-14T12:00:00Z"));
+    // The suggested ID is the job's own ID (never a fresh one derived from the title), so no second folder appears.
+    expect(meta).toMatchObject({ company: "Northstar Labs", title: "Support Analyst", suggestedJobId: jobId });
+    expect((await loadStagedJobDescription(root, "paste-saved01")).meta.suggestedJobId).toBe(jobId);
+    // The snapshot keeps the job's existing posting.
+    expect(await stageFetchedJobDescription(root, jobId)).toBeNull();
+    expect(await readdir(join(root, "jobs"))).toEqual([jobId]);
+    for (const bad of ["../outside", "", "a/b", 7]) await expect(stageSavedJob(root, bad, "paste-saved02")).rejects.toThrow("isn't a job");
+    await mkdir(join(root, "jobs", "empty-job"), { recursive: true });
+    await expect(stageSavedJob(root, "empty-job", "paste-saved03")).rejects.toThrow("no saved posting");
   });
 
   it("refuses an unknown or malformed paste ID, and prunes pastes no queue item uses", async () => {

@@ -23,7 +23,7 @@ import type { ApplicationStatus, ApplicationValidationReport, CandidateProfile, 
 import * as pdfjsLib from "pdfjs-dist/build/pdf.mjs";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { filterChallengeExercises, parseChallengePractice, type ChallengeFilter } from "./challenge-practice";
-import { buildJobActions, type JobAction } from "./job-actions";
+import { DRAFT_ACTION_ID, buildJobActions, type JobAction } from "./job-actions";
 import { evaluationCategoryLabels, evaluationCredits, evaluationLabel, evaluationSection, parseEvaluationRequirements } from "./evaluation-model";
 import { parseQuestionBank, type QuestionEntry } from "./question-navigation";
 import { inferCodeLanguage, markdownHtml, sanitizeHtml } from "./markdown";
@@ -176,14 +176,18 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     if (!existing) return true;
     return window.confirm(`You already have this job: ${[existing.company, existing.title].filter(Boolean).join(", ") || existing.name} (${TRACKER_LABELS[effectiveStatus(existing)].toLowerCase()}, added ${new Date(existing.createdAt).toLocaleDateString()}).\n\nAdd it again anyway?`);
   }
-  async function queueJob(input: { kind: "link"; url: string; batch?: { index: number; size: number } } | { kind: "paste"; text: string; note?: string } | { kind: "found"; id: string; auto?: boolean }, manual: boolean): Promise<number> {
+  async function queueJob(input: { kind: "link"; url: string; batch?: { index: number; size: number } } | { kind: "paste"; text: string; note?: string } | { kind: "found"; id: string; auto?: boolean } | { kind: "saved"; jobId: string }, manual: boolean): Promise<number> {
     // The app says what setup is missing before a job reaches Agy (electron/setup-readiness.ts owns the rules).
     const ready = await loadReadiness();
     if (ready && !ready.ready) throw new Error(`${ready.blocker} Open Setup in the sidebar.`);
     // Links are fetched here, by the app: Agy's sandbox has no network. The saved posting is queued like a paste,
     // and a page that can't be read is reported now instead of stalling the queue.
     const item = newQueueItem({ kind: "paste", label: null, note: input.kind === "paste" ? input.note : null }, new Date(), manual);
-    if (FEATURES.candidates && input.kind !== "found") {
+    if (input.kind === "saved") {
+      // A saved job (posting only): its own posting goes to the queue and the drafts land in its folder.
+      const meta = await window.sensei.jobs.stageSaved(input.jobId, item.id);
+      item.label = [meta.company, meta.title].filter(Boolean).join(", ") || input.jobId;
+    } else if (FEATURES.candidates && input.kind !== "found") {
       // Recruiter Edition: the posting is saved once in the library, then copied to each candidate chosen for it.
       let posting = input.kind === "link" ? await window.sensei.candidates.stageLink(input.url, item.id) : await window.sensei.candidates.stagePaste(input.text, item.id);
       if (!posting.company) {
@@ -623,10 +627,20 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     pushLocation({ kind: "job", jobId, tab, roundId });
   }
 
-  function insertJobPrompt(action: Pick<JobAction, "prompt" | "label">) {
+  function insertJobPrompt(action: Pick<JobAction, "prompt" | "label"> & Partial<Pick<JobAction, "id" | "jobId">>) {
+    // Drafting a saved job is the app's own step: the job joins the queue (it never interrupts a running job).
+    if (action.id === DRAFT_ACTION_ID && action.jobId) { void draftSavedJob(action.jobId); return; }
     promptRequestId.current += 1;
     setRightPanelOpen(true);
     setPromptRequest({ id: promptRequestId.current, text: action.prompt, label: action.label });
+  }
+
+  async function draftSavedJob(jobId: string): Promise<void> {
+    setError(null);
+    try {
+      const ahead = await queueJob({ kind: "saved", jobId }, true);
+      showToast(`Sent for drafts${ahead ? ` (${ahead} ahead in the queue)` : ""}.`);
+    } catch (caught) { setError(messageOf(caught, "Unable to send this job for drafts.")); }
   }
 
   async function updateTracker(jobId: string, update: JobTrackerUpdate, options: { quiet?: boolean } = {}) {
@@ -1021,7 +1035,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
           : FEATURES.today && currentLocation.kind === "today-home" ? <TodayView onOpenJob={openJob} onToast={showToast}
               onGo={(target) => showPage(({ setup: "setup-home", jobs: "jobs-home", "job-search": "search-home", interviews: "interviews-home", learnings: "interviews-home", context: "context-home" } as const)[target])}
               onAnswerAddedFile={(path) => void updateContext([...new Set([...selectedCareerPaths, path])], selectedJobFiles)} />
-          : FEATURES.jobSearch && currentLocation.kind === "search-home" ? <JobSearchView status={searchStatus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onOpenJob={openJob} onToast={showToast} />
+          : FEATURES.jobSearch && currentLocation.kind === "search-home" ? <JobSearchView status={searchStatus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onQueueSaved={(jobId) => queueJob({ kind: "saved", jobId }, true)} onOpenJob={openJob} onToast={showToast} />
           : FEATURES.interviews && currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
           : FEATURES.candidates && currentLocation.kind === "postings-home" ? <PostingsView activeId={candidates?.activeId ?? null} onToast={showToast} onActive={async (pasteId, label, url) => {
             const item = newQueueItem({ kind: "paste", label }, new Date(), false);

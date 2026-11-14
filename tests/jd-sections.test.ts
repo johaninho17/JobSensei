@@ -122,7 +122,7 @@ describe("job identity", () => {
 describe("job actions name the exact job", () => {
   it("gives two same-company jobs different prompts that carry the job ID", async () => {
     const { buildJobActions } = await import("../src/renderer/job-actions");
-    const base = { relativePath: "jobs/x", name: "x", company: "Northstar Bank", createdAt: "2026-10-25T00:00:00Z", modifiedAt: "2026-10-25T00:00:00Z", artifactCount: 1, applicationStage: null, rating: null } as never;
+    const base = { relativePath: "jobs/x", name: "x", company: "Northstar Bank", createdAt: "2026-10-25T00:00:00Z", modifiedAt: "2026-10-25T00:00:00Z", artifactCount: 1, applicationStage: null, rating: null, hasApplicationMaterials: true } as never;
     const a = buildJobActions({ ...(base as object), id: "northstar-bank-swe-iii", title: "Software Engineer III" } as never, null, null);
     const b = buildJobActions({ ...(base as object), id: "northstar-bank-analyst-iii", title: "Solution Analyst III" } as never, null, null);
     expect(a[0]!.prompt).toBe("Prepare Northstar Bank Software Engineer III recruiter interview (job: northstar-bank-swe-iii)");

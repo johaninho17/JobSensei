@@ -790,6 +790,12 @@ export async function setItemStatus(workspace: string, ids: string[], status: In
   return saveSearchState(workspace, { ...state, items: state.items.map((item) => wanted.has(item.id) ? { ...item, ...patch, status } : item) });
 }
 
+/** A saved match whose job was sent for drafts from Jobs or the Saved tab moves to "Sent for drafts". */
+export async function markSavedJobQueued(workspace: string, jobId: string, now = new Date()): Promise<void> {
+  const ids = (await readSearchState(workspace)).items.filter((item) => item.jobId === jobId && item.status === "saved").map((item) => item.id);
+  if (ids.length) await setItemStatus(workspace, ids, "queued", { queuedAt: now.toISOString(), autoQueued: false });
+}
+
 /** Saves a found job into Jobs (status Saved) with its posting, without running Agy. */
 export async function saveFoundJob(workspace: string, itemId: string): Promise<string> {
   const state = await readSearchState(workspace);
