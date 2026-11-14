@@ -122,3 +122,21 @@ describe("Agy's first-run screens", () => {
     expect(classifyAgyScreen("> Type your message\nGemini 4 Argon · medium")).toBe("ready");
   });
 });
+
+describe("when a chat run ends", () => {
+  const base = { running: true, agy: true, startedAt: 1_000, lastOutputAt: 100_000, recentOutput: "", screen: "ready" as const };
+  it("stays running through a quiet stretch until Agy is idle on its ready screen", async () => {
+    const { chatRunState } = await import("../src/shared/job-queue");
+    const started = 100_000;
+    // Just sent: never done in the first seconds, whatever the screen says.
+    expect(chatRunState({ ...base, lastOutputAt: 90_000 }, started, started + 2_000)).toBe("running");
+    // Output 3 s ago (a pause while Agy thinks): still running. This is the case the old 2.5 s timer got wrong.
+    expect(chatRunState({ ...base, lastOutputAt: started + 20_000 }, started, started + 23_000)).toBe("running");
+    // Waiting on an approval screen: still running.
+    expect(chatRunState({ ...base, screen: "blocked", lastOutputAt: started + 20_000 }, started, started + 60_000)).toBe("running");
+    // Idle on the ready screen: done.
+    expect(chatRunState({ ...base, lastOutputAt: started + 20_000 }, started, started + 26_000)).toBe("done");
+    expect(chatRunState({ ...base, running: false }, started, started + 26_000)).toBe("stopped");
+    expect(chatRunState({ ...base, agy: false }, started, started + 26_000)).toBe("unknown");
+  });
+});
