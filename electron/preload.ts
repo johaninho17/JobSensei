@@ -7,6 +7,8 @@ const api: SenseiApi = {
     checkUpdate: () => ipcRenderer.invoke("app:check-update"),
     openRelease: (url) => ipcRenderer.invoke("app:open-release", url),
     copyText: (text) => ipcRenderer.invoke("app:copy-text", text),
+    browser: () => ipcRenderer.invoke("app:browser"),
+    setBrowser: (choice) => ipcRenderer.invoke("app:set-browser", choice),
   },
   setup: {
     readiness: () => ipcRenderer.invoke("setup:readiness"),

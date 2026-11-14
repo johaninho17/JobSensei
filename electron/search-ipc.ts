@@ -162,7 +162,7 @@ export function registerSearchIpc(ctx: FeatureContext): void {
     const [itemId] = foundIds(id);
     const item = (await readSearchState(ctx.requireWorkspace())).items.find((candidate) => candidate.id === itemId);
     const link = externalLink(item?.url);
-    if (link) await shell.openExternal(link);
+    if (link) await ctx.openLink(link);
   });
   ipcMain.handle("search:stage", async (_event, id: unknown, pasteId: unknown, auto: unknown) => {
     const [itemId] = foundIds(id);

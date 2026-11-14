@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, session, shell } from "electron";
 import { handleLinks } from "./open-link";
+import { availableBrowsers, BROWSER_NAMES, browserOpener, readBrowserChoice, saveBrowserChoice } from "./browser-choice";
 import { pdfFreshness } from "./pdf-freshness";
 import { installLogFile } from "./log-file";
 import { recruiterInstructionsFor } from "./recruiter-defaults";
@@ -48,6 +49,8 @@ const features = featuresFor(edition);
 // The recruiter edition keeps its own settings folder and Agy homes; solo keeps the name it always had.
 if (edition !== "solo") app.setName(EDITION_INFO[edition].productName);
 if (process.env.SENSEI_USER_DATA) app.setPath("userData", resolve(process.env.SENSEI_USER_DATA));
+/** Every app window hands web links to this: the browser chosen in Settings, else the system default. */
+const openLink = browserOpener(() => app.getPath("userData"), (url) => shell.openExternal(url));
 installLogFile(join(app.getPath("userData"), "logs", "main.log"));
 if (process.argv.includes("--dev") && !process.env.VITE_DEV_SERVER_URL) {
   process.env.VITE_DEV_SERVER_URL = DEV_URL;
@@ -71,7 +74,7 @@ function createWindow(): void {
     backgroundColor: "#f4f6f8",
     webPreferences: { preload: join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
-  handleLinks(mainWindow.webContents, DEV_URL, (url) => shell.openExternal(url));
+  handleLinks(mainWindow.webContents, DEV_URL, openLink);
   mainWindow.webContents.on("did-fail-load", (_event, code, description, url) => console.error(`Sensei renderer failed to load (${code}): ${description} ${url}`));
   mainWindow.webContents.on("render-process-gone", (_event, details) => console.error(`Sensei renderer exited: ${details.reason}`));
   mainWindow.webContents.on("console-message", (event) => console.error(`Sensei renderer: ${event.message}`));
@@ -404,6 +407,13 @@ ipcMain.handle("app:check-update", async () => {
   if (!release.tag_name || !release.html_url || !newerVersion(release.tag_name, app.getVersion())) return null;
   return { version: release.tag_name.replace(/^v/, ""), url: release.html_url };
 });
+// Which browser links open in: a setting for this computer (electron/browser-choice.ts).
+ipcMain.handle("app:browser", async () => {
+  const available = availableBrowsers();
+  const choice = await readBrowserChoice(app.getPath("userData"));
+  return { choice: available.includes(choice) ? choice : "default", options: available.map((id) => ({ id, name: BROWSER_NAMES[id] })) };
+});
+ipcMain.handle("app:set-browser", async (_event, choice: unknown) => saveBrowserChoice(app.getPath("userData"), choice));
 ipcMain.handle("app:open-release", async (_event, url: unknown) => {
   const repository = await releaseRepository();
   if (typeof url === "string" && repository && url.startsWith(`https://github.com/${repository}/releases/`)) await shell.openExternal(url);
@@ -558,6 +568,7 @@ const featureContext: FeatureContext = {
   mainWindow: () => mainWindow,
   agyHomeFor: (workspace) => agyHomes.get(workspace),
   userDataPath: () => app.getPath("userData"),
+  openLink: (url) => openLink(url),
   appRoot: terminalAppRoot,
   jobNames,
 };
