@@ -17,7 +17,7 @@ const RESUME_TYPES = new Set([".docx", ".md", ".pdf"]);
 /** Copies the resume into the candidate's `resumes/` folder (never overwriting) and returns its workspace path. */
 async function copyResume(folder: string, source: string): Promise<string> {
   const extension = extname(source).toLowerCase();
-  if (!RESUME_TYPES.has(extension)) throw new Error("Choose the resume as a Word (.docx) or Markdown (.md) file.");
+  if (!RESUME_TYPES.has(extension)) throw new Error("Choose the resume as a Word (.docx), Markdown (.md), or PDF file.");
   const info = await stat(source).catch(() => null);
   if (!info?.isFile()) throw new Error("That resume file can't be read.");
   const dir = join(folder, "resumes");

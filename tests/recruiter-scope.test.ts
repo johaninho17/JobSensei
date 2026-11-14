@@ -51,7 +51,7 @@ describe("adding a candidate is the whole setup", () => {
   it("refuses a resume type the app can't keep the layout of", async () => {
     const { folder, outside, store } = await candidateFolder();
     await writeFile(join(outside, "resume.pages"), "x");
-    await expect(applyIntake(folder, store, { resumePath: join(outside, "resume.pages") })).rejects.toThrow("Word (.docx) or Markdown (.md)");
+    await expect(applyIntake(folder, store, { resumePath: join(outside, "resume.pages") })).rejects.toThrow("Word (.docx), Markdown (.md), or PDF");
   });
 
   it("lists only the recruiter's items: resume, files and notes, targets, cover letters, private names (no name, story, voice)", async () => {

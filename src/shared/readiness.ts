@@ -36,4 +36,7 @@ export type Readiness = z.infer<typeof readinessSchema>;
 
 /** The words used everywhere a base resume can't be read (Get Started, Setup, the snapshot that Agy sees). */
 export const RESUME_FORMAT_HELP = "JobSensei reads your base resume's structure from a Word (.docx) or Markdown (.md) file. A PDF works only when the .docx or .md version is in the same folder.";
+/** The same help where PDFs are read directly (features.pdfResumes). */
+export const RESUME_FORMAT_HELP_PDF = "JobSensei reads a base resume from a Word (.docx), Markdown (.md), or PDF file. A PDF must have selectable text (not a scan); check what JobSensei read after adding it.";
+export const resumeFormatHelp = (pdfResumes: boolean) => (pdfResumes ? RESUME_FORMAT_HELP_PDF : RESUME_FORMAT_HELP);
 export const RESUME_PDF_ONLY = `Your base resume is a PDF with no Word or Markdown version beside it. ${RESUME_FORMAT_HELP} Choose the .docx or .md version in Setup.`;

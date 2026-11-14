@@ -5,7 +5,7 @@ import { workspaceFile } from "./workspace";
 import { countCareerFiles, coverLetterPlanFor } from "../src/shared/cover-letter-policy";
 import { readdir, stat } from "node:fs/promises";
 import { dirname, extname, join, resolve, sep } from "node:path";
-import { readinessSchema, RESUME_FORMAT_HELP, RESUME_PDF_ONLY, type Readiness, type ReadinessItem } from "../src/shared/readiness";
+import { readinessSchema, resumeFormatHelp, RESUME_PDF_ONLY, type Readiness, type ReadinessItem } from "../src/shared/readiness";
 import type { CandidateProfile, ContextManifest, Settings } from "../src/shared/schemas";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
 import { featuresFor, type Features } from "../src/shared/edition";
@@ -50,9 +50,10 @@ export async function checkBaseResume(workspacePath: string, relativePath: strin
     check = { ok: true, employers: baseline.employers.length, lines };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    check = extname(relativePath).toLowerCase() === ".pdf"
+    const pdfResumes = featuresFor(currentEdition()).pdfResumes;
+    check = extname(relativePath).toLowerCase() === ".pdf" && !pdfResumes
       ? { ok: false, message: RESUME_PDF_ONLY }
-      : { ok: false, message: `JobSensei couldn't read your base resume's sections (${reason}). It needs a header, a skills section, an experience section with at least one job, and an education section. ${RESUME_FORMAT_HELP}` };
+      : { ok: false, message: `JobSensei couldn't read your base resume's sections (${reason}). It needs a header, a skills section, an experience section with at least one job, and an education section. ${resumeFormatHelp(pdfResumes)}` };
   }
   resumeCache.set(absolute, { key, check });
   return check;
@@ -81,7 +82,7 @@ export async function computeReadiness(input: ReadinessInput): Promise<Readiness
   add({
     id: "resume", level: "required", state: !resumePath ? "missing" : resume?.ok ? "done" : "problem", action: "resume", path: resumePath ?? "resumes",
     title: "Base resume (Word or Markdown)",
-    detail: !resumePath ? `Not chosen yet. ${RESUME_FORMAT_HELP}` : resume?.ok ? `${resumePath.split("/").pop()}: read ${resume.employers} job${resume.employers === 1 ? "" : "s"}, skills, and education.` : (resume as { message: string }).message,
+    detail: !resumePath ? `Not chosen yet. ${resumeFormatHelp(features.pdfResumes)}` : resume?.ok ? `${resumePath.split("/").pop()}: read ${resume.employers} job${resume.employers === 1 ? "" : "s"}, skills, and education.` : (resume as { message: string }).message,
     improves: "Every tailored resume keeps its layout, section order, dates, and length (its number of pages).",
     lines: resume?.ok ? resume.lines : [],
   });

@@ -323,7 +323,7 @@ export function CandidateResumeCard({ name, problem, onChoose }: { name: string 
   return <main className="candidate-start" aria-labelledby="resume-card-title">
     <section className="onboarding-card">
       <h1 id="resume-card-title">Add {name ? `${name}'s` : "the"} base resume</h1>
-      <p>Tailoring starts once {who}'s resume is in. Use a Word (.docx) or Markdown (.md) file; every tailored resume keeps its layout, section order, dates, and length.</p>
+      <p>Tailoring starts once {who}'s resume is in. Use a Word (.docx), Markdown (.md), or PDF file with selectable text; every tailored resume keeps its section order, dates, and length.</p>
       {problem && <p className="inline-error" role="alert">{problem}</p>}
       <div className="onboarding-actions"><button className="btn-primary" disabled={busy} onClick={() => { setBusy(true); void onChoose().finally(() => setBusy(false)); }}>{busy ? "Reading…" : "Choose resume"}</button></div>
     </section>
