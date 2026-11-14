@@ -22,7 +22,7 @@ import { TodayView } from "./TodayView";
 import { DocsView } from "./DocsView";
 import { findDuplicateJob } from "../shared/job-organize";
 import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
-import { IS_MAC, type JobWorkspaceTab, type PromptRequest, displayJobName, filePaths, findNode, messageOf, plural, workspaceLabel } from "./app-shared";
+import { IS_MAC, type JobWorkspaceTab, type PromptRequest, displayJobName, filePaths, findNode, messageOf, onFavoritesChanged, plural, storedFavoriteJobIds, workspaceLabel } from "./app-shared";
 import { RUN_KIND_LABEL, RUN_STATE_LABEL, TerminalPanel } from "./TerminalPanel";
 import { CSV_COLUMNS, JobsHome, SetupLine } from "./JobsHome";
 import { ContextAdder, ContextHome, Onboarding, SetupHome } from "./SetupAndContext";
@@ -352,6 +352,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     return () => window.clearInterval(timer);
   }, [workspace.status, readiness?.ready]);
   useEffect(() => { if (FEATURES.interviewProfile && workspace.status === "ready") void window.sensei.profile.preview().then((preview) => setStoryBankPath(preview.storyBankPath)).catch(() => undefined); }, [workspace.status, jobTree]);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(storedFavoriteJobIds);
+  useEffect(() => onFavoritesChanged(setFavoriteIds), []);
   const [recentJobIds, setRecentJobIds] = useState<string[]>(() => { try { return JSON.parse(window.localStorage.getItem("sensei-recent-jobs") ?? "[]") as string[]; } catch { return []; } });
   useEffect(() => {
     if (!activeJobId) return;
@@ -927,7 +929,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       run: () => setSettingsModalOpen(true),
     },
   ];
-  const recentJobs = recentJobIds.map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job)).slice(0, 6);
+  // Sidebar: the jobs the user starred in Jobs (#13), newest first; recent jobs still feed the status bar and search.
+  const favoriteJobs = jobs.filter((job) => favoriteIds.has(job.id)).sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)).slice(0, 8);
   const interviewingJobs = jobs.filter((job) => job.interviewRoundLabel);
   const activeInterviewCount = activeInterviews(interviewingJobs).length;
   const followUpsDue = !FEATURES.nudges ? 0 : jobs.filter((job) => { const days = followUpDays(job.tracker); return days !== null && days <= 0 && !["rejected", "withdrawn"].includes(effectiveStatus(job)); }).length;
@@ -961,9 +964,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         <li><button aria-current={activePage === "setup-home" ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />{FEATURES.candidates ? "Profile" : "Setup"}{readiness && (FEATURES.candidates ? <span className={readiness.ready ? "side-count" : "side-due"}>{readiness.ready ? "Ready" : "Needs a resume"}</span> : <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>)}</button></li>
         {!FEATURES.candidates && <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context{FEATURES.nudges && newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>}
       </ul>
-      {!FEATURES.candidates && recentJobs.length > 0 && <section className="side-recent" aria-labelledby="side-recent-title">
-        <h2 id="side-recent-title">Recent jobs</h2>
-        <ul>{recentJobs.map((job) => <li key={job.id}><button aria-current={activePage === "job" && viewedJobId === job.id ? "page" : undefined} onClick={() => openJob(job.id)}><strong>{job.company ?? displayJobName(job.name)}</strong><small>{job.title ?? "Role not recorded"}</small></button></li>)}</ul>
+      {!FEATURES.candidates && <section className="side-recent" aria-labelledby="side-recent-title">
+        <h2 id="side-recent-title">Favorites</h2>
+        {favoriteJobs.length === 0 && <p className="side-empty">Star a job (☆) in Jobs to keep it here.</p>}
+        <ul>{favoriteJobs.map((job) => <li key={job.id}><button aria-current={activePage === "job" && viewedJobId === job.id ? "page" : undefined} onClick={() => openJob(job.id)}><strong>{job.company ?? displayJobName(job.name)}</strong><small>{job.title ?? "Role not recorded"}</small></button></li>)}</ul>
       </section>}
       <div className="side-foot">
         <button aria-current={activePage === "docs-home" ? "page" : undefined} onClick={() => showPage("docs-home")}><NavIcon name="docs" />Docs</button>

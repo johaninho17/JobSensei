@@ -18,6 +18,20 @@ export function storedFavoriteJobIds(): Set<string> {
   }
 }
 
+const FAVORITES_EVENT = "sensei-favorites-changed";
+
+/** Saves the starred jobs (Jobs ☆) and tells the rest of the window, so the sidebar's Favorites list follows at once. */
+export function saveFavoriteJobIds(ids: Set<string>): void {
+  try { window.localStorage.setItem(JOB_FAVORITES_KEY, JSON.stringify([...ids])); } catch { /* storage unavailable */ }
+  window.dispatchEvent(new Event(FAVORITES_EVENT));
+}
+
+export function onFavoritesChanged(callback: (ids: Set<string>) => void): () => void {
+  const listener = () => callback(storedFavoriteJobIds());
+  window.addEventListener(FAVORITES_EVENT, listener);
+  return () => window.removeEventListener(FAVORITES_EVENT, listener);
+}
+
 /** Job links waiting for Agy. With "Run automatically" on, the next link is sent (and run) when Agy is idle. */
 /** `batch`: this link is one of several pasted together (index from 0), so a recruiter can choose candidates once. */
 export type QueueJob = (input: { kind: "link"; url: string; batch?: { index: number; size: number } } | { kind: "paste"; text: string; note?: string }, manual: boolean) => Promise<number>;

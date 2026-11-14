@@ -80,6 +80,7 @@
 .side-recent strong, .side-recent small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-recent strong { font-size: var(--fs-13); font-weight: 650; }
 .side-recent small { color: var(--muted); font-size: var(--fs-12); }
+.side-empty { margin: 0; padding: 0 var(--space-3); color: var(--muted); font-size: var(--fs-12); }
 .side-foot { margin-top: auto; }
 
 .topbar { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: 0 var(--space-4); border-bottom: 1px solid var(--line); background: var(--canvas); }
