@@ -3,7 +3,7 @@
 import { roundDone } from "../shared/interview-progress";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { InterviewOverview, InterviewRound, JobFolderSummary } from "../shared/schemas";
-import { listItems, markdownSections, parseInterviewCards, splitIds, storyTitles, type CardKind, type InterviewCard } from "./interview-cards";
+import { listItems, markdownSections, moveOpen, openOnly, parseInterviewCards, splitIds, toggleCard, storyTitles, type CardKind, type InterviewCard } from "./interview-cards";
 import { markdownHtml } from "./markdown";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 
@@ -74,7 +74,7 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
   }
   function jumpTo(id: string) {
     setQuery("");
-    setOpen((current) => new Set(current).add(id));
+    setOpen(openOnly(id));
     window.requestAnimationFrame(() => {
       const target = document.getElementById(`icard-${id}`);
       target?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
@@ -82,7 +82,7 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
     });
   }
   function toggle(id: string) {
-    setOpen((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+    setOpen((current) => toggleCard(current, id));
   }
   function onListKeyDown(event: ReactKeyboardEvent<HTMLOListElement>) {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "j" && event.key !== "k") return;
@@ -90,7 +90,10 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
     const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
     if (index < 0) return;
     event.preventDefault();
-    buttons[Math.max(0, Math.min(buttons.length - 1, index + (event.key === "ArrowDown" || event.key === "j" ? 1 : -1)))]?.focus();
+    const target = buttons[Math.max(0, Math.min(buttons.length - 1, index + (event.key === "ArrowDown" || event.key === "j" ? 1 : -1)))];
+    const targetId = target?.closest<HTMLElement>("[id^='icard-']")?.id.slice("icard-".length);
+    if (targetId) setOpen((current) => moveOpen(current, targetId));
+    target?.focus();
   }
   useEffect(() => {
     const shortcuts = (event: KeyboardEvent) => {
