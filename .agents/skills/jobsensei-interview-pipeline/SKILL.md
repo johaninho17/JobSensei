@@ -58,7 +58,7 @@ Each round mixes the questions everyone gets for that round (the stage file's ar
 
 Pressure cards always carry a **Likely follow-up**: the drill-down a sharp interviewer uses ("give me one specific example", "what was the result?", "you haven't used X; how would what you know carry over?"), with a 2–3 word cue toward the answer.
 
-**Story fit.** A question about customers, clients, or partners is answered with a customer, client, or partner story. A personal project or internal tool answers only questions about the candidate's own projects, learning, or tools. Pick the story whose situation matches the question (a customer problem that became a feature → that story, not a process description).
+**Story fit.** A question about customers, clients, or partners is answered with a customer, client, or partner story. A personal project or internal tool answers only questions about the candidate's own projects, learning, or tools. The reverse holds too: a question about tools, AI use, or projects ("how do you use AI?", "what do you build with?", "tell me about a project") is answered with a project or tool story from the evidence or the story bank, and its first Say point names the project and what it does in plain words ("<project>: <what it does>"), never a generic problem the candidate could have had. Pick the story whose situation matches the question (a customer problem that became a feature → that story, not a process description).
 
 ## Question card (the only format)
 

@@ -384,6 +384,21 @@ describe("interview parsing and shared rules", () => {
   });
 });
 
+describe("story fit for tool and AI questions (#24)", () => {
+  it("tool, AI, and project questions pick a project story whose first Say point names the project", async () => {
+    const { readFileSync } = await import("node:fs");
+    const skill = readFileSync(".agents/skills/jobsensei-interview-pipeline/SKILL.md", "utf8");
+    const fit = skill.slice(skill.indexOf("**Story fit.**"), skill.indexOf("## Question card"));
+    expect(fit).toMatch(/question about tools, AI use, or projects/);
+    expect(fit).toMatch(/first Say point names the project and what it does/);
+    expect(fit).toMatch(/never a generic problem/);
+    // One owner: the rule lives only in the pipeline skill's story-fit paragraph.
+    for (const file of [".agents/skills/jobsensei-interview-coach/SKILL.md", ".agents/workflows/jobsensei-story-bank.md", "AGENTS.md"]) {
+      expect(readFileSync(file, "utf8"), file).not.toMatch(/first Say point names the project/);
+    }
+  });
+});
+
 describe("pressure questions", () => {
   it("are part of every round's rules, with story fit and a story map", async () => {
     const { readFileSync } = await import("node:fs");

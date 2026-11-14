@@ -25,7 +25,7 @@ Audit date: 2026-10-23, updated after Phase 4. ⚠ marks copies still known to c
 | Stretch score | `electron/stretch-score.ts` (called from validation) | Overview `StretchSummary`; `stretch-score.test.ts` |
 | Draft guards (unsupported skills, earlier roles, restated requirements) | `pruneUnsupportedSkills` (application-artifacts), `expandBundleBaselines` / `pruneBundleSkills` (finalize), `restatedRequirements` (validation) | `draft-guards.test.ts` |
 | Skills line count / Languages line | `application-artifacts.ts` | Pipeline skill "curate categories" (truth rule folded into AGENTS.md 2026-10-24) |
-| Interview rules (framing, knowability, question card, gap questions, no overlap, One-Pass flow) | `interview-pipeline/SKILL.md` | Pointers: `AGENTS.md`, `PRODUCT_FLOWS.md` (user summary), coach + challenge skills. Checked by `interview:check`; tests in `interview-check.test.ts` |
+| Interview rules (framing, knowability, question card, story fit incl. tool/AI questions → project stories, gap questions, no overlap, One-Pass flow) | `interview-pipeline/SKILL.md` | Pointers: `AGENTS.md`, `PRODUCT_FLOWS.md` (user summary), coach + challenge skills. Checked by `interview:check`; tests in `interview-check.test.ts` |
 | Company research format | `interview-pipeline/references/research.md` (loaded only when research is written); checked by `interview:check` | — |
 | Debrief mode | `interview-pipeline/references/debrief.md` | Pipeline SKILL points to it |
 | Interview round archetypes and `prep.md` sections | `interview-pipeline/references/stage-0N-*.md` (no card format there) | — |
