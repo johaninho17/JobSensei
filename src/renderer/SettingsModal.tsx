@@ -329,7 +329,7 @@ export function SettingsModal({
               <div className="settings-group">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <h3 className="settings-group-title" id="settings-tone-and-positioning-presets">Tone and positioning presets</h3>
-                  <span style={{ fontSize: "0.75rem", color: "var(--color-fg-muted)" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
                     Generated dynamically from your profile & career discipline
                   </span>
                 </div>
@@ -343,7 +343,7 @@ export function SettingsModal({
                       onClick={() => setVoice({ ...voice, tonePreset: preset.id })}
                     >
                       <strong>{preset.name}</strong>
-                      <p style={{ fontWeight: 600, color: "var(--color-fg-primary)", marginBottom: "4px" }}>{preset.tagline}</p>
+                      <p style={{ fontWeight: 600, color: "var(--ink)", marginBottom: "4px" }}>{preset.tagline}</p>
                       <p>{preset.description}</p>
                     </button>
                   ))}
@@ -361,9 +361,9 @@ export function SettingsModal({
                   placeholder="e.g. Speak candidly, emphasize measurable business impact, and use plain spoken English."
                   style={{
                     width: "100%",
-                    background: "var(--color-bg-surface-elevated)",
-                    color: "var(--color-fg-primary)",
-                    border: "1px solid var(--color-border-subtle)",
+                    background: "var(--raised)",
+                    color: "var(--ink)",
+                    border: "1px solid var(--line)",
                     borderRadius: "6px",
                     padding: "8px 12px",
                     fontSize: "0.85rem",

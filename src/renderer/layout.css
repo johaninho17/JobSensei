@@ -47,7 +47,7 @@
 .segmented { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: var(--radius-s); background: var(--sunken); }
 .segmented button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 var(--space-3); border: 0; border-radius: 4px; color: var(--muted); background: none; font: 600 var(--fs-13) var(--font-ui); cursor: pointer; }
 .segmented button span { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
-.segmented button[aria-pressed="true"] { color: var(--ink); background: var(--raised); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.segmented button[aria-pressed="true"] { color: var(--ink); background: var(--raised); box-shadow: var(--shadow-s); }
 .segmented button:hover:not([aria-pressed="true"]) { color: var(--ink); }
 
 /* ---------- Shell ---------- */
@@ -68,7 +68,7 @@
 .side-nav { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .side-nav button, .side-foot button { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 38px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-s); color: var(--ink); background: none; font: 500 var(--fs-15) var(--font-ui); text-align: left; cursor: pointer; }
 .side-nav button:hover, .side-foot button:hover:not(:disabled), .side-recent button:hover { background: var(--hover); }
-.side-nav button[aria-current="page"] { background: var(--raised); box-shadow: inset 3px 0 0 var(--accent), 0 1px 2px rgba(0, 0, 0, .08); font-weight: 650; }
+.side-nav button[aria-current="page"] { background: var(--raised); box-shadow: inset 3px 0 0 var(--accent), var(--shadow-s); font-weight: 650; }
 .nav-icon { flex: 0 0 auto; color: var(--muted); }
 .side-nav button[aria-current="page"] .nav-icon { color: var(--accent); }
 .side-count { margin-left: auto; color: var(--muted); font-size: var(--fs-13); font-variant-numeric: tabular-nums; }
@@ -329,22 +329,6 @@
 
 /* Board: one column per status; drag or use the card's status menu. */
 .jobs-home.is-board { max-width: none; }
-.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(200px, 1fr); gap: var(--space-3); overflow-x: auto; padding-bottom: var(--space-3); }
-.board-col { display: flex; flex-direction: column; gap: var(--space-2); min-height: 200px; align-self: start; padding: var(--space-2); border: 1px solid transparent; border-radius: var(--radius-m); background: var(--sunken); }
-.board-col.is-over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--sunken)); }
-.board-col h2 { display: flex; align-items: center; justify-content: space-between; margin: 0; padding: var(--space-1) var(--space-1) var(--space-2); font: 600 var(--fs-13) var(--font-ui); }
-.board-col h2 > span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; }
-.board-col ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.board-card { display: grid; gap: 4px; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--raised); cursor: grab; }
-.board-card:active { cursor: grabbing; }
-.board-card.is-busy { opacity: .6; }
-.board-card-open { display: grid; padding: 0; border: 0; color: var(--ink); background: none; font: inherit; text-align: left; cursor: pointer; }
-.board-card-open strong { font-weight: 650; }
-.board-card-open span { color: var(--muted); font-size: var(--fs-13); }
-.board-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--fs-13); }
-.board-card-move { margin-left: auto; }
-.board-card-move select { max-width: 110px; min-height: 26px; border: 1px solid var(--line); border-radius: var(--radius-s); color: var(--muted); background: var(--canvas); font: var(--fs-12) var(--font-ui); }
-.board-empty { margin: var(--space-4) 0; color: var(--muted); font-size: var(--fs-13); text-align: center; }
 .interview-rows li.is-closed { opacity: .6; }
 
 /* Application check: plain-language status first, pipeline diagnostics folded away. */
@@ -385,11 +369,6 @@
 .live-window-message { padding: var(--space-4); }
 .live.is-compact .live-head > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .live.is-compact .live-count { white-space: nowrap; }
-.board-col h2 > span:first-child { color: var(--ink); }
-.board-more { align-self: center; font-size: var(--fs-13); }
-.board-card { position: relative; }
-.board-card .job-more { position: absolute; top: 4px; right: 4px; }
-.board-card-open { padding-right: 26px; }
 
 /* ---------- Phase 6: run status, add a job, setup ---------- */
 .run-status { display: grid; gap: 2px; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); background: var(--raised); font-size: var(--fs-13); }
@@ -418,7 +397,7 @@
 .job-actions-for { margin: 0; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); color: var(--muted); font-size: var(--fs-12); }
 
 /* Overflow guards: long evidence IDs, URLs, and titles wrap instead of spilling out of panels and cards. */
-.overview-panel, .icard, .board-card, .job-card, .app-check, .next-step, .setup-check, .interview-row, .run-status { min-width: 0; overflow-wrap: anywhere; }
+.overview-panel, .icard, .job-card, .app-check, .next-step, .setup-check, .interview-row, .run-status { min-width: 0; overflow-wrap: anywhere; }
 .overview-grid > *, .iv-qlayout > *, .job-card-grid > * { min-width: 0; }
 .tracker-dates { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .tracker-dates input, .tracker-notes textarea { min-width: 0; max-width: 100%; box-sizing: border-box; }
@@ -611,7 +590,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .job-head-actions .job-pdf-export { display: inline-flex; align-items: center; gap: var(--space-2); }
 /* Next step as one slim line. */
 .next-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-2) var(--space-3); border-left: 3px solid var(--brass); border-radius: var(--radius-s); background: var(--brass-tint); }
-.next-bar-label { color: var(--brass); font: 700 var(--fs-12) var(--font-ui); text-transform: uppercase; letter-spacing: .04em; }
+.next-bar-label { color: var(--brass); font: 700 var(--fs-12) var(--font-ui); }
 .next-bar-title { flex: 1 1 200px; min-width: 0; font-size: var(--fs-15); }
 .next-bar .btn-primary { min-height: 32px; padding: 0 var(--space-3); font-size: var(--fs-13); }
 .next-bar-more summary { width: auto; padding: 0 var(--space-2); font: 600 var(--fs-13) var(--font-ui); }
@@ -760,7 +739,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .find-facts { color: var(--muted); font-size: var(--fs-13); }
 .find-why { font-size: var(--fs-13); }
 .find-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); }
-.find-tag { padding: 1px 8px; border-radius: var(--radius-pill); background: var(--brass-tint); color: var(--ink); font-size: var(--fs-12, 12px); }
+.find-tag { padding: 1px 8px; border-radius: var(--radius-pill); background: var(--brass-tint); color: var(--ink); font-size: var(--fs-12); }
 .find-tag.is-blocker { background: var(--risk-tint); color: var(--risk); }
 .find-tag.is-gap { background: transparent; border: 1px solid var(--line); color: var(--muted); }
 .find-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); justify-content: flex-end; align-items: center; max-width: 260px; }
@@ -850,11 +829,11 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .pill-group { display: flex; flex-wrap: wrap; gap: 6px; }
 .pill { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-pill); background: none; color: var(--ink); font: 500 var(--fs-13) var(--font-ui); cursor: pointer; }
 .pill small { color: var(--muted); font-size: var(--fs-12); }
-.pill[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent)); color: var(--ink); }
+.pill[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--ink); }
 .jobs-filters { position: relative; }
 .jobs-filters > summary { list-style: none; }
 .jobs-filters > summary::-webkit-details-marker { display: none; }
-.jobs-filters-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: min(420px, 86vw); display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md, 10px); background: var(--surface, var(--canvas)); box-shadow: 0 12px 32px rgb(0 0 0 / 0.16); }
+.jobs-filters-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: min(420px, 86vw); display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); box-shadow: var(--shadow); }
 .jobs-filter-row { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: var(--space-3); font-size: var(--fs-13); }
 .jobs-filter-row > span { color: var(--muted); }
 .jobs-filter-hint { margin: 0; font-size: var(--fs-12); }
@@ -959,7 +938,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 
 /* Candidates page: the recruiter's home when no candidate is open (recruiter plan R8) */
 .candidates-home { min-height: 100vh; background: var(--canvas); color: var(--ink); }
-.candidates-nav { display: flex; gap: var(--space-1); padding: var(--space-2) var(--space-5, 24px) 0; border-bottom: 1px solid var(--line); }
+.candidates-nav { display: flex; gap: var(--space-1); padding: var(--space-2) var(--space-5) 0; border-bottom: 1px solid var(--line); }
 .candidates-nav button { padding: var(--space-2) var(--space-3); border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: none; font: 600 var(--fs-13) var(--font-ui); cursor: pointer; }
 .candidates-nav button[aria-current="page"] { color: var(--ink); border-bottom-color: var(--brass); }
 .recruiter-settings { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 200px); margin-top: 0; overflow-y: auto; }
@@ -978,9 +957,9 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .base-resume-tab .document-meta { display: none; }
 .base-resume-read { margin: var(--space-2) 0 var(--space-3); }
 .base-resume-read ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); color: var(--muted); font-size: var(--fs-13); }
-.candidates-top { display: flex; justify-content: space-between; align-items: center; padding: var(--space-3) var(--space-5, 24px); border-bottom: 1px solid var(--line); }
+.candidates-top { display: flex; justify-content: space-between; align-items: center; padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--line); }
 .candidates-brand { font-family: var(--font-display); font-size: var(--fs-15); font-weight: 600; }
-.candidates-page { max-width: 1080px; margin: 0 auto; padding: var(--space-5, 24px); }
+.candidates-page { max-width: 1080px; margin: 0 auto; padding: var(--space-5); }
 .candidates-head { display: flex; justify-content: space-between; align-items: end; gap: var(--space-3); margin-bottom: var(--space-3); }
 .candidates-table td:first-child .btn-link { font-weight: 600; }
 
@@ -1016,7 +995,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .report-dates label { display: grid; gap: var(--space-1); font-size: var(--fs-13); color: var(--muted); }
 
 /* Agy panel: why it switched to Console */
-.console-note { margin: 0; padding: var(--space-2) var(--space-3); font-size: var(--fs-13); color: #f3f1e8; background: color-mix(in srgb, var(--accent) 35%, #10201a); }
+.console-note { margin: 0; padding: var(--space-2) var(--space-3); font-size: var(--fs-13); color: var(--term-ink); background: color-mix(in srgb, var(--term-leaf) 28%, var(--term-bg)); }
 .console-note .btn-link { color: inherit; }
 
 /* Docs page (DocsView.tsx) */
