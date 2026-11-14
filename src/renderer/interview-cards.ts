@@ -162,3 +162,22 @@ export function splitIds(value: string): { text: string; ids: string[] } {
     .trim();
   return { text, ids: [...new Set(ids)] };
 }
+
+/** Which question cards are open. A click opens one card and closes the rest; "Expand all" may open many. */
+export type OpenCards = ReadonlySet<string>;
+
+/** Click on a card: an open card closes; a closed card opens alone. */
+export function toggleCard(open: OpenCards, id: string): Set<string> {
+  if (open.has(id)) { const next = new Set(open); next.delete(id); return next; }
+  return new Set([id]);
+}
+
+/** Jump to a card (question rail): it opens alone. */
+export function openOnly(id: string): Set<string> {
+  return new Set([id]);
+}
+
+/** Arrow keys from one card to the next: when exactly one card is open, the open card follows. */
+export function moveOpen(open: OpenCards, toId: string): Set<string> {
+  return open.size === 1 ? new Set([toId]) : new Set(open);
+}
