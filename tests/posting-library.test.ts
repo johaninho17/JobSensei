@@ -176,8 +176,8 @@ describe("candidate approval, weekly report, insight (recruiter plan R8 P5)", ()
 
   it("counts applications this week, replies, and interviews, and writes the report and shortlist as plain text", async () => {
     const { candidateInsight, reportRows, reportText, shortlistText } = await import("../src/shared/recruiter-insight");
-    const { setDraftsMarkApplied } = await import("../src/shared/tracker");
-    setDraftsMarkApplied(false); // the Recruiter Edition's rule: drafts are not sent until marked applied
+    const { setPdfsMarkApplied } = await import("../src/shared/tracker");
+    setPdfsMarkApplied(false); // the Recruiter Edition: only Mark applied counts
     const job = (status: string | null, appliedAt: string | null, company = "Northstar Labs") => ({ tracker: status ? { status, appliedAt, nextFollowUpAt: null, notes: "", history: [] } : null, hasApplicationMaterials: true, interviewRoundLabel: null, createdAt: "2026-11-01T10:00:00.000Z", company, name: company.toLowerCase(), title: "Support Engineer", rating: 3.6, statusText: status === "interviewing" ? "Interviewing" : "Applied" }) as never;
     const now = new Date(2026, 10, 11, 12);
     const jobs = [job("applied", "2026-11-10"), job("interviewing", "2026-11-03"), job("rejected", "2026-10-20"), job(null, null)];
@@ -189,7 +189,7 @@ describe("candidate approval, weekly report, insight (recruiter plan R8 P5)", ()
     expect(text).toContain("from 2026-11-01 to 2026-11-11: 2 (weekly goal: 5)");
     expect(text).toContain("now interviewing");
     expect(shortlistText("Alex Morgan", [{ id: "paste-x1y2", company: "Juniper Analytics", title: "Analyst", url: "https://example.com/j", reasons: ["Title matches"], proposedAt: "" }])).toContain("1. Juniper Analytics: Analyst (Title matches)\n   https://example.com/j");
-    setDraftsMarkApplied(true);
+    setPdfsMarkApplied(true);
   });
 });
 

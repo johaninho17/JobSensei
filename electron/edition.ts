@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { EDITION_MARKER, featuresFor, folderMismatchMessage, parseEdition, type Edition } from "../src/shared/edition";
-import { setDraftsMarkApplied } from "../src/shared/tracker";
+import { setPdfsMarkApplied } from "../src/shared/tracker";
 import { writeJsonAtomic } from "./persistence";
 
 let cached: Edition | null = null;
@@ -14,7 +14,7 @@ let cached: Edition | null = null;
  */
 export function currentEdition(): Edition {
   const edition = readEdition();
-  setDraftsMarkApplied(featuresFor(edition).draftsMarkApplied);
+  setPdfsMarkApplied(featuresFor(edition).pdfsMarkApplied);
   return edition;
 }
 

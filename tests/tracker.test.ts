@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { updateJobTracker } from "../electron/tracker";
 import { listJobFolders } from "../electron/job-folders";
-import { effectiveAppliedAt, effectiveStatus, followUpDays, staleApplications } from "../src/shared/tracker";
+import { effectiveAppliedAt, effectiveStatus, followUpDays, readyToSend, staleApplications, statusLabel } from "../src/shared/tracker";
 
 async function workspace(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "sensei-tracker-"));
@@ -51,8 +51,21 @@ describe("job tracker", () => {
     const base = { tracker: null, hasApplicationMaterials: false, interviewRoundLabel: null, createdAt: "2026-10-20T12:00:00" };
     expect(effectiveStatus(base)).toBe("saved");
     expect(effectiveAppliedAt(base)).toBeNull();
-    expect(effectiveStatus({ ...base, hasApplicationMaterials: true })).toBe("applied");
-    expect(effectiveAppliedAt({ ...base, hasApplicationMaterials: true })).toBe("2026-10-20");
+    // Drafting is not applying: drafts alone stay saved and read "Drafted"; PDFs are what mark the job applied.
+    const drafted = { ...base, hasApplicationMaterials: true };
+    expect(effectiveStatus(drafted)).toBe("saved");
+    expect(readyToSend(drafted)).toBe(true);
+    expect(statusLabel(drafted)).toBe("Drafted");
+    expect(effectiveAppliedAt(drafted)).toBeNull();
+    const withPdfs = { ...drafted, hasPdfs: true, pdfsAt: "2026-10-23T09:30:00" };
+    expect(effectiveStatus(withPdfs)).toBe("applied");
+    expect(statusLabel(withPdfs)).toBe("Applied");
+    expect(effectiveAppliedAt(withPdfs)).toBe("2026-10-23");
+    expect(effectiveAppliedAt({ ...withPdfs, pdfsAt: null })).toBe("2026-10-20");
+    // The user's choice wins both ways: Undo after PDFs returns to Drafted; a set status ignores PDFs.
+    expect(statusLabel({ ...withPdfs, tracker: { status: "saved", appliedAt: null } })).toBe("Drafted");
+    expect(statusLabel({ ...drafted, tracker: { status: "applied", appliedAt: "2026-10-21" } })).toBe("Applied");
+    expect(statusLabel(base)).toBe("Saved");
     expect(effectiveStatus({ ...base, hasApplicationMaterials: true, interviewRoundLabel: "Recruiter screen" })).toBe("interviewing");
     expect(effectiveStatus({ ...base, hasApplicationMaterials: true, tracker: { status: "rejected", appliedAt: null } })).toBe("rejected");
     expect(followUpDays({ nextFollowUpAt: "2026-10-24" }, new Date(2026, 9, 25))).toBe(-1);
@@ -62,7 +75,7 @@ describe("job tracker", () => {
 
   it("finds applications with no reply after 30 days", () => {
     const now = Date.parse("2026-10-25T12:00:00");
-    const job = (id: string, createdAt: string, tracker: Parameters<typeof staleApplications>[0][number]["tracker"] = null) => ({ id, tracker, hasApplicationMaterials: true, interviewRoundLabel: null, createdAt });
+    const job = (id: string, createdAt: string, tracker: Parameters<typeof staleApplications>[0][number]["tracker"] = null) => ({ id, tracker, hasApplicationMaterials: true, hasPdfs: true, interviewRoundLabel: null, createdAt });
     const jobs = [job("old", "2026-09-01T10:00:00"), job("new", "2026-10-20T10:00:00"), job("touched", "2026-09-01T10:00:00", { status: "applied", appliedAt: "2026-09-01", updatedAt: "2026-10-20T10:00:00Z" } as never), job("closed", "2026-09-01T10:00:00", { status: "rejected", appliedAt: null } as never)];
     expect(staleApplications(jobs, now).map((entry) => entry.id)).toEqual(["old"]);
   });

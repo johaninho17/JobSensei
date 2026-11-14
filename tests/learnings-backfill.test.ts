@@ -7,7 +7,7 @@ import { computeLearnings, furthestRecordedStage } from "../src/shared/learnings
 import { jobFolderSummarySchema, jobTrackerSchema, type JobFolderSummary } from "../src/shared/schemas";
 
 const job = (id: string, extra: Record<string, unknown>): JobFolderSummary => jobFolderSummarySchema.parse({
-  id, relativePath: `jobs/${id}`, name: id, company: id, createdAt: "2026-10-01T00:00:00.000Z", modifiedAt: "2026-10-01T00:00:00.000Z", artifactCount: 3, hasApplicationMaterials: true, ...extra,
+  id, relativePath: `jobs/${id}`, name: id, company: id, createdAt: "2026-10-01T00:00:00.000Z", modifiedAt: "2026-10-01T00:00:00.000Z", artifactCount: 3, hasApplicationMaterials: true, hasPdfs: true, ...extra,
 });
 
 describe("backfill merge", () => {

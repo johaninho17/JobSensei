@@ -193,7 +193,7 @@ async function readCurrentInterviewLabel(jobPath: string): Promise<string | null
 const SUMMARY_INPUTS = [
   "", ".sensei", "interviews", ".sensei/job.json", "job.json", ".sensei/status.json", "status.json", "evaluation.md",
   "original_jd.md", "original_jd.txt", ".sensei/application_run.json", ".sensei/evidence_snapshot.json", ".sensei/tracker.json",
-  "interviews/interview.json", ".sensei/validation_report.json", "interviews/company_research.md",
+  "interviews/interview.json", ".sensei/validation_report.json", "interviews/company_research.md", "pdfs",
 ];
 const summaryCache = new Map<string, { key: string; summary: JobFolderSummary }>();
 const treeCache = new Map<string, { key: string; node: FileTreeNode | null }>();
@@ -252,7 +252,10 @@ async function readJobSummary(path: string, name: string): Promise<JobFolderSumm
   const tracker = await readJobTracker(path);
   const interviewRoundCount = await countInterviewRounds(path);
   const posting = await readPostingRecord(path);
-  const pdfs = await readdir(join(path, "pdfs")).then((names) => names.filter((file) => /\.pdf$/i.test(file)).length, () => 0);
+  const pdfNames = await readdir(join(path, "pdfs")).then((names) => names.filter((file) => /\.pdf$/i.test(file)), () => [] as string[]);
+  const pdfs = pdfNames.length;
+  const pdfTimes = await Promise.all(pdfNames.map((file) => stat(join(path, "pdfs", file)).then((entry) => entry.mtimeMs, () => 0)));
+  const pdfsAt = pdfs ? new Date(Math.max(...pdfTimes)).toISOString() : null;
   const record = buildJobRecord({
     jobId: name,
     posting,
@@ -263,7 +266,7 @@ async function readJobSummary(path: string, name: string): Promise<JobFolderSumm
     documents: { evaluation: Boolean(evaluation.trim()), resume: hasResume, coverLetter: hasCoverLetter, answers: files.some((file) => file.isFile() && file.name === "application_answers.md"), pdfs },
     preparedRounds: interviewRoundCount,
     tracker,
-    status: effectiveStatus({ tracker, hasApplicationMaterials, interviewRoundLabel }),
+    status: effectiveStatus({ tracker, hasApplicationMaterials, interviewRoundLabel, hasPdfs: pdfs > 0 }),
     letterSkipped: Boolean(await readJson(join(path, ".sensei", "validation_report.json")).then((report) => report.coverLetterSkipped)),
   });
   await saveJobRecord(path, record).catch(() => undefined);
@@ -284,6 +287,8 @@ async function readJobSummary(path: string, name: string): Promise<JobFolderSumm
     interviewRoundCount,
     role: await readRoleFacts(path),
     hasApplicationMaterials,
+    hasPdfs: pdfs > 0,
+    pdfsAt,
     tracker,
     health: record.health,
     gapTerms: record.gapTerms,
