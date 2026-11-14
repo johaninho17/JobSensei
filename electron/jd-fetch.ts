@@ -128,8 +128,9 @@ export function extractJobDescription(html: string, url: string): Omit<FetchedJo
   }
   const rawPageTitle = decodeEntities(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim() ?? "") || null;
   const pageTitle = rawPageTitle ? splitPageTitle(rawPageTitle) : null;
-  const title = posting?.title?.trim() || pageTitle?.title || null;
-  const company = (typeof posting?.hiringOrganization === "string" ? posting.hiringOrganization : posting?.hiringOrganization?.name)?.trim() || pageTitle?.company || null;
+  const title = (posting?.title ? decodeEntities(posting.title).trim() : "") || pageTitle?.title || null;
+  const organization = typeof posting?.hiringOrganization === "string" ? posting.hiringOrganization : posting?.hiringOrganization?.name;
+  const company = (organization ? decodeEntities(organization).trim() : "") || pageTitle?.company || null;
   const location = locationText(posting?.jobLocation);
   const pay = pagePay(posting, html);
   const body = posting?.description ? htmlToText(decodeEntities(posting.description)) : htmlToText(html);
@@ -171,10 +172,71 @@ function cleanExtracted(extracted: Extracted): { extracted: Extracted; form: str
   return { extracted: { ...extracted, markdown }, form };
 }
 
-/** Fetches a posting link (apply-page links are turned into the posting first) and cleans it. */
-export async function fetchAndClean(url: string, fetcher: typeof fetch): Promise<{ extracted: Extracted; form: string | null }> {
+/**
+ * Loads a page in a real browser and returns its HTML after scripts ran (Workday, SmartRecruiters, iCIMS, and company
+ * career sites that build the posting with JavaScript). Set by the app at start (electron/page-render.ts); command-line
+ * runs and tests have none and read the plain page only.
+ */
+type PageRenderer = (url: string) => Promise<string | null>;
+let pageRenderer: PageRenderer | null = null;
+export function setPageRenderer(renderer: PageRenderer | null): void { pageRenderer = renderer; }
+
+const bodyLength = (extracted: Extracted) => extracted.markdown.replace(/^[\s\S]*?\*\*Source:\*\*[^\n]*\n/, "").trim().length;
+
+/**
+ * A company career page that embeds a job board's posting (Greenhouse `gh_jid` pages, Lever or Ashby frames): the
+ * board's own posting link, which reads cleanly.
+ */
+export function embeddedPostingUrl(html: string, pageUrl: string): string | null {
+  const embed = html.match(/(?:boards|job-boards)\.greenhouse\.io\/embed\/job_(?:app|board)[^"'\s>]*/i)?.[0].replaceAll("&amp;", "&") ?? "";
+  const ghFor = embed.match(/[?&]for=([A-Za-z0-9_-]+)/)?.[1];
+  const token = embed.match(/[?&]token=(\d+)/)?.[1] ?? new URL(pageUrl).searchParams.get("gh_jid");
+  if (ghFor && token) return `https://job-boards.greenhouse.io/${ghFor}/jobs/${token}`;
+  const direct = html.match(/https:\/\/(?:jobs\.lever\.co\/[A-Za-z0-9_.-]+\/[0-9a-f-]{36}|jobs\.ashbyhq\.com\/[A-Za-z0-9_.%-]+\/[0-9a-f-]{36}|(?:boards|job-boards)\.greenhouse\.io\/[A-Za-z0-9_-]+\/jobs\/\d+)/i)?.[0];
+  return direct && singlePostingOnPage(html, direct) ? direct : null;
+}
+
+/** A page that links one posting many times (its apply button or frame), not a list of many postings. */
+function singlePostingOnPage(html: string, link: string): boolean {
+  const all = new Set(html.match(/https:\/\/(?:jobs\.lever\.co|jobs\.ashbyhq\.com|(?:boards|job-boards)\.greenhouse\.io)\/[^"'\s<>?#]+/gi) ?? []);
+  return all.size === 1 || [...all].every((other) => other.startsWith(link));
+}
+
+/** The page's posting, from the plain page or (when that has too little text) the rendered one. */
+async function readPage(target: string, fetcher: typeof fetch, render: boolean, depth = 0): Promise<Extracted> {
+  const renderer = render ? pageRenderer : null;
+  let html: string | null = null;
+  let failure: unknown = null;
+  try { html = await fetchPage(target, fetcher); } catch (error) { failure = error; }
+  const tryEmbedded = async (page: string): Promise<Extracted | null> => {
+    const embedded = depth === 0 ? embeddedPostingUrl(page, target) : null;
+    if (!embedded || embedded === target) return null;
+    const inner = await readPage(postingUrl(embedded), fetcher, render, depth + 1).catch(() => null);
+    return inner && bodyLength(inner) >= MIN_DESCRIPTION_CHARS ? { ...inner, url: target } : null;
+  };
+  if (html) {
+    const fromEmbed = await tryEmbedded(html);
+    if (fromEmbed) return fromEmbed;
+    const extracted = extractJobDescription(html, target);
+    if (bodyLength(extracted) >= MIN_DESCRIPTION_CHARS || !renderer) return extracted;
+  }
+  const rendered = renderer ? await renderer(target).catch(() => null) : null;
+  if (rendered) {
+    const fromEmbed = await tryEmbedded(rendered);
+    if (fromEmbed) return fromEmbed;
+    return extractJobDescription(rendered, target);
+  }
+  if (html) return extractJobDescription(html, target);
+  throw failure instanceof Error ? failure : new Error(String(failure));
+}
+
+/**
+ * Fetches a posting link (apply-page links are turned into the posting first) and cleans it. `render: false` skips
+ * the browser fallback (Job Search checks many links and only keeps board postings, which read without it).
+ */
+export async function fetchAndClean(url: string, fetcher: typeof fetch, options: { render?: boolean } = {}): Promise<{ extracted: Extracted; form: string | null }> {
   const target = postingUrl(url);
-  return cleanExtracted(await fetchOracleCloudPosting(target, fetcher) ?? extractJobDescription(await fetchPage(target, fetcher), target));
+  return cleanExtracted(await fetchOracleCloudPosting(target, fetcher) ?? await readPage(target, fetcher, options.render ?? true));
 }
 
 const ORACLE_CX = /^https:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)*\.oraclecloud\.com)\/hcmUI\/CandidateExperience\/[a-z-]+\/sites\/([A-Za-z0-9_]+)\/(?:job|requisitions\/preview)\/(\d+)/i;
@@ -323,8 +385,9 @@ export async function stageLinkJobDescription(workspacePath: string, url: string
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Couldn't open this posting (${message.replace(/\n[\s\S]*/, "")}). Paste the job description instead.`);
   }
-  const bodyChars = extracted.markdown.replace(/^[\s\S]*?\*\*Source:\*\*[^\n]*\n/, "").trim().length;
-  if (bodyChars < MIN_DESCRIPTION_CHARS) throw new Error("Couldn't read a job description from this page (it may need JavaScript or block bots). Paste the job description instead.");
+  if (bodyLength(extracted) < MIN_DESCRIPTION_CHARS) throw new Error(signInWall(extracted.markdown)
+    ? "This site only shows the posting after signing in (LinkedIn, Indeed, and similar). Open the job on the company's own careers page and paste that link, or paste the job description."
+    : "Couldn't read a job description from this page. Paste the job description instead.");
   const { markdown, ...rest } = extracted;
   const meta = { ...rest, fetchedAt: now.toISOString() };
   const paths = stagedPaths(workspacePath, id);
@@ -333,6 +396,10 @@ export async function stageLinkJobDescription(workspacePath: string, url: string
   await writeJsonAtomic(paths.meta, meta);
   await writeForm(paths.form, form);
   return meta;
+}
+
+function signInWall(markdown: string): boolean {
+  return /\b(?:sign in|log in|join now|create (?:an )?account)\b/i.test(markdown) && /linkedin|indeed|glassdoor|ziprecruiter|wellfound|otta/i.test(markdown);
 }
 
 /** Saves an already fetched and cleaned posting under a paste ID, so the queue loads it like any other. */

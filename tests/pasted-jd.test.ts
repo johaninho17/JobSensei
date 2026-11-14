@@ -123,7 +123,7 @@ describe("links fetched by the app (Agy's sandbox has no network)", () => {
     const offline = (async () => { throw new TypeError("fetch failed"); }) as unknown as typeof fetch;
     await expect(stageLinkJobDescription("/tmp/unused", "https://jobs.example.com/x", "paste-link-0002", offline)).rejects.toThrow(/Couldn't open this posting \(fetch failed\)\. Paste the job description instead\./);
     const empty = (async () => new Response("<html><body>Loading…</body></html>", { status: 200 })) as unknown as typeof fetch;
-    await expect(stageLinkJobDescription("/tmp/unused", "https://jobs.example.com/y", "paste-link-0003", empty)).rejects.toThrow(/may need JavaScript/);
+    await expect(stageLinkJobDescription("/tmp/unused", "https://jobs.example.com/y", "paste-link-0003", empty)).rejects.toThrow(/Couldn't read a job description from this page/);
     expect(isNetworkError("fetch failed")).toBe(true);
     expect(isNetworkError("The posting returned HTTP 404.")).toBe(false);
   });
