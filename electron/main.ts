@@ -123,12 +123,27 @@ function runSmokeCheck(window: BrowserWindow, outPath: string): void {
  * waits up to 45 s for Agy's own welcome or sign-in screen. Fails with the start error or Agy's last output.
  */
 async function smokeStartAgy(): Promise<{ ok: boolean; detail: string }> {
-  try {
-    if (features.candidates && recruiterRoot) {
-      const { addCandidate, setActiveCandidate } = await import("./candidates.js");
-      const entry = await addCandidate(recruiterRoot, "Smoke Test");
+  if (!features.candidates || !recruiterRoot) return smokeAgyOnce();
+  // Recruiter Edition: start Agy for one candidate, switch to a second, then back, the way a recruiter works. Each
+  // switch moves the candidates' Agy history, which is where Windows can refuse (an open file can't be moved).
+  const { addCandidate, setActiveCandidate } = await import("./candidates.js");
+  const first = await addCandidate(recruiterRoot, "Smoke Test");
+  const second = await addCandidate(recruiterRoot, "Smoke Second");
+  const steps: string[] = [];
+  for (const [label, entry] of [["first candidate", first], ["second candidate", second], ["back to the first", first]] as const) {
+    try {
+      await closeCandidateFolder();
       await openCandidateFolder(await setActiveCandidate(recruiterRoot, entry.id));
-    }
+    } catch (error) { return { ok: false, detail: `Switching to the ${label} failed: ${error instanceof Error ? error.message : String(error)}` }; }
+    const result = await smokeAgyOnce();
+    steps.push(`${label}: ${result.ok ? "ok" : result.detail}`);
+    if (!result.ok) return { ok: false, detail: steps.join(" | ") };
+  }
+  return { ok: true, detail: steps.join(" | ") };
+}
+
+async function smokeAgyOnce(): Promise<{ ok: boolean; detail: string }> {
+  try {
     const started = await startAgyTerminal();
     if (!started.agyStarted) return { ok: false, detail: "Agy was not found; a plain shell started instead." };
     const end = Date.now() + 45_000;

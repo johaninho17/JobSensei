@@ -58,7 +58,21 @@ async function moveEntries(fromRoot: string, toRoot: string): Promise<void> {
     const to = join(toRoot, ...entry.split("/"));
     await rm(to, { recursive: true, force: true });
     await mkdir(dirname(to), { recursive: true });
-    await rename(from, to);
+    await renameWhenFree(from, to);
+  }
+}
+
+/**
+ * Windows locks a file while any process has it open, so a rename right after Agy closes can fail for a moment
+ * (EBUSY/EPERM/EACCES) while its helper processes let go. Retries for up to ~6 s before giving up (2026-11-14).
+ */
+export async function renameWhenFree(from: string, to: string, attempts = 12, waitMs = 500): Promise<void> {
+  for (let attempt = 1; ; attempt += 1) {
+    try { await rename(from, to); return; } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (attempt >= attempts || !["EBUSY", "EPERM", "EACCES"].includes(code ?? "")) throw error;
+      await new Promise((done) => setTimeout(done, waitMs));
+    }
   }
 }
 

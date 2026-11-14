@@ -1,6 +1,7 @@
 import type { IPty } from "node-pty";
 import { workspaceFile } from "./layout";
 import { statSync } from "node:fs";
+import { execFile } from "node:child_process";
 import { delimiter, dirname, join, resolve } from "node:path";
 import type { ContextManifest } from "../src/shared/schemas";
 import { classifyAgyScreen, plainTerminalText } from "../src/shared/job-queue";
@@ -173,6 +174,9 @@ export class TerminalSession {
     const alive = () => { try { process.kill(target, 0); return true; } catch { return false; } };
     const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
     const exited = new Promise<void>((done) => ptyProcess.onExit(() => done()));
+    // Windows has no process groups: stop Agy and every process it started (its helpers can hold files open, and
+    // Windows won't move an open file, so the next candidate's history couldn't be swapped in).
+    if (windows) await new Promise<void>((done) => execFile("taskkill", ["/PID", String(ptyProcess.pid), "/T", "/F"], () => done()));
     this.stop();
     if (!windows) { try { process.kill(target, "SIGTERM"); } catch { /* already gone */ } }
     await Promise.race([exited, sleep(timeoutMs)]);
