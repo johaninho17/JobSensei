@@ -6,7 +6,7 @@ import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, readyT
 import { type Readiness } from "../shared/readiness";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { CompanyStrip, JobFilters, SavedViews, storeJobViews, storedJobViews } from "./JobOrganize";
-import { GROUPINGS, NO_FACETS, groupJobs, matchesFacets, type Grouping, type JobFacets, type JobView } from "../shared/job-organize";
+import { GROUPINGS, NO_FACETS, countWithin, groupJobs, matchesFacets, type Grouping, type JobFacets, type JobView } from "../shared/job-organize";
 import { FitBadge, JOB_FAVORITES_KEY, type JobWorkspaceTab, type QueueJob, TrackerPill, displayJobName, formatJobDate, formatTrackerDate, messageOf, plural, storedFavoriteJobIds } from "./app-shared";
 
 // CSV columns follow the edition: no follow-up or interview columns where those features are left out.
@@ -107,12 +107,14 @@ export function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onM
   };
   const tab: JobsTab = JOB_TABS.some((candidate) => candidate.id === statusGroup) ? statusGroup as JobsTab : "active";
   const inTab = (job: JobFolderSummary, value: JobsTab) => { if (value === "reached") return reachedInterview(job); if (value === "ready") return readyToSend(job); const statuses = JOB_TABS.find((candidate) => candidate.id === value)!.statuses; if (value === "saved" && readyToSend(job)) return false; return !statuses || statuses.includes(effectiveStatus(job)); };
-  const filterCounts = Object.fromEntries((["all", "active", "interviewing", "follow-up", "review", "favorites"] as JobsFilter[]).map((value) => [value, jobs.filter((job) => matches(job, value)).length])) as Record<JobsFilter, number>;
+  // The jobs the open tab, filters, and search show; a quick filter's count is how many of these it keeps (#15).
+  const normalizedQuery = query.trim().toLowerCase();
+  const inView = (job: JobFolderSummary) => inTab(job, tab) && matchesFacets(job, facets) && (!normalizedQuery || `${job.company ?? ""} ${job.title ?? ""} ${job.name} ${job.location ?? ""} ${effectiveStatus(job)} ${job.interviewRoundLabel ?? ""} ${job.tracker?.notes ?? ""}`.toLowerCase().includes(normalizedQuery));
+  const filterCounts = countWithin(jobs, inView, ["all", "active", "interviewing", "follow-up", "review", "favorites"] as JobsFilter[], matches);
   const visibleJobs = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
     const text = (value: string | null | undefined, fallback: string) => (value ?? fallback).toLowerCase();
     return jobs
-      .filter((job) => matches(job, filter) && inTab(job, tab) && matchesFacets(job, facets) && (!normalized || `${job.company ?? ""} ${job.title ?? ""} ${job.name} ${job.location ?? ""} ${effectiveStatus(job)} ${job.interviewRoundLabel ?? ""} ${job.tracker?.notes ?? ""}`.toLowerCase().includes(normalized)))
+      .filter((job) => matches(job, filter) && inView(job))
       .sort((a, b) => {
         if (sort === "company") return text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
         if (sort === "role") return text(a.title, "").localeCompare(text(b.title, ""));

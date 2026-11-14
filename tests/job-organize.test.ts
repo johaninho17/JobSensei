@@ -69,3 +69,13 @@ describe("organizing jobs", () => {
     expect(findDuplicateJob(jobs, { title: "Solutions Engineer" })).toBeNull();
   });
 });
+
+describe("quick-filter counts (#15)", () => {
+  it("count only the jobs the open tab shows, so each number equals the rows it filters to", async () => {
+    const { countWithin } = await import("../src/shared/job-organize");
+    const jobs = [{ id: "a", status: "applied", fav: true }, { id: "b", status: "applied", fav: false }, { id: "c", status: "rejected", fav: true }, { id: "d", status: "rejected", fav: true }];
+    const appliedTab = (job: { status: string }) => job.status === "applied";
+    const counts = countWithin(jobs, appliedTab, ["all", "favorites"], (job, filter) => filter === "all" || job.fav);
+    expect(counts).toEqual({ all: 2, favorites: 1 });
+  });
+});
