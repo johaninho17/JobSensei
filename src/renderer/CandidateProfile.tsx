@@ -49,7 +49,7 @@ export function BaseResumeTab({ path, read, viewer, onReplace }: { path: string 
     </div>
     {path ? <>
       <p className="muted">{path.split("/").pop()}. Every tailored resume keeps this layout and length.</p>
-      {read.length > 0 && <details className="base-resume-read"><summary>What JobSensei read</summary><ul>{read.map((line) => <li key={line}>{line}</li>)}</ul></details>}
+      {read.length > 0 && <details className="base-resume-read" open={read.some((line) => /Read from a PDF/.test(line))}><summary>What JobSensei read</summary><ul>{read.map((line) => <li key={line}>{line}</li>)}</ul></details>}
       {viewer}
     </> : <p className="muted">No base resume yet. Choose a Word or Markdown resume to start tailoring.</p>}
   </section>;

@@ -4,6 +4,9 @@ import mammoth from "mammoth";
 import { resumeFootprintSchema, type ResumeFootprint } from "../src/shared/schemas";
 import { assertInsideWorkspace } from "./workspace";
 import { experienceBulletLines, mammothHtmlToMarkdown } from "./resume-sections";
+import { featuresFor } from "../src/shared/edition";
+import { currentEdition } from "./edition";
+import { pdfResumeMarkdown } from "./pdf-resume";
 
 const MIN_FOOTPRINT_RATIO = 0.9;
 const MAX_FOOTPRINT_RATIO = 1.15;
@@ -77,6 +80,11 @@ async function docxFootprint(sourcePath: string, buffer: Buffer): Promise<Resume
 }
 
 async function pdfFootprint(sourcePath: string, buffer: Buffer): Promise<ResumeFootprint> {
+  // Where PDFs are read as resumes (features.pdfResumes), bullets are measured from the same reading the parser uses.
+  if (featuresFor(currentEdition()).pdfResumes) {
+    const measured = markdownFootprint(sourcePath, (await pdfResumeMarkdown(buffer)).markdown);
+    if (measured.experienceBulletCount) return resumeFootprintSchema.parse({ ...measured, format: "pdf" });
+  }
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const pdf = await pdfjs.getDocument({ data: Uint8Array.from(buffer) }).promise;
   const pages: string[] = [];

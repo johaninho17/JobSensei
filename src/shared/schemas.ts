@@ -665,7 +665,7 @@ export const canonicalResumeBaselineSchema = z.object({
   baselineId: z.string().min(1),
   sourcePath: z.string().min(1),
   sourceSha256: z.string().min(1),
-  structureSource: z.enum(["markdown", "docx"]),
+  structureSource: z.enum(["markdown", "docx", "pdf"]),
   headerLines: z.array(z.string().min(1)).min(2),
   /** Optional summary section between the header and Skills ("Summary", "Professional Summary", "Profile", "About"). */
   summaryHeadingLine: z.string().min(1).optional(),

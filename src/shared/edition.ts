@@ -29,11 +29,13 @@ export type Features = {
   today: boolean;
   /** Making the PDFs marks a drafted job applied; off where a recruiter sends and marks it. `src/shared/tracker.ts` owns the rule. */
   pdfsMarkApplied: boolean;
+  /** A PDF base resume is read directly (no Word or Markdown copy needed); its structure is shown for checking (pdf-resume.ts). */
+  pdfResumes: boolean;
 };
 
 const FEATURES: Record<Edition, Features> = {
-  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, today: true, pdfsMarkApplied: true },
-  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, today: false, pdfsMarkApplied: false },
+  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, today: true, pdfsMarkApplied: true, pdfResumes: false },
+  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, today: false, pdfsMarkApplied: false, pdfResumes: true },
 };
 
 export type EditionInfo = {

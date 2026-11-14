@@ -3,6 +3,9 @@ import { RESUME_FORMAT_HELP, RESUME_PDF_ONLY } from "../src/shared/readiness";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import mammoth from "mammoth";
+import { featuresFor } from "../src/shared/edition";
+import { currentEdition } from "./edition";
+import { pdfResumeMarkdown } from "./pdf-resume";
 import {
   canonicalResumeBaselineSchema,
   type ApplicationDraft,
@@ -87,7 +90,7 @@ function parseCanonicalMarkdown(
   markdown: string,
   sourcePath: string,
   sourceSha256: string,
-  structureSource: "markdown" | "docx",
+  structureSource: "markdown" | "docx" | "pdf",
   footprint: ResumeFootprint,
   warnings: string[],
 ): CanonicalResumeBaseline {
@@ -237,6 +240,11 @@ export async function loadCanonicalResumeBaseline(workspacePath: string, relativ
       } catch {
         // continue trying next companion candidate
       }
+    }
+    // No Word or Markdown copy beside it: read the PDF itself where the edition allows (features.pdfResumes).
+    if (featuresFor(currentEdition()).pdfResumes) {
+      const { markdown, warnings } = await pdfResumeMarkdown(source);
+      return parseCanonicalMarkdown(markdown, relativePath, sha256(source), "pdf", footprint, warnings);
     }
   }
   throw new Error(extension === ".pdf" ? RESUME_PDF_ONLY : RESUME_FORMAT_HELP);

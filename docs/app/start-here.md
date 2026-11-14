@@ -23,7 +23,7 @@ JobSensei Recruiter Edition tailors resumes for your candidates from their own f
 ## The minimum
 
 1. **Agy signed in, once.** Open the Agy panel and sign in with your account; every candidate uses it. If Agy asks you to pick a colour scheme or agree to its terms, switch the panel to **Console** to see and answer it.
-2. **A candidate with a base resume** (Candidates → Add candidate). The resume as Word (.docx) or Markdown (.md); every tailored resume keeps its layout, sections, and length. A PDF alone can't be read.
+2. **A candidate with a base resume** (Candidates → Add candidate). The resume as Word (.docx), Markdown (.md), or a PDF with selectable text; every tailored resume keeps its sections and length. After adding a PDF, check Profile → Resume → What JobSensei read.
 
 ## What makes it much better
 
