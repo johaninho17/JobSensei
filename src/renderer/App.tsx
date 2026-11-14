@@ -233,7 +233,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         notify("Job queue finished", `${queue.items.filter((item) => item.status === "done").length} drafted, ${queue.items.filter((item) => item.status === "needs_attention").length} need attention`);
       }
       if (JSON.stringify(queue) !== JSON.stringify(queueRef.current)) await saveQueue(queue);
-      if (send) { if (!FEATURES.candidates) setRightPanelOpen(true); await window.sensei.terminal.write(`${promptForItem(send)}\r`); }
+      if (send) { if (!FEATURES.candidates) setRightPanelOpen(true); const text = promptForItem(send); await window.sensei.terminal.write(`${text}\r`); window.dispatchEvent(new CustomEvent("sensei-agy-sent", { detail: { text, label: send.label ?? send.url ?? "Queued job" } })); }
     };
     void tick();
     const timer = window.setInterval(() => void tick(), 5000);

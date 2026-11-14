@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { chatRunState } from "../shared/job-queue";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { type RunStatus } from "../shared/schemas";
@@ -120,7 +121,10 @@ export function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareer
   const [liveNow, setLiveNow] = useState(Date.now());
   const chatStreamRef = useRef<HTMLDivElement>(null);
   const activeAsstIdRef = useRef<string | null>(null);
-  const quietTimerRef = useRef<number | null>(null);
+  const lastOutputAtRef = useRef(0);
+  const activeStartedAtRef = useRef(0);
+  const beginChatRunRef = useRef<(text: string, label?: string, attachedPaste?: PastedBlock, fromQueue?: boolean) => string>(() => "");
+  const finishChatRunRef = useRef<(status: "success" | "error", note?: string) => void>(() => undefined);
   const [chatEntries, setChatEntries] = useState<ChatEntry[]>([
     {
       id: "welcome",
@@ -130,6 +134,32 @@ export function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareer
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     },
   ]);
+
+  // A chat run ends when Agy is idle again (`chatRunState`, the queue's rule), not after a pause in its output.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (!activeAsstIdRef.current) return;
+      void window.sensei.terminal.status().then((state) => {
+        if (!activeAsstIdRef.current) return;
+        const now = Date.now();
+        const run = chatRunState(state, activeStartedAtRef.current, now);
+        if (run === "done") finishChatRunRef.current("success");
+        else if (run === "stopped") finishChatRunRef.current("error", "The terminal stopped before this finished. Use Restart, then send it again.");
+        // A plain shell (Agy not running) has no status line to read: quiet output is the only signal there.
+        else if (run === "unknown" && now - Math.max(lastOutputAtRef.current, activeStartedAtRef.current) > 2500) finishChatRunRef.current("success");
+      }).catch(() => undefined);
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, []);
+  // A job the queue sends to Agy shows in the chat like one the user sent (the queue has already written it).
+  useEffect(() => {
+    const onSent = (event: Event) => {
+      const detail = (event as CustomEvent<{ text: string; label: string }>).detail;
+      if (detail?.text) beginChatRunRef.current(detail.text, detail.label, undefined, true);
+    };
+    window.addEventListener("sensei-agy-sent", onSent);
+    return () => window.removeEventListener("sensei-agy-sent", onSent);
+  }, []);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -148,10 +178,24 @@ export function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareer
     textarea.style.height = `${nextHeight}px`;
   }, [chatInput]);
 
-  const executeCommand = (text: string, label?: string, attachedPaste?: PastedBlock) => {
+  /** Ends the chat entry of the run in progress (if any) with a result. */
+  const finishChatRun = (status: "success" | "error", note?: string) => {
+    const finishedId = activeAsstIdRef.current;
+    if (!finishedId) return;
+    activeAsstIdRef.current = null;
+    const finishTime = Date.now();
+    setChatEntries((prev) => prev.map((entry) => entry.id === finishedId
+      ? { ...entry, status, durationMs: entry.startTime ? finishTime - entry.startTime : undefined, content: note ?? entry.content }
+      : entry));
+  };
+
+  /** Shows a request in the chat as a running entry and returns the text to send. `fromQueue`: the job queue sent it. */
+  const beginChatRun = (text: string, label?: string, attachedPaste?: PastedBlock, fromQueue = false): string => {
+    // One run at a time in the chat: a new request closes the previous entry.
+    finishChatRun("success");
     const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const now = Date.now();
-    const userContent = label ? `⚡ ${label}` : text;
+    const userContent = fromQueue ? `⚡ From the queue: ${label ?? "job"}` : label ? `⚡ ${label}` : text;
     const userMsg: ChatEntry = {
       id: `user-${now}`,
       sender: "user",
@@ -167,6 +211,7 @@ export function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareer
 
     const asstId = `asst-${now}`;
     activeAsstIdRef.current = asstId;
+    activeStartedAtRef.current = now;
     const commandSummary = label || (text.trim() ? (text.length > 40 ? `${text.slice(0, 40)}…` : text) : (attachedPaste ? `Pasted JD (${attachedPaste.lineCount} lines)` : "Task"));
 
     const asstMsg: ChatEntry = {
@@ -181,6 +226,13 @@ export function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareer
     };
 
     setChatEntries((prev) => [...prev, userMsg, asstMsg]);
+    return payload;
+  };
+
+  beginChatRunRef.current = beginChatRun;
+  finishChatRunRef.current = finishChatRun;
+  const executeCommand = (text: string, label?: string, attachedPaste?: PastedBlock) => {
+    const payload = beginChatRun(text, label, attachedPaste);
     if (attachedPaste) {
       // A long paste that is not a job description goes to Agy as one bracketed paste.
       void window.sensei.terminal.write(`\x1b[200~${payload.replace(/\x1b\[20[01]~/g, "")}\x1b[201~`)
@@ -343,21 +395,7 @@ export function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareer
         }));
       }
 
-      if (quietTimerRef.current !== null) window.clearTimeout(quietTimerRef.current);
-      quietTimerRef.current = window.setTimeout(() => {
-        if (activeAsstIdRef.current) {
-          const finishedId = activeAsstIdRef.current;
-          const finishTime = Date.now();
-          setChatEntries((prev) => prev.map((entry) => {
-            if (entry.id === finishedId) {
-              const duration = entry.startTime ? finishTime - entry.startTime : undefined;
-              return { ...entry, status: "success", durationMs: duration };
-            }
-            return entry;
-          }));
-          activeAsstIdRef.current = null;
-        }
-      }, 2500);
+      lastOutputAtRef.current = Date.now();
     });
     const removeExit = window.sensei.terminal.onExit((code) => setStatus(`Terminal exited (${code})`));
     let resizeFrame: number | null = null;

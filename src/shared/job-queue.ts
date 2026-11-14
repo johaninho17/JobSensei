@@ -108,3 +108,15 @@ export function agyReadiness(state: { running: boolean; agy: boolean; startedAt:
   if (state.lastOutputAt && now - state.lastOutputAt < IDLE_MS) return false;
   return (state.screen ?? classifyAgyScreen(plainTerminalText(state.recentOutput))) === "ready";
 }
+
+/**
+ * Whether a run shown in the Agy chat has ended. It uses the queue's own idle rule (`agyReadiness`), never a silence
+ * timer: Agy is routinely quiet for seconds while it thinks or waits on a command. "unknown" = a plain shell (no Agy),
+ * where the caller falls back to quiet output.
+ */
+export function chatRunState(state: Parameters<typeof agyReadiness>[0], startedAt: number, now: number): "running" | "done" | "stopped" | "unknown" {
+  if (!state.running) return "stopped";
+  if (!state.agy) return "unknown";
+  if (now - startedAt < 4000) return "running";
+  return agyReadiness(state, now) ? "done" : "running";
+}
