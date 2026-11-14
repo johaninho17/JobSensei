@@ -8,7 +8,7 @@ import {
 } from "../src/shared/job-search";
 import {
   boardOf, buildRatingPrompt, buildSearchPrompt, parseRatingReply, closedPosting, nameJob, resolveLink, singlePosting, parseSearchReply, postingAgeDays, quickFit, readSearchState, runSearch,
-  readSearchSettings, saveFoundJob, saveSearchSettings, stageFoundJob, vocabularyFrom,
+  markSavedJobQueued, readSearchSettings, saveFoundJob, saveSearchSettings, stageFoundJob, vocabularyFrom,
 } from "../electron/job-search";
 import { buildPostingRecord } from "../electron/posting-record";
 import { boardRef, fitsSearchTitles, titleSimilarity } from "../electron/job-boards";
@@ -172,6 +172,11 @@ describe("search run", () => {
     const jobId = await saveFoundJob(workspace, found.id);
     expect(await readFile(join(workspace, "jobs", jobId, "original_jd.md"), "utf8")).toContain("Northstar Labs");
     expect((await readSearchState(workspace)).items[0]).toMatchObject({ status: "saved", jobId });
+    // Drafting that saved job later (from Jobs or the Saved tab) moves the match to "Sent for drafts".
+    await markSavedJobQueued(workspace, "some-other-job");
+    expect((await readSearchState(workspace)).items[0].status).toBe("saved");
+    await markSavedJobQueued(workspace, jobId);
+    expect((await readSearchState(workspace)).items[0]).toMatchObject({ status: "queued", jobId, autoQueued: false });
 
     // A second run never brings the same posting back, and never removes what's there.
     const again = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner: async () => ({ response: reply, conversationId: null }), now: () => new Date("2026-11-05T13:00:00Z") });

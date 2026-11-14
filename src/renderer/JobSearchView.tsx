@@ -32,11 +32,13 @@ export function runSummary(run: SearchRun): string {
   return `${head}${notes ? ` (${notes})` : ""}.`;
 }
 
-export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
+export function JobSearchView({ status, onQueueFound, onQueueSaved, onOpenJob, onToast }: {
   /** The run's live status, kept by the app so it survives leaving this page. */
   status: SearchStatus;
   /** Sends a found job to the application queue; returns how many jobs are ahead of it. */
   onQueueFound: (id: string, auto: boolean) => Promise<number>;
+  /** Sends a saved match's job (already in Jobs) for drafts; resolves to how many jobs are ahead in the queue. */
+  onQueueSaved: (jobId: string) => Promise<number>;
   onOpenJob: (jobId: string) => void;
   onToast: (message: string, undo?: () => void) => void;
 }) {
@@ -154,6 +156,18 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
     } finally { setBusy(false); }
   }
 
+  /** A saved match already has its job in Jobs; its drafts go into that job. */
+  async function draftSaved(jobId: string) {
+    setBusy(true);
+    try {
+      const ahead = await onQueueSaved(jobId);
+      setState((await window.sensei.jobSearch.get()).state);
+      onToast(`Sent 1 job for drafts${ahead ? ` (${ahead} ahead in the queue)` : ""}.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(reason));
+    } finally { setBusy(false); }
+  }
+
   function renderItem(item: InboxItem) {
     const isSelected = selected.has(item.id);
     const facts = [item.location, item.workSetup, item.pay, capital(item.level), item.postedAt ? `Posted ${item.postedAt}` : null, boardName(item.board)].filter(Boolean);
@@ -178,7 +192,10 @@ export function JobSearchView({ status, onQueueFound, onOpenJob, onToast }: {
           <button className="btn-quiet" disabled={busy} onClick={() => void save([item.id])}>Save for later</button>
           <button className="btn-link" disabled={busy} onClick={() => void dismiss([item.id])}>Dismiss</button>
         </>}
-        {item.status === "saved" && item.jobId && <button className="btn-link" onClick={() => onOpenJob(item.jobId!)}>In Jobs: open</button>}
+        {item.status === "saved" && item.jobId && <>
+          <button className="btn-quiet" disabled={busy} onClick={() => void draftSaved(item.jobId!)}>Draft application</button>
+          <button className="btn-link" onClick={() => onOpenJob(item.jobId!)}>In Jobs: open</button>
+        </>}
         {item.status === "queued" && <span className="muted">{item.autoQueued ? "Sent for drafts automatically" : "Sent for drafts"}{item.queuedAt ? ` · ${new Date(item.queuedAt).toLocaleDateString()}` : ""}</span>}
         {item.status === "dismissed" && <button className="btn-quiet" disabled={busy} onClick={() => void window.sensei.jobSearch.setStatus([item.id], "new").then(setState)}>Restore</button>}
       </div>}

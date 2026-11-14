@@ -343,6 +343,20 @@ export async function stageCleanedPosting(workspacePath: string, id: string, mar
   await writeJsonAtomic(paths.meta, meta);
 }
 
+/**
+ * Sends a job that already has a folder and a posting (saved for later, no drafts yet) to the queue: its own posting
+ * is staged under a paste ID with the job's ID as the suggested ID, so the drafts land in that folder, not a new one.
+ */
+export async function stageSavedJob(workspacePath: string, jobId: unknown, id: string, now = new Date()): Promise<Omit<FetchedJobDescription, "markdown">> {
+  if (typeof jobId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/.test(jobId) || jobId.includes("..")) throw new Error("That isn't a job.");
+  const markdown = await readFile(join(workspacePath, "jobs", jobId, "original_jd.md"), "utf8").catch(() => null);
+  if (!markdown?.trim()) throw new Error("This job has no saved posting to draft from.");
+  const metadata = parseJobDescriptionMetadata(markdown);
+  const meta = { url: metadata.url ?? "saved", fetchedAt: now.toISOString(), title: metadata.title, company: metadata.company, location: metadata.location, suggestedJobId: jobId };
+  await stageCleanedPosting(workspacePath, id, markdown, meta);
+  return meta;
+}
+
 /** Network errors (no route out of a sandbox, DNS, reset), as opposed to a page that couldn't be read. */
 export function isNetworkError(message: string): boolean {
   return /\bfetch failed\b|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EPERM|UND_ERR|network/i.test(message);

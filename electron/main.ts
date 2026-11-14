@@ -10,7 +10,7 @@ import { activeCandidatePath, ensureRecruiterRoot, readRoster } from "./candidat
 import { watch, type FSWatcher } from "node:fs";
 import { updateJobTracker } from "./tracker";
 import { latestRun } from "./run-status";
-import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription } from "./jd-fetch";
+import { setStagedCompany, stagePastedJobDescription, stageLinkJobDescription, stageSavedJob } from "./jd-fetch";
 import { readJobQueue, saveJobQueue } from "./job-queue";
 import { RunWatcher } from "./run-watcher";
 import { createAgyHomeCache, prepareAgyHome, pruneHeadlessConversations, writeSenseiLauncher } from "./agy-home";
@@ -361,6 +361,13 @@ ipcMain.handle("queue:save", async (_event, queue: unknown) => saveJobQueue(requ
 ipcMain.handle("jobs:stage-pasted-jd", async (_event, text: unknown, id: unknown) => stagePastedJobDescription(requireWorkspace(), text, String(id)));
 ipcMain.handle("jobs:set-staged-company", async (_event, id: unknown, company: unknown) => setStagedCompany(requireWorkspace(), String(id), String(company ?? "")));
 ipcMain.handle("jobs:stage-link", async (_event, url: unknown, id: unknown) => stageLinkJobDescription(requireWorkspace(), String(url), String(id)));
+// A saved job (posting only) goes to the queue; a Job Search match saved as that job moves to "Sent for drafts".
+ipcMain.handle("jobs:stage-saved", async (_event, jobId: unknown, id: unknown) => {
+  const workspace = requireWorkspace();
+  const meta = await stageSavedJob(workspace, jobId, String(id));
+  if (features.jobSearch) await (await import("./job-search.js")).markSavedJobQueued(workspace, String(jobId));
+  return meta;
+});
 // Writes only to the file the user picks in the save dialog.
 ipcMain.handle("jobs:export-csv", async (_event, csv: unknown) => {
   if (typeof csv !== "string" || !csv.startsWith("\uFEFF") || csv.length > 10_000_000) throw new Error("The export is invalid.");

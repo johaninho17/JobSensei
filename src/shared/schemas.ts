@@ -1444,6 +1444,8 @@ export interface SenseiApi {
     stagePastedJd(text: string, id: string): Promise<{ company: string | null; title: string | null; suggestedJobId: string | null }>;
     /** Fetches a posting in the app and saves it under a paste ID; throws a plain message when the page can't be read. */
     stageLink(url: string, id: string): Promise<{ company: string | null; title: string | null; suggestedJobId: string | null }>;
+    /** Stages a saved job's own posting for the queue, so its drafts land in that job's folder. */
+    stageSaved(jobId: string, id: string): Promise<{ company: string | null; title: string | null; suggestedJobId: string | null }>;
     /** The company the user named for a saved paste that names none. */
     setStagedCompany(id: string, company: string): Promise<{ company: string | null; title: string | null; suggestedJobId: string | null }>;
   };
