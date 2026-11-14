@@ -231,6 +231,7 @@ ipcMain.handle("profile:update-details", async (_event, details) => updateCandid
   confidentialNames: Array.isArray(details?.confidentialNames) ? details.confidentialNames.filter((value: unknown): value is string => typeof value === "string") : undefined,
   boundaries: Array.isArray(details?.boundaries) ? details.boundaries.filter((value: unknown): value is string => typeof value === "string") : undefined,
   interviewLogistics: details?.interviewLogistics && typeof details.interviewLogistics === "object" ? details.interviewLogistics : undefined,
+  practiceInterviewsAsEvidence: typeof details?.practiceInterviewsAsEvidence === "boolean" ? details.practiceInterviewsAsEvidence : undefined,
 }));
 ipcMain.handle("profile:preview", async () => {
   const workspace = requireWorkspace();

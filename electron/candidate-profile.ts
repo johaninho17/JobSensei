@@ -123,7 +123,7 @@ export async function updateCandidateProfilePreferences(
 /** Settings fields that live outside `preferences`: career direction and the candidate's truth rules. */
 export async function updateCandidateProfileDetails(
   workspacePath: string,
-  details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[]; interviewLogistics?: Partial<InterviewLogistics> },
+  details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[]; interviewLogistics?: Partial<InterviewLogistics>; practiceInterviewsAsEvidence?: boolean },
 ): Promise<CandidateProfile> {
   const current = await readCandidateProfile(workspacePath);
   if (!current) throw new Error("No candidate profile found to update.");
@@ -149,6 +149,7 @@ export async function updateCandidateProfileDetails(
       ...current.truth,
       ...(details.confidentialNames ? { confidentialNames: clean(details.confidentialNames) } : {}),
       ...(details.boundaries ? { boundaries: clean(details.boundaries) } : {}),
+      ...(typeof details.practiceInterviewsAsEvidence === "boolean" ? { practiceInterviewsAsEvidence: details.practiceInterviewsAsEvidence } : {}),
     },
     updatedAt: new Date().toISOString(),
   });

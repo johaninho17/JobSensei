@@ -194,6 +194,8 @@ export const candidateProfileSchema = z.object({
     boundaries: z.array(z.string()).default([]),
     /** Client, partner, or project names that must never appear in public resumes or cover letters. */
     confidentialNames: z.array(z.string().min(1)).default([]),
+    /** Rows from practice (mock) interviews count as career evidence (src/shared/practice-evidence.ts). */
+    practiceInterviewsAsEvidence: z.boolean().default(true),
   }),
   updatedAt: z.string(),
 });
@@ -1407,7 +1409,7 @@ export interface SenseiApi {
     updatePreferences(preferences: CandidateProfile["preferences"]): Promise<CandidateProfile>;
     /** Saves the writing-voice file (context/application_voice_profile.md); returns its path. */
     saveVoice(text: string): Promise<string>;
-    updateDetails(details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[]; interviewLogistics?: Partial<InterviewLogistics> }): Promise<CandidateProfile>;
+    updateDetails(details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[]; interviewLogistics?: Partial<InterviewLogistics>; practiceInterviewsAsEvidence?: boolean }): Promise<CandidateProfile>;
     /** What Agy will receive from the profile and voice profile on the next run. */
     preview(): Promise<{ styleRules: string[]; instructions: string[]; baseResumeHasSummary: boolean | null; interviewLogistics: string[]; storyBankPath: string | null }>;
   };
