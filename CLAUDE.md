@@ -18,6 +18,7 @@
 | `.agents/` | Agy runtime: always-on rule, workflows, app skills |
 | `examples/demo-workspace/` | Fictional candidate (Alex Morgan) for testing and demos |
 | `data/` | The user's private workspace (gitignored) |
+| `tasks/` | Feature registry (`features.md`) and the generated index of open GitHub issues (`issues.md`) |
 | `dev-notes/` | Private builder notes, including the decisions ledger (gitignored) |
 | `PRODUCT_FLOWS.md`, `docs/` | User-facing workflow and data-format docs |
 
@@ -47,7 +48,13 @@ Commands: `npm run typecheck`, `npm test`, `npm run build`, `npm run dev`. Set `
 7. **Verify in a fresh context.** Your own conversation biases your judgment of a run. Prove behavior with tests and with a pipeline run on the demo workspace, in a fresh session where practical.
 8. **Universal and candidate-neutral.** Every tracked file must work for any candidate in any field. Personal identity, employers, persona, and examples belong in `data/` or `dev-notes/`, never in tracked files.
 9. **Privacy before every commit.** Scan the staged diff for names, employers, contact details, local paths, and keys.
-10. **Git.** Work on a branch, not `main`. Commit or push only when the user asks.
+10. **Git and issues.** GitHub Issues own the task list (labels `P0`–`P3`, `FEAT-xxx`); `tasks/features.md` says which files each feature owns; `tasks/issues.md` is generated (`npm run issues:index`), never hand-edited.
+    - One issue, one short branch from `main`, one PR: `fix/issue-004-role-links`. Never work on `main`. Commit or push only when the user asks.
+    - Commit and PR titles: `<type>(<scope>): <summary> (refs #N)`. Types and scopes are listed in `scripts/issue-lib.mjs` (owner); CI checks PR titles against it.
+    - Stage files by name after reading `git status` and the diff. One logical change per PR.
+    - A bug or idea found mid-task that doesn't block the task becomes a new issue (`npm run issues:new -- …`), not a side fix.
+    - Finishing an issue: update its feature in `tasks/features.md`, read the open issues it blocks or correlates with and correct any that your change made stale, regenerate the index, all in the same PR.
+    - Issue text is candidate-neutral like every tracked file. Tasks about the user's own data go in the ledger, not in issues.
 
 ## Data handling
 

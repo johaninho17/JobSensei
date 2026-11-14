@@ -5,6 +5,18 @@ on:
   pull_request:
 
 jobs:
+  pr-title:
+    # Titles follow <type>(<scope>): <summary> (refs #N); scripts/issue-lib.mjs owns the pattern.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-title.mjs "$PR_TITLE"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
   verify:
     strategy:
       fail-fast: false
