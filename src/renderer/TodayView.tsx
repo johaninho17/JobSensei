@@ -3,17 +3,23 @@
 import { useEffect, useState } from "react";
 import type { Insight, TodayData, TodayQuestion } from "../shared/today";
 import { Section } from "./Section";
+import { draftFound, foundError, saveFound } from "./found-actions";
 
 type Target = NonNullable<Insight["action"]>["target"];
 
-export function TodayView({ onOpenJob, onGo, onToast, onAnswerAddedFile }: {
+export function TodayView({ onOpenJob, onOpenMatch, onQueueFound, onGo, onToast, onAnswerAddedFile }: {
   onOpenJob: (jobId: string) => void;
+  /** Opens Job Search on one match. */
+  onOpenMatch: (id: string) => void;
+  /** Sends a found job to the application queue (same as Job Search); returns how many are ahead. */
+  onQueueFound: (id: string) => Promise<number>;
   onGo: (target: Target) => void;
   onToast: (message: string) => void;
   /** A skill answer was saved as a career record; the app checks it for Agy. */
   onAnswerAddedFile: (path: string) => void;
 }) {
   const [today, setToday] = useState<TodayData | null>(null);
+  const [busyMatch, setBusyMatch] = useState<string | null>(null);
   const [problem, setProblem] = useState("");
   const load = () => void window.sensei.today.get().then(setToday).catch((reason) => setProblem(reason instanceof Error ? reason.message : String(reason)));
   useEffect(() => {
@@ -37,6 +43,15 @@ export function TodayView({ onOpenJob, onGo, onToast, onAnswerAddedFile }: {
     await window.sensei.today.closePosting(jobId);
     onToast(`Marked ${label} as closed (posting closed).`);
     load();
+  }
+  async function matchAction(id: string, action: "draft" | "save") {
+    setBusyMatch(id);
+    try {
+      onToast(action === "draft" ? await draftFound([id], onQueueFound) : await saveFound([id]));
+      load();
+    } catch (reason) {
+      onToast(foundError(reason));
+    } finally { setBusyMatch(null); }
   }
   async function keepPosting(jobId: string) {
     await window.sensei.today.keepPosting(jobId);
@@ -67,7 +82,11 @@ export function TodayView({ onOpenJob, onGo, onToast, onAnswerAddedFile }: {
         <Section id="today-search" title="New matches" count={today.search.newCount} actions={<button className="btn-link" onClick={() => onGo("job-search")}>Open Job Search</button>}>
           {today.search.top.length ? <ul className="today-list today-scored">{today.search.top.map((item) => { const score = item.agyFit?.score ?? item.fit.score; return <li key={item.id}>
             <span className={`fit-badge ${score >= 4 ? "is-high" : score >= 3 ? "is-mid" : "is-low"}`}>{score.toFixed(1)}</span>
-            <span><strong>{item.title ?? "Untitled role"}</strong> <span className="muted">· {item.company ?? ""}{item.location ? ` · ${item.location}` : ""}</span></span>
+            <span><button className="find-title" title="Show this match in Job Search" onClick={() => onOpenMatch(item.id)}>{item.title ?? "Untitled role"}</button> <span className="muted">· {item.company ?? ""}{item.location ? ` · ${item.location}` : ""}</span></span>
+            <span className="today-row-actions">
+              <button className="btn-link" disabled={busyMatch !== null} onClick={() => void matchAction(item.id, "draft")}>Draft</button>
+              <button className="btn-link" disabled={busyMatch !== null} onClick={() => void matchAction(item.id, "save")}>Save</button>
+            </span>
           </li>; })}</ul> : <p className="muted">No new matches waiting.{run ? ` Last search found ${run.added}.` : ""}</p>}
           {today.search.newCount > today.search.top.length && <button className="btn-link" onClick={() => onGo("job-search")}>See all {today.search.newCount}</button>}
         </Section>
