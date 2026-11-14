@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { featuresFor } from "../src/shared/edition";
-import { readyToSend, setDraftsMarkApplied, statusLabel, effectiveStatus } from "../src/shared/tracker";
+import { readyToSend, setPdfsMarkApplied, statusLabel, effectiveStatus } from "../src/shared/tracker";
 import { applyIntake } from "../electron/candidate-intake";
 import { createCandidateProfile, readCandidateProfile } from "../electron/candidate-profile";
 import { readActiveContextManifest } from "../electron/context";
@@ -16,7 +16,7 @@ import { updateJobTracker } from "../electron/tracker";
 const temps: string[] = [];
 const edition = process.env.JOBSENSEI_EDITION;
 afterEach(async () => {
-  setDraftsMarkApplied(true);
+  setPdfsMarkApplied(true);
   if (edition === undefined) delete process.env.JOBSENSEI_EDITION; else process.env.JOBSENSEI_EDITION = edition;
   await Promise.all(temps.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -76,17 +76,19 @@ describe("adding a candidate is the whole setup", () => {
 describe("the edition stops at applying", () => {
   const drafted = { tracker: null, hasApplicationMaterials: true, interviewRoundLabel: null };
   it("shows drafted jobs as Ready to send until the recruiter marks them applied", () => {
-    setDraftsMarkApplied(featuresFor("recruiter").draftsMarkApplied);
+    setPdfsMarkApplied(featuresFor("recruiter").pdfsMarkApplied);
     expect(effectiveStatus(drafted)).toBe("saved");
     expect(readyToSend(drafted)).toBe(true);
     expect(statusLabel(drafted)).toBe("Ready to send");
     expect(statusLabel({ ...drafted, tracker: { status: "applied", appliedAt: "2026-11-10" } })).toBe("Applied");
   });
 
-  it("keeps the solo rule: drafts mean applied", () => {
-    setDraftsMarkApplied(featuresFor("solo").draftsMarkApplied);
-    expect(statusLabel(drafted)).toBe("Applied");
-    expect(readyToSend(drafted)).toBe(false);
+  it("never lets PDFs mark a job applied in the Recruiter Edition, unlike the regular app", () => {
+    setPdfsMarkApplied(featuresFor("recruiter").pdfsMarkApplied);
+    expect(statusLabel({ ...drafted, hasPdfs: true })).toBe("Ready to send");
+    setPdfsMarkApplied(featuresFor("solo").pdfsMarkApplied);
+    expect(statusLabel(drafted)).toBe("Drafted");
+    expect(statusLabel({ ...drafted, hasPdfs: true })).toBe("Applied");
   });
 
   it("sets no follow-up date when a recruiter marks a job applied", async () => {

@@ -12,7 +12,7 @@ const AGY_GREETING = FEATURES.candidates
   : "Connected to local career evidence and job workspace. Paste a job description to screen and tailor your application, choose a recommended action, or enter a prompt below.";
 // CSV columns follow the edition: no follow-up or interview columns where those features are left out.
 const CSV_COLUMNS = { followUps: FEATURES.nudges, interviews: FEATURES.interviews };
-import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, readyToSend, statusLabel, followUpDays, reachedInterview, staleApplications } from "../shared/tracker";
+import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, readyToSend, draftedLabel, statusLabel, followUpDays, reachedInterview, staleApplications } from "../shared/tracker";
 import { FIT_GATE, FIT_CLASSIFICATION_CREDIT } from "../shared/fit-credit";
 import { computeLearnings, STAGE_LABELS } from "../shared/learnings";
 import type { Readiness, ReadinessItem } from "../shared/readiness";
@@ -705,6 +705,22 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     return () => { offStatus(); offFinished(); offUpdated(); offRated(); };
   }, [workspace?.path]);
 
+  // Making a job's PDFs marks a drafted job applied (regular app), with Undo back to Drafted.
+  const pdfsCreatedRef = useRef<(jobId: string) => void>(() => undefined);
+  pdfsCreatedRef.current = (jobId) => {
+    const job = jobs.find((candidate) => candidate.id === jobId);
+    if (!FEATURES.pdfsMarkApplied || !job || !readyToSend(job)) return;
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    void updateTracker(jobId, { status: "applied", appliedAt: today }, { quiet: true }).then(() =>
+      showToast(`${job.company ?? displayJobName(job.name)}: PDFs made, marked as applied`, () => void updateTracker(jobId, { status: "saved", appliedAt: null, nextFollowUpAt: null }, { quiet: true })));
+  };
+  useEffect(() => {
+    const onPdfs = (event: Event) => pdfsCreatedRef.current(String((event as CustomEvent).detail ?? ""));
+    window.addEventListener("sensei-pdfs-created", onPdfs);
+    return () => window.removeEventListener("sensei-pdfs-created", onPdfs);
+  }, []);
+
   useEffect(() => {
     const onAnnounce = (event: Event) => showToast(String((event as CustomEvent).detail ?? ""));
     window.addEventListener("sensei-announce", onAnnounce);
@@ -1328,8 +1344,8 @@ type JobsTab = "active" | "ready" | "interviewing" | "offer" | "reached" | "appl
 /** Status subtabs on the Jobs page; Active is the default. */
 const JOB_TABS: Array<{ id: JobsTab; label: string; statuses: TrackerStatus[] | null }> = [
   { id: "active", label: "Active", statuses: ["saved", "applied", "interviewing", "offer"] },
-  // Recruiter Edition: drafts done, not sent yet (drafts never mark a job applied there).
-  ...(!FEATURES.draftsMarkApplied ? [{ id: "ready" as const, label: "Ready to send", statuses: null }] : []),
+  // Drafts done, not applied yet (`src/shared/tracker.ts` owns the rule and the label).
+  { id: "ready", label: FEATURES.pdfsMarkApplied ? "Drafted" : "Ready to send", statuses: null },
   { id: "interviewing", label: "Interviewing", statuses: ["interviewing"] },
   { id: "offer", label: "Offer", statuses: ["offer"] },
   // Every job that got to an interview, whatever its status now (open or closed). Not in editions without interviews.
@@ -1386,7 +1402,7 @@ function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTr
       || (value === "favorites" && favorites.has(job.id));
   };
   const tab: JobsTab = JOB_TABS.some((candidate) => candidate.id === statusGroup) ? statusGroup as JobsTab : "active";
-  const inTab = (job: JobFolderSummary, value: JobsTab) => { if (value === "reached") return reachedInterview(job); if (value === "ready") return readyToSend(job); const statuses = JOB_TABS.find((candidate) => candidate.id === value)!.statuses; return !statuses || statuses.includes(effectiveStatus(job)); };
+  const inTab = (job: JobFolderSummary, value: JobsTab) => { if (value === "reached") return reachedInterview(job); if (value === "ready") return readyToSend(job); const statuses = JOB_TABS.find((candidate) => candidate.id === value)!.statuses; if (value === "saved" && readyToSend(job)) return false; return !statuses || statuses.includes(effectiveStatus(job)); };
   const filterCounts = Object.fromEntries((["all", "active", "interviewing", "follow-up", "review", "favorites"] as JobsFilter[]).map((value) => [value, jobs.filter((job) => matches(job, value)).length])) as Record<JobsFilter, number>;
   const visibleJobs = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -2156,7 +2172,7 @@ function JobWorkspaceDashboard({ job, status, applicationLoading, overview, inte
         <p className="job-head-company">{job.company ?? displayJobName(job.name)}</p>
         <h1>{job.title ?? "Role not recorded"}</h1>
         <div className="job-head-meta">
-          <label className={`tracker-select is-${trackerStatus}`}><span className="sr-only">Application status</span><select value={trackerStatus} onChange={(event) => void onUpdateTracker({ status: event.target.value as TrackerStatus })}>{TRACKER_STATUSES.map((value) => <option key={value} value={value}>{TRACKER_LABELS[value]}</option>)}</select></label>
+          <label className={`tracker-select is-${trackerStatus}`}><span className="sr-only">Application status</span><select value={trackerStatus} onChange={(event) => void onUpdateTracker({ status: event.target.value as TrackerStatus })}>{TRACKER_STATUSES.map((value) => <option key={value} value={value}>{value === "saved" && job.hasApplicationMaterials ? draftedLabel() : TRACKER_LABELS[value]}</option>)}</select></label>
           {job.applicationStage && <StatusPill value={job.applicationStage} />}
           {job.rating !== null && <span><strong className="tabular">{job.rating.toFixed(1)}</strong> of 5 fit</span>}
           {job.location && <span>{job.location}</span>}
@@ -2533,6 +2549,12 @@ function useAnnounce() {
   return (message: string) => { if (!mounted.current) window.dispatchEvent(new CustomEvent("sensei-announce", { detail: message })); };
 }
 
+/** Tells the app a job's resume or cover letter PDF was made (`jobs/<id>/…_Resume.md` or `cover_letter.md`). */
+function pdfsCreated(sourcePath: string): void {
+  const [root, jobId, file] = sourcePath.split("/");
+  if (root === "jobs" && jobId && file && (/_Resume\.md$/i.test(file) || file.toLowerCase() === "cover_letter.md")) window.dispatchEvent(new CustomEvent("sensei-pdfs-created", { detail: jobId }));
+}
+
 function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: string | null; coverLetterPath: string | null }) {
   const announce = useAnnounce();
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
@@ -2553,6 +2575,7 @@ function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: strin
       setState("done");
       setMessage(saved);
       announce(`${saved} (${resumePath.split("/")[1] ?? "job"}).`);
+      pdfsCreated(resumePath);
     } catch (caught) {
       setState("error");
       setMessage(messageOf(caught, "PDF creation failed."));
@@ -3219,6 +3242,7 @@ function MarkdownExportButton({ relativePath, onExported }: { relativePath: stri
       setState(result.validationStatus === "warning" ? "warning" : "done");
       setMessage(`Saved ${result.relativePath} (${result.pageCount} page${result.pageCount === 1 ? "" : "s"}${pageUse})`);
       announce(`PDF saved: ${result.relativePath}${result.validationStatus === "warning" ? " (review: 2 pages)" : ""}.`);
+      pdfsCreated(relativePath);
       onExported();
     } catch (caught) {
       setState("error");

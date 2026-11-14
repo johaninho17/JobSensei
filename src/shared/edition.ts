@@ -27,13 +27,13 @@ export type Features = {
   coverLetterOptIn: boolean;
   /** Today page: morning matches, what's due, insights, questions, closed-posting checks (builds on Job Search and interviews). */
   today: boolean;
-  /** Drafts mark a job applied (solo: sent through Sensei); off where a recruiter sends and marks it (recruiter plan R8). */
-  draftsMarkApplied: boolean;
+  /** Making the PDFs marks a drafted job applied; off where a recruiter sends and marks it. `src/shared/tracker.ts` owns the rule. */
+  pdfsMarkApplied: boolean;
 };
 
 const FEATURES: Record<Edition, Features> = {
-  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, today: true, draftsMarkApplied: true },
-  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, today: false, draftsMarkApplied: false },
+  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, today: true, pdfsMarkApplied: true },
+  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, today: false, pdfsMarkApplied: false },
 };
 
 export type EditionInfo = {

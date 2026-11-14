@@ -403,6 +403,9 @@ export const jobFolderSummarySchema = z.object({
   interviewRoundCount: z.number().int().nonnegative().default(0),
   role: roleFactsSchema.nullable().default(null),
   hasApplicationMaterials: z.boolean().default(false),
+  /** PDFs exist under the job's `pdfs/` folder, and when the newest was made (drafted vs applied, `src/shared/tracker.ts`). */
+  hasPdfs: z.boolean().default(false),
+  pdfsAt: z.string().nullable().default(null),
   /** Null until the user sets a status; the UI then shows "Saved". */
   tracker: jobTrackerSchema.nullable().default(null),
   /** How complete each area of the job is (from the job record). */

@@ -13,12 +13,14 @@ describe("jobs CSV export", () => {
   });
 
   it("writes a BOM, the header, and one row per job with derived status", () => {
-    const csv = jobsToCsv([job({}), job({ id: "meridian-se", company: "Meridian, Inc.", tracker: { schemaVersion: 1, status: "rejected", appliedAt: "2026-10-01", nextFollowUpAt: null, notes: "Line one\nline two", history: [], updatedAt: null } })]);
+    const csv = jobsToCsv([job({ hasPdfs: true, pdfsAt: "2026-10-20T10:00:00" }), job({ id: "meridian-se", company: "Meridian, Inc.", tracker: { schemaVersion: 1, status: "rejected", appliedAt: "2026-10-01", nextFollowUpAt: null, notes: "Line one\nline two", history: [], updatedAt: null } })]);
     expect(csv.startsWith("﻿Company,Title,Status,Applied,Follow up,Fit,Interview,Location,Added,Notes,Job ID\r\n")).toBe(true);
     const lines = csv.slice(1).split("\r\n");
     expect(lines[1]).toBe('Northstar Labs,Support Analyst,Applied,2026-10-20,,4.1,,"Remote, US",2026-10-20,,northstar-analyst');
     expect(lines[2]).toContain('"Meridian, Inc."');
     expect(lines[2]).toContain('Rejected,2026-10-01');
     expect(lines[2]).toContain('"Line one\nline two"');
+    // Drafts without PDFs are Drafted, with no applied date.
+    expect(jobsToCsv([job({})]).slice(1).split("\r\n")[1]).toBe('Northstar Labs,Support Analyst,Drafted,,,4.1,,"Remote, US",2026-10-20,,northstar-analyst');
   });
 });

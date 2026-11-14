@@ -2,42 +2,47 @@ import type { JobTracker, TrackerStatus } from "./schemas";
 
 export const TRACKER_LABELS: Record<TrackerStatus, string> = { saved: "Saved", applied: "Applied", interviewing: "Interviewing", offer: "Offer", rejected: "Rejected", withdrawn: "Withdrawn" };
 
-type TrackedJob = { tracker: Pick<JobTracker, "status" | "appliedAt"> | null; hasApplicationMaterials: boolean; interviewRoundLabel: string | null; createdAt: string };
+type TrackedJob = { tracker: Pick<JobTracker, "status" | "appliedAt"> | null; hasApplicationMaterials: boolean; interviewRoundLabel: string | null; createdAt: string; hasPdfs?: boolean; pdfsAt?: string | null };
+type StatusInputs = Pick<TrackedJob, "tracker" | "hasApplicationMaterials" | "interviewRoundLabel" | "hasPdfs">;
 
 /**
- * Whether drafts count as applied. In the solo edition a job sent through Sensei is assumed applied (U7); in the
- * Recruiter Edition drafts are only ready to send until the recruiter marks the job applied. Set once at start by
- * each process from `features.draftsMarkApplied`.
+ * Drafting is not applying (owner of this rule). A job with drafts is "Drafted" until it is marked applied.
+ * Regular app: making the PDFs is what marks it applied (the user's last step before sending). Recruiter Edition:
+ * only the recruiter's Mark applied does, and the label is "Ready to send". Set once at start by each process from
+ * `features.pdfsMarkApplied`.
  */
-let draftsMarkApplied = true;
-export function setDraftsMarkApplied(value: boolean): void { draftsMarkApplied = value; }
+let pdfsMarkApplied = true;
+export function setPdfsMarkApplied(value: boolean): void { pdfsMarkApplied = value; }
 
 /**
  * The status shown for a job. A status the user set always wins. Otherwise it is derived:
- * interview prep exists -> interviewing; application drafts exist -> applied (solo) or still saved (recruiter); else saved.
+ * interview prep exists -> interviewing; drafts with PDFs -> applied (regular app); else saved.
  */
-export function effectiveStatus(job: Pick<TrackedJob, "tracker" | "hasApplicationMaterials" | "interviewRoundLabel">): TrackerStatus {
+export function effectiveStatus(job: StatusInputs): TrackerStatus {
   if (job.tracker) return job.tracker.status;
   if (job.interviewRoundLabel) return "interviewing";
-  return job.hasApplicationMaterials && draftsMarkApplied ? "applied" : "saved";
+  return job.hasApplicationMaterials && pdfsMarkApplied && job.hasPdfs ? "applied" : "saved";
 }
 
-/** Drafts are done but the job isn't marked applied yet (Recruiter Edition). */
-export function readyToSend(job: Pick<TrackedJob, "tracker" | "hasApplicationMaterials" | "interviewRoundLabel">): boolean {
-  return !draftsMarkApplied && job.hasApplicationMaterials && effectiveStatus(job) === "saved";
+/** Drafts are done but the job isn't applied yet: shown as Drafted (regular app) or Ready to send (Recruiter Edition). */
+export function readyToSend(job: StatusInputs): boolean {
+  return job.hasApplicationMaterials && effectiveStatus(job) === "saved";
 }
 
-/** The status as shown on a job: "Ready to send" for drafted, unsent jobs in the Recruiter Edition. */
-export function statusLabel(job: Pick<TrackedJob, "tracker" | "hasApplicationMaterials" | "interviewRoundLabel">): string {
-  return readyToSend(job) ? "Ready to send" : TRACKER_LABELS[effectiveStatus(job)];
+/** The name of that in-between state in this edition. */
+export function draftedLabel(): string { return pdfsMarkApplied ? "Drafted" : "Ready to send"; }
+
+/** The status as shown on a job. */
+export function statusLabel(job: StatusInputs): string {
+  return readyToSend(job) ? draftedLabel() : TRACKER_LABELS[effectiveStatus(job)];
 }
 
-/** The applied date: the user's date, else the local day the job was added when its status counts as applied or later. */
+/** The applied date: the user's date; else, when the status counts as applied or later, the local day the PDFs were made, or the day the job was added. */
 export function effectiveAppliedAt(job: TrackedJob): string | null {
   if (job.tracker?.appliedAt) return job.tracker.appliedAt;
   const status = effectiveStatus(job);
   if (status === "saved" || job.tracker) return null;
-  const added = new Date(job.createdAt);
+  const added = new Date(job.pdfsAt && status === "applied" ? job.pdfsAt : job.createdAt);
   return `${added.getFullYear()}-${String(added.getMonth() + 1).padStart(2, "0")}-${String(added.getDate()).padStart(2, "0")}`;
 }
 
