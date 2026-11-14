@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { DEFAULT_PDF_TEXT_SIZE, exportedPdfSchema, type ExportedPdf, type PdfTextSize } from "../src/shared/schemas";
 import { classifyApplicationArtifact, type ApplicationArtifactType } from "./application-artifacts";
+import { pdfOutputName } from "./pdf-freshness";
 import { assertInsideWorkspace } from "./workspace";
 import { writeBinaryAtomic } from "./persistence";
 import { readCandidateProfile } from "./candidate-profile";
@@ -28,10 +29,7 @@ const PDF_TEXT_SCALE: Record<PdfTextSize, number> = {
   largest: 1.1,
 };
 
-export function pdfOutputName(sourcePath: string, artifactType: ApplicationArtifactType, artifactPrefix?: string): string {
-  if (artifactType === "resume") return `${artifactPrefix || basename(sourcePath, ".md").replace(/_[^_]+_Resume$/i, "") || "Candidate"}_Resume.pdf`;
-  return `${basename(sourcePath, ".md")}.pdf`;
-}
+export { pdfOutputName };
 
 function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");

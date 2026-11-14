@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { DEFAULT_PDF_TEXT_SIZE, INTERVIEW_ROUNDS, OUTCOME_RESULTS, TRACKER_STATUSES, type InterviewEvent, type InterviewRoundKind, type JobOutcome, type JobQueue, type JobTrackerUpdate, type RunStatus, type TrackerStatus } from "../shared/schemas";
+import { DEFAULT_PDF_TEXT_SIZE, INTERVIEW_ROUNDS, OUTCOME_RESULTS, TRACKER_STATUSES, type InterviewEvent, type InterviewRoundKind, type JobOutcome, type JobQueue, type JobTrackerUpdate, type RunStatus, type TrackerStatus, type PdfFreshness } from "../shared/schemas";
 import { advanceQueue, agyReadiness, newQueueItem, promptForItem } from "../shared/job-queue";
 import { jobsToCsv } from "../shared/jobs-csv";
 // What the Agy chat says first: the Recruiter Edition works for the open candidate, not for the person at the keyboard.
@@ -2569,8 +2569,28 @@ function pdfsCreated(sourcePath: string): void {
   if (root === "jobs" && jobId && file && (/_Resume\.md$/i.test(file) || file.toLowerCase() === "cover_letter.md")) window.dispatchEvent(new CustomEvent("sensei-pdfs-created", { detail: jobId }));
 }
 
+/** Tells open export controls that a document was saved or a PDF was made, so they re-check which PDFs are current. */
+function documentsChanged(): void { window.dispatchEvent(new CustomEvent("sensei-docs-changed")); }
+
+/** A job's documents with each PDF's state (`electron/pdf-freshness.ts` owns the rule); re-read when documents change. */
+function usePdfFreshness(jobId: string | null): PdfFreshness[] {
+  const [items, setItems] = useState<PdfFreshness[]>([]);
+  useEffect(() => {
+    if (!jobId) { setItems([]); return; }
+    let cancelled = false;
+    const load = () => void window.sensei.files.pdfFreshness(jobId).then((next) => { if (!cancelled) setItems(next); }, () => undefined);
+    load();
+    window.addEventListener("sensei-docs-changed", load);
+    window.addEventListener("focus", load);
+    return () => { cancelled = true; window.removeEventListener("sensei-docs-changed", load); window.removeEventListener("focus", load); };
+  }, [jobId]);
+  return items;
+}
+
 function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: string | null; coverLetterPath: string | null }) {
   const announce = useAnnounce();
+  // PDFs made before the resume or cover letter was last edited would send the old text.
+  const stale = usePdfFreshness(resumePath?.split("/")[1] ?? null).filter((item) => item.state === "stale");
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
   const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
@@ -2590,13 +2610,16 @@ function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: strin
       setMessage(saved);
       announce(`${saved} (${resumePath.split("/")[1] ?? "job"}).`);
       pdfsCreated(resumePath);
+      documentsChanged();
     } catch (caught) {
       setState("error");
       setMessage(messageOf(caught, "PDF creation failed."));
       announce(`PDF creation failed: ${messageOf(caught, "unknown error")}`);
     }
   }
-  return <span className="job-pdf-export"><PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} /><button className="export-button" disabled={missing || state === "working"} title={missing ? "A tailored resume is required" : coverLetterPath ? "Create PDFs for this job's resume and cover letter" : "Create a PDF of this job's resume"} onClick={() => void exportApplicationPdfs()}>{state === "working" ? "Creating PDFs…" : "Create PDFs"}</button>{message && <small className={`export-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</small>}</span>;
+  return <span className="job-pdf-export"><PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} /><button className="export-button" disabled={missing || state === "working"} title={missing ? "A tailored resume is required" : coverLetterPath ? "Create PDFs for this job's resume and cover letter" : "Create a PDF of this job's resume"} onClick={() => void exportApplicationPdfs()}>{state === "working" ? "Creating PDFs…" : stale.length ? "Update PDFs" : "Create PDFs"}</button>{stale.length > 0 && state !== "working"
+    ? <small className="export-message is-stale" role="status">{stale.length === 1 ? `The ${stale[0]!.kind === "resume" ? "resume" : "cover letter"} PDF is older than your last edit` : "The PDFs are older than your last edits"}</small>
+    : message && <small className={`export-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</small>}</span>;
 }
 
 
@@ -2989,6 +3012,7 @@ function MarkdownDocument({ preview, focusAnchor, onExported, onDirtyChange, onS
       setExpectedModifiedAt(saved.modifiedAt);
       setState("saved");
       setMessage("Saved locally");
+      documentsChanged();
     } catch (caught) {
       setState("error");
       setMessage(messageOf(caught, "Unable to save this Markdown file."));
@@ -3242,6 +3266,7 @@ function PdfTextSizeSelect({ value, onChange, disabled }: { value: PdfTextSize; 
 }
 
 function MarkdownExportButton({ relativePath, onExported }: { relativePath: string; onExported: () => void }) {
+  const stale = usePdfFreshness(relativePath.startsWith("jobs/") ? relativePath.split("/")[1] ?? null : null).some((item) => item.source === relativePath && item.state === "stale");
   const announce = useAnnounce();
   const [state, setState] = useState<"idle" | "working" | "done" | "warning" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -3257,6 +3282,7 @@ function MarkdownExportButton({ relativePath, onExported }: { relativePath: stri
       setMessage(`Saved ${result.relativePath} (${result.pageCount} page${result.pageCount === 1 ? "" : "s"}${pageUse})`);
       announce(`PDF saved: ${result.relativePath}${result.validationStatus === "warning" ? " (review: 2 pages)" : ""}.`);
       pdfsCreated(relativePath);
+      documentsChanged();
       onExported();
     } catch (caught) {
       setState("error");
@@ -3264,7 +3290,7 @@ function MarkdownExportButton({ relativePath, onExported }: { relativePath: stri
       announce(`PDF export failed: ${messageOf(caught, "unknown error")}`);
     }
   }
-  return <span className="markdown-actions"><PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} /><button className="export-button" disabled={state === "working"} onClick={() => void exportPdf()}>{state === "working" ? "Creating PDF…" : "Approve & Export PDF"}</button>{message && <span className={`export-message ${state === "error" ? "is-error" : ""}`} title={message}>{state === "done" ? "PDF saved" : state === "warning" ? "PDF saved - review 2 pages" : message}</span>}</span>;
+  return <span className="markdown-actions"><PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} /><button className="export-button" disabled={state === "working"} onClick={() => void exportPdf()}>{state === "working" ? "Creating PDF…" : stale ? "Update PDF" : "Approve & Export PDF"}</button>{stale && state !== "working" ? <span className="export-message is-stale" role="status">PDF out of date</span> : message && <span className={`export-message ${state === "error" ? "is-error" : ""}`} title={message}>{state === "done" ? "PDF saved" : state === "warning" ? "PDF saved - review 2 pages" : message}</span>}</span>;
 }
 
 function PdfDocument({ preview }: { preview: FilePreview }) {
