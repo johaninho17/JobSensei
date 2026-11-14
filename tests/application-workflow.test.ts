@@ -8,6 +8,7 @@ import {
 } from "../electron/application-artifacts";
 import { pdfOutputName } from "../electron/pdf-export";
 import { applicationBundleSchema, candidateProfileSchema, pdfExportRequestSchema } from "../src/shared/schemas";
+import { rendererPagesSource } from "./renderer-source";
 
 const root = process.cwd();
 
@@ -72,7 +73,7 @@ Evidence ID: context:example:1`;
   it("keeps removed provider APIs out of renderer and preload code", async () => {
     const [preload, renderer, schemas] = await Promise.all([
       readFile(join(root, "electron/preload.ts"), "utf8"),
-      readFile(join(root, "src/renderer/App.tsx"), "utf8"),
+      rendererPagesSource(root),
       readFile(join(root, "src/shared/schemas.ts"), "utf8"),
     ]);
     const publicCode = `${preload}\n${renderer}\n${schemas}`;
