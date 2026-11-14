@@ -289,6 +289,9 @@ export const exportedPdfSchema = z.object({
 });
 export type ExportedPdf = z.infer<typeof exportedPdfSchema>;
 
+/** One application document and its PDF: none made yet, current, or made before the document's last edit (`electron/pdf-freshness.ts`). */
+export type PdfFreshness = { source: string; kind: "resume" | "cover-letter"; pdf: string | null; state: "none" | "current" | "stale" };
+
 /** Application tracker, one per job: `jobs/<id>/.sensei/tracker.json`. Written only when the user changes it. */
 export const TRACKER_STATUSES = ["saved", "applied", "interviewing", "offer", "rejected", "withdrawn"] as const;
 export const trackerStatusSchema = z.enum(TRACKER_STATUSES);
@@ -1428,6 +1431,8 @@ export interface SenseiApi {
     pathForFile(file: File): string;
     getBaseResume(): Promise<string | null>;
     exportMarkdownPdf(relativePath: string, textSize?: PdfTextSize): Promise<ExportedPdf>;
+    /** The job's resume and cover letter, each with whether its PDF is missing, current, or out of date. */
+    pdfFreshness(jobId: string): Promise<PdfFreshness[]>;
   };
   jobs: {
     list(): Promise<JobFolderSummary[]>;

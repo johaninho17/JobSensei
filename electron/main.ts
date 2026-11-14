@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, session, shell } from "electron";
 import { handleLinks } from "./open-link";
+import { pdfFreshness } from "./pdf-freshness";
 import { installLogFile } from "./log-file";
 import { recruiterInstructionsFor } from "./recruiter-defaults";
 import { textContextMenu } from "./context-menu";
@@ -343,6 +344,10 @@ ipcMain.handle("context:import-paths", async (_event, paths: unknown, kind: unkn
   return importContextFiles(requireWorkspace(), paths as string[], contextKind(kind));
 });
 ipcMain.handle("files:get-base-resume", async () => getBaseResume(requireWorkspace(), (await settingsStore.get()).baseResumePath));
+ipcMain.handle("files:pdf-freshness", async (_event, jobId: unknown) => {
+  const workspace = requireWorkspace();
+  return pdfFreshness(workspace, jobId, (await readCandidateProfile(workspace))?.identity.artifactPrefix ?? undefined);
+});
 ipcMain.handle("files:export-markdown-pdf", async (_event, input) => {
   const request = pdfExportRequestSchema.parse(input);
   return exportMarkdownPdf(requireWorkspace(), request.relativePath, request.textSize);

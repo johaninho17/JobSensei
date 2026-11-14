@@ -111,6 +111,7 @@ const api: SenseiApi = {
     listTree: () => ipcRenderer.invoke("files:list-tree"),
     preview: (relativePath) => ipcRenderer.invoke("files:preview", relativePath),
     saveMarkdown: (input) => ipcRenderer.invoke("files:save-markdown", input),
+    pdfFreshness: (jobId) => ipcRenderer.invoke("files:pdf-freshness", jobId),
     deletePath: (relativePath) => ipcRenderer.invoke("files:delete", relativePath),
     reveal: (relativePath) => ipcRenderer.invoke("files:reveal", relativePath),
     pathForFile: (file) => webUtils.getPathForFile(file),

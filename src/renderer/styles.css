@@ -376,6 +376,8 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
 .jobs-table strong { color: var(--ink)}
 .job-pdf-export { display: inline-flex; align-items: center; gap: 8px}
 .job-pdf-export .export-message { max-width: 210px}
+.job-pdf-export .export-message.is-stale { max-width: 320px}
+.export-message.is-stale { color: var(--brass); font-weight: 600}
 .pdf-text-size { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font: var(--fs-12) var(--font-ui)}
 .pdf-text-size select { min-width: 92px; padding: 6px 24px 6px 8px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--ink); background: var(--raised); font: var(--fs-12) var(--font-ui)}
 .workspace-tabs { position: sticky; top: calc(-1 * var(--space-5)); z-index: 14; display: flex; gap: var(--space-5); margin-bottom: var(--space-5); padding: 0; border-bottom: 1px solid var(--line); background: var(--canvas)}
