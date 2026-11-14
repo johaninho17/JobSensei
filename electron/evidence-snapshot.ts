@@ -1,4 +1,5 @@
 import { readTextFile, writeCompressedJsonAtomic } from "./persistence";
+import { PRACTICE_NOT_EVIDENCE_LINE, fromPracticeInterview, practiceCountsAsEvidence } from "../src/shared/practice-evidence";
 import { recruiterDefaultsFor, recruiterInstructionsFor } from "./recruiter-defaults";
 import { createHash } from "node:crypto";
 import { postingRecordFor, writePostingRecord } from "./posting-record";
@@ -546,6 +547,7 @@ export function profileInstructionLines(profile?: CandidateProfile | null, write
   return [
     ...(writeLetter && letter?.length ? [`Cover letters: ${letter.length.min}–${letter.length.max} words, ${letter.focus === "examples" ? "led by one or two real examples" : "led by the career story (where I started, why I moved, how I work now)"}; coverLetterBrief has the full structure.`] : []),
     ...(boundaries.length ? [`The candidate's own truth boundaries (never cross them): ${boundaries.join(" ")}`] : []),
+    ...(practiceCountsAsEvidence(profile) ? [] : [PRACTICE_NOT_EVIDENCE_LINE]),
     confidentialNames.length
       ? `Never name these clients or partners in the resume or cover letter; describe them by industry instead (naming the industry is fine): ${confidentialNames.join(", ")}.`
       : "Never name clients or partners in the resume or cover letter; describe them by industry instead (naming the industry is fine).",
@@ -819,7 +821,8 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       sourceRole: role,
       ...(text && (role === "structured" || role === "employer-context" || role === "broad" || role === "policy" || role === "secondary-resume") ? { contextText: text } : {}),
     });
-    const tableRows = role === "structured" && text ? evidenceRows(text, relativePath, manifestSource?.sourceFamily ?? null, candidateFilesEligible) : [];
+    const tableRows = (role === "structured" && text ? evidenceRows(text, relativePath, manifestSource?.sourceFamily ?? null, candidateFilesEligible) : [])
+      .filter((row) => practiceCountsAsEvidence(candidateProfile) || !fromPracticeInterview(row));
     rows.push(...tableRows);
     if (candidateFilesEligible && text && !tableRows.length && (role === "structured" || role === "broad" || role === "secondary-resume" || role === "linkedin")) {
       rows.push(...candidateFileRows(text, relativePath, manifestSource?.sourceFamily ?? null, canonicalResult.canonicalResume?.employers ?? []));

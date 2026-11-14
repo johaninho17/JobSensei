@@ -57,6 +57,7 @@ export function SettingsModal({
   const [transitionSummary, setTransitionSummary] = useState("");
   const [confidentialNamesText, setConfidentialNamesText] = useState("");
   const [boundariesText, setBoundariesText] = useState("");
+  const [practiceEvidence, setPracticeEvidence] = useState(true);
   const [preview, setPreview] = useState<ProfilePreview | null>(null);
   const [logistics, setLogistics] = useState<InterviewLogistics>(EMPTY_INTERVIEW_LOGISTICS);
 
@@ -110,6 +111,7 @@ export function SettingsModal({
       setTransitionSummary(story.transitionSummary);
       setConfidentialNamesText((profile.truth?.confidentialNames ?? []).join(", "));
       setBoundariesText((profile.truth?.boundaries ?? []).join("\n"));
+      setPracticeEvidence(profile.truth?.practiceInterviewsAsEvidence !== false);
       setLogistics(readLogistics(profile));
     }
     void window.sensei.profile.preview().then(setPreview).catch(() => setPreview(null));
@@ -158,6 +160,7 @@ export function SettingsModal({
         transitionSummary: transitionSummary.trim(),
         confidentialNames: parseNames(confidentialNamesText),
         boundaries: boundariesText.split("\n").map((line) => line.trim()).filter(Boolean),
+        practiceInterviewsAsEvidence: practiceEvidence,
         interviewLogistics: logisticsUpdate(logistics),
       });
       onProfileUpdated(withDetails ?? updated);
@@ -570,6 +573,13 @@ export function SettingsModal({
                   onChange={(e) => setBoundariesText(e.target.value)}
                 />
               </div>
+              {FEATURES.interviews && <div className="settings-group">
+                <h3 className="settings-group-title" id="settings-practice-evidence">Practice interviews</h3>
+                <p className="settings-group-desc">
+                  Stories you told in practice (mock) interviews can back drafts once you confirm them into your interview stories. Turn this off to keep practice interviews for interview voice and practice only. A mock interviewer's feedback never counts.
+                </p>
+                <label className="search-check"><input type="checkbox" checked={practiceEvidence} onChange={(e) => setPracticeEvidence(e.target.checked)} />Practice interviews count as career evidence</label>
+              </div>}
             </div>
           )}
 

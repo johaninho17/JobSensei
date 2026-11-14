@@ -202,7 +202,7 @@ const updateSchema = z.object({ startedAt: z.string(), backup: z.string(), recor
 export type PendingUpdate = z.infer<typeof updateSchema>;
 
 /** Starts an update: backs up the content files and records which recordings it covers. Returns the prompt for Agy. */
-export async function startUpdate(workspacePath: string, recordings: Recording[], jobNames: Record<string, string>, now = new Date()): Promise<{ prompt: string; update: PendingUpdate }> {
+export async function startUpdate(workspacePath: string, recordings: Recording[], jobNames: Record<string, string>, now = new Date(), practiceStories = true): Promise<{ prompt: string; update: PendingUpdate }> {
   const root = assertInsideWorkspace(workspacePath, workspacePath);
   const chosen = waitingToImport(recordings);
   if (!chosen.length) throw new Error("There are no new recordings to import.");
@@ -224,6 +224,7 @@ export async function startUpdate(workspacePath: string, recordings: Recording[]
     "Run the interview review import (.agents/workflows/jobsensei-interview-review.md) on only these new recordings:",
     list,
     "Read only these files plus the current story bank, interview voice, role memory, and interview stories. Add, merge, or upgrade; remove or shorten something only when a better version replaces it, and show me each one as old → new with why. After I confirm and you save, write the change list to .sensei/content-changes.json as step 4 describes.",
+    ...(practiceStories ? [] : ["Practice interviews are not evidence for me (my setting): from practice interviews, update only interview voice and hard questions to practice; propose no interview-story rows."]),
   ].join("\n");
   return { prompt, update };
 }
