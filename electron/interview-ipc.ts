@@ -1,5 +1,6 @@
 // Interview prep IPC and windows. Loaded only when the edition has `features.interviews` (src/shared/edition.ts).
-import { BrowserWindow, ipcMain } from "electron";
+import { BrowserWindow, ipcMain, shell } from "electron";
+import { handleLinks } from "./open-link";
 import { join } from "node:path";
 import type { FeatureContext } from "./feature-context";
 import { getInterviewOverview, listInterviewRounds, refreshInterviewDashboard, setCurrentInterviewRound } from "./interviews";
@@ -29,6 +30,7 @@ async function openInterviewWorkspaceWindow(jobId: string, roundId: string): Pro
     backgroundColor: "#f4f6f8",
     webPreferences: { preload: join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
+  handleLinks(interviewWindow.webContents, process.env.VITE_DEV_SERVER_URL ?? "", (url) => shell.openExternal(url));
   const query = `interviewWorkspace=1&jobId=${encodeURIComponent(jobId)}&roundId=${encodeURIComponent(roundId)}`;
   if (process.env.VITE_DEV_SERVER_URL) await interviewWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?${query}`);
   else await interviewWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"), { search: `?${query}` });
@@ -54,6 +56,7 @@ async function openLiveWindow(jobId: string, roundId: string): Promise<void> {
       webPreferences: { preload: join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     liveWindow.setAlwaysOnTop(true, "floating");
+    handleLinks(liveWindow.webContents, process.env.VITE_DEV_SERVER_URL ?? "", (url) => shell.openExternal(url));
     liveWindow.on("closed", () => { liveWindow = undefined; });
   }
   if (process.env.VITE_DEV_SERVER_URL) await liveWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?${query}`);

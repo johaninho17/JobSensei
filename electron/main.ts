@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, session, shell } from "electron";
+import { handleLinks } from "./open-link";
 import { installLogFile } from "./log-file";
 import { recruiterInstructionsFor } from "./recruiter-defaults";
 import { textContextMenu } from "./context-menu";
@@ -68,13 +69,10 @@ function createWindow(): void {
     backgroundColor: "#f4f6f8",
     webPreferences: { preload: join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  handleLinks(mainWindow.webContents, DEV_URL, (url) => shell.openExternal(url));
   mainWindow.webContents.on("did-fail-load", (_event, code, description, url) => console.error(`Sensei renderer failed to load (${code}): ${description} ${url}`));
   mainWindow.webContents.on("render-process-gone", (_event, details) => console.error(`Sensei renderer exited: ${details.reason}`));
   mainWindow.webContents.on("console-message", (event) => console.error(`Sensei renderer: ${event.message}`));
-  mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(DEV_URL) && !url.startsWith("file://")) event.preventDefault();
-  });
   mainWindow.on("closed", () => { terminal.stop(); runWatcher.stop(); mainWindow = undefined; });
   runWatcher.start();
   if (process.env.SENSEI_SMOKE_OUT) runSmokeCheck(mainWindow, process.env.SENSEI_SMOKE_OUT);
