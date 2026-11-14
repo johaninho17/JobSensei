@@ -1,4 +1,6 @@
 import { appendFile, readFile, stat } from "node:fs/promises";
+import { scanRecordings } from "./content-refresh";
+import { waitingToImport } from "../src/shared/recordings";
 import { queueAnswer, readAnswerInbox } from "./answer-filing";
 import { join } from "node:path";
 import type { CandidateProfile, JobFolderSummary } from "../src/shared/schemas";
@@ -119,11 +121,13 @@ export async function removeQuestion(workspace: string, id: string): Promise<voi
 
 // ---------- Insights ----------
 
-function insightsFor(input: { jobs: JobFolderSummary[]; readiness: { ready: boolean; done: number; total: number } | null; deliveryFixes: string[]; accuracy: ReturnType<typeof ratingAccuracy>; scheduleOn: boolean; searchTitles: number; knownTerms: (term: string) => boolean }): Insight[] {
+function insightsFor(input: { jobs: JobFolderSummary[]; recordingsWaiting: number; readiness: { ready: boolean; done: number; total: number } | null; deliveryFixes: string[]; accuracy: ReturnType<typeof ratingAccuracy>; scheduleOn: boolean; searchTitles: number; knownTerms: (term: string) => boolean }): Insight[] {
   const learn = computeLearnings(input.jobs);
   const out: Insight[] = [];
   if (input.readiness && input.readiness.done < input.readiness.total) out.push({ area: "data", text: `Setup is ${input.readiness.done} of ${input.readiness.total}. The missing steps improve drafts and interview prep.`, action: { label: "Open Setup", target: "setup" } });
-  if (learn.unrecorded > 0) out.push({ area: "data", text: `${learn.unrecorded} job${learn.unrecorded === 1 ? " has" : "s have"} interview prep but no recorded interview or outcome, so Learnings can't count ${learn.unrecorded === 1 ? "it" : "them"}.`, action: { label: "See interviews", target: "interviews" } });
+  // Same count as Interviews → Your content (waitingToImport over the same scan).
+  if (input.recordingsWaiting > 0) out.push({ area: "interviews", text: `${input.recordingsWaiting} new interview recording${input.recordingsWaiting === 1 ? " isn't" : "s aren't"} in your interview content yet (real or practice interviews).`, action: { label: "Update your content", target: "interviews" } });
+  if (learn.unrecorded > 0) out.push({ area: "data", text: `${learn.unrecorded} job${learn.unrecorded === 1 ? " has" : "s have"} interview prep but no interview date or outcome logged on the job, so Learnings can't count ${learn.unrecorded === 1 ? "it" : "them"}.`, action: { label: "See interviews", target: "interviews" } });
   // The fix itself, without the tracker's "Now / Aim / Status" notes.
   const fix = input.deliveryFixes[0]?.split(/\s+—\s+|\s+-\s+Now:/)[0]?.replace(/[.:\s]+$/, "");
   if (fix) out.push({ area: "interviews", text: `Your top delivery fix to practice: ${fix}.`, action: { label: "See Learnings", target: "learnings" } });
@@ -170,9 +174,10 @@ async function ratingPairs(workspace: string, jobs: JobFolderSummary[]): Promise
 
 export async function buildTodayData(workspace: string, input: { jobs: JobFolderSummary[]; profile: CandidateProfile | null; readiness: { ready: boolean; done: number; total: number } | null; now?: Date }): Promise<TodayData> {
   const now = input.now ?? new Date();
-  const [search, closed, dates, settings, voiceText, pairs] = await Promise.all([
+  const [search, closed, dates, settings, voiceText, pairs, recordings] = await Promise.all([
     readSearchState(workspace), readClosedPostings(workspace), interviewDates(workspace, input.jobs),
     readSearchSettings(workspace, input.profile), readFile(path(workspace, "profile/interview_voice.md"), "utf8").catch(() => ""), ratingPairs(workspace, input.jobs),
+    scanRecordings(workspace, input.jobs.map((job) => job.id)).catch(() => []),
   ]);
   // Questions: only from real gaps, only when the user wants them (Settings → Interactive clarifying questions).
   let questions = await readQuestions(workspace);
@@ -197,7 +202,7 @@ export async function buildTodayData(workspace: string, input: { jobs: JobFolder
   } else {
     questions = [];
   }
-  const insights = insightsFor({ jobs: input.jobs, readiness: input.readiness, deliveryFixes: parseInterviewVoice(voiceText).deliveryFixes, accuracy: ratingAccuracy(pairs), scheduleOn: settings.schedule.enabled, searchTitles: settings.titles.length, knownTerms });
+  const insights = insightsFor({ jobs: input.jobs, recordingsWaiting: waitingToImport(recordings).length, readiness: input.readiness, deliveryFixes: parseInterviewVoice(voiceText).deliveryFixes, accuracy: ratingAccuracy(pairs), scheduleOn: settings.schedule.enabled, searchTitles: settings.titles.length, knownTerms });
   const answers = (await readAnswerInbox(workspace).catch(() => [])).filter((answer) => answer.status === "pending" || Date.parse(answer.filedAt ?? answer.answeredAt) > now.getTime() - 7 * 86_400_000)
     .sort((a, b) => b.answeredAt.localeCompare(a.answeredAt)).slice(0, 6)
     .map(({ id, subject, status, filedTo, note, answeredAt }) => ({ id, subject, status, filedTo, note, answeredAt }));

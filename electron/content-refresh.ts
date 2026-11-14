@@ -1,6 +1,7 @@
 // Interview content refresh: the app knows which recordings are new, sends Agy only those, and checks that an update
 // never loses content without a better replacement (`.agents/workflows/jobsensei-interview-review.md` step 4 owns the
 // rule for Agy; this file owns the check).
+import { waitingToImport } from "../src/shared/recordings";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -203,7 +204,7 @@ export type PendingUpdate = z.infer<typeof updateSchema>;
 /** Starts an update: backs up the content files and records which recordings it covers. Returns the prompt for Agy. */
 export async function startUpdate(workspacePath: string, recordings: Recording[], jobNames: Record<string, string>, now = new Date()): Promise<{ prompt: string; update: PendingUpdate }> {
   const root = assertInsideWorkspace(workspacePath, workspacePath);
-  const chosen = recordings.filter((recording) => recording.state === "new" || recording.state === "changed");
+  const chosen = waitingToImport(recordings);
   if (!chosen.length) throw new Error("There are no new recordings to import.");
   const backup = `${BACKUP_ROOT}/${now.toISOString().replace(/[:.]/g, "-")}`;
   const files = await contentPaths(root);
