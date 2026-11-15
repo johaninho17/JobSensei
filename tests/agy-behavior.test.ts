@@ -56,11 +56,11 @@ describe("fit settings (#37)", () => {
     expect(gateStatusFor({ ...today, score: 3, gateScore: 3 } as never, 2.5)).toBe("accepted");
   });
 
-  it("lets the user change credit and gate, and nothing else yet", () => {
-    expect([...CONNECTED].sort()).toEqual(["fit-credit", "fit-gate", "lines-reworked"]);
+  it("reads every connected setting from the profile", () => {
+    expect([...CONNECTED].sort()).toEqual(["fit-credit", "fit-gate", "framing", "lines-reworked"]);
     const effective = effectiveBehavior({ framing: "beyond", fit: { strong: 0.9, gate: 2.5 }, linesReworked: 8 });
     expect(effective.fit).toMatchObject({ strong: 0.9, gate: 2.5 });
-    expect(effective.framing).toBe("framed");
+    expect(effective.framing).toBe("beyond");
     expect(effective.linesReworked).toBe(8);
   });
 });
@@ -75,5 +75,44 @@ describe("resume lines reworked (#38)", () => {
     const none = bulletPlanLine(plan(0));
     expect(none).toContain("keep every Northstar Labs bullet as written");
     expect(none).toContain("Acme Corp: leave out of the bundle");
+  });
+});
+
+describe("framing dial (#36)", () => {
+  it("gives Agy one framing line per stop, each with the same floor", async () => {
+    const { FRAMING_FLOOR, FRAMING_STOPS, framingInstruction } = await import("../src/shared/agy-behavior");
+    for (const stop of FRAMING_STOPS) {
+      const line = framingInstruction(stop);
+      expect(line).toMatch(/^Framing \(the candidate's setting/);
+      expect(line).toContain(`never invent ${FRAMING_FLOOR}`);
+    }
+    expect(framingInstruction("framed")).toContain("same confidence as the base resume");
+    expect(framingInstruction("as-written")).toContain("no stronger verb, scope, or ownership");
+    expect(framingInstruction("beyond")).toContain("the app marks every such line");
+    expect(CONNECTED.has("framing")).toBe(true);
+  });
+
+  it("warns about lines past the setting, and lists lines beyond the evidence at the top stop", async () => {
+    const { framingIssues } = await import("../electron/application-validation");
+    const lines = [
+      { text: "Onboarded new customers to the analytics product", artifact: "resume", level: 0, reason: "As its evidence says." },
+      { text: "Guided customers through data setup and first reports", artifact: "resume", level: 1, reason: "Reworded from its evidence." },
+      { text: "Led enterprise-wide onboarding for every new account", artifact: "resume", level: 2, reason: "Stronger than its evidence: led, enterprise-wide, every." },
+      { text: "Owned the Salesforce rollout", artifact: "resume", level: 3, reason: "Not supported by its cited evidence." },
+    ] as never;
+    expect((framingIssues(lines, "framed") as Array<{ code: string }>).map((item) => item.code)).toEqual(["LINE_PAST_FRAMING_SETTING"]);
+    expect(framingIssues(lines, "reworded")).toHaveLength(2);
+    expect(framingIssues(lines, "as-written")).toHaveLength(3);
+    const beyond = framingIssues(lines, "beyond") as Array<{ code: string; severity: string; message: string }>;
+    expect(beyond).toHaveLength(1);
+    expect(beyond[0]).toMatchObject({ code: "LINES_BEYOND_EVIDENCE", severity: "warning" });
+    expect(beyond[0]!.message).toContain("Owned the Salesforce rollout");
+  });
+
+  it("puts the setting's line in the run instructions and points the other copies to it", async () => {
+    const { readFileSync } = await import("node:fs");
+    expect(readFileSync("electron/evidence-snapshot.ts", "utf8")).toContain('framingInstruction(snapshot.settingsScore?.behavior.framing ?? "framed")');
+    expect(readFileSync("AGENTS.md", "utf8")).toContain("follow the `Framing` line in the run's instructions");
+    expect(readFileSync(".agents/skills/jobsensei-application-writer/SKILL.md", "utf8")).toContain("as the run's `Framing` line says");
   });
 });

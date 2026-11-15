@@ -32,6 +32,8 @@ function overlap(line: string, rows: string): number {
   return [...lineWords].filter((word) => rowWords.has(word)).length / lineWords.size;
 }
 
+export type RatedLine = { text: string; artifact: "resume" | "cover-letter"; level: 0 | 1 | 2 | 3; reason: string };
+
 export function scoreStretch(input: {
   lines: StretchLine[];
   /** Base-resume bullets and skills lines. */
@@ -40,7 +42,7 @@ export function scoreStretch(input: {
   rowText: Map<string, string>;
   /** Lines that failed the grounding check, with the check's message. */
   unsupported: Array<{ text: string; reason: string }>;
-}): StretchScore {
+}): StretchScore & { /** Every rated line (not stored in the report). */ lines: RatedLine[] } {
   const baseline = new Set(input.baselineLines.map(normalize));
   const unsupported = new Map(input.unsupported.map((line) => [normalize(line.text), line.reason]));
   const resumeLines = input.lines.filter((line) => line.artifact === "resume");
@@ -66,6 +68,7 @@ export function scoreStretch(input: {
     tailoredPercent,
     average: Math.round(average * 100) / 100,
     counts: { asEvidence: count(0), reworded: count(1), framed: count(2), unsupported: count(3) },
+    lines: rated.map((line) => ({ text: line.text, artifact: line.artifact, level: line.level, reason: line.reason })),
     top: [...rated]
       .filter((line) => line.level > 0)
       .sort((a, b) => b.level - a.level)

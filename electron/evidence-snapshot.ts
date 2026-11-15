@@ -41,7 +41,7 @@ import { APPLICATION_FORM_FILE } from "./posting-clean";
 import { BASE_ROW_PREFIX, FILE_ROW_PREFIX, baseEarnsFitCredit, baseResumeRows, candidateFileRows, noFitCredit } from "./candidate-evidence";
 import { currentEdition } from "./edition";
 import { featuresFor } from "../src/shared/edition";
-import { effectiveBehavior, settingScore } from "../src/shared/agy-behavior";
+import { effectiveBehavior, framingInstruction, settingScore } from "../src/shared/agy-behavior";
 import { countCareerFiles, coverLetterPlanFor } from "../src/shared/cover-letter-policy";
 
 const MANIFEST_PATH = ".sensei/active-context.json";
@@ -1078,7 +1078,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
         bulletPlanLine(resumePlan),
         "Skills and length follow the base resume (owner of this rule): keep every skills item from the base resume: lead with what this job needs, add supported items, and remove an item only when nothing supports it. Skills the posting does not ask for still show the candidate's range, so they stay. The resume keeps the base resume's page count.",
         "Unchanged baseline bullets are the candidate's own approved claims: copy them word for word with the evidenceIds listed in baselineBullets (often none). Never attach an unrelated evidence ID to make a bullet look supported.",
-        "Frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. The base resume is evidence too (owner of this rule): rows with `base:` IDs are its own lines, so a base line reworded for this job may cite its own `base:` row, and a candidate with only a base resume still gets a close tailoring. Whatever a line cites, it may not add an event, metric, tool, or ownership the cited rows do not state. " + (baseEarnsFitCredit() ? "`base:` rows also count when rating requirements." : "`base:` rows earn no fit credit; rate requirements from the other rows."),
+        framingInstruction(snapshot.settingsScore?.behavior.framing ?? "framed") + " The base resume is evidence too (owner of this rule): rows with `base:` IDs are its own lines, so a base line reworded for this job may cite its own `base:` row, and a candidate with only a base resume still gets a close tailoring. Whatever a line cites, it may not add an event, metric, tool, or ownership the cited rows do not state. " + (baseEarnsFitCredit() ? "`base:` rows also count when rating requirements." : "`base:` rows earn no fit credit; rate requirements from the other rows."),
         ...profileInstructionLines(candidateProfile, snapshot.coverLetterPlan?.write !== false, await recruiterInstructionsFor(workspace)),
         `Keep bullets about as long as the base resume's (about ${Math.round(snapshot.baseResumeFootprint?.averageExperienceBulletWords ?? 16)} words); no word counting.`,
         "provenLines (owner of this rule) are lines from tailored resumes that got the candidate a real interview, each with its evidenceIds (all routed to this job). When you rewrite a bullet at the same employer from the same evidence, prefer that proven wording, adjusted lightly for this job; never move a line to another employer.",
