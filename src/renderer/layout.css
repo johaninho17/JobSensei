@@ -1038,3 +1038,10 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .behavior-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }
 .inline-heading { display: inline; margin: 0; font-size: inherit; }
 .files-preview-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-2); }
+/* Agy page → Activity (#33): one row per run, panel and background together. */
+.agy-activity { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.agy-activity li { display: grid; grid-template-columns: 140px minmax(0, 1fr) auto; gap: var(--space-3); align-items: baseline; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+.agy-activity-when, .agy-activity-what { display: grid; gap: 2px; min-width: 0; }
+.agy-activity small { color: var(--muted); font-size: var(--fs-12); }
+.agy-activity li.is-failed .agy-activity-what small { color: var(--risk); }
+.agy-activity li.is-running .agy-activity-what small { color: var(--brass); }

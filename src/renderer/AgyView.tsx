@@ -1,6 +1,7 @@
 // The Agy page: what Agy can do for you, as buttons, and how it uses your data. `src/shared/agy-actions.ts` owns the
 // list of actions; the text of "How it works" is docs/app/how-agy-uses-it.md (the same owner the Docs page reads).
 import { useEffect, useState, type ReactNode } from "react";
+import type { AgyActivity } from "../shared/schemas";
 import howAgy from "../../docs/app/how-agy-uses-it.md?raw";
 import { AGY_ACTION_GROUPS, buildAgyActions, type AgyAction, type AgyActionContext } from "../shared/agy-actions";
 import { CONNECTED, DEFAULT_AGY_BEHAVIOR, FRAMING_LABELS, SETTINGS_BANDS, agyBehaviorSchema, bandFor, effectiveBehavior, settingScore, type AgyBehavior, type BehaviorSetting } from "../shared/agy-behavior";
@@ -10,8 +11,8 @@ import { markdownHtml } from "./markdown";
 import { Section } from "./Section";
 import { SubTabs, SubTabPanel } from "./SubTabs";
 
-type AgyTab = "actions" | "behavior" | "conversations" | "memory" | "how";
-const TABS: Array<{ id: AgyTab; label: string }> = [{ id: "actions", label: "Actions" }, { id: "behavior", label: "Behavior" }, { id: "conversations", label: "Conversations" }, { id: "memory", label: "Memory" }, { id: "how", label: "How it works" }];
+type AgyTab = "actions" | "activity" | "behavior" | "conversations" | "memory" | "how";
+const TABS: Array<{ id: AgyTab; label: string }> = [{ id: "actions", label: "Actions" }, { id: "activity", label: "Activity" }, { id: "behavior", label: "Behavior" }, { id: "conversations", label: "Conversations" }, { id: "memory", label: "Memory" }, { id: "how", label: "How it works" }];
 
 const SETTING_ROWS: Array<{ id: BehaviorSetting; title: string; value: (behavior: AgyBehavior) => string; help: string }> = [
   { id: "framing", title: "How far wording may reach", value: (behavior) => FRAMING_LABELS[behavior.framing], help: "Real work worded at its strongest; never an event, number, tool, or ownership that didn't happen." },
@@ -68,7 +69,7 @@ const remembered = (): AgyTab => {
   try { const value = window.localStorage.getItem("sensei-agy-tab"); return TABS.some((tab) => tab.id === value) ? value as AgyTab : "actions"; } catch { return "actions"; }
 };
 
-export function AgyView({ context, saved, onSaveBehavior, busyLabel, onRun, onShowAgy }: { context: AgyActionContext; /** The settings in the profile (`preferences.agy`). */ saved: AgyBehavior; onSaveBehavior: (next: AgyBehavior) => Promise<void>; /** The job Agy is working on now, if any. */ busyLabel: string | null; onRun: (action: AgyAction) => void; /** Opens the Agy panel. */ onShowAgy: () => void }) {
+export function AgyView({ context, saved, onSaveBehavior, busyLabel, onRun, onShowAgy, onOpenActivity }: { /** Opens what an activity row is about (a job tab or a page). */ onOpenActivity?: (open: AgyActivity["open"]) => void; context: AgyActionContext; /** The settings in the profile (`preferences.agy`). */ saved: AgyBehavior; onSaveBehavior: (next: AgyBehavior) => Promise<void>; /** The job Agy is working on now, if any. */ busyLabel: string | null; onRun: (action: AgyAction) => void; /** Opens the Agy panel. */ onShowAgy: () => void }) {
   const [tab, setTab] = useState<AgyTab>(remembered);
   const actions = buildAgyActions(context);
   return <section className="agy-home">
@@ -91,10 +92,30 @@ export function AgyView({ context, saved, onSaveBehavior, busyLabel, onRun, onSh
         })}
         {!context.job && <p className="muted">Open a job to see its actions here.</p>}
       </>}
+      {tab === "activity" && <ActivityTab onOpen={onOpenActivity} />}
       {tab === "behavior" && <BehaviorTab saved={saved} onSave={onSaveBehavior} />}
       {tab === "memory" && <AgyMemory />}
       {tab === "conversations" && <AgyConversations onOpened={onShowAgy} />}
       {tab === "how" && <article className="docs-page iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(howAgy, [], { readable: true }) }} />}
     </SubTabPanel>
   </section>;
+}
+
+const RESULT_LABEL: Record<AgyActivity["result"], string> = { running: "Running", passed: "Done", warnings: "Done, with things to check", failed: "Failed" };
+const duration = (value: number | null) => value === null ? "" : value < 60 ? `${value}s` : `${Math.floor(value / 60)}m ${value % 60}s`;
+
+/** Everything Agy did, in the panel and in the background, in one list (#33; data: electron/agy-activity.ts). */
+function ActivityTab({ onOpen }: { onOpen?: (open: AgyActivity["open"]) => void }) {
+  const [entries, setEntries] = useState<AgyActivity[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const load = () => void window.sensei.app.agyActivity().then(setEntries).catch(() => setFailed(true));
+  useEffect(() => { load(); const timer = window.setInterval(load, 15_000); return () => window.clearInterval(timer); }, []);
+  if (failed) return <p className="inline-error" role="alert">Couldn't read Agy's activity.</p>;
+  if (!entries) return <p className="muted">Reading Agy's activity…</p>;
+  if (!entries.length) return <p className="muted">Nothing yet. Runs from the Agy panel and the background (job search, written answers, filing your Today answers) show here.</p>;
+  return <ul className="agy-activity">{entries.map((entry) => <li key={entry.id} className={`is-${entry.result}`}>
+    <span className="agy-activity-when"><time dateTime={entry.at}>{new Date(entry.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</time><small>{entry.where === "panel" ? "Agy panel" : "Background"}</small></span>
+    <span className="agy-activity-what"><strong>{entry.label}</strong><small>{[RESULT_LABEL[entry.result], duration(entry.durationSeconds), entry.detail].filter(Boolean).join(" · ")}</small></span>
+    {onOpen && <button className="btn-link" onClick={() => onOpen(entry.open)}>Open</button>}
+  </li>)}</ul>;
 }
