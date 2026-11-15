@@ -1,4 +1,5 @@
 import { readFile, readdir, stat } from "node:fs/promises";
+import { normalCompany, normalTitle } from "../src/shared/posting-fields";
 import { basename, join } from "node:path";
 import { evidenceSnapshotSchema, stretchScoreSchema, type ArtifactFile, type FileTreeNode, type JobFolderSummary } from "../src/shared/schemas";
 import { previewFile } from "./files";
@@ -238,8 +239,11 @@ async function readJobSummary(path: string, name: string): Promise<JobFolderSumm
   const status = await readJson(join(path, ".sensei", "status.json"));
   const legacyStatus = Object.keys(status).length ? status : await readJson(join(path, "status.json"));
   const metadataFallback = await legacyJobMetadata(path);
-  const title = stringValue(metadata.title, metadata.role, legacyStatus.title, legacyStatus.role, metadataFallback.title);
-  const company = stringValue(metadata.company, legacyStatus.company, metadataFallback.company);
+  // The list, filters, and grouping show each field's normal form (src/shared/posting-fields.ts).
+  const rawCompany = stringValue(metadata.company, legacyStatus.company, metadataFallback.company);
+  const company = normalCompany(rawCompany) ?? rawCompany;
+  const rawTitle = stringValue(metadata.title, metadata.role, legacyStatus.title, legacyStatus.role, metadataFallback.title);
+  const title = normalTitle(rawTitle, company) ?? rawTitle;
   const hasResume = files.some((file) => file.isFile() && /_Resume\.md$/i.test(file.name));
   const hasCoverLetter = files.some((file) => file.isFile() && file.name.toLowerCase() === "cover_letter.md");
   const hasApplicationMaterials = hasResume || hasCoverLetter;

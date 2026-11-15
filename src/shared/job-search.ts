@@ -1,3 +1,4 @@
+import { companyKey } from "./posting-fields";
 import { z } from "zod";
 
 /**
@@ -266,7 +267,7 @@ export function jobKey(company: string | null, title: string | null): string | n
   const norm = (value: string | null) => (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   // The same role posted once per city ("Engineer (Atlanta)", "Engineer (New York)") is one job.
   const role = (title ?? "").replace(/\([^)]*\)/g, " ").replace(/\s[-–|]\s*(?:remote|hybrid|[A-Z][\w .]+,\s*[A-Z]{2})\s*$/i, " ");
-  return company && title ? `${norm(company)}|${norm(role)}` : null;
+  return company && title ? `${companyKey(company) || norm(company)}|${norm(role)}` : null;
 }
 
 /** Whether a link belongs to a board or site the search must not use. */

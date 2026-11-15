@@ -1,5 +1,6 @@
 // "Who is this for?" (Recruiter Edition, plan R5): how well a posting suits each candidate's targets, with a reason
 // for every point, so the recruiter sees why a candidate is or isn't suggested. Pure, so the rules are tested alone.
+import { companyKey } from "./posting-fields";
 import type { CandidateTargets } from "./schemas";
 import { SENIORITY_LEVELS, type PostingRecord } from "./posting";
 
@@ -39,9 +40,8 @@ const NO_SPONSORSHIP = /\b(?:no|not|unable to|cannot|can't|will not|won't|do not
 
 /** Same company, ignoring legal suffixes and punctuation ("Northstar Labs, Inc." = "northstar labs"). */
 export function sameCompany(a: string | null | undefined, b: string | null | undefined): boolean {
-  const norm = (value: string | null | undefined) => (value ?? "").toLowerCase().replace(/\b(?:inc|llc|ltd|corp|corporation|co|company|gmbh|plc)\b\.?/g, "").replace(/[^a-z0-9]+/g, "");
-  const left = norm(a);
-  const right = norm(b);
+  const left = companyKey(a);
+  const right = companyKey(b);
   return left.length >= 3 && right.length >= 3 && left === right;
 }
 
