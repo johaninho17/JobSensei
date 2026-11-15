@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_PDF_TEXT_SIZE, INTERVIEW_ROUNDS, OUTCOME_RESULTS, TRACKER_STATUSES, type InterviewEvent, type InterviewRoundKind, type JobOutcome, type JobTrackerUpdate, type TrackerStatus, type ApplicationStatus, type ApplicationValidationReport, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type PdfTextSize, type QuestionsState } from "../shared/schemas";
 import { TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, draftedLabel } from "../shared/tracker";
-import { FIT_CLASSIFICATION_CREDIT } from "../shared/fit-credit";
 import { type JobAction } from "./job-actions";
 import { markdownHtml } from "./markdown";
 import { InterviewView } from "./InterviewView";
@@ -531,9 +530,9 @@ function ApplicationHealth({ job, files, status, loading, onStatus }: { job: Job
       <li className={hasResume ? "is-ready" : ""}><span aria-hidden="true">{hasResume ? "✓" : "○"}</span>Resume</li>
       <li className={hasCoverLetter ? "is-ready" : ""}><span aria-hidden="true">{hasCoverLetter ? "✓" : "○"}</span>Cover letter</li>
     </ul>
-    <p className="app-check-next"><strong>Next:</strong> {recommendedAction}.{job.rating !== null && <> Fit {job.rating.toFixed(1)} of 5{job.ratingConfidence ? `, ${job.ratingConfidence} confidence` : ""}.</>}</p>
+    <p className="app-check-next"><strong>Next:</strong> {recommendedAction}.</p>
     {issues.length > 0 && <details className="application-issues" open={issuesOpen} onToggle={(event) => setIssuesOpen(event.currentTarget.open)}><summary>{plural(issues.filter((issue) => issue.severity === "error").length, "error")} and {plural(issues.filter((issue) => issue.severity === "warning").length, "warning")} from the last check</summary>{issues.map((issue, index) => <div className={`application-issue is-${issue.severity}`} key={`${issue.code}-${issue.artifact}-${index}`}><strong>{issue.severity === "warning" ? "Warning" : "Needs review"}</strong><span>{issue.code} · {issue.artifact}</span><p>{issue.message}</p>{issue.explanation && <div className="application-issue-explanation"><span><b>Sentence</b>{issue.explanation.sentence ?? "Unavailable"}</span><span><b>Source</b>{issue.explanation.sources.length ? issue.explanation.sources.map((source, sourceIndex) => <span className="application-issue-source" key={`${source.evidenceId}-${sourceIndex}`}><code>{source.evidenceId}</code> · <code>{source.sourcePath}</code><em>{source.claim}</em></span>) : "Unavailable"}</span></div>}<small>{issue.repairHint}</small></div>)}</details>}
-    {(job.ratingHighlights.length > 0 || job.ratingGaps.length > 0) && <details className="application-fit-details"><summary>Why this rating <span>{job.ratingHighlights.length} strengths · {job.ratingGaps.length} gaps</span></summary><div><section><h3>Strongest alignment</h3>{job.ratingHighlights.length ? <ul>{job.ratingHighlights.map((item) => <li key={item}>{item}</li>)}</ul> : <p>No direct-match summary was found.</p>}</section><section><h3>Gaps and risks</h3>{job.ratingGaps.length ? <ul>{job.ratingGaps.map((item) => <li key={item}>{item}</li>)}</ul> : <p>No material gaps were listed.</p>}</section></div></details>}
+    {/* Fit, strengths, and gaps live in Overview and Evaluation; Checks lists document checks only (#28). */}
     {(lastReport?.ats?.missingFields.length ?? 0) > 0 && <p className="app-check-message">ATS fields to review: {lastReport?.ats?.missingFields.join(", ")}</p>}
     <details className="app-check-details"><summary>Pipeline details</summary>
     <div className="application-health-facts">
@@ -544,7 +543,6 @@ function ApplicationHealth({ job, files, status, loading, onStatus }: { job: Job
       <span><small>Resume density</small>{status.resumeBulletCount === null ? "Not drafted" : `${status.resumeBulletCount} bullets, ${status.currentEmployerBulletCount ?? 0} in current role`}</span>
       <span><small>Recent work</small>{status.recentCurrentEmployerBulletCount === null ? "Not audited" : `${status.recentCurrentEmployerBulletCount} evidence-backed`}</span>
       <span><small>Word target</small>{footprint && footprint.targetWordMin !== null && footprint.targetWordMax !== null ? `${footprint.targetWordMin}-${footprint.targetWordMax}` : "Unavailable"}</span>
-      <span><small>Fit credit</small>{`Direct ${FIT_CLASSIFICATION_CREDIT.direct * 100}%, strong transferable ${FIT_CLASSIFICATION_CREDIT.strong_transferable * 100}%, adjacent ${FIT_CLASSIFICATION_CREDIT.adjacent_transferable * 100}%`}</span>
     </div>
     {(() => {
       const report = lastReport ?? status.validation;
