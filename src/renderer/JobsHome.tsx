@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { looksLikePastedPosting } from "../shared/paste-limits";
 import { createPortal } from "react-dom";
 import { TRACKER_STATUSES, type JobQueue, type JobTrackerUpdate, type TrackerStatus, type JobFolderSummary } from "../shared/schemas";
 import { jobsToCsv } from "../shared/jobs-csv";
@@ -248,7 +249,7 @@ function JobQueueBox({ queue, jobs, agyReady, onOpenAgy, onSave, onQueueJob, onO
   const manyLinks = links.length > 1 && links.every((link) => /^https?:\/\/\S+$/i.test(link) && link.length <= 400);
   const isLink = /^https?:\/\/[^\s]+$/i.test(value);
   const duplicate = isLink && queue.items.some((item) => item.url === value && item.status !== "done");
-  const valid = !adding && !duplicate && (manyLinks || (isLink ? value.length <= 400 : value.length >= 400));
+  const valid = !adding && !duplicate && (manyLinks || (isLink ? value.length <= 400 : looksLikePastedPosting(value)));
   const update = (id: string, patch: Partial<JobQueue["items"][number]>) => onSave({ ...queue, items: queue.items.map((item) => item.id === id ? { ...item, ...patch } : item) });
   async function add(event: React.FormEvent) {
     event.preventDefault();
@@ -298,7 +299,7 @@ function JobQueueBox({ queue, jobs, agyReady, onOpenAgy, onSave, onQueueJob, onO
       <label htmlFor="add-job-url" id="job-queue-title">Add jobs</label>
       <textarea id="add-job-url" rows={!manyLinks && (isLink || !value) ? 1 : 4} value={input} onChange={(event) => { setInput(event.target.value); setProblem(null); }} placeholder="Paste a job link or description" aria-describedby="add-job-help" />
       <button className="btn-primary" disabled={!valid}>Add to queue</button>
-      <p id="add-job-help">{problem ?? (duplicate ? "That link is already in the queue." : manyLinks ? `${links.length} links: each is added in turn.` : value && !isLink && value.length < 400 ? "Paste the whole job description, or just its link." : FEATURES.candidates ? <>Agy tailors one job at a time for the candidate it's for: it reads the posting, rates the fit, and drafts the resume (and a cover letter when turned on).</> : <>Agy runs one job at a time: it reads the posting, scores your fit, and drafts the resume and cover letter.</>)}</p>
+      <p id="add-job-help">{problem ?? (duplicate ? "That link is already in the queue." : manyLinks ? `${links.length} links: each is added in turn.` : value && !isLink && !looksLikePastedPosting(value) ? "Paste the whole job description, or just its link." : FEATURES.candidates ? <>Agy tailors one job at a time for the candidate it's for: it reads the posting, rates the fit, and drafts the resume (and a cover letter when turned on).</> : <>Agy runs one job at a time: it reads the posting, scores your fit, and drafts the resume and cover letter.</>)}</p>
       <label className="queue-auto"><input type="checkbox" checked={queue.autoRun} onChange={(event) => onSave({ ...queue, autoRun: event.target.checked })} /> Run automatically when Agy is free</label>
     </form>
     {QUEUE_LIST}
