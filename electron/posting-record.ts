@@ -119,12 +119,13 @@ export function parsePay(posting: string): PostingPay | null {
   const match = RANGE.exec(line);
   if (!match) {
     const single = new RegExp(AMOUNT).exec(line)?.[0];
-    return single ? { text: single.trim(), min: amount(single), max: amount(single), currency: currencyOf(single), period: periodOf(line, amount(single)), line: short(line) } : null;
+    return single ? { text: single.trim().replace(/[,.]+$/, ""), min: amount(single), max: amount(single), currency: currencyOf(single), period: periodOf(line, amount(single)), line: short(line) } : null;
   }
   const min = amount(match[1]!);
   const max = amount(match[2]!.match(/^[$£€]/) ? match[2]! : `${match[1]!.trim()[0]}${match[2]}`);
   const period = periodOf(match[4] ?? line, min);
-  const text = `${match[1]!.trim()}–${match[2]!.trim().replace(/^(?![$£€])/, match[1]!.trim()[0]!)}${period ? `/${period}` : ""}`;
+  const written = (value: string) => value.trim().replace(/[,.]+$/, "");
+  const text = `${written(match[1]!)}–${written(match[2]!).replace(/^(?![$£€])/, match[1]!.trim()[0]!)}${period ? `/${period}` : ""}`;
   return { text, min, max, currency: currencyOf(match[1]!) ?? (match[3]?.trim().toUpperCase() || null), period, line: short(line) };
 }
 const currencyOf = (value: string) => value.includes("$") ? "USD" : value.includes("£") ? "GBP" : value.includes("€") ? "EUR" : null;

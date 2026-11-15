@@ -58,6 +58,23 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
+/**
+ * The page without its site chrome: menus, header, footer, side panels, and cookie banners removed, and the page's
+ * `<main>` or `<article>` when it holds most of the text.
+ */
+export function mainContent(html: string): string {
+  const stripped = html
+    .replace(/<(nav|header|footer|aside)\b[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<(div|section)\b[^>]*(?:id|class)=["'][^"']*\b(?:cookie|consent|onetrust|gdpr)[^"']*["'][^>]*>[\s\S]*?<\/\1>/gi, " ");
+  const textLength = (value: string) => htmlToText(value).length;
+  const total = textLength(stripped);
+  for (const tag of ["main", "article"]) {
+    const inner = stripped.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*)<\\/${tag}>`, "i"))?.[1];
+    if (inner && textLength(inner) >= total * 0.6) return inner;
+  }
+  return stripped;
+}
+
 interface JobPostingLd {
   title?: string;
   description?: string;
@@ -145,7 +162,7 @@ export function extractJobDescription(html: string, url: string): Omit<FetchedJo
   const company = (organization ? decodeEntities(organization).trim() : "") || pageTitle?.company || null;
   const location = locationText(posting?.jobLocation);
   const pay = pagePay(posting, html);
-  const body = posting?.description ? htmlToText(decodeEntities(posting.description)) : htmlToText(html);
+  const body = posting?.description ? htmlToText(decodeEntities(posting.description)) : htmlToText(mainContent(html));
   const header = [
     `# ${title ?? "Job Description"}`,
     "",
@@ -265,7 +282,67 @@ export async function fetchAndClean(url: string, fetcher: typeof fetch, options:
 
 /** Postings a job board serves as JSON (Greenhouse, Workday, Oracle Cloud), shown with `source` as their link. */
 async function postingFromApi(url: string, fetcher: typeof fetch, source = url): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
-  return await fetchGreenhouseJob(url, fetcher, source) ?? await fetchWorkdayPosting(url, fetcher) ?? await fetchOracleCloudPosting(url, fetcher);
+  return await fetchGreenhouseJob(url, fetcher, source) ?? await fetchWorkdayPosting(url, fetcher) ?? await fetchOracleCloudPosting(url, fetcher)
+    ?? await fetchSmartRecruitersPosting(url, fetcher) ?? await fetchWorkablePosting(url, fetcher) ?? await fetchRecruiteePosting(url, fetcher);
+}
+
+async function getJson<T>(url: string, fetcher: typeof fetch): Promise<T | null> {
+  const response = await fetcher(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
+  if (!response?.ok) return null;
+  return await response.json().catch(() => null) as T | null;
+}
+
+/** "SANTA CLARA, CALIFORNIA" → "Santa Clara, California"; mixed-case text stays as written. */
+const tidyCase = (value: string) => value.replace(/\b[A-Z]{3,}\b/g, (word) => word[0] + word.slice(1).toLowerCase());
+const factLines = (facts: Array<[string, string | null | undefined]>) => facts.filter(([, value]) => value).map(([label, value]) => `<p>${label}: ${value}</p>`).join("");
+const setupOf = (remote?: boolean | null, hybrid?: boolean | null) => remote ? "Remote" : hybrid ? "Hybrid" : null;
+
+const SMARTRECRUITERS = /^https:\/\/(?:jobs|careers)\.smartrecruiters\.com\/([A-Za-z0-9_-]+)\/(\d{6,})/i;
+
+/** SmartRecruiters postings from its public posting API (sections, location, type, posted date, reference). */
+async function fetchSmartRecruitersPosting(url: string, fetcher: typeof fetch): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
+  const match = SMARTRECRUITERS.exec(url);
+  if (!match) return null;
+  type Data = { name?: string; refNumber?: string; releasedDate?: string; company?: { name?: string }; typeOfEmployment?: { label?: string };
+    location?: { fullLocation?: string; city?: string; region?: string; remote?: boolean; hybrid?: boolean }; jobAd?: { sections?: Record<string, { title?: string; text?: string }> } };
+  const data = await getJson<Data>(`https://api.smartrecruiters.com/v1/companies/${match[1]}/postings/${match[2]}`, fetcher);
+  const sections = Object.values(data?.jobAd?.sections ?? {}).filter((section) => section.text?.trim());
+  if (!data?.name || !sections.length) return null;
+  const location = data.location?.fullLocation ? tidyCase(data.location.fullLocation) : null;
+  const html = factLines([["Work setup", setupOf(data.location?.remote, data.location?.hybrid)], ["Employment type", data.typeOfEmployment?.label], ["Posted", data.releasedDate?.slice(0, 10)], ["Job ID", data.refNumber]])
+    + sections.map((section) => `<h2>${section.title ?? ""}</h2>${section.text}`).join("");
+  return postingFromBoard({ url, title: data.name, company: data.company?.name?.trim() || null, location, html }).extracted;
+}
+
+const WORKABLE = /^https:\/\/apply\.workable\.com\/([A-Za-z0-9_-]+)\/j\/([A-Za-z0-9]+)/i;
+
+/** Workable postings from its public job API; the company name from the account. */
+async function fetchWorkablePosting(url: string, fetcher: typeof fetch): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
+  const match = WORKABLE.exec(url);
+  if (!match) return null;
+  type Data = { title?: string; description?: string; requirements?: string; benefits?: string; published?: string; type?: string; workplace?: string; remote?: boolean;
+    location?: { city?: string; region?: string | null; country?: string } };
+  const data = await getJson<Data>(`https://apply.workable.com/api/v2/accounts/${match[1]}/jobs/${match[2]}`, fetcher);
+  if (!data?.title || !data.description) return null;
+  const account = await getJson<{ name?: string }>(`https://apply.workable.com/api/v1/accounts/${match[1]}`, fetcher);
+  const place = [data.location?.city, data.location?.region, data.location?.country].filter((part) => part && part.trim()).join(", ") || null;
+  const html = factLines([["Work setup", data.workplace === "hybrid" ? "Hybrid" : data.workplace === "on_site" ? "On-site" : setupOf(data.remote ?? data.workplace === "remote", false)], ["Employment type", data.type], ["Posted", data.published?.slice(0, 10)]])
+    + data.description + (data.requirements ? `<h2>Requirements</h2>${data.requirements}` : "") + (data.benefits ? `<h2>Benefits</h2>${data.benefits}` : "");
+  return postingFromBoard({ url, title: data.title, company: account?.name?.trim() || workdayCompany(match[1]!, null), location: place, html }).extracted;
+}
+
+const RECRUITEE = /^https:\/\/([a-z0-9-]+)\.recruitee\.com\/o\/([A-Za-z0-9_-]+)/i;
+
+/** Recruitee postings from the company's public offers API. */
+async function fetchRecruiteePosting(url: string, fetcher: typeof fetch): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
+  const match = RECRUITEE.exec(url);
+  if (!match) return null;
+  type Offer = { title?: string; description?: string; requirements?: string; company_name?: string; location?: string; published_at?: string; employment_type_code?: string; remote?: boolean; hybrid?: boolean };
+  const offer = (await getJson<{ offer?: Offer }>(`https://${match[1]}.recruitee.com/api/offers/${match[2]}`, fetcher))?.offer;
+  if (!offer?.title || !offer.description) return null;
+  const html = factLines([["Work setup", setupOf(offer.remote, offer.hybrid)], ["Employment type", offer.employment_type_code?.replace(/_/g, " ")], ["Posted", offer.published_at?.slice(0, 10)]])
+    + offer.description + (offer.requirements ? `<h2>Requirements</h2>${offer.requirements}` : "");
+  return postingFromBoard({ url, title: offer.title, company: offer.company_name?.trim() || null, location: offer.location?.trim() || null, html }).extracted;
 }
 
 const GREENHOUSE_JOB = /^https:\/\/(?:boards|job-boards)\.greenhouse\.io\/([A-Za-z0-9_-]+)\/jobs\/(\d+)/i;
