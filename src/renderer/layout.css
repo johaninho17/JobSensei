@@ -1048,3 +1048,9 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .behavior-weights { margin-top: var(--space-5); }
 .behavior-weights h2 { margin: 0 0 var(--space-1); font: 600 var(--fs-15) var(--font-ui); }
 .behavior-error { color: var(--risk); font: var(--fs-13) var(--font-ui); }
+/* Agy → Behavior → How Job Search ranks matches (#39). */
+.behavior-ranking { display: grid; gap: var(--space-2); margin-top: var(--space-5); }
+.behavior-ranking h2 { margin: 0; font: 600 var(--fs-15) var(--font-ui); }
+.behavior-slider { display: grid; gap: 2px; max-width: 460px; }
+.behavior-slider small { font-size: var(--fs-12); }
+.find-rank { font-size: var(--fs-12); }

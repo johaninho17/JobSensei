@@ -1,4 +1,5 @@
 import { companyKey } from "./posting-fields";
+import { DEFAULT_AGY_BEHAVIOR, type AgyBehavior } from "./agy-behavior";
 import { z } from "zod";
 
 /**
@@ -367,20 +368,58 @@ export function titleExcluded(title: string, words: string[]): string | null {
 }
 
 /** Inbox order: by fit (Agy's light rating, else quick fit; highest first), then newest. */
-export function rankInbox(items: InboxItem[], sort: "fit" | "newest" | "company" = "fit"): InboxItem[] {
+/** Ranking weights: owned by Agy's Behavior settings (`search` in src/shared/agy-behavior.ts). */
+export type RankingWeights = AgyBehavior["search"];
+export const DEFAULT_RANKING: RankingWeights = DEFAULT_AGY_BEHAVIOR.search;
+
+/** The highest yearly amount in a pay line ("$120K–$150K", "$55/hr" ≈ $114K), or null. */
+export function yearlyPay(pay: string | null): number | null {
+  if (!pay) return null;
+  const amounts = [...pay.matchAll(/\$\s?(\d[\d,]*(?:\.\d+)?)\s*([kK])?/g)].map((match) => Number(match[1]!.replace(/,/g, "")) * (match[2] ? 1000 : 1));
+  if (!amounts.length) return null;
+  const top = Math.max(...amounts);
+  return /\b(?:hour|hr|hourly)\b/i.test(pay) || top < 500 ? top * 2080 : top;
+}
+
+/** Each part of a match's rank in fit points, so the page can say why a match sits where it does. */
+export function rankParts(item: InboxItem, weights: RankingWeights = DEFAULT_RANKING, now = Date.now()): { fit: number; freshness: number; pay: number; likeInterviewed: number; total: number } {
+  const ageDays = Math.max(0, (now - (Date.parse(item.postedAt ?? item.foundAt) || now)) / 86_400_000);
+  const yearly = yearlyPay(item.pay);
+  const parts = {
+    fit: weights.fit * effectiveFit(item),
+    freshness: weights.freshness * Math.max(0, 1 - ageDays / 30),
+    pay: yearly ? weights.pay * Math.min(1, yearly / 250_000) : 0,
+    likeInterviewed: item.likeInterviewed ? weights.likeInterviewed : 0,
+  };
+  return { ...parts, total: parts.fit + parts.freshness + parts.pay + parts.likeInterviewed };
+}
+
+/** One line on why a match ranks where it does: only the parts that add something. */
+export function rankReason(item: InboxItem, weights: RankingWeights = DEFAULT_RANKING, now = Date.now()): string {
+  const parts = rankParts(item, weights, now);
+  const bonus = (value: number) => `+${value.toFixed(2).replace(/0$/, "")}`;
+  return [
+    weights.fit > 0 ? `fit ${effectiveFit(item).toFixed(1)}${weights.fit !== 1 ? ` ×${weights.fit}` : ""}` : null,
+    parts.freshness >= 0.05 ? `newly posted ${bonus(parts.freshness)}` : null,
+    parts.pay >= 0.05 ? `pay ${bonus(parts.pay)}` : null,
+    parts.likeInterviewed > 0 ? `${item.likeInterviewed} ${bonus(parts.likeInterviewed)}` : null,
+  ].filter(Boolean).join(" · ");
+}
+
+export function rankInbox(items: InboxItem[], sort: "fit" | "newest" | "company" = "fit", weights: RankingWeights = DEFAULT_RANKING, now = Date.now()): InboxItem[] {
   const time = (item: InboxItem) => Date.parse(item.postedAt ?? item.foundAt) || 0;
-  // Jobs like ones that got interviews rank a quarter point higher (the shown score doesn't change).
-  const rank = (item: InboxItem) => effectiveFit(item) + (item.likeInterviewed ? 0.25 : 0);
+  // The shown fit score never changes; only the order does (weights from Search settings → Ranking).
+  const rank = (item: InboxItem) => rankParts(item, weights, now).total;
   return [...items].sort((a, b) => sort === "company" ? (a.company ?? "").localeCompare(b.company ?? "") || rank(b) - rank(a)
     : sort === "newest" ? time(b) - time(a) || rank(b) - rank(a)
       : rank(b) - rank(a) || time(b) - time(a));
 }
 
 /** Which new items to queue for drafts by themselves: at or above the user's rating, within today's cap. */
-export function autoDraftPicks(state: JobSearchState, settings: JobSearchSettings, now = new Date()): InboxItem[] {
+export function autoDraftPicks(state: JobSearchState, settings: JobSearchSettings, now = new Date(), weights: RankingWeights = DEFAULT_RANKING): InboxItem[] {
   if (settings.autoDraftAt === null) return [];
   const today = now.toISOString().slice(0, 10);
   const queuedToday = state.items.filter((item) => item.autoQueued && item.queuedAt?.slice(0, 10) === today).length;
   const room = Math.max(0, settings.autoDraftDailyCap - queuedToday);
-  return rankInbox(state.items.filter((item) => item.status === "new" && item.fit.blockers.length === 0 && effectiveFit(item) >= settings.autoDraftAt!)).slice(0, room);
+  return rankInbox(state.items.filter((item) => item.status === "new" && item.fit.blockers.length === 0 && effectiveFit(item) >= settings.autoDraftAt!), "fit", weights).slice(0, room);
 }

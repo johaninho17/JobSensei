@@ -1,6 +1,7 @@
 // The scheduled search, one owner for both callers: the OS schedule's runner (app closed) and the app itself when it
 // opens or the computer wakes and the day's search hasn't run (src/shared/job-search.ts `dailyRunDue` decides).
 // Watched companies always; Agy's web search on the days the user chose; a run whose Agy part failed is retried once.
+import { effectiveBehavior } from "../src/shared/agy-behavior";
 import { autoDraftPicks, dailyRunDue, scheduledAgyToday, type SearchRun } from "../src/shared/job-search";
 import { reachedInterview } from "../src/shared/tracker";
 import { pruneHeadlessConversations } from "./agy-home";
@@ -61,7 +62,7 @@ export async function runScheduledSearch(deps: {
     });
     // Strong matches are marked for drafts; the app queues them (within the daily cap).
     const state = await readSearchState(workspace);
-    const picks = run.status === "done" ? autoDraftPicks({ ...state, items: state.items.filter((item) => item.runId === run.id) }, settings) : [];
+    const picks = run.status === "done" ? autoDraftPicks({ ...state, items: state.items.filter((item) => item.runId === run.id) }, settings, new Date(), effectiveBehavior(profile?.preferences.agy).search) : [];
     if (picks.length) await saveSearchState(workspace, { ...state, pendingDrafts: [...new Set([...state.pendingDrafts, ...picks.map((item) => item.id)])] });
     await log(`${agyOnly ? "Agy retry " : ""}${run.status}: ${run.found} links, ${run.added} new, ${run.rated} rated, ${picks.length} marked for drafts${run.error ? `; ${run.error}` : ""}${withAgy ? (agyPath ? "" : "; Agy not found, watched companies only") : "; watched companies only (Search settings)"}`);
     // Second step, after the search: the morning summary (closed postings, what's due, questions), no Agy.

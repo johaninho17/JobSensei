@@ -75,6 +75,14 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
       </div>
       <p className={weightTotal === 100 ? "muted" : "behavior-error"} role="status">Total {weightTotal} of 100{weightTotal === 100 ? "" : `: ${weightTotal > 100 ? "take away" : "add"} ${Math.abs(100 - weightTotal)} before saving`}.</p>
     </section>
+    {FEATURES.jobSearch && <section className="behavior-ranking" aria-labelledby="behavior-ranking-title">
+      <h2 id="behavior-ranking-title">How Job Search ranks matches</h2>
+      <p className="muted">Each slider is worth up to that many fit points in the order of Job Search matches; the fit shown on a match never changes. Not part of the settings score: it changes the order, not what Agy writes.</p>
+      {RANKING_SLIDERS.map((slider) => <label key={slider.key} className="behavior-slider"><span>{slider.label} <strong className="tabular">{draft.search[slider.key].toFixed(2).replace(/0$/, "")}</strong></span>
+        <input type="range" min={0} max={slider.max} step={0.05} value={draft.search[slider.key]} aria-describedby={`rank-${slider.key}`} onChange={(event) => { const value = Number(event.target.value); setDraft((current) => ({ ...current, search: { ...current.search, [slider.key]: value } })); setState("idle"); }} />
+        <small id={`rank-${slider.key}`} className="muted">{slider.help}</small>
+      </label>)}
+    </section>}
     <div className="behavior-actions">
       <button className="btn-primary" disabled={!changed || !valid || state === "saving"} onClick={() => void save(draft)}>{state === "saving" ? "Saving…" : "Save settings"}</button>
       <button className="btn-quiet" disabled={state === "saving" || JSON.stringify(draft) === JSON.stringify(DEFAULT_AGY_BEHAVIOR)} onClick={() => { setDraft(DEFAULT_AGY_BEHAVIOR); void save(DEFAULT_AGY_BEHAVIOR); }}>Back to the app's defaults</button>
@@ -137,3 +145,11 @@ function ActivityTab({ onOpen }: { onOpen?: (open: AgyActivity["open"]) => void 
     {onOpen && <button className="btn-link" onClick={() => onOpen(entry.open)}>Open</button>}
   </li>)}</ul>;
 }
+
+/** Behavior → How Job Search ranks matches (#39); weights in fit points (src/shared/job-search.ts `rankParts`). */
+const RANKING_SLIDERS: Array<{ key: keyof AgyBehavior["search"]; label: string; max: number; help: string }> = [
+  { key: "fit", label: "Fit", max: 2, help: "How much the fit score counts (1 = as rated, 0 = ignore it)." },
+  { key: "freshness", label: "Newly posted", max: 1, help: "Points for a posting from today, falling to none at 30 days." },
+  { key: "pay", label: "Pay", max: 1, help: "Points for pay: all of them at $250K a year or more, in proportion below; none when the posting has no pay." },
+  { key: "likeInterviewed", label: "Like a job where you got an interview", max: 1, help: "Points for a job similar to one that got you a real interview (0.25 before this setting existed)." },
+];

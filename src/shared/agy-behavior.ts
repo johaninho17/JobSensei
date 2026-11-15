@@ -60,6 +60,17 @@ export const agyBehaviorSchema = z.object({
   }).prefault({}),
   /** Most current-role bullets reworked per resume (#38). */
   linesReworked: z.number().int().min(0).max(12).default(4),
+  /**
+   * How Job Search orders matches (#39), in fit points: fit multiplier, points for a posting from today (none at 30
+   * days), points for pay ($250K a year or more = all of them), points for a job like one that got an interview. The
+   * defaults are the ranking before #39. Not part of the settings score: it changes order, not what Agy writes.
+   */
+  search: z.object({
+    fit: z.number().min(0).max(2).default(1),
+    freshness: z.number().min(0).max(1).default(0),
+    pay: z.number().min(0).max(1).default(0),
+    likeInterviewed: z.number().min(0).max(1).default(0.25),
+  }).prefault({}),
 });
 export type AgyBehavior = z.infer<typeof agyBehaviorSchema>;
 export const DEFAULT_AGY_BEHAVIOR: AgyBehavior = agyBehaviorSchema.parse({});
@@ -80,6 +91,7 @@ export function effectiveBehavior(saved?: unknown): AgyBehavior {
       weights: chosen.fit.weights,
     },
     linesReworked: CONNECTED.has("lines-reworked") ? chosen.linesReworked : DEFAULT_AGY_BEHAVIOR.linesReworked,
+    search: chosen.search,
   };
 }
 
