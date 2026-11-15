@@ -123,7 +123,7 @@ export async function updateCandidateProfilePreferences(
 /** Settings fields that live outside `preferences`: career direction and the candidate's truth rules. */
 export async function updateCandidateProfileDetails(
   workspacePath: string,
-  details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[]; interviewLogistics?: Partial<InterviewLogistics>; practiceInterviewsAsEvidence?: boolean },
+  details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[]; interviewLogistics?: Partial<InterviewLogistics>; practiceInterviewsAsEvidence?: boolean; identity?: { fullName?: string; artifactPrefix?: string; email?: string; phone?: string; location?: string } },
 ): Promise<CandidateProfile> {
   const current = await readCandidateProfile(workspacePath);
   if (!current) throw new Error("No candidate profile found to update.");
@@ -134,6 +134,13 @@ export async function updateCandidateProfileDetails(
       ...current.career,
       ...(details.transitionSummary !== undefined ? { transitionSummary: details.transitionSummary.trim() } : {}),
     },
+    // Identity edited in Settings (#22): blank optional fields clear; name and prefix keep their old value when blank.
+    ...(details.identity ? { identity: {
+      ...current.identity,
+      ...(details.identity.fullName?.trim() ? { fullName: details.identity.fullName.trim() } : {}),
+      ...(details.identity.artifactPrefix?.trim() ? { artifactPrefix: details.identity.artifactPrefix.trim() } : {}),
+      ...Object.fromEntries((["email", "phone", "location"] as const).filter((key) => typeof details.identity![key] === "string").map((key) => [key, details.identity![key]!.trim() || null])),
+    } } : {}),
     ...(details.interviewLogistics ? {
       preferences: {
         ...current.preferences,
