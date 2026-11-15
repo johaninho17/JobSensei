@@ -1011,3 +1011,12 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .docs-page th, .docs-page td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1px solid var(--line); }
 .docs-page code { font-family: var(--font-mono); font-size: 0.92em; }
 .side-foot { display: grid; gap: 2px; }
+
+/* Agy page: one row per action (what it does, where it runs, a button). */
+.agy-actions { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.agy-actions li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
+.agy-actions li:last-child { border-bottom: 0; }
+.agy-actions strong { font: 600 var(--fs-15) var(--font-ui); color: var(--ink); }
+.agy-actions p { margin: 2px 0 0; color: var(--muted); font: var(--fs-13)/1.45 var(--font-ui); max-width: 75ch; }
+.agy-where { color: var(--muted); font: var(--fs-12) var(--font-ui); white-space: nowrap; }
+.agy-busy { margin: 0 0 var(--space-4); padding: var(--space-3) var(--space-4); border-left: 3px solid var(--brass); background: var(--brass-tint); color: var(--ink); font: var(--fs-13)/1.45 var(--font-ui); }

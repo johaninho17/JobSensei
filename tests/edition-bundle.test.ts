@@ -8,7 +8,7 @@ const assets = join(__dirname, "..", "dist-renderer", "assets");
 const recruiterBuild = process.env.JOBSENSEI_EDITION === "recruiter" && existsSync(assets);
 
 // Text that only the left-out screens contain (interview view, live window, questions, Learnings, Your content).
-const LEFT_OUT = ["No interview rounds yet", "Answer anyway", "How far applications got", "Update from", "Delivery fixes", "Story bank", "Interview prep uses these exactly", "Check watched companies", "Job search finished",
+const LEFT_OUT = ["Everything Agy can do for you", "No interview rounds yet", "Answer anyway", "How far applications got", "Update from", "Delivery fixes", "Story bank", "Interview prep uses these exactly", "Check watched companies", "Job search finished",
   // Recruiter plan R8: the edition stops at applying and never treats a candidate as the user.
   "Prepare recruiter interview", "Start current-round mock", "Analyze latest debrief", "Went to interview", "Follow up on", "Follow-up due",
   "Get JobSensei ready", "Make it better", "facts about you", "tailor your application", "Tone and positioning presets", "Role themes and reusable bullets", "Interactive clarifying questions", "Claims I never make", "scores your fit", "application and interview prep"];

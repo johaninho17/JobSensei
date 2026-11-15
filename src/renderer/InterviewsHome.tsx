@@ -11,7 +11,10 @@ import { storyTitles } from "./interview-cards";
 import { TrackerPill, displayJobName, messageOf, plural } from "./app-shared";
 
 export function InterviewsHome({ jobs, allJobs, newRecordings, onRecordingsChanged, onSendPrompt, onOpen, onOpenFile }: { jobs: JobFolderSummary[]; allJobs: JobFolderSummary[]; newRecordings: number; onRecordingsChanged: () => void; onSendPrompt: (action: Pick<JobAction, "prompt" | "label">) => void; onOpen: (jobId: string, roundId?: string) => void; onOpenFile: (path: string) => void }) {
-  const [view, setView] = useState<"active" | "past" | "learnings" | "content">("active");
+  // Another page can ask for a subtab once (the Agy page opens Your content).
+  const [view, setView] = useState<"active" | "past" | "learnings" | "content">(() => {
+    try { const asked = window.sessionStorage.getItem("sensei-interviews-view"); window.sessionStorage.removeItem("sensei-interviews-view"); return asked === "content" ? "content" : "active"; } catch { return "active"; }
+  });
   const [overviews, setOverviews] = useState<Record<string, InterviewOverview | null>>({});
   useEffect(() => {
     let cancelled = false;
