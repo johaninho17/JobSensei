@@ -40,3 +40,19 @@ export function usageByRecording(recordings: string[], changes: Array<{ file: st
 export function usedInText(usedIn: UsedIn[]): string {
   return usedIn.length ? usedIn.map((entry) => `${entry.area} (${entry.count})`).join(", ") : "Nothing taken from it";
 }
+
+/** Kinds of recording a user adds in Interviews → Your content. Practice interviews go to their own folder, which the
+ * review workflow treats as practice (.agents/workflows/jobsensei-interview-review.md step 6). */
+export type RecordingKind = "interview" | "practice";
+
+/** Where an added recording goes (logical path; the layout maps it to disk). A real interview goes under its job's ID,
+ * so the scan matches it to that job; without a job it goes to "other". */
+export function recordingFolder(kind: RecordingKind, jobId: string | null): string {
+  if (kind === "practice") return "debrief/mock-interviews";
+  return `debrief/${jobId && /^[a-z0-9][a-z0-9-]*$/.test(jobId) ? jobId : "other"}`;
+}
+
+/** A changed path (logical or tidy-layout disk path) is a recording, so the Interviews badge and list refresh. */
+export function isRecordingPath(path: string): boolean {
+  return /^(?:debrief|interviews\/recordings)\//.test(path.replace(/\\/g, "/")) && !/^debrief\/interview-memory\//.test(path);
+}

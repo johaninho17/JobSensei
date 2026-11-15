@@ -20,6 +20,8 @@ const api: SenseiApi = {
     finishUpdate: (keepOld) => ipcRenderer.invoke("content:finish-update", keepOld),
     undoUpdate: () => ipcRenderer.invoke("content:undo-update"),
     skip: (paths) => ipcRenderer.invoke("content:skip", paths),
+    addRecordings: (kind, jobId) => ipcRenderer.invoke("content:add-recordings", kind, jobId),
+    importRecordingPaths: (paths, kind, jobId) => ipcRenderer.invoke("content:import-recording-paths", paths, kind, jobId),
   },
   layout: {
     plan: () => ipcRenderer.invoke("layout:plan"),
