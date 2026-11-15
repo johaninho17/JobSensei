@@ -53,9 +53,9 @@ export function StatusPill({ value }: { value: string }) {
   return <span className={`status-pill is-${tone}`}>{normalized}</span>;
 }
 
-export function FitBadge({ rating }: { rating: number | null }) {
+export function FitBadge({ rating, gate = FIT_GATE }: { rating: number | null; /** The job's own gate (its stamped settings). */ gate?: number }) {
   if (rating === null) return <span className="fit-badge is-none">—</span>;
-  const tone = rating >= 4 ? "high" : rating >= FIT_GATE ? "mid" : "low";
+  const tone = rating >= 4 ? "high" : rating >= gate ? "mid" : "low";
   return <span className={`fit-badge is-${tone}`} title={`${rating.toFixed(1)} of 5 fit`}><span className="tabular">{rating.toFixed(1)}</span></span>;
 }
 

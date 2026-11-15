@@ -36,7 +36,7 @@ import {
 import { currentManifestHash } from "./context-manifest-hash";
 import { writeJsonAtomic, readTextFile } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
-import { normalizeEvidenceClassifications, scoreEvaluation } from "./fit-scoring";
+import { fitSettingsOf, normalizeEvidenceClassifications, scoreEvaluation } from "./fit-scoring";
 import { canonicalCoverLetterDrifts, canonicalResumeDrifts } from "./canonical-resume";
 import { readCandidateProfile } from "./candidate-profile";
 import { scoreStretch } from "./stretch-score";
@@ -161,7 +161,7 @@ function keywordClasses(loaded: LoadedApplication): ApplicationValidationReport[
   const bounded = loaded.snapshot
     ? normalizeEvidenceClassifications(loaded.evaluationMarkdown, loaded.snapshot)
     : { markdown: loaded.evaluationMarkdown, adjustments: [] };
-  const scoring = scoreEvaluation(bounded.markdown);
+  const scoring = scoreEvaluation(bounded.markdown, fitSettingsOf(loaded.snapshot));
   if (!scoring) return [];
   return [
     ...scoring.requirements.map((row) => ({
@@ -539,7 +539,7 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
       const bounded = loaded.snapshot
         ? normalizeEvidenceClassifications(loaded.evaluationMarkdown, loaded.snapshot)
         : { markdown: loaded.evaluationMarkdown, adjustments: [] };
-      const scoring = scoreEvaluation(bounded.markdown);
+      const scoring = scoreEvaluation(bounded.markdown, fitSettingsOf(loaded.snapshot));
       if (!scoring) {
         issues.push(issue("FIT_SCORING_UNVERIFIED", "evaluation.md", "Requirement Scoring", "The evaluation has no machine-checkable requirement scoring table.", "Future runs should include the required per-requirement classification table; keep this existing evaluation readable.", "warning"));
       } else {

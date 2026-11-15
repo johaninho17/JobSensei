@@ -1028,3 +1028,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .settings-score.is-careful, .settings-score.is-balanced { color: var(--ink); }
 .settings-score-big { margin: 0 0 var(--space-2); font: 600 var(--fs-18) var(--font-ui); }
 .settings-score-big strong { font: 700 var(--fs-28) var(--font-display); }
+.behavior-fields { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
+.behavior-field { display: grid; gap: var(--space-1); font: var(--fs-12) var(--font-ui); color: var(--muted); }
+.behavior-field input { width: 7.5em; }
+.behavior-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }

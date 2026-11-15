@@ -38,3 +38,29 @@ describe("Agy behavior settings and the settings score", () => {
     expect(jobSettingsScore(settingScore(agyBehaviorSchema.parse({ framing: "as-written" })))).toMatchObject({ score: 38, band: "careful" });
   });
 });
+
+describe("fit settings (#37)", () => {
+  it("scores each job with the credit and gate stamped on its snapshot", async () => {
+    const { calculateFitScore, fitSettingsOf, gateStatusFor } = await import("../electron/fit-scoring");
+    const rows = [
+      { requirement: "req:1 Customer onboarding", category: "core", classification: "strong_transferable", weight: 61.54, evidence: "", reason: "" },
+      { requirement: "req:2 SQL", category: "technical", classification: "adjacent_transferable", weight: 38.46, evidence: "", reason: "" },
+    ] as never;
+    const today = calculateFitScore(rows);
+    const lenient = calculateFitScore(rows, { strong: 0.9, adjacent: 0.8, unclear: 0.1, gate: 2.5 });
+    expect(lenient.score).toBeGreaterThan(today.score);
+    expect(fitSettingsOf(null)).toEqual(DEFAULT_AGY_BEHAVIOR.fit);
+    const stamped = settingScore(agyBehaviorSchema.parse({ fit: { gate: 2.5 } }));
+    expect(fitSettingsOf({ settingsScore: stamped }).gate).toBe(2.5);
+    expect(gateStatusFor({ ...today, score: 3, gateScore: 3 } as never)).toContain("below threshold");
+    expect(gateStatusFor({ ...today, score: 3, gateScore: 3 } as never, 2.5)).toBe("accepted");
+  });
+
+  it("lets the user change credit and gate, and nothing else yet", () => {
+    expect([...CONNECTED].sort()).toEqual(["fit-credit", "fit-gate"]);
+    const effective = effectiveBehavior({ framing: "beyond", fit: { strong: 0.9, gate: 2.5 }, linesReworked: 8 });
+    expect(effective.fit).toMatchObject({ strong: 0.9, gate: 2.5 });
+    expect(effective.framing).toBe("framed");
+    expect(effective.linesReworked).toBe(4);
+  });
+});
