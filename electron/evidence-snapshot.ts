@@ -369,7 +369,10 @@ export function bulletPlanLine(plan: NonNullable<ApplicationContext["resumePlan"
   const base = current.baseBullets ?? current.maxBullets;
   const extra = Math.max(0, current.maxBullets - base);
   const rewrite = current.rewriteUpTo ?? Math.min(4, base);
-  const parts = [`Bullets (owner of this rule): ${current.employer} has ${base} base bullets: rewrite ${rewrite >= 4 ? "3–4" : `up to ${rewrite}`} of them for this job (as text) and keep the rest as {"baseline": N}${extra ? `; you may add ${extra} new supported bullet${extra === 1 ? "" : "s"} (${current.maxBullets} at most, not required)` : ""}.`];
+  // The user's "Resume lines reworked" setting sets rewriteUpTo (Agy → Behavior, #38); 4 reads as today's "3–4".
+  const howMany = rewrite === 0 ? null : rewrite === 4 ? "3–4" : `up to ${rewrite}`;
+  if (!howMany) return [`Bullets (owner of this rule): keep every ${current.employer} bullet as written ({"baseline": N}); tailor the skills lines only.`, ...(earlier.length ? [`${earlier.map((target) => target.employer).join(", ")}: leave out of the bundle; the app keeps them exactly as in the base resume.`] : [])].join(" ");
+  const parts = [`Bullets (owner of this rule): ${current.employer} has ${base} base bullets: rewrite ${howMany} of them for this job (as text) and keep the rest as {"baseline": N}${extra ? `; you may add ${extra} new supported bullet${extra === 1 ? "" : "s"} (${current.maxBullets} at most, not required)` : ""}.`];
   if (earlier.length) parts.push(`${earlier.map((target) => target.employer).join(", ")}: leave out of the bundle; the app keeps them exactly as in the base resume.`);
   parts.push("A role never ends with fewer bullets than its base; replace a weaker bullet instead of dropping it.");
   return parts.join(" ");
@@ -391,12 +394,14 @@ export function buildResumePlan(
     if (row.employer) routedCounts.set(row.employer, (routedCounts.get(row.employer) ?? 0) + 1);
   }
   const currentEmployer = canonicalResume.employers[0]?.name ?? null;
+  const linesReworked = effectiveBehavior(candidateProfile?.preferences.agy).linesReworked;
   const targets = canonicalResume.employers.map((employer, index) => ({
     employer: employer.name,
     baseBullets: employer.originalBulletCount,
     maxBullets: employer.originalBulletCount,
-    // The current role is where tailoring happens (3-4 bullets, decision R1); earlier roles keep their lines.
-    rewriteUpTo: index === 0 ? Math.min(4, employer.originalBulletCount) : 0,
+    // The current role is where tailoring happens (default 3-4 bullets, decision R1; the user's setting, #38);
+    // earlier roles keep their lines.
+    rewriteUpTo: index === 0 ? Math.min(linesReworked, employer.originalBulletCount) : 0,
   }));
   let added = 0;
   for (const target of targets) {
