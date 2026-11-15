@@ -31,11 +31,13 @@ export type Features = {
   pdfsMarkApplied: boolean;
   /** A PDF base resume is read directly (no Word or Markdown copy needed); its structure is shown for checking (pdf-resume.ts). */
   pdfResumes: boolean;
+  /** The Agy page: actions as buttons and how Agy works (`src/shared/agy-actions.ts`). Regular app first. */
+  agyPage: boolean;
 };
 
 const FEATURES: Record<Edition, Features> = {
-  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, today: true, pdfsMarkApplied: true, pdfResumes: false },
-  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, today: false, pdfsMarkApplied: false, pdfResumes: true },
+  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, today: true, pdfsMarkApplied: true, pdfResumes: false, agyPage: true },
+  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, today: false, pdfsMarkApplied: false, pdfResumes: true, agyPage: false },
 };
 
 export type EditionInfo = {

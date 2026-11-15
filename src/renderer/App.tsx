@@ -20,6 +20,8 @@ import { type CandidatesState } from "../shared/candidates";
 import { JobSearchView } from "./JobSearchView";
 import { TodayView } from "./TodayView";
 import { DocsView } from "./DocsView";
+import { AgyView } from "./AgyView";
+import type { AgyAction } from "../shared/agy-actions";
 import { findDuplicateJob } from "../shared/job-organize";
 import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
 import { IS_MAC, type JobWorkspaceTab, type PromptRequest, displayJobName, filePaths, findNode, messageOf, onFavoritesChanged, plural, storedFavoriteJobIds, workspaceLabel } from "./app-shared";
@@ -39,7 +41,7 @@ const RIGHT_PANEL_MIN = 300;
 const RIGHT_PANEL_MAX = 900;
 const VIEWER_PANEL_MIN = 320;
 type JobLocation = { kind: "job"; jobId: string; tab: JobWorkspaceTab; roundId?: string };
-type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home"; focus?: string } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" } | { kind: "docs-home" } | { kind: "postings-home" } | { kind: "reports-home" };
+type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home"; focus?: string } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" } | { kind: "docs-home" } | { kind: "agy-home" } | { kind: "postings-home" } | { kind: "reports-home" };
 type WorkspaceLocation =
   | PageLocation
   | JobLocation
@@ -299,7 +301,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       if (event.key === "g") { goPrefix.current = Date.now(); return; }
       if (Date.now() - goPrefix.current < 1200) {
         goPrefix.current = 0;
-        const page = FEATURES.interviews || event.key !== "i" ? ({ ...(FEATURES.today ? { t: "today-home" } : {}), j: "jobs-home", i: "interviews-home", c: "context-home" } as Record<string, PageLocation["kind"]>)[event.key] : undefined;
+        const page = FEATURES.interviews || event.key !== "i" ? ({ ...(FEATURES.today ? { t: "today-home" } : {}), j: "jobs-home", i: "interviews-home", c: "context-home", ...(FEATURES.agyPage ? { a: "agy-home" } : {}) } as Record<string, PageLocation["kind"]>)[event.key] : undefined;
         if (page) { event.preventDefault(); showPage(page); }
         return;
       }
@@ -520,7 +522,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
 
   function currentReturnLocation(jobId: string | null): JobLocation | PageLocation {
     const current = navigationHistory[navigationIndex];
-    if (current?.kind === "job" || current?.kind === "today-home" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home" || current?.kind === "docs-home" || current?.kind === "postings-home" || current?.kind === "reports-home") return current;
+    if (current?.kind === "job" || current?.kind === "today-home" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home" || current?.kind === "docs-home" || current?.kind === "agy-home" || current?.kind === "postings-home" || current?.kind === "reports-home") return current;
     if (current?.kind === "document") return current.returnTo;
     return jobId ? { kind: "job", jobId, tab: "overview" } : { kind: "jobs-home" };
   }
@@ -595,6 +597,19 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     promptRequestId.current += 1;
     setRightPanelOpen(true);
     setPromptRequest({ id: promptRequestId.current, text: action.prompt, label: action.label });
+  }
+
+  /** Runs a button from the Agy page through the path that already does that work (`src/shared/agy-actions.ts`). */
+  function runAgyAction(action: AgyAction) {
+    const run = action.run;
+    if (run.kind === "job-action") { const found = agyJobActions.find((candidate) => candidate.id === run.actionId); if (found) insertJobPrompt(found); return; }
+    if (run.kind === "prompt" || run.kind === "command") { insertJobPrompt({ prompt: run.text, label: action.label }); return; }
+    if (run.call === "open-recordings") { try { window.sessionStorage.setItem("sensei-interviews-view", "content"); } catch { /* opens on Active */ } showPage("interviews-home"); return; }
+    if (run.call === "open-job-search") { showPage("search-home"); return; }
+    setError(null);
+    void window.sensei.jobSearch.run(run.call === "search-watched" ? "watched" : "search").then(
+      () => showToast(run.call === "search-watched" ? "Checking watched companies. Matches appear in Job Search." : "Search started. You'll be told when it finishes."),
+      (caught) => setError(messageOf(caught, "Unable to start the search.")));
   }
 
   async function draftSavedJob(jobId: string): Promise<void> {
@@ -873,6 +888,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const recentForStatus = recentJobIds.slice(0, 3).map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job) && job!.id !== viewedJob?.id);
   const paletteActions: PaletteAction[] = [
     ...(FEATURES.today ? [{ id: "go-today", title: "Go to Today", subtitle: "Morning search, what's due, insights, and questions", keywords: "home day summary", shortcut: "g t", run: () => showPage("today-home") }] : []),
+    ...(FEATURES.agyPage ? [{ id: "go-agy", title: "Go to Agy", subtitle: "Everything Agy can do: actions for this job, interviews, job search, and Agy's own commands", keywords: "assistant actions commands model run", shortcut: "g a", run: () => showPage("agy-home") }] : []),
     { id: "go-docs", title: "Go to Docs", subtitle: "How to get the best results, your data, how Agy uses it, Agy commands", keywords: "help guide documentation commands model theme", run: () => showPage("docs-home") },
     { id: "go-jobs", title: "Go to Jobs", subtitle: "All jobs, the queue, and the status strip", keywords: "home list cards", shortcut: "g j", run: () => showPage("jobs-home") },
     ...(FEATURES.interviews ? [{ id: "go-interviews", title: "Go to Interviews", subtitle: "Every job with interview prep", keywords: "rounds prep", shortcut: "g i", run: () => showPage("interviews-home") }] : []),
@@ -931,6 +947,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   ];
   // Sidebar: the jobs the user starred in Jobs (#13), newest first; recent jobs still feed the status bar and search.
   const favoriteJobs = jobs.filter((job) => favoriteIds.has(job.id)).sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)).slice(0, 8);
+  const recentJobs = recentJobIds.map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job)).slice(0, 6);
+  // The Agy page lists actions for the open job, or the job opened last.
+  const agyJob = actionTargetJob ?? recentJobs[0] ?? null;
+  const agyJobActions = agyJob && agyJob === actionTargetJob ? jobActions : buildJobActions(agyJob, null, null);
   const interviewingJobs = jobs.filter((job) => job.interviewRoundLabel);
   const activeInterviewCount = activeInterviews(interviewingJobs).length;
   const followUpsDue = !FEATURES.nudges ? 0 : jobs.filter((job) => { const days = followUpDays(job.tracker); return days !== null && days <= 0 && !["rejected", "withdrawn"].includes(effectiveStatus(job)); }).length;
@@ -973,6 +993,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         <ul>{favoriteJobs.map((job) => <li key={job.id}><button aria-current={activePage === "job" && viewedJobId === job.id ? "page" : undefined} onClick={() => openJob(job.id)}><strong>{job.company ?? displayJobName(job.name)}</strong><small>{job.title ?? "Role not recorded"}</small></button></li>)}</ul>
       </section>}
       <div className="side-foot">
+        {FEATURES.agyPage && <button aria-current={activePage === "agy-home" ? "page" : undefined} onClick={() => showPage("agy-home")}><NavIcon name="agy" /><span className="side-label">Agy</span></button>}
         <button aria-current={activePage === "docs-home" ? "page" : undefined} onClick={() => showPage("docs-home")}><NavIcon name="docs" /><span className="side-label">Docs</span></button>
         <button onClick={() => setSettingsModalOpen(true)} disabled={!configured}><NavIcon name="settings" /><span className="side-label">Settings</span></button>
       </div>
@@ -1040,6 +1061,11 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
             void window.sensei.candidates.switchTo(candidateId).then(() => window.location.reload(), (caught) => setError(messageOf(caught, "Couldn't open that candidate.")));
           }} />
           : currentLocation.kind === "docs-home" ? <DocsView />
+          : FEATURES.agyPage && currentLocation.kind === "agy-home" ? <AgyView busyLabel={busyJobLabel} onRun={runAgyAction} context={{
+            features: { interviews: FEATURES.interviews, contentRefresh: FEATURES.contentRefresh, jobSearch: FEATURES.jobSearch },
+            job: agyJob ? { name: [agyJob.company ?? displayJobName(agyJob.name), agyJob.title].filter(Boolean).join(", "), actions: agyJobActions } : null,
+            newRecordings, searchRunning: searchStatus.running,
+          }} />
           : FEATURES.candidates && (currentLocation.kind === "setup-home" || currentLocation.kind === "context-home") ? <ProfilePage key={currentLocation.kind}
             name={candidateProfile?.identity.fullName ?? candidates?.candidates.find((candidate) => candidate.id === candidates.activeId)?.displayName ?? "Candidate"}
             initial={currentLocation.kind === "context-home" ? "files" : "overview"}
@@ -1077,7 +1103,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   </main>;
 }
 
-function NavIcon({ name }: { name: "today" | "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" | "pipeline" | "docs" | "people" }) {
+function NavIcon({ name }: { name: "today" | "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" | "pipeline" | "docs" | "people" | "agy" }) {
   const paths: Record<typeof name, string> = {
     people: "M9 11a3 3 0 1 0 0-6a3 3 0 1 0 0 6z M3 19c0-3 2.7-5 6-5s6 2 6 5 M16 11a2.5 2.5 0 1 0 0-5 M17 14c2.2.4 4 2.2 4 5",
     today: "M5 6h14v14H5z M5 10h14 M9 4v4 M15 4v4 M9 14h2 M13 14h2 M9 17h2",
@@ -1086,6 +1112,7 @@ function NavIcon({ name }: { name: "today" | "jobs" | "search" | "interviews" | 
     interviews: "M5 5h14v10H9l-4 4z M8.5 9.5h7 M8.5 12h4",
     context: "M5 4h10l4 4v12H5z M15 4v4h4 M8 12h8 M8 16h6",
     docs: "M6 3h9l3 3v15H6z M15 3v3h3 M9 11h6 M9 15h6",
+    agy: "M4 5h16v14H4z M8 10l3 2.5L8 15 M13 15h4",
     settings: "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1",
     sidebar: "M4 5h16v14H4z M9 5v14",
     setup: "M5 6h14 M5 12h14 M5 18h14 M8 4v4 M15 10v4 M10 16v4",
@@ -1109,7 +1136,7 @@ function ToastRegion({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: n
 
 const SHORTCUTS: Array<[string, string]> = [
   ["⌘K or Ctrl K", "Search jobs, files, and actions"],
-  ["g then t / j / i / c", "Go to Today, Jobs, Interviews, or Career context"],
+  ["g then t / j / i / c / a", "Go to Today, Jobs, Interviews, Career context, or Agy"],
   ["[ and ]", "Previous or next job (on a job page)"],
   ["1 – 6", "Set the open job to Saved, Applied, Interviewing, Offer, Rejected, Withdrawn"],
   ["⌘J or Ctrl J", "Show or hide Agy"],
