@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { looksLikePastedPosting } from "../shared/paste-limits";
 import { clearChatHistory, loadChatHistory, saveChatHistory, type ChatEntry, type PastedBlock } from "./chat-history";
 import { chatRunState } from "../shared/job-queue";
 import { Terminal } from "@xterm/xterm";
@@ -300,7 +301,7 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
     const text = event.clipboardData.getData("text");
     if (!text) return;
     const lines = text.split(/\r\n|\r|\n/);
-    if (lines.length >= 3 || text.length > 250) {
+    if (lines.length >= 3 || looksLikePastedPosting(text)) {
       event.preventDefault();
       const id = `paste-${Date.now()}`;
       const preview = lines.filter((l) => l.trim().length > 0).slice(0, 3).join("\n") || text.slice(0, 150);
@@ -346,7 +347,9 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
       setStatus("Terminal bridge unavailable; restart the app.");
       return;
     }
-    const terminal = new Terminal({ cursorBlink: true, convertEol: true, fontFamily: "DM Mono, monospace", fontSize: 12, theme: terminalTheme(theme), scrollback: 4000 });
+    // convertEol stays off: output comes from a real pty, and Agy's screen (raw mode) uses a bare line feed to move
+    // down a row in the same column. Turning it into CR+LF made redraws land in the wrong place while typing (#11).
+    const terminal = new Terminal({ cursorBlink: true, convertEol: false, fontFamily: terminalFont(), fontSize: 12, theme: terminalTheme(theme), scrollback: 4000 });
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(hostRef.current);
@@ -725,4 +728,19 @@ function JobActionsMenu({ actions, onInsert }: { actions: JobAction[]; onInsert:
     })}</div>}
   </div>;
 }
-function terminalTheme(_theme: "dark" | "light") { return { background: "#0b0f0d", foreground: "#e4ece3", cursor: "#b5db63", selectionBackground: "#354b35", black: "#172019", brightBlack: "#718073", green: "#a7d66b", brightGreen: "#c7ed89" }; }
+/** A value from tokens.css (the one owner of colours and fonts), with a fallback when the page has no styles. */
+function token(name: string, fallback: string): string {
+  try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback; } catch { return fallback; }
+}
+
+/** The console's font: the system monospace from `--font-mono` (no web font that could change cell width after start). */
+function terminalFont(): string { return token("--font-mono", "ui-monospace, Menlo, monospace"); }
+
+/** The console stays dark in both themes (U1); its colours are the `--term-*` tokens. */
+function terminalTheme(_theme: "dark" | "light") {
+  return {
+    background: token("--term-bg", "#0e1913"), foreground: token("--term-ink", "#e6eee7"), cursor: token("--term-leaf", "#82c99d"),
+    selectionBackground: `${token("--term-leaf", "#82c99d").slice(0, 7)}55`, black: token("--term-raised", "#15241c"), brightBlack: token("--term-muted", "#93a99a"),
+    green: token("--term-leaf", "#82c99d"), brightGreen: token("--term-leaf", "#82c99d"), yellow: token("--term-brass", "#d8b26b"), red: token("--term-risk", "#ec9483"),
+  };
+}
