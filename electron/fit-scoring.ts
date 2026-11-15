@@ -65,23 +65,17 @@ function creditTable(settings: FitSettings = DEFAULT_FIT_SETTINGS): Record<FitCl
   return { ...FIT_CLASSIFICATION_CREDIT, strong_transferable: settings.strong, adjacent_transferable: settings.adjacent, unclear: settings.unclear };
 }
 
-const EXPECTED_CATEGORY_WEIGHTS: Record<FitCategory, number> = {
-  core: 40,
-  technical: 25,
-  scope: 15,
-  outcomes: 10,
-  domain: 5,
-  learning: 5,
-};
+/** Today's category weights; each job uses the weights stamped on its snapshot (the user's setting, #92). */
+const EXPECTED_CATEGORY_WEIGHTS: Record<FitCategory, number> = DEFAULT_AGY_BEHAVIOR.fit.weights;
 
 /**
  * Each category's share of 100: the fixed weights, rescaled over the categories that have rows (a
  * posting may list nothing for domain or learning). Core is always required.
  */
-export function categoryTargets(present: Iterable<FitCategory>): Record<FitCategory, number> {
+export function categoryTargets(present: Iterable<FitCategory>, weights: Record<FitCategory, number> = EXPECTED_CATEGORY_WEIGHTS): Record<FitCategory, number> {
   const have = new Set(present);
-  const total = FIT_CATEGORIES.filter((category) => have.has(category)).reduce((sum, category) => sum + EXPECTED_CATEGORY_WEIGHTS[category], 0);
-  return Object.fromEntries(FIT_CATEGORIES.map((category) => [category, have.has(category) && total ? EXPECTED_CATEGORY_WEIGHTS[category] * 100 / total : 0])) as Record<FitCategory, number>;
+  const total = FIT_CATEGORIES.filter((category) => have.has(category)).reduce((sum, category) => sum + weights[category], 0);
+  return Object.fromEntries(FIT_CATEGORIES.map((category) => [category, have.has(category) && total ? weights[category] * 100 / total : 0])) as Record<FitCategory, number>;
 }
 
 export function calculateFitScore(requirements: FitRequirement[], settings: FitSettings = DEFAULT_FIT_SETTINGS): FitScoreResult {
@@ -95,7 +89,7 @@ export function calculateFitScore(requirements: FitRequirement[], settings: FitS
     categoryWeights[row.category] += row.weight;
   }
   if (categoryWeights.core === 0) throw new Error("The evaluation has no `core` row; rate at least one core responsibility.");
-  const targets = categoryTargets(FIT_CATEGORIES.filter((category) => categoryWeights[category] > 0));
+  const targets = categoryTargets(FIT_CATEGORIES.filter((category) => categoryWeights[category] > 0), settings.weights);
   for (const category of FIT_CATEGORIES) {
     if (Math.abs(categoryWeights[category] - targets[category]) > 0.05) {
       throw new Error(`${category} requirements must total ${Math.round(targets[category] * 100) / 100}%, received ${categoryWeights[category]}%.`);
@@ -221,7 +215,7 @@ export function gateStatusFor(result: FitScoreResult, gate: number = FIT_GATE): 
 }
 
 export function scoreEvaluation(markdown: string, settings: FitSettings = DEFAULT_FIT_SETTINGS): FitScoreResult | null {
-  const requirements = parseFitRequirements(completeFallbackTable(markdown));
+  const requirements = parseFitRequirements(completeFallbackTable(markdown, settings.weights));
   return requirements ? applyMustHaves(calculateFitScore(requirements, settings), parseMustHaves(markdown)) : null;
 }
 
@@ -780,7 +774,7 @@ export function verifyMustHaves(markdown: string, requiredItems: string[], snaps
  * and the app's weights, so those evaluations are scored like any other. Tables that already have weights,
  * or that aren't in the short form, come back unchanged.
  */
-export function completeFallbackTable(markdown: string): string {
+export function completeFallbackTable(markdown: string, weights?: Record<FitCategory, number>): string {
   const section = /(###\s+Requirement Scoring\s*\n)([\s\S]*?)(?=\n#{1,3}\s+|$)/i.exec(markdown);
   if (!section) return markdown;
   const tableLines = section[2]!.split("\n").filter((line) => /^\s*\|.*\|\s*$/.test(line));
@@ -791,10 +785,10 @@ export function completeFallbackTable(markdown: string): string {
   const at = (row: string[], name: string) => headers.indexOf(name) >= 0 ? row[headers.indexOf(name)] ?? "" : "";
   const rows = tableLines.slice(2).map(cells).filter((row) => at(row, "requirement")).map((row) => `| ${tableText(at(row, "requirement"))} | ${at(row, "category")} | 0% | yes | ${at(row, "classification")} | ${tableText(at(row, "evidence"))} | ${at(row, "blocker")} |`);
   const table = ["| Requirement | Category | Weight | Material | Classification | Evidence | Blocker |", "| --- | --- | ---: | --- | --- | --- | --- |", ...rows].join("\n");
-  return assignCategoryWeights(markdown.replace(section[0], `${section[1]}${table}\n`));
+  return assignCategoryWeights(markdown.replace(section[0], `${section[1]}${table}\n`), weights);
 }
 
-export function assignCategoryWeights(markdown: string): string {
+export function assignCategoryWeights(markdown: string, weights?: Record<FitCategory, number>): string {
   const section = /(###\s+Requirement Scoring\s*\n)([\s\S]*?)(?=\n#{1,3}\s+|$)/i.exec(markdown);
   if (!section) return markdown;
   const lines = section[2]!.split("\n");
@@ -809,7 +803,7 @@ export function assignCategoryWeights(markdown: string): string {
   const categoryOf = (line: string) => cells(line)[categoryIndex]!.replaceAll("`", "").toLowerCase().replaceAll(" ", "_") as FitCategory;
   const counts = new Map<FitCategory, number>();
   for (const line of lines.filter(isRow)) counts.set(categoryOf(line), (counts.get(categoryOf(line)) ?? 0) + 1);
-  const targets = categoryTargets([...counts.keys()].filter((category) => FIT_CATEGORIES.includes(category)));
+  const targets = categoryTargets([...counts.keys()].filter((category) => FIT_CATEGORIES.includes(category)), weights);
   const seen = new Map<FitCategory, number>();
   const rewritten = lines.map((line) => {
     if (!isRow(line)) return line;
@@ -918,8 +912,9 @@ function writeMustHaveTable(markdown: string, requirements: JobRequirement[]): s
 }
 
 export function normalizeEvaluationScore(markdown: string, snapshot?: EvidenceSnapshot, requiredItems: string[] = [], requirements: JobRequirement[] = []): string {
-  const rated = requirements.length ? writeRequirementTable(markdown, requirements) : completeFallbackTable(markdown);
-  const weighted = assignCategoryWeights(rated);
+  const weights = fitSettingsOf(snapshot).weights;
+  const rated = requirements.length ? writeRequirementTable(markdown, requirements) : completeFallbackTable(markdown, weights);
+  const weighted = assignCategoryWeights(rated, weights);
   const bounded = snapshot ? normalizeEvidenceClassifications(weighted, snapshot) : { markdown: weighted, adjustments: [] };
   const withMustHaves = requirements.length ? writeMustHaveTable(bounded.markdown, requirements) : bounded.markdown;
   const checked = verifyMustHaves(withMustHaves, requiredItems, snapshot).markdown;
@@ -954,7 +949,7 @@ export function normalizeEvaluationScore(markdown: string, snapshot?: EvidenceSn
     domain: "Domain",
     learning: "Learning and adaptability",
   };
-  const summaryTargets = categoryTargets(new Set(result.requirements.map((row) => row.category)));
+  const summaryTargets = categoryTargets(new Set(result.requirements.map((row) => row.category)), fitSettingsOf(snapshot).weights);
   const categorySummary = [
     "### Category Summary",
     ...FIT_CATEGORIES.filter((category) => summaryTargets[category] > 0).map((category) => `- **${categoryLabels[category]}:** ${result.categoryCredits[category].toFixed(1)} / ${Math.round(summaryTargets[category] * 10) / 10}`),

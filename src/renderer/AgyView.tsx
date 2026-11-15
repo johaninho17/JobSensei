@@ -34,7 +34,11 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
   const behavior = effectiveBehavior(draft);
   const score = settingScore(behavior);
   const band = bandFor(score.score);
-  const changed = JSON.stringify(agyBehaviorSchema.parse(draft)) !== JSON.stringify(agyBehaviorSchema.parse(saved));
+  const parsedDraft = agyBehaviorSchema.safeParse(draft);
+  const valid = parsedDraft.success;
+  const changed = JSON.stringify(draft) !== JSON.stringify(saved);
+  const weightTotal = Object.values(draft.fit.weights).reduce((sum, value) => sum + value, 0);
+  const setWeight = (key: keyof AgyBehavior["fit"]["weights"], value: number) => { setDraft((current) => ({ ...current, fit: { ...current.fit, weights: { ...current.fit.weights, [key]: Math.round(value) } } })); setState("idle"); };
   const setFit = (key: keyof AgyBehavior["fit"], value: number) => { setDraft((current) => ({ ...current, fit: { ...current.fit, [key]: value } })); setState("idle"); };
   const save = async (next: AgyBehavior) => {
     setState("saving");
@@ -58,9 +62,22 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
       <span className="agy-where">{score.parts[row.id]} of 10</span>
       <span className="agy-where">{CONNECTED.has(row.id) ? "Your setting" : "App rule"}</span>
     </li>)}</ul>
+    <section className="behavior-weights" aria-labelledby="behavior-weights-title">
+      <h2 id="behavior-weights-title">Fit score weights</h2>
+      <p className="muted">How much each kind of requirement counts toward a job's fit score. They add up to 100; a category the posting doesn't list is left out and the rest are scaled up. Weights don't change the settings score.</p>
+      <div className="behavior-fields">
+        <NumberField label="Core work" value={draft.fit.weights.core} min={1} max={100} step={1} onChange={(value) => setWeight("core", value)} />
+        <NumberField label="Technical" value={draft.fit.weights.technical} min={0} max={100} step={1} onChange={(value) => setWeight("technical", value)} />
+        <NumberField label="Scope" value={draft.fit.weights.scope} min={0} max={100} step={1} onChange={(value) => setWeight("scope", value)} />
+        <NumberField label="Outcomes" value={draft.fit.weights.outcomes} min={0} max={100} step={1} onChange={(value) => setWeight("outcomes", value)} />
+        <NumberField label="Domain" value={draft.fit.weights.domain} min={0} max={100} step={1} onChange={(value) => setWeight("domain", value)} />
+        <NumberField label="Learning" value={draft.fit.weights.learning} min={0} max={100} step={1} onChange={(value) => setWeight("learning", value)} />
+      </div>
+      <p className={weightTotal === 100 ? "muted" : "behavior-error"} role="status">Total {weightTotal} of 100{weightTotal === 100 ? "" : `: ${weightTotal > 100 ? "take away" : "add"} ${Math.abs(100 - weightTotal)} before saving`}.</p>
+    </section>
     <div className="behavior-actions">
-      <button className="btn-primary" disabled={!changed || state === "saving"} onClick={() => void save(draft)}>{state === "saving" ? "Saving…" : "Save settings"}</button>
-      <button className="btn-quiet" disabled={state === "saving" || JSON.stringify(agyBehaviorSchema.parse(draft)) === JSON.stringify(DEFAULT_AGY_BEHAVIOR)} onClick={() => { setDraft(DEFAULT_AGY_BEHAVIOR); void save(DEFAULT_AGY_BEHAVIOR); }}>Back to the app's defaults</button>
+      <button className="btn-primary" disabled={!changed || !valid || state === "saving"} onClick={() => void save(draft)}>{state === "saving" ? "Saving…" : "Save settings"}</button>
+      <button className="btn-quiet" disabled={state === "saving" || JSON.stringify(draft) === JSON.stringify(DEFAULT_AGY_BEHAVIOR)} onClick={() => { setDraft(DEFAULT_AGY_BEHAVIOR); void save(DEFAULT_AGY_BEHAVIOR); }}>Back to the app's defaults</button>
       <span className="muted" role="status">{state === "saved" ? "Saved. Jobs drafted from now on use these settings." : state === "error" ? "Couldn't save. Try again." : changed ? "Not saved yet." : ""}</span>
     </div>
     {SETTING_ROWS.some((row) => !CONNECTED.has(row.id)) && <p className="muted">Settings marked "App rule" become adjustable here once they are connected to Agy, so a change here always changes what Agy does.</p>}

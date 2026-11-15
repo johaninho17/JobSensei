@@ -1045,3 +1045,6 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .agy-activity small { color: var(--muted); font-size: var(--fs-12); }
 .agy-activity li.is-failed .agy-activity-what small { color: var(--risk); }
 .agy-activity li.is-running .agy-activity-what small { color: var(--brass); }
+.behavior-weights { margin-top: var(--space-5); }
+.behavior-weights h2 { margin: 0 0 var(--space-1); font: 600 var(--fs-15) var(--font-ui); }
+.behavior-error { color: var(--risk); font: var(--fs-13) var(--font-ui); }
