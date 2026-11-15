@@ -1364,6 +1364,9 @@ export interface SenseiApi {
     finishUpdate(keepOld: string[]): Promise<{ restored: number }>;
     undoUpdate(): Promise<void>;
     skip(paths: string[]): Promise<void>;
+    /** Adds recordings or practice-interview transcripts (copies) to the job's recording folder. */
+    addRecordings(kind: "interview" | "practice", jobId: string | null): Promise<ContextImportResult>;
+    importRecordingPaths(paths: string[], kind: "interview" | "practice", jobId: string | null): Promise<ContextImportResult>;
   };
   /** Today: what happened, what's due, insights, and questions (electron/today.ts). */
   /** Workspace folders: preview the tidy layout, apply it, undo it. */

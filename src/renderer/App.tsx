@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { ConfirmHost, askConfirm, confirmDiscard } from "./confirm";
 import { goTarget, neighborJob, statusKeyAction } from "../shared/shortcuts";
+import { isRecordingPath, waitingToImport } from "../shared/recordings";
 import { activeInterviews } from "../shared/interview-progress";
 import { createPortal } from "react-dom";
 import { TRACKER_STATUSES, type JobQueue, type JobTrackerUpdate, type RunStatus, type ApplicationStatus, type CandidateProfile, type ContextManifest, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type SearchResult, type Settings, type WorkspaceSummary } from "../shared/schemas";
@@ -355,7 +356,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const [searchStatus, setSearchStatus] = useState<SearchStatus>({ running: false, source: null, progress: null, startedAt: null });
   const [searchNew, setSearchNew] = useState(0);
   const searchFinishedRef = useRef<(run: SearchRun | null) => void>(() => undefined);
-  const loadRecordings = () => window.sensei.content.recordings().then(({ recordings }) => { setNewRecordings(recordings.filter((recording) => recording.state === "new" || recording.state === "changed").length); }).catch(() => undefined);
+  const loadRecordings = () => window.sensei.content.recordings().then(({ recordings }) => { setNewRecordings(waitingToImport(recordings).length); }).catch(() => undefined);
   useEffect(() => { if (FEATURES.contentRefresh && workspace.status === "ready") void loadRecordings(); }, [workspace.status, tree]);
   // Setup readiness follows the workspace, profile, settings, and files; while a required step is missing it is
   // checked again every 15 seconds (for example, Agy finishing its sign-in in the panel).
@@ -491,7 +492,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
 
   useEffect(() => { void refresh(); }, []);
   useEffect(() => {
-    return window.sensei.workspace.onChanged((paths) => { void refresh(true, paths); });
+    return window.sensei.workspace.onChanged((paths) => { void refresh(true, paths); if (FEATURES.contentRefresh && paths.some(isRecordingPath)) void loadRecordings(); });
   }, [selectionInitialized, selectedCareerPaths, selectedJobFiles]);
 
   useEffect(() => {

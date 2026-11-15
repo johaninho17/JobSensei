@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { usedInText } from "../shared/recordings";
+import { isRecordingPath, usedInText, waitingToImport, type RecordingKind } from "../shared/recordings";
 import { type ContentReviewInfo, type RecordingInfo, type InterviewOverview, type JobFolderSummary } from "../shared/schemas";
 import { effectiveStatus } from "../shared/tracker";
 import { computeLearnings, STAGE_LABELS } from "../shared/learnings";
@@ -152,8 +152,10 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
   const [message, setMessage] = useState("");
   const load = () => window.sensei.content.recordings().then(setData).catch((caught) => setMessage(messageOf(caught, "Couldn't read your recordings.")));
   useEffect(() => { void load(); }, []);
+  // Files placed in the recordings folder by hand show up without a restart (#16).
+  useEffect(() => window.sensei.workspace.onChanged((paths) => { if (!paths.length || paths.some(isRecordingPath)) { void load(); onChanged(); } }), []);
   const jobName = (id: string | null) => { const job = id ? jobs.find((candidate) => candidate.id === id) : null; return job ? `${job.company ?? displayJobName(job.name)}${job.title ? `, ${job.title}` : ""}` : null; };
-  const waiting = (data?.recordings ?? []).filter((recording) => recording.state === "new" || recording.state === "changed");
+  const waiting = waitingToImport(data?.recordings ?? []);
   const flagged = (data?.recordings ?? []).filter((recording) => recording.state === "duplicate");
   // Imported recordings and what they were used for, newest import first (#17).
   const imported = (data?.recordings ?? []).filter((recording) => recording.state === "imported").sort((a, b) => (b.importedAt ?? "").localeCompare(a.importedAt ?? ""));
@@ -181,7 +183,8 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
           <span><strong>{recording.path.replace(/^debrief\//, "")}</strong><small>{jobName(recording.jobId) ?? "Job not matched: Agy will ask which job it was"}</small></span>
           <button className="btn-link" onClick={() => onOpenFile(recording.path)}>Open</button>
           <button className="btn-link" disabled={busy} onClick={() => void run(() => window.sensei.content.skip([recording.path]), "Couldn't skip it.")}>Skip</button>
-        </li>)}</ul> : <p className="muted">No new recordings. Add transcripts to <code>debrief/&lt;company&gt;/</code> and they'll show up here.</p>}
+        </li>)}</ul> : <p className="muted">No new recordings. Add a transcript or your notes below and it shows up here.</p>}
+        <RecordingAdder jobs={jobs} onAdded={(message) => { setMessage(message); void load(); onChanged(); }} />
         {flagged.length > 0 && <p className="learn-note">{flagged.map((recording) => `${recording.path.replace(/^debrief\//, "")} is an exact copy of ${recording.duplicateOf?.replace(/^debrief\//, "")}`).join("; ")}. Copies are never imported twice; if one is filed under the wrong company, move or delete it.</p>}
         <div className="onboarding-actions"><button className="btn-primary" disabled={busy || !waiting.length} onClick={() => void start()}>{waiting.length ? `Update from ${plural(waiting.length, "new recording")}` : "Nothing new to update"}</button></div>
       </>}
@@ -219,5 +222,39 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
         {source.path.endsWith(".md") ? <button className="btn-link" onClick={() => onOpenFile(source.path)}>Open</button> : <button className="btn-link" onClick={() => void window.sensei.files.reveal(source.path).catch(() => undefined)}>Show</button>}
       </li>)}</ul>
     </section>
+  </div>;
+}
+
+/** Interviews → Your content → Add recordings (#16): pick the kind and the job, then Add files or drop them. */
+function RecordingAdder({ jobs, onAdded }: { jobs: JobFolderSummary[]; onAdded: (message: string) => void }) {
+  const [kind, setKind] = useState<RecordingKind>("interview");
+  const [jobId, setJobId] = useState("");
+  const [over, setOver] = useState(false);
+  const sorted = [...jobs].sort((a, b) => (a.company ?? a.name).localeCompare(b.company ?? b.name));
+  async function add(paths?: string[]) {
+    try {
+      const result = paths ? await window.sensei.content.importRecordingPaths(paths, kind, jobId || null) : await window.sensei.content.addRecordings(kind, jobId || null);
+      if (!result.added.length && !result.skipped.length) return;
+      const skipped = result.skipped.filter((item) => !item.reason.startsWith("already added"));
+      onAdded([result.added.length ? `Added ${plural(result.added.length, "file")}.` : "", ...skipped.map((item) => `${item.name}: ${item.reason}.`)].filter(Boolean).join(" "));
+    } catch (caught) { onAdded(messageOf(caught, "Couldn't add those files.")); }
+  }
+  return <div className={`context-add${over ? " is-over" : ""}`} aria-label="Add recordings"
+    onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); setOver(true); } }}
+    onDragLeave={() => setOver(false)}
+    onDrop={(event) => { event.preventDefault(); setOver(false); const paths = [...event.dataTransfer.files].map((file) => window.sensei.files.pathForFile(file)).filter(Boolean); if (paths.length) void add(paths); }}>
+    <div className="segmented" role="group" aria-label="Kind of recording">
+      <button aria-pressed={kind === "interview"} onClick={() => setKind("interview")}>Real interview</button>
+      <button aria-pressed={kind === "practice"} onClick={() => setKind("practice")}>Practice interview</button>
+    </div>
+    <p>{kind === "interview" ? "A transcript or your own notes from a real interview. Choose the job so prep for its next round uses it." : "A mock interview with an AI or a friend. It shapes your interview voice and the hard questions to practice."}</p>
+    {kind === "interview" && <label className="search-field"><span>Job</span><select value={jobId} onChange={(event) => setJobId(event.target.value)}>
+      <option value="">Not sure (Agy will ask)</option>
+      {sorted.map((job) => <option key={job.id} value={job.id}>{job.company ?? displayJobName(job.name)}{job.title ? `, ${job.title}` : ""}</option>)}
+    </select></label>}
+    <div className="context-add-actions">
+      <button className="btn-primary" onClick={() => void add()}>Add files</button>
+      <span className="muted">or drop files here (text, Word, PDF, Markdown, subtitles). Copies are added; your originals stay where they are.</span>
+    </div>
   </div>;
 }

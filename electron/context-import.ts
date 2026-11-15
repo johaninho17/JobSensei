@@ -25,8 +25,16 @@ async function freeName(folder: string, name: string): Promise<string> {
 }
 
 export async function importContextFiles(workspacePath: string, sources: string[], kind: ContextKind): Promise<ImportResult> {
+  return copyFilesInto(workspacePath, CONTEXT_FOLDERS[kind], sources, CONTEXT_EXTENSIONS);
+}
+
+/**
+ * Copies files into one workspace folder (logical path, mapped to disk by the layout): copies only, never overwrites
+ * ("notes-2.md"), skips folders, unreadable types, files over 20 MB, and exact copies already there. Shared by career
+ * context and interview recordings (electron/recording-import.ts).
+ */
+export async function copyFilesInto(workspacePath: string, folderRelative: string, sources: string[], extensions: string[]): Promise<ImportResult> {
   const root = resolve(workspacePath);
-  const folderRelative = CONTEXT_FOLDERS[kind];
   const folder = workspaceFile(root, folderRelative);
   await mkdir(folder, { recursive: true });
   const result: ImportResult = { added: [], skipped: [] };
@@ -34,7 +42,7 @@ export async function importContextFiles(workspacePath: string, sources: string[
     const name = basename(source);
     const info = await stat(source).catch(() => null);
     if (!info?.isFile()) { result.skipped.push({ name, reason: "not a file (folders can't be added; add the files inside)" }); continue; }
-    if (!CONTEXT_EXTENSIONS.includes(extname(name).toLowerCase())) { result.skipped.push({ name, reason: `not a readable type (use ${CONTEXT_EXTENSIONS.join(", ")})` }); continue; }
+    if (!extensions.includes(extname(name).toLowerCase())) { result.skipped.push({ name, reason: `not a readable type (use ${extensions.join(", ")})` }); continue; }
     if (info.size > MAX_BYTES) { result.skipped.push({ name, reason: "larger than 20 MB" }); continue; }
     const absolute = resolve(source);
     if (absolute.startsWith(`${folder}${sep}`)) { result.skipped.push({ name, reason: "already in this folder" }); continue; }
