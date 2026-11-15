@@ -1,4 +1,5 @@
 import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
+import { MIN_PASTED_POSTING_CHARS } from "../src/shared/paste-limits";
 import { formatPay } from "../src/shared/pay";
 import { basename, join, resolve } from "node:path";
 import { writeJsonAtomic, writeTextAtomic } from "./persistence";
@@ -335,7 +336,7 @@ function stagedPaths(workspacePath: string, id: string): { markdown: string; met
 export async function stagePastedJobDescription(workspacePath: string, input: unknown, id: string, now = new Date()): Promise<Omit<FetchedJobDescription, "markdown">> {
   if (typeof input !== "string") throw new Error("The pasted job description must be text.");
   const text = input.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim();
-  if (text.length < MIN_DESCRIPTION_CHARS) throw new Error("That paste is too short to be a job description.");
+  if (text.length < MIN_PASTED_POSTING_CHARS) throw new Error("That paste is too short to be a job description.");
   if (text.length > MAX_PASTED_CHARS) throw new Error("That paste is too long for a job description.");
   const metadata = parseJobDescriptionMetadata(text);
   const meta = {
@@ -347,7 +348,7 @@ export async function stagePastedJobDescription(workspacePath: string, input: un
     suggestedJobId: suggestJobId(metadata.company, metadata.title),
   };
   const { markdown, form } = cleanPosting(text, { title: meta.title, company: meta.company, location: meta.location, source: meta.url });
-  if (markdown.replace(/^[\s\S]*?\*\*Source:\*\*[^\n]*\n/, "").trim().length < MIN_DESCRIPTION_CHARS / 2) throw new Error("That paste looks like an application form, not a job description. Paste the job description too.");
+  if (markdown.replace(/^[\s\S]*?\*\*Source:\*\*[^\n]*\n/, "").trim().length < MIN_PASTED_POSTING_CHARS / 2) throw new Error("That paste looks like an application form, not a job description. Paste the job description too.");
   const paths = stagedPaths(workspacePath, id);
   await mkdir(join(paths.markdown, ".."), { recursive: true });
   await writeTextAtomic(paths.markdown, markdown);
