@@ -6,8 +6,6 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 
 | # | Issue | Features | Blocked |
 |---|---|---|---|
-| #7 | Interview count matches what is shown as active | FEAT-005 |  |
-| #10 | Agy chat shows queued jobs and ends a run when the run ends | FEAT-006 |  |
 | #11 | Console text stays in order while typing | FEAT-006 |  |
 | #12 | Sidebar can be resized and its text never overlaps | FEAT-009 |  |
 | #31 | Agy page: shell and subtabs | FEAT-012 |  |
@@ -23,12 +21,9 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 
 | # | Issue | Features | Blocked |
 |---|---|---|---|
-| #5 | Setting: open links in the default browser, Safari, or Chrome | FEAT-008 |  |
 | #13 | Sidebar lists favorites instead of recent jobs | FEAT-001, FEAT-009 |  |
-| #15 | Quick-filter counts match the open status tab | FEAT-001 |  |
 | #16 | Add recordings, debriefs, and mock transcripts from the app | FEAT-005, FEAT-008 |  |
 | #17 | Run Agy actions from the app and show what each recording was used for | FEAT-005, FEAT-006 |  |
-| #18 | Setting: mock interview transcripts count as career evidence | FEAT-003, FEAT-008 |  |
 | #19 | Investigate one continuing Agy conversation in the regular app | FEAT-006 |  |
 | #21 | Job posting, evaluation, and files open inside the job page | FEAT-002 |  |
 | #22 | Settings and Setup share one form per field | FEAT-008 |  |
@@ -52,4 +47,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #28 | Checks tab shows checks only | FEAT-002 |  |
 | #30 | Chat history survives a reload or workspace switch | FEAT-006 |  |
 
-35 open.
+30 open.
