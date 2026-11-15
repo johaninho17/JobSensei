@@ -1034,3 +1034,4 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .behavior-field input { width: 7.5em; }
 .behavior-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }
 .inline-heading { display: inline; margin: 0; font-size: inherit; }
+.files-preview-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-2); }
