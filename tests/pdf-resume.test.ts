@@ -88,7 +88,8 @@ const shape = (baseline: Awaited<ReturnType<typeof loadCanonicalResumeBaseline>>
   summary: Boolean(baseline.originalSummaryLines?.length),
 });
 
-describe("PDF base resumes", () => {
+// The PDF reader loads on first use, which takes several seconds on slow Windows CI runners.
+describe("PDF base resumes", { timeout: 30_000 }, () => {
   let folder: string;
   const edition = process.env.JOBSENSEI_EDITION;
   beforeAll(async () => { folder = await mkdtemp(join(tmpdir(), "pdf-resume-")); });
