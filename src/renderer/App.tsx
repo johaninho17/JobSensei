@@ -1074,7 +1074,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
             void window.sensei.candidates.switchTo(candidateId).then(() => window.location.reload(), (caught) => setError(messageOf(caught, "Couldn't open that candidate.")));
           }} />
           : currentLocation.kind === "docs-home" ? <DocsView />
-          : FEATURES.agyPage && currentLocation.kind === "agy-home" ? <AgyView busyLabel={busyJobLabel} onRun={runAgyAction} saved={agyBehaviorSchema.parse(candidateProfile?.preferences.agy ?? {})} onSaveBehavior={async (agy) => {
+          : FEATURES.agyPage && currentLocation.kind === "agy-home" ? <AgyView busyLabel={busyJobLabel} onRun={runAgyAction} onShowAgy={() => setRightPanelOpen(true)} saved={agyBehaviorSchema.parse(candidateProfile?.preferences.agy ?? {})} onSaveBehavior={async (agy) => {
             if (!candidateProfile) throw new Error("No profile yet.");
             setCandidateProfile(await window.sensei.profile.updatePreferences({ ...candidateProfile.preferences, agy }));
           }} context={{
