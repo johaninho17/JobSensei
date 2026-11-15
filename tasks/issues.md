@@ -6,11 +6,9 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 
 | # | Issue | Features | Blocked |
 |---|---|---|---|
-| #11 | Console text stays in order while typing | FEAT-006 |  |
 | #35 | Agy page: Behavior settings and the settings score | FEAT-003, FEAT-012 |  |
 | #36 | Behavior: framing dial | FEAT-003, FEAT-012 |  |
 | #37 | Behavior: fit weights, credit, and gate | FEAT-003, FEAT-012 |  |
-| #54 | Every saved posting uses the same template | FEAT-013 | yes |
 
 ## P2
 
@@ -29,11 +27,6 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #40 | Agy page: How it works | FEAT-012 |  |
 | #41 | Agy page: Memory | FEAT-012 |  |
 | #52 | Read postings on any careers site: structured data, main text, then the app's own browser | FEAT-013 |  |
+| #88 | Jobs and Learnings by settings band | FEAT-012 | yes |
 
-## P3
-
-| # | Issue | Features | Blocked |
-|---|---|---|---|
-| #26 | One confirm dialog instead of window.confirm | FEAT-009 |  |
-
-19 open.
+17 open.

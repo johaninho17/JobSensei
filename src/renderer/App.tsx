@@ -22,6 +22,7 @@ import { JobSearchView } from "./JobSearchView";
 import { TodayView } from "./TodayView";
 import { DocsView } from "./DocsView";
 import { AgyView } from "./AgyView";
+import { effectiveBehavior } from "../shared/agy-behavior";
 import type { AgyAction } from "../shared/agy-actions";
 import { findDuplicateJob } from "../shared/job-organize";
 import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
@@ -1062,7 +1063,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
             void window.sensei.candidates.switchTo(candidateId).then(() => window.location.reload(), (caught) => setError(messageOf(caught, "Couldn't open that candidate.")));
           }} />
           : currentLocation.kind === "docs-home" ? <DocsView />
-          : FEATURES.agyPage && currentLocation.kind === "agy-home" ? <AgyView busyLabel={busyJobLabel} onRun={runAgyAction} context={{
+          : FEATURES.agyPage && currentLocation.kind === "agy-home" ? <AgyView busyLabel={busyJobLabel} onRun={runAgyAction} behavior={effectiveBehavior(candidateProfile?.preferences.agy)} context={{
             features: { interviews: FEATURES.interviews, contentRefresh: FEATURES.contentRefresh, jobSearch: FEATURES.jobSearch },
             job: agyJob ? { name: [agyJob.company ?? displayJobName(agyJob.name), agyJob.title].filter(Boolean).join(", "), actions: agyJobActions } : null,
             newRecordings, searchRunning: searchStatus.running,

@@ -307,6 +307,7 @@ export async function validateJobApplication(workspacePath: string, jobId: strin
     stretch,
     keywordClasses: keywordClasses(loaded),
     coverLetterSkipped: loaded.snapshot?.coverLetterPlan?.write === false ? loaded.snapshot.coverLetterPlan.reason : null,
+    settingsScore: loaded.snapshot?.settingsScore ?? null,
     issues,
   });
 
