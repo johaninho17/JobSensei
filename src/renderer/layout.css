@@ -1032,3 +1032,4 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .behavior-field { display: grid; gap: var(--space-1); font: var(--fs-12) var(--font-ui); color: var(--muted); }
 .behavior-field input { width: 7.5em; }
 .behavior-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }
+.inline-heading { display: inline; margin: 0; font-size: inherit; }
