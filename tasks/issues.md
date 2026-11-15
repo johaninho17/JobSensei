@@ -2,12 +2,6 @@
 
 Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; change the issue on GitHub and regenerate.
 
-## P1
-
-| # | Issue | Features | Blocked |
-|---|---|---|---|
-| #36 | Behavior: framing dial | FEAT-003, FEAT-012 |  |
-
 ## P2
 
 | # | Issue | Features | Blocked |
@@ -25,4 +19,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 |---|---|---|---|
 | #92 | Behavior: category weights for the fit score | FEAT-012 |  |
 
-8 open.
+7 open.

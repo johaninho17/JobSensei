@@ -48,6 +48,15 @@ export const agyBehaviorSchema = z.object({
     adjacent: z.number().min(0).max(1).default(FIT_CLASSIFICATION_CREDIT.adjacent_transferable),
     unclear: z.number().min(0).max(1).default(FIT_CLASSIFICATION_CREDIT.unclear),
     gate: z.number().min(1).max(5).default(FIT_GATE),
+    /** Each requirement category's share of the fit score; they add up to 100 (#92). Not part of the settings score. */
+    weights: z.object({
+      core: z.number().int().min(1).max(100).default(40),
+      technical: z.number().int().min(0).max(100).default(25),
+      scope: z.number().int().min(0).max(100).default(15),
+      outcomes: z.number().int().min(0).max(100).default(10),
+      domain: z.number().int().min(0).max(100).default(5),
+      learning: z.number().int().min(0).max(100).default(5),
+    }).prefault({}).refine((weights) => Object.values(weights).reduce((sum, value) => sum + value, 0) === 100, { message: "The category weights must add up to 100." }),
   }).prefault({}),
   /** Most current-role bullets reworked per resume (#38). */
   linesReworked: z.number().int().min(0).max(12).default(4),
@@ -68,6 +77,7 @@ export function effectiveBehavior(saved?: unknown): AgyBehavior {
     fit: {
       ...(CONNECTED.has("fit-credit") ? { strong: chosen.fit.strong, adjacent: chosen.fit.adjacent, unclear: chosen.fit.unclear } : { strong: DEFAULT_AGY_BEHAVIOR.fit.strong, adjacent: DEFAULT_AGY_BEHAVIOR.fit.adjacent, unclear: DEFAULT_AGY_BEHAVIOR.fit.unclear }),
       gate: CONNECTED.has("fit-gate") ? chosen.fit.gate : DEFAULT_AGY_BEHAVIOR.fit.gate,
+      weights: chosen.fit.weights,
     },
     linesReworked: CONNECTED.has("lines-reworked") ? chosen.linesReworked : DEFAULT_AGY_BEHAVIOR.linesReworked,
   };

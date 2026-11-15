@@ -6,7 +6,7 @@ import { candidateProfileSchema } from "../src/shared/schemas";
 
 describe("Agy behavior settings and the settings score", () => {
   it("defaults to the rules the app follows today", () => {
-    expect(DEFAULT_AGY_BEHAVIOR).toEqual({ framing: "framed", fit: { strong: FIT_CLASSIFICATION_CREDIT.strong_transferable, adjacent: FIT_CLASSIFICATION_CREDIT.adjacent_transferable, unclear: FIT_CLASSIFICATION_CREDIT.unclear, gate: FIT_GATE }, linesReworked: 4 });
+    expect(DEFAULT_AGY_BEHAVIOR).toEqual({ framing: "framed", fit: { strong: FIT_CLASSIFICATION_CREDIT.strong_transferable, adjacent: FIT_CLASSIFICATION_CREDIT.adjacent_transferable, unclear: FIT_CLASSIFICATION_CREDIT.unclear, gate: FIT_GATE, weights: { core: 40, technical: 25, scope: 15, outcomes: 10, domain: 5, learning: 5 } }, linesReworked: 4 });
     const parts = leniencyParts(DEFAULT_AGY_BEHAVIOR);
     expect(parts).toEqual({ framing: 6, "fit-credit": 5, "fit-gate": 5, "lines-reworked": 5 });
     expect(settingScore(DEFAULT_AGY_BEHAVIOR)).toMatchObject({ score: 53, band: "balanced" });
@@ -114,5 +114,23 @@ describe("framing dial (#36)", () => {
     expect(readFileSync("electron/evidence-snapshot.ts", "utf8")).toContain('framingInstruction(snapshot.settingsScore?.behavior.framing ?? "framed")');
     expect(readFileSync("AGENTS.md", "utf8")).toContain("follow the `Framing` line in the run's instructions");
     expect(readFileSync(".agents/skills/jobsensei-application-writer/SKILL.md", "utf8")).toContain("as the run's `Framing` line says");
+  });
+});
+
+describe("category weights (#92)", () => {
+  it("scores with the weights stamped on the job and refuses weights that don't add up to 100", async () => {
+    const { calculateFitScore, categoryTargets } = await import("../electron/fit-scoring");
+    expect(DEFAULT_AGY_BEHAVIOR.fit.weights).toEqual({ core: 40, technical: 25, scope: 15, outcomes: 10, domain: 5, learning: 5 });
+    expect(agyBehaviorSchema.safeParse({ fit: { weights: { core: 50 } } }).success).toBe(false);
+    const weights = { core: 60, technical: 20, scope: 10, outcomes: 10, domain: 0, learning: 0 };
+    expect(categoryTargets(["core", "technical"], weights)).toMatchObject({ core: 75, technical: 25 });
+    const rows = [
+      { requirement: "req:1 Customer onboarding", category: "core", classification: "direct", weight: 75, evidence: "", reason: "" },
+      { requirement: "req:2 SQL", category: "technical", classification: "gap", weight: 25, evidence: "", reason: "" },
+    ] as never;
+    const settings = { ...DEFAULT_AGY_BEHAVIOR.fit, weights };
+    expect(calculateFitScore(rows, settings).score).toBeGreaterThan(3.5);
+    // Rows weighted for other targets are refused, so a job is never scored with weights it wasn't rated under.
+    expect(() => calculateFitScore(rows)).toThrow(/must total/);
   });
 });
