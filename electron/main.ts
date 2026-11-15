@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, session, shell } from "electron";
 import { deleteMemory, listMemory } from "./agy-memory";
 import { conversationExists, deleteConversations, listConversations } from "./agy-conversations";
+import { agyActivity } from "./agy-activity";
 import { handleLinks } from "./open-link";
 import { availableBrowsers, BROWSER_NAMES, browserOpener, readBrowserChoice, saveBrowserChoice } from "./browser-choice";
 import { pdfFreshness } from "./pdf-freshness";
@@ -418,6 +419,7 @@ ipcMain.handle("app:browser", async () => {
   return { choice: available.includes(choice) ? choice : "default", options: available.map((id) => ({ id, name: BROWSER_NAMES[id] })) };
 });
 ipcMain.handle("app:set-browser", async (_event, choice: unknown) => saveBrowserChoice(app.getPath("userData"), choice));
+ipcMain.handle("app:agy-activity", async () => agyActivity(requireWorkspace()));
 ipcMain.handle("app:open-release", async (_event, url: unknown) => {
   const repository = await releaseRepository();
   if (typeof url === "string" && repository && url.startsWith(`https://github.com/${repository}/releases/`)) await shell.openExternal(url);

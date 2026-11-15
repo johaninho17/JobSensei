@@ -1290,6 +1290,19 @@ export type QuestionsState = {
   conversationId: string | null;
 };
 
+/** One thing Agy did, in the panel or in the background (Agy page → Activity, electron/agy-activity.ts). */
+export type AgyActivity = {
+  id: string;
+  kind: "application" | "interview" | "search" | "answers" | "filing" | "content";
+  where: "panel" | "background";
+  label: string;
+  at: string;
+  durationSeconds: number | null;
+  result: "running" | "passed" | "warnings" | "failed";
+  detail: string | null;
+  open: { jobId?: string; tab?: "application" | "interview"; roundId?: string; page?: "search-home" | "today-home" | "interviews-home" };
+};
+
 export type RecordingInfo = { path: string; size: number; state: "new" | "changed" | "imported" | "duplicate" | "skipped"; duplicateOf: string | null; jobId: string | null; usedIn?: Array<{ area: "Story bank" | "Interview voice" | "Role memory" | "Interview stories"; count: number }>; usedInShared?: boolean; importedAt?: string | null };
 type ContentItemInfo = { file: string; section: string; key: string; text: string };
 export type ContentReviewInfo = { added: ContentItemInfo[]; upgraded: Array<{ before: ContentItemInfo; after: ContentItemInfo }>; replaced: Array<{ before: ContentItemInfo; after: ContentItemInfo | null; replacement: string; why: string }>; lost: Array<{ before: ContentItemInfo; after: ContentItemInfo | null }>; files: string[]; changeListFound: boolean };
@@ -1408,6 +1421,8 @@ export interface SenseiApi {
     /** A newer GitHub release, or null (also null for builds without a recorded release source). */
     checkUpdate(): Promise<{ version: string; url: string } | null>;
     openRelease(url: string): Promise<void>;
+    /** Everything Agy did, newest first (Agy page → Activity). */
+    agyActivity(): Promise<AgyActivity[]>;
     /** Where web links open on this computer, and the browsers installed. */
     browser(): Promise<{ choice: string; options: Array<{ id: string; name: string }> }>;
     setBrowser(choice: string): Promise<string>;
