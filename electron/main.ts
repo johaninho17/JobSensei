@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, session, shell } from "electron";
 import { deleteMemory, listMemory } from "./agy-memory";
+import { conversationExists, deleteConversations, listConversations } from "./agy-conversations";
 import { handleLinks } from "./open-link";
 import { availableBrowsers, BROWSER_NAMES, browserOpener, readBrowserChoice, saveBrowserChoice } from "./browser-choice";
 import { pdfFreshness } from "./pdf-freshness";
@@ -571,6 +572,25 @@ ipcMain.handle("agy:delete-memory", async (_event, ids: unknown) => {
   await deleteMemory(home, ids === "all" ? "all" : ids.filter((id): id is string => typeof id === "string"));
   await startAgyTerminal();
   return listMemory(home);
+});
+// Agy page → Conversations (#34): Agy is stopped before a resume, a new conversation, or a delete.
+const conversationHome = async () => { const workspace = requireWorkspace(); return { workspace, home: await agyHomes.get(workspace).catch(() => null) }; };
+ipcMain.handle("agy:conversations", async () => { const { workspace, home } = await conversationHome(); return home ? listConversations(home, workspace) : []; });
+ipcMain.handle("agy:open-conversation", async (_event, id: unknown) => {
+  const { home } = await conversationHome();
+  if (typeof id === "string" && !(home && await conversationExists(home, id))) throw new Error("That conversation is gone.");
+  await terminal.stopAndWait();
+  terminal.openConversationNext(typeof id === "string" ? id : null);
+  return startAgyTerminal();
+});
+ipcMain.handle("agy:delete-conversations", async (_event, ids: unknown) => {
+  const { workspace, home } = await conversationHome();
+  if (!home || !Array.isArray(ids)) return [];
+  const wanted = new Set((await listConversations(home, workspace)).map((entry) => entry.id));
+  await terminal.stopAndWait();
+  await deleteConversations(home, ids.filter((id): id is string => typeof id === "string" && wanted.has(id)));
+  await startAgyTerminal();
+  return listConversations(home, workspace);
 });
 ipcMain.handle("terminal:stop", async () => terminal.stop());
 

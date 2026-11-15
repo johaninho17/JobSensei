@@ -1523,10 +1523,18 @@ export interface SenseiApi {
     memory(): Promise<Array<{ id: string; bytes: number; updatedAt: string }>>;
     /** Stops Agy, deletes the chosen memory items (or all), starts Agy again; returns the list after. */
     deleteMemory(ids: string[] | "all"): Promise<Array<{ id: string; bytes: number; updatedAt: string }>>;
+    /** Agy page → Conversations: this workspace's past conversations, newest first. */
+    conversations(): Promise<AgyConversationSummary[]>;
+    /** Stops Agy and starts it in that conversation, or a new one (`null`). */
+    openConversation(id: string | null): Promise<{ cwd: string; agyStarted?: boolean }>;
+    /** Stops Agy, deletes the chosen conversations, starts Agy again; returns the list after. */
+    deleteConversations(ids: string[]): Promise<AgyConversationSummary[]>;
     onData(callback: (data: string) => void): () => void;
     onExit(callback: (code: number) => void): () => void;
   };
 }
+
+export type AgyConversationSummary = { id: string; prompt: string; jobId: string | null; startedAt: string; lastUsedAt: string; background: boolean };
 
 export type LayoutMove = { from: string; to: string; kind: "move" | "archive"; reason: string };
 /** What tidying the workspace folders would do (version 2 = already tidy). */
