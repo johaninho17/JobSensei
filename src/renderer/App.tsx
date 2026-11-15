@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { ConfirmHost, askConfirm, confirmDiscard } from "./confirm";
 import { activeInterviews } from "../shared/interview-progress";
 import { createPortal } from "react-dom";
 import { TRACKER_STATUSES, type JobQueue, type JobTrackerUpdate, type RunStatus, type ApplicationStatus, type CandidateProfile, type ContextManifest, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type SearchResult, type Settings, type WorkspaceSummary } from "../shared/schemas";
@@ -133,10 +134,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   }
   async function loadReadiness() { try { const next = await window.sensei.setup.readiness(); setReadiness(next); return next; } catch { return null; } }
   /** A job the user already has (same posting link, or same company and title) is asked about before it is added again. */
-  function confirmNotDuplicate(incoming: { url?: string | null; company?: string | null; title?: string | null }): boolean {
+  async function confirmNotDuplicate(incoming: { url?: string | null; company?: string | null; title?: string | null }): Promise<boolean> {
     const existing = findDuplicateJob(jobs, incoming);
     if (!existing) return true;
-    return window.confirm(`You already have this job: ${[existing.company, existing.title].filter(Boolean).join(", ") || existing.name} (${TRACKER_LABELS[effectiveStatus(existing)].toLowerCase()}, added ${new Date(existing.createdAt).toLocaleDateString()}).\n\nAdd it again anyway?`);
+    return askConfirm({ title: "You already have this job", body: `${[existing.company, existing.title].filter(Boolean).join(", ") || existing.name} (${TRACKER_LABELS[effectiveStatus(existing)].toLowerCase()}, added ${new Date(existing.createdAt).toLocaleDateString()}). Add it again anyway?`, confirmLabel: "Add it again" });
   }
   async function queueJob(input: { kind: "link"; url: string; batch?: { index: number; size: number } } | { kind: "paste"; text: string; note?: string } | { kind: "found"; id: string; auto?: boolean } | { kind: "saved"; jobId: string }, manual: boolean): Promise<number> {
     // The app says what setup is missing before a job reaches Agy (electron/setup-readiness.ts owns the rules).
@@ -172,7 +173,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       item.label = await window.sensei.jobSearch.stage(input.id, item.id, input.auto === true);
     } else if (input.kind === "link") {
       const meta = await window.sensei.jobs.stageLink(input.url, item.id);
-      if (!confirmNotDuplicate({ url: input.url, company: meta.company, title: meta.title })) throw new Error("Not added: you already have this job.");
+      if (!(await confirmNotDuplicate({ url: input.url, company: meta.company, title: meta.title }))) throw new Error("Not added: you already have this job.");
       item.url = input.url;
       item.label = [meta.company, meta.title].filter(Boolean).join(", ") || input.url;
     } else {
@@ -184,7 +185,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         const company = await askCompany(meta.title ?? firstLine);
         if (company) meta = await window.sensei.jobs.setStagedCompany(item.id, company);
       }
-      if (!confirmNotDuplicate({ company: meta.company, title: meta.title ?? firstLine })) throw new Error("Not added: you already have this job.");
+      if (!(await confirmNotDuplicate({ company: meta.company, title: meta.title ?? firstLine }))) throw new Error("Not added: you already have this job.");
       item.label = [meta.company, meta.title ?? firstLine].filter(Boolean).join(", ") || null;
     }
     return addToQueue(item);
@@ -529,14 +530,14 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
 
   async function selectFile(relativePath: string, anchor?: string) {
     if (relativePath === selectedPath && preview) return;
-    if (editorDirty && !window.confirm("Discard your unsaved Markdown changes?")) return;
+    if (editorDirty && !(await confirmDiscard())) return;
     setEditorDirty(false);
     const jobId = relativePath.match(/^jobs\/([^/]+)/)?.[1] ?? null;
     pushLocation({ kind: "document", relativePath, jobId, anchor, returnTo: currentReturnLocation(jobId) });
   }
 
-  function closeDocument() {
-    if (editorDirty && !window.confirm("Discard your unsaved Markdown changes?")) return;
+  async function closeDocument() {
+    if (editorDirty && !(await confirmDiscard())) return;
     setEditorDirty(false);
     const current = navigationHistory[navigationIndex];
     if (current?.kind === "document") {
@@ -546,8 +547,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     }
   }
 
-  function navigateHistory(direction: -1 | 1) {
-    if (editorDirty && !window.confirm("Discard your unsaved Markdown changes?")) return;
+  async function navigateHistory(direction: -1 | 1) {
+    if (editorDirty && !(await confirmDiscard())) return;
     const nextIndex = navigationIndex + direction;
     const next = navigationHistory[nextIndex];
     if (!next) return;
@@ -571,14 +572,14 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     if (pending && jobs.some((job) => job.id === pending)) openJob(pending);
   }, [jobs.length > 0]);
 
-  function openJob(jobId: string) {
-    if (editorDirty && !window.confirm("Discard your unsaved Markdown changes?")) return;
+  async function openJob(jobId: string) {
+    if (editorDirty && !(await confirmDiscard())) return;
     setEditorDirty(false);
     pushLocation({ kind: "job", jobId, tab: "overview" });
   }
 
-  function showPage(kind: PageLocation["kind"]) {
-    if (editorDirty && !window.confirm("Discard your unsaved Markdown changes?")) return;
+  async function showPage(kind: PageLocation["kind"]) {
+    if (editorDirty && !(await confirmDiscard())) return;
     setEditorDirty(false);
     if (currentLocation.kind === kind) return;
     pushLocation({ kind });
@@ -804,7 +805,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   }
 
   async function removeSecondary(path: string) {
-    if (!window.confirm(`Remove ${path} from secondary resumes?\n\nThe source file will not be deleted.`)) return;
+    if (!(await askConfirm({ title: `Remove ${path} from secondary resumes?`, body: "The file itself is not deleted.", confirmLabel: "Remove" }))) return;
     setError(null);
     try {
       const nextSettings = await window.sensei.settings.removeSecondary(path);
@@ -817,7 +818,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   }
 
   async function deletePath(path: string) {
-    if (!window.confirm(`Move ${path} to Trash?\n\nYou can recover it from your system Trash or Recycle Bin.`)) return;
+    if (!(await askConfirm({ title: `Move ${path} to Trash?`, body: "You can recover it from your system Trash or Recycle Bin.", confirmLabel: "Move to Trash", danger: true }))) return;
     setError(null);
     try {
       const deletedPrefix = `${path}/`;
@@ -1096,6 +1097,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       </section>
     </div>
     <div className={`panel-resizer is-right ${rightPanelOpen ? "" : "is-collapsed"}`} role="separator" aria-label="Resize terminal panel" aria-orientation="vertical" aria-valuemin={RIGHT_PANEL_MIN} aria-valuemax={panelMaximum("right")} aria-valuenow={rightPanelWidth} tabIndex={rightPanelOpen ? 0 : -1} onPointerDown={(event) => beginPanelResize("right", event)} onKeyDown={(event) => resizePanelWithKeyboard("right", event)} />
+    <ConfirmHost />
     <ToastRegion toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
     {shortcutsOpen && <ShortcutsPanel onClose={() => setShortcutsOpen(false)} />}
     {companyAsk && <CompanyDialog title={companyAsk.title} onDone={(company) => { companyAsk.resolve(company); setCompanyAsk(null); }} />}
