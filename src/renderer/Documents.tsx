@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { confirmDiscard } from "./confirm";
 import { createPortal } from "react-dom";
 import { DEFAULT_PDF_TEXT_SIZE, type PdfFreshness, type ChallengeExercise, type ChallengePractice, type FilePreview, type PdfTextSize } from "../shared/schemas";
 // pdfjs-dist ships the browser runtime without declarations for this subpath.
@@ -233,7 +234,7 @@ function MarkdownDocument({ preview, focusAnchor, onExported, onDirtyChange, onS
   }
 
   async function reloadFromDisk() {
-    if (dirty && !window.confirm("Discard your unsaved changes and reload this file?")) return;
+    if (dirty && !(await confirmDiscard("your unsaved changes and reload this file"))) return;
     try {
       const latest = await window.sensei.files.preview(preview.relativePath);
       const content = latest.content ?? "";

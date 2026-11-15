@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { looksLikePastedPosting } from "../shared/paste-limits";
+import { askConfirm } from "./confirm";
 import { createPortal } from "react-dom";
 import { TRACKER_STATUSES, type JobQueue, type JobTrackerUpdate, type TrackerStatus, type JobFolderSummary } from "../shared/schemas";
 import { jobsToCsv } from "../shared/jobs-csv";
@@ -126,7 +127,7 @@ export function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onM
   }, [jobs, query, filter, sort, favorites, tab, facets]);
   const stale = staleApplications(jobs);
   async function closeStale() {
-    if (!window.confirm(`Mark ${stale.length} application${stale.length === 1 ? "" : "s"} with no reply after ${STALE_DAYS} days as rejected? You can change any of them back later.`)) return;
+    if (!(await askConfirm({ title: `Mark ${stale.length} application${stale.length === 1 ? "" : "s"} as rejected?`, body: `No reply after ${STALE_DAYS} days. You can change any of them back later.`, confirmLabel: "Mark as rejected" }))) return;
     setClosing(true);
     const closed = [...stale];
     try { for (const job of closed) await onUpdateTracker(job.id, { status: "rejected" }, { quiet: true }); } finally { setClosing(false); }

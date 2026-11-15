@@ -1,5 +1,6 @@
 // Recruiter Edition (recruiter plan R1): the candidate list, the first-candidate screen, and the switcher.
 // Rendered only when FEATURES.candidates is on, so the solo build leaves this file out.
+import { askConfirm } from "./confirm";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { CandidateEntry, CandidatesState } from "../shared/candidates";
 import type { CandidateSuggestion, LibraryPosting } from "../shared/candidate-match";
@@ -200,7 +201,7 @@ export function CandidateSwitcher({ state }: { state: CandidatesState }) {
         <button role="menuitem" className="menu-item" onClick={() => setMode("rename")}>Rename {active.displayName}</button>
         {(["paused", "placed"] as const).filter((status) => status !== active.status).map((status) => <button key={status} role="menuitem" className="menu-item" onClick={() => void window.sensei.candidates.setStatus(active.id, status).then(reloadForCandidate, (caught) => setError(message(caught)))}>Mark as {STATUS_LABEL[status].toLowerCase()}</button>)}
         {active.status !== "active" && <button role="menuitem" className="menu-item" onClick={() => void run(window.sensei.candidates.setStatus(active.id, "active"))}>Mark as active</button>}
-        <button role="menuitem" className="menu-item" onClick={() => { if (window.confirm(`Archive ${active.displayName}? Their folder stays on this computer and you can restore them later.`)) void run(window.sensei.candidates.setStatus(active.id, "archived")); }}>Archive {active.displayName}</button>
+        <button role="menuitem" className="menu-item" onClick={() => void askConfirm({ title: `Archive ${active.displayName}?`, body: "Their folder stays on this computer and you can restore them later.", confirmLabel: "Archive" }).then((yes) => { if (yes) void run(window.sensei.candidates.setStatus(active.id, "archived")); })}>Archive {active.displayName}</button>
         <button role="menuitem" className="menu-item" onClick={() => void window.sensei.candidates.exportCandidate(active.id).then((result) => setNotice(result ? `Saved ${result.files} files to ${result.path.split(/[\\/]/).pop()}` : null), (caught) => setError(message(caught)))}>Export {active.displayName} (.zip)</button>
         <button role="menuitem" className="menu-item is-danger" onClick={() => setMode("delete")}>Delete {active.displayName}…</button>
         {notice && <p className="muted" role="status">{notice}</p>}
