@@ -7,7 +7,7 @@ import { type Readiness } from "../shared/readiness";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { CompanyStrip, JobFilters, SavedViews, storeJobViews, storedJobViews } from "./JobOrganize";
 import { GROUPINGS, NO_FACETS, countWithin, groupJobs, matchesFacets, type Grouping, type JobFacets, type JobView } from "../shared/job-organize";
-import { FitBadge, JOB_FAVORITES_KEY, type JobWorkspaceTab, type QueueJob, TrackerPill, displayJobName, formatJobDate, formatTrackerDate, messageOf, plural, storedFavoriteJobIds } from "./app-shared";
+import { FitBadge, type JobWorkspaceTab, type QueueJob, TrackerPill, displayJobName, formatJobDate, formatTrackerDate, messageOf, plural, saveFavoriteJobIds, storedFavoriteJobIds } from "./app-shared";
 
 // CSV columns follow the edition: no follow-up or interview columns where those features are left out.
 export const CSV_COLUMNS = { followUps: FEATURES.nudges, interviews: FEATURES.interviews };
@@ -86,7 +86,7 @@ export function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onM
   });
   useEffect(() => { window.localStorage.setItem("sensei-jobs-view", view); }, [view]);
   useEffect(() => { window.localStorage.setItem("sensei-jobs-sort", sort); }, [sort]);
-  useEffect(() => { window.localStorage.setItem(JOB_FAVORITES_KEY, JSON.stringify([...favorites])); }, [favorites]);
+  useEffect(() => { saveFavoriteJobIds(favorites); }, [favorites]);
   function toggleFavorite(jobId: string) {
     setFavorites((current) => {
       const next = new Set(current);
