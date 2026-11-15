@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { usedInText } from "../shared/recordings";
 import { type ContentReviewInfo, type RecordingInfo, type InterviewOverview, type JobFolderSummary } from "../shared/schemas";
 import { effectiveStatus } from "../shared/tracker";
 import { computeLearnings, STAGE_LABELS } from "../shared/learnings";
@@ -154,6 +155,8 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
   const jobName = (id: string | null) => { const job = id ? jobs.find((candidate) => candidate.id === id) : null; return job ? `${job.company ?? displayJobName(job.name)}${job.title ? `, ${job.title}` : ""}` : null; };
   const waiting = (data?.recordings ?? []).filter((recording) => recording.state === "new" || recording.state === "changed");
   const flagged = (data?.recordings ?? []).filter((recording) => recording.state === "duplicate");
+  // Imported recordings and what they were used for, newest import first (#17).
+  const imported = (data?.recordings ?? []).filter((recording) => recording.state === "imported").sort((a, b) => (b.importedAt ?? "").localeCompare(a.importedAt ?? ""));
   async function run(task: () => Promise<void>, failure: string) {
     setBusy(true); setMessage("");
     try { await task(); } catch (caught) { setMessage(messageOf(caught, failure)); } finally { setBusy(false); await load(); onChanged(); }
@@ -170,6 +173,7 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
       {data?.pending ? <div className="onboarding-result" role="status">
         <strong>Update in progress</strong>
         <p>Agy is importing {plural(data.pending.recordings.length, "recording")} (started {new Date(data.pending.startedAt).toLocaleString()}). Confirm its proposals in the Agy panel; once it has saved, review the changes here.</p>
+        <ul className="recording-list">{data.pending.recordings.map((recording) => <li key={recording.path}><span className="setup-state">Importing</span><span><strong>{recording.path.replace(/^debrief\//, "")}</strong></span></li>)}</ul>
         <div className="onboarding-actions"><button className="btn-primary" disabled={busy} onClick={() => void check()}>Review changes</button><button className="btn-quiet" disabled={busy} onClick={() => void undo()}>Undo the update</button></div>
       </div> : <>
         {waiting.length ? <ul className="recording-list">{waiting.map((recording) => <li key={recording.path}>
@@ -195,6 +199,17 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
       </li>; })}</ul></div>}
       {review.lost.length > 0 && <details open><summary>Removed without a replacement (will be put back)</summary><ul>{review.lost.map(({ before }) => <li key={before.file + before.key}>{snippet(before.text)} <small className="muted">{before.file}</small></li>)}</ul></details>}
       <div className="onboarding-actions"><button className="btn-primary" disabled={busy} onClick={() => void finish()}>Save the update</button><button className="btn-quiet" disabled={busy} onClick={() => void undo()}>Undo everything</button></div>
+    </section>}
+    {imported.length > 0 && <section className="iv-section">
+      <details>
+        <summary><h3 className="inline-heading">Imported recordings</h3> <span className="muted">{plural(imported.length, "recording")}</span></summary>
+        <p className="learn-note">What each update took from a recording. "Shared" means Agy didn't say which recording an item came from, so it is counted for each one of that update.</p>
+        <ul className="recording-list">{imported.slice(0, 30).map((recording) => <li key={recording.path}>
+          <span className="setup-state">{recording.importedAt ? new Date(recording.importedAt).toLocaleDateString() : "Earlier"}</span>
+          <span><strong>{recording.path.replace(/^debrief\//, "")}</strong><small>{recording.importedAt ? `Used in: ${usedInText(recording.usedIn ?? [])}${recording.usedInShared ? " (shared)" : ""}` : "Imported before the app kept track"}</small></span>
+          <button className="btn-link" onClick={() => onOpenFile(recording.path)}>Open</button>
+        </li>)}</ul>
+      </details>
     </section>}
     <section className="iv-section">
       <h3>What Agy uses for interview prep</h3>

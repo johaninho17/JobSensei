@@ -1290,7 +1290,7 @@ export type QuestionsState = {
   conversationId: string | null;
 };
 
-export type RecordingInfo = { path: string; size: number; state: "new" | "changed" | "imported" | "duplicate" | "skipped"; duplicateOf: string | null; jobId: string | null };
+export type RecordingInfo = { path: string; size: number; state: "new" | "changed" | "imported" | "duplicate" | "skipped"; duplicateOf: string | null; jobId: string | null; usedIn?: Array<{ area: "Story bank" | "Interview voice" | "Role memory" | "Interview stories"; count: number }>; usedInShared?: boolean; importedAt?: string | null };
 type ContentItemInfo = { file: string; section: string; key: string; text: string };
 export type ContentReviewInfo = { added: ContentItemInfo[]; upgraded: Array<{ before: ContentItemInfo; after: ContentItemInfo }>; replaced: Array<{ before: ContentItemInfo; after: ContentItemInfo | null; replacement: string; why: string }>; lost: Array<{ before: ContentItemInfo; after: ContentItemInfo | null }>; files: string[]; changeListFound: boolean };
 

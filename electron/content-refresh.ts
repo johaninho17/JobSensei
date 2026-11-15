@@ -1,7 +1,7 @@
 // Interview content refresh: the app knows which recordings are new, sends Agy only those, and checks that an update
 // never loses content without a better replacement (`.agents/workflows/jobsensei-interview-review.md` step 4 owns the
 // rule for Agy; this file owns the check).
-import { waitingToImport } from "../src/shared/recordings";
+import { usageByRecording, waitingToImport, type UsedIn } from "../src/shared/recordings";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -27,6 +27,9 @@ const ledgerSchema = z.object({
     firstSeen: z.string(),
     status: z.enum(["imported", "skipped"]),
     importedAt: z.string().nullable().default(null),
+    /** What the update took from it (#17): content areas with counts; shared when Agy didn't say which recording. */
+    usedIn: z.array(z.object({ area: z.enum(["Story bank", "Interview voice", "Role memory", "Interview stories"]), count: z.number() })).default([]),
+    usedInShared: z.boolean().default(false),
   })),
 });
 type Ledger = z.infer<typeof ledgerSchema>;
@@ -39,6 +42,10 @@ export type Recording = {
   duplicateOf: string | null;
   /** The job the recording's folder matches, when exactly one does. */
   jobId: string | null;
+  /** For imported recordings: what the update took from it, and when (#17). */
+  usedIn?: UsedIn[];
+  usedInShared?: boolean;
+  importedAt?: string | null;
 };
 
 const sha = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
@@ -83,7 +90,7 @@ export async function scanRecordings(workspacePath: string, jobIds: string[] = [
     for (const path of paths) {
       if (!listed.has(path) && !companion(path)) continue;
       const data = await readFile(workspaceFile(root, path));
-      ledger.files[path] = { hash: sha(data), size: data.length, firstSeen: now, status: "imported", importedAt: null };
+      ledger.files[path] = { hash: sha(data), size: data.length, firstSeen: now, status: "imported", importedAt: null, usedIn: [], usedInShared: false };
     }
     if (Object.keys(ledger.files).length) await writeJsonAtomic(workspaceFile(root, LEDGER_FILE), ledger);
   }
@@ -100,7 +107,7 @@ export async function scanRecordings(workspacePath: string, jobIds: string[] = [
       : first && first !== path ? "duplicate"
       : known ? "changed" : "new";
     if (!owner.has(hash)) owner.set(hash, path);
-    recordings.push({ path, size, state, duplicateOf: state === "duplicate" ? first! : null, jobId: matchJob(path, jobIds) });
+    recordings.push({ path, size, state, duplicateOf: state === "duplicate" ? first! : null, jobId: matchJob(path, jobIds), ...(state === "imported" && known ? { usedIn: known.usedIn, usedInShared: known.usedInShared, importedAt: known.importedAt } : {}) });
   }
   return recordings;
 }
@@ -146,7 +153,7 @@ export function contentItems(file: string, markdown: string): ContentItem[] {
 const normal = (text: string) => text.toLowerCase().replace(/[`*_]/g, "").replace(/[^a-z0-9:.-]+/g, " ").trim();
 const ids = (text: string) => new Set(text.match(/\b(?:S\d{1,2}|context:[a-z0-9:._-]+|[a-z][a-z0-9-]*:[a-z0-9-]+:[a-z0-9.+-]+)\b/gi) ?? []);
 
-export type ChangeEntry = { file: string; kind: "added" | "upgraded" | "replaced" | "removed"; item: string; replacement?: string; why?: string };
+export type ChangeEntry = { file: string; kind: "added" | "upgraded" | "replaced" | "removed"; item: string; replacement?: string; why?: string; /** The recording the item came from (#17). */ from?: string };
 export type ContentReview = {
   added: ContentItem[];
   upgraded: Array<{ before: ContentItem; after: ContentItem }>;
@@ -268,7 +275,10 @@ export async function finishUpdate(workspacePath: string, keepOld: string[] = []
     await writeFile(path, restoreLost(await readText(root, file), putBack.filter((entry) => entry.before.file === file)), "utf8");
   }
   const ledger = await readLedger(root);
-  for (const recording of update.recordings) ledger.files[recording.path] = { hash: recording.hash, size: recording.size, firstSeen: ledger.files[recording.path]?.firstSeen ?? now.toISOString(), status: "imported", importedAt: now.toISOString() };
+  const changes = (await readJson<{ changes?: ChangeEntry[] }>(workspaceFile(root, CHANGES_FILE)))?.changes ?? [];
+  const version = layoutVersion(root);
+  const usage = usageByRecording(update.recordings.map((recording) => recording.path), Array.isArray(changes) ? changes.filter((change) => change && typeof change.file === "string") : [], (path) => toLogical(path, version) ?? path);
+  for (const recording of update.recordings) ledger.files[recording.path] = { hash: recording.hash, size: recording.size, firstSeen: ledger.files[recording.path]?.firstSeen ?? now.toISOString(), status: "imported", importedAt: now.toISOString(), usedIn: usage[recording.path]?.usedIn ?? [], usedInShared: usage[recording.path]?.shared ?? false };
   await writeJsonAtomic(workspaceFile(root, LEDGER_FILE), ledger);
   await rm(workspaceFile(root, UPDATE_FILE), { force: true });
   return { restored: putBack.length };
@@ -294,7 +304,7 @@ export async function skipRecordings(workspacePath: string, paths: string[], now
   for (const path of paths) {
     if (!path.startsWith("debrief/") || path.includes("..")) continue;
     const data = await readFile(workspaceFile(root, path)).catch(() => null);
-    if (data) ledger.files[path] = { hash: sha(data), size: data.length, firstSeen: now.toISOString(), status: "skipped", importedAt: null };
+    if (data) ledger.files[path] = { hash: sha(data), size: data.length, firstSeen: now.toISOString(), status: "skipped", importedAt: null, usedIn: [], usedInShared: false };
   }
   await writeJsonAtomic(workspaceFile(root, LEDGER_FILE), ledger);
 }
