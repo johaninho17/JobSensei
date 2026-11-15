@@ -132,6 +132,19 @@ export async function deleteConversations(agyHome: string, ids: string[]): Promi
     }
     removed.push(id);
   }
+  // Agy's search index keeps each conversation's title, preview, and text: remove the deleted ones there too.
+  if (removed.length) {
+    try {
+      const { DatabaseSync } = await import("node:sqlite");
+      const db = new DatabaseSync(join(cli, "conversation_summaries.db"));
+      try {
+        for (const table of ["conversation_summaries", "conversation_parents", "conversations_fts"]) {
+          const statement = db.prepare(`DELETE FROM ${table} WHERE conversation_id = ?`);
+          for (const id of removed) { try { statement.run(id); } catch { /* table missing in this Agy version */ } }
+        }
+      } finally { db.close(); }
+    } catch { /* no index yet */ }
+  }
   // "Most recent conversation" per folder (used by --continue) must not point at a deleted one.
   const lastPath = join(cli, "cache", "last_conversations.json");
   try {

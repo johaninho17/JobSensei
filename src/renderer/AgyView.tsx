@@ -68,7 +68,7 @@ const remembered = (): AgyTab => {
   try { const value = window.localStorage.getItem("sensei-agy-tab"); return TABS.some((tab) => tab.id === value) ? value as AgyTab : "actions"; } catch { return "actions"; }
 };
 
-export function AgyView({ context, saved, onSaveBehavior, busyLabel, onRun, onShowAgy }: { context: AgyActionContext; /** The settings in the profile (`preferences.agy`). */ saved: AgyBehavior; onSaveBehavior: (next: AgyBehavior) => Promise<void>; /** The job Agy is working on now, if any. */ busyLabel: string | null; onRun: (action: AgyAction) => void onShowAgy }: { context: AgyActionContext; }) {
+export function AgyView({ context, saved, onSaveBehavior, busyLabel, onRun, onShowAgy }: { context: AgyActionContext; /** The settings in the profile (`preferences.agy`). */ saved: AgyBehavior; onSaveBehavior: (next: AgyBehavior) => Promise<void>; /** The job Agy is working on now, if any. */ busyLabel: string | null; onRun: (action: AgyAction) => void; /** Opens the Agy panel. */ onShowAgy: () => void }) {
   const [tab, setTab] = useState<AgyTab>(remembered);
   const actions = buildAgyActions(context);
   return <section className="agy-home">

@@ -29,6 +29,10 @@ async function home(entries: Array<{ id: string; folder: string; prompt: string 
     db.close();
     await mkdir(join(cli, "brain", entry.id), { recursive: true });
   }
+  const index = new DatabaseSync(join(cli, "conversation_summaries.db"));
+  index.exec("CREATE TABLE conversation_summaries (conversation_id text PRIMARY KEY, preview text)");
+  for (const entry of entries) index.prepare("INSERT INTO conversation_summaries VALUES (?, ?)").run(entry.id, entry.prompt);
+  index.close();
   await writeFile(join(cli, "cache", "last_conversations.json"), JSON.stringify({ "/work/alex": entries[0]?.id, "/work/other": "kept-0000-id" }));
   return { root, cli };
 }
@@ -65,6 +69,9 @@ describe("Agy conversations", () => {
     expect(await stat(join(cli, "brain", A)).catch(() => null)).toBeNull();
     expect(await stat(join(cli, "conversations", `${B}.db`))).toBeTruthy();
     expect(JSON.parse(await readFile(join(cli, "cache", "last_conversations.json"), "utf8"))).toEqual({ "/work/other": "kept-0000-id" });
+    const index = new DatabaseSync(join(cli, "conversation_summaries.db"), { readOnly: true });
+    expect((index.prepare("SELECT conversation_id FROM conversation_summaries").all() as Array<{ conversation_id: string }>).map((row) => row.conversation_id)).toEqual([B]);
+    index.close();
   });
 
   it("resumes a chosen conversation with Agy's own flag", () => {
