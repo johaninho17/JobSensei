@@ -6,7 +6,7 @@ import { candidateProfileSchema } from "../src/shared/schemas";
 
 describe("Agy behavior settings and the settings score", () => {
   it("defaults to the rules the app follows today", () => {
-    expect(DEFAULT_AGY_BEHAVIOR).toEqual({ framing: "framed", fit: { strong: FIT_CLASSIFICATION_CREDIT.strong_transferable, adjacent: FIT_CLASSIFICATION_CREDIT.adjacent_transferable, unclear: FIT_CLASSIFICATION_CREDIT.unclear, gate: FIT_GATE, weights: { core: 40, technical: 25, scope: 15, outcomes: 10, domain: 5, learning: 5 } }, linesReworked: 4 });
+    expect(DEFAULT_AGY_BEHAVIOR).toEqual({ framing: "framed", fit: { strong: FIT_CLASSIFICATION_CREDIT.strong_transferable, adjacent: FIT_CLASSIFICATION_CREDIT.adjacent_transferable, unclear: FIT_CLASSIFICATION_CREDIT.unclear, gate: FIT_GATE, weights: { core: 40, technical: 25, scope: 15, outcomes: 10, domain: 5, learning: 5 } }, linesReworked: 4 , search: { fit: 1, freshness: 0, pay: 0, likeInterviewed: 0.25 } });
     const parts = leniencyParts(DEFAULT_AGY_BEHAVIOR);
     expect(parts).toEqual({ framing: 6, "fit-credit": 5, "fit-gate": 5, "lines-reworked": 5 });
     expect(settingScore(DEFAULT_AGY_BEHAVIOR)).toMatchObject({ score: 53, band: "balanced" });

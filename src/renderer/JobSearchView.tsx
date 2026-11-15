@@ -2,7 +2,7 @@
 // Agy only finds links; the app opened, saved, and rated every posting shown here (electron/job-search.ts).
 import { useEffect, useMemo, useState } from "react";
 import {
-  DEFAULT_JOB_SEARCH_SETTINGS, SEARCH_BOARDS, SEARCH_LEVELS, SKIPPED_BOARDS, WORK_SETUPS, effectiveFit, rankInbox, searchProgressText,
+  DEFAULT_JOB_SEARCH_SETTINGS, SEARCH_BOARDS, SEARCH_LEVELS, SKIPPED_BOARDS, WORK_SETUPS, DEFAULT_RANKING, effectiveFit, rankInbox, rankReason, searchProgressText, type RankingWeights,
   type InboxItem, type JobSearchSettings, type JobSearchState, type ScheduleInfo, type SearchRun, type SearchStatus, type WatchedSuggestion,
 } from "../shared/job-search";
 import { SubTabs } from "./SubTabs";
@@ -33,7 +33,9 @@ export function runSummary(run: SearchRun): string {
   return `${head}${notes ? ` (${notes})` : ""}.`;
 }
 
-export function JobSearchView({ status, focusId, onQueueFound, onQueueSaved, onOpenJob, onToast }: {
+export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQueueFound, onQueueSaved, onOpenJob, onToast }: {
+  /** How matches are ordered (Agy page → Behavior → Job Search ranking). */
+  ranking?: RankingWeights;
   /** A match to show and scroll to when the page opens (from Today). */
   focusId?: string;
   /** The run's live status, kept by the app so it survives leaving this page. */
@@ -69,7 +71,7 @@ export function JobSearchView({ status, focusId, onQueueFound, onQueueSaved, onO
   }, [focusItem?.id]);
 
   // Matches are only new finds; jobs sent for drafts, saved, or dismissed each get their own tab.
-  const live = useMemo(() => rankInbox((state?.items ?? []).filter((item) => item.status === "new"), sort), [state, sort]);
+  const live = useMemo(() => rankInbox((state?.items ?? []).filter((item) => item.status === "new"), sort, ranking), [state, sort, ranking]);
   const byStatus = (status: InboxItem["status"]) => rankInbox((state?.items ?? []).filter((item) => item.status === status), "newest");
   const drafting = byStatus("queued");
   const savedItems = byStatus("saved");
@@ -189,6 +191,7 @@ export function JobSearchView({ status, focusId, onQueueFound, onQueueSaved, onO
         {facts.length > 0 && <p className="find-facts">{facts.join(" · ")}</p>}
         {item.agyFit && <p className="find-why">{item.agyFit.why}{item.agyFit.gaps.length > 0 && <span className="muted"> Gaps: {item.agyFit.gaps.join("; ")}.</span>}</p>}
         <p className={item.agyFit ? "find-why muted" : "find-why"}>{item.agyFit ? `Quick check: ${item.fit.why}` : item.fit.why}</p>
+        {item.status === "new" && sort === "fit" && <p className="find-why muted find-rank">Ranked by {rankReason(item, ranking)}</p>}
         {(item.fit.blockers.length > 0 || item.fit.flags.length > 0 || item.fit.gaps.length > 0) && <p className="find-tags">
           {item.fit.blockers.map((text) => <span key={text} className="find-tag is-blocker">{text}</span>)}
           {item.fit.flags.map((text) => <span key={text} className="find-tag">{text}</span>)}
@@ -454,3 +457,4 @@ function ScheduleFields({ schedule, onChange }: { schedule: JobSearchSettings["s
     </>}
   </Section>;
 }
+

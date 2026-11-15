@@ -24,7 +24,7 @@ import { JobSearchView } from "./JobSearchView";
 import { TodayView } from "./TodayView";
 import { DocsView } from "./DocsView";
 import { AgyView } from "./AgyView";
-import { agyBehaviorSchema } from "../shared/agy-behavior";
+import { agyBehaviorSchema, effectiveBehavior } from "../shared/agy-behavior";
 import type { AgyAction } from "../shared/agy-actions";
 import { findDuplicateJob } from "../shared/job-organize";
 import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
@@ -661,7 +661,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       if (!run) { showToast("The job search stopped unexpectedly."); return; }
       const current = await window.sensei.jobSearch.get().catch(() => null);
       if (!current) return;
-      const picks = run.status === "done" ? autoDraftPicks(current.state, current.settings) : [];
+      const picks = run.status === "done" ? autoDraftPicks(current.state, current.settings, new Date(), effectiveBehavior(candidateProfile?.preferences.agy).search) : [];
       let sent = 0;
       for (const item of picks) { try { await queueJob({ kind: "found", id: item.id, auto: true }, false); sent += 1; } catch { break; } }
       setSearchNew(current.state.items.filter((item) => item.status === "new").length - sent);
@@ -1055,7 +1055,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
               onQueueFound={(id) => queueJob({ kind: "found", id, auto: false }, true)}
               onGo={(target) => showPage(({ setup: "setup-home", jobs: "jobs-home", "job-search": "search-home", interviews: "interviews-home", learnings: "interviews-home", context: "context-home" } as const)[target])}
               onAnswerAddedFile={(path) => void updateContext([...new Set([...selectedCareerPaths, path])], selectedJobFiles)} />
-          : FEATURES.jobSearch && currentLocation.kind === "search-home" ? <JobSearchView key={currentLocation.focus ?? ""} status={searchStatus} focusId={currentLocation.focus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onQueueSaved={(jobId) => queueJob({ kind: "saved", jobId }, true)} onOpenJob={openJob} onToast={showToast} />
+          : FEATURES.jobSearch && currentLocation.kind === "search-home" ? <JobSearchView key={currentLocation.focus ?? ""} ranking={effectiveBehavior(candidateProfile?.preferences.agy).search} status={searchStatus} focusId={currentLocation.focus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onQueueSaved={(jobId) => queueJob({ kind: "saved", jobId }, true)} onOpenJob={openJob} onToast={showToast} />
           : FEATURES.interviews && currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
           : FEATURES.candidates && currentLocation.kind === "postings-home" ? <PostingsView activeId={candidates?.activeId ?? null} onToast={showToast} onActive={async (pasteId, label, url) => {
             const item = newQueueItem({ kind: "paste", label }, new Date(), false);
