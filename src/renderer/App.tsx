@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { ConfirmHost, askConfirm, confirmDiscard } from "./confirm";
+import { goTarget, neighborJob, statusKeyAction } from "../shared/shortcuts";
 import { activeInterviews } from "../shared/interview-progress";
 import { createPortal } from "react-dom";
 import { TRACKER_STATUSES, type JobQueue, type JobTrackerUpdate, type RunStatus, type ApplicationStatus, type CandidateProfile, type ContextManifest, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type SearchResult, type Settings, type WorkspaceSummary } from "../shared/schemas";
@@ -291,6 +292,9 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   useEffect(() => { if (workspace.status === "ready") void window.sensei.app.checkUpdate().then(setUpdate).catch(() => undefined); }, [workspace.status]);
   // Keyboard shortcuts (the "?" panel lists them). Ignored while typing or when a dialog is open.
   const goPrefix = useRef(0);
+  // The order of the Jobs list the user last saw ([ and ] follow it) and a closing status key waiting for its second press.
+  const jobOrder = useRef<string[]>([]);
+  const armedStatus = useRef<{ key: string; at: number } | null>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -303,20 +307,26 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       if (event.key === "g") { goPrefix.current = Date.now(); return; }
       if (Date.now() - goPrefix.current < 1200) {
         goPrefix.current = 0;
-        const page = FEATURES.interviews || event.key !== "i" ? ({ ...(FEATURES.today ? { t: "today-home" } : {}), j: "jobs-home", i: "interviews-home", c: "context-home", ...(FEATURES.agyPage ? { a: "agy-home" } : {}) } as Record<string, PageLocation["kind"]>)[event.key] : undefined;
-        if (page) { event.preventDefault(); showPage(page); }
+        const page = goTarget(event.key, { today: FEATURES.today, jobSearch: FEATURES.jobSearch, interviews: FEATURES.interviews, agyPage: FEATURES.agyPage });
+        if (page) { event.preventDefault(); void showPage(page); }
         return;
       }
       const location = navigationHistory[navigationIndex];
       const job = location?.kind === "job" ? jobs.find((candidate) => candidate.id === location.jobId) : null;
       if (!job) return;
       if (event.key === "[" || event.key === "]") {
-        const index = jobs.findIndex((candidate) => candidate.id === job.id);
-        const next = jobs[index + (event.key === "]" ? 1 : -1)];
-        if (next) { event.preventDefault(); openJob(next.id); }
+        const next = neighborJob(job.id, event.key === "]" ? 1 : -1, jobOrder.current, jobs.map((candidate) => candidate.id));
+        if (next) { event.preventDefault(); void openJob(next); }
       } else if (/^[1-6]$/.test(event.key)) {
         event.preventDefault();
-        void updateTracker(job.id, { status: TRACKER_STATUSES[Number(event.key) - 1]! });
+        const status = TRACKER_STATUSES[Number(event.key) - 1]!;
+        if (statusKeyAction(event.key, armedStatus.current, Date.now()) === "arm") {
+          armedStatus.current = { key: event.key, at: Date.now() };
+          showToast(`Press ${event.key} again to mark ${job.company ?? displayJobName(job.name)} as ${TRACKER_LABELS[status]}.`);
+          return;
+        }
+        armedStatus.current = null;
+        void updateTracker(job.id, { status });
       }
     };
     window.addEventListener("keydown", onKey);
@@ -891,7 +901,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const paletteActions: PaletteAction[] = [
     ...(FEATURES.today ? [{ id: "go-today", title: "Go to Today", subtitle: "Morning search, what's due, insights, and questions", keywords: "home day summary", shortcut: "g t", run: () => showPage("today-home") }] : []),
     ...(FEATURES.agyPage ? [{ id: "go-agy", title: "Go to Agy", subtitle: "Everything Agy can do: actions for this job, interviews, job search, and Agy's own commands", keywords: "assistant actions commands model run", shortcut: "g a", run: () => showPage("agy-home") }] : []),
-    { id: "go-docs", title: "Go to Docs", subtitle: "How to get the best results, your data, how Agy uses it, Agy commands", keywords: "help guide documentation commands model theme", run: () => showPage("docs-home") },
+    { id: "go-docs", title: "Go to Docs", subtitle: "How to get the best results, your data, how Agy uses it, Agy commands", keywords: "help guide documentation commands model theme", shortcut: "g d", run: () => showPage("docs-home") },
     { id: "go-jobs", title: "Go to Jobs", subtitle: "All jobs, the queue, and the status strip", keywords: "home list cards", shortcut: "g j", run: () => showPage("jobs-home") },
     ...(FEATURES.interviews ? [{ id: "go-interviews", title: "Go to Interviews", subtitle: "Every job with interview prep", keywords: "rounds prep", shortcut: "g i", run: () => showPage("interviews-home") }] : []),
     { id: "go-context", title: FEATURES.candidates ? "Go to the candidate's files" : "Go to Career context", subtitle: FEATURES.candidates ? "Their resume, files, and your notes" : "Resumes and sources Agy reads", keywords: "files sources resume", shortcut: "g c", run: () => showPage("context-home") },
@@ -1095,7 +1105,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
             sources={contextSourcesBlock}
             jobFiles={<section className="context-block"><h2>Job files in context</h2><p>Add a job's files when you want Agy to use them outside that job, for example an earlier letter that worked well.</p><button className="btn-link" onClick={() => { setSelectedJobFiles([]); void updateContext(selectedCareerPaths, []); }} disabled={!selectedJobFiles.length}>Clear job files ({selectedJobFiles.length})</button><div className="context-tree">{jobTree.length ? jobTree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedJobFiles} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No job folders yet.</p>}</div></section>}
           />
-          : <JobsHome jobs={jobs} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} onUpdateTracker={updateTracker} onToast={showToast} statusGroup={jobsStatusGroup} onStatusGroup={setJobsStatusGroup} queue={jobQueue} agyReady={agyReady} onOpenAgy={() => setRightPanelOpen(true)} onSaveQueue={(next) => void saveQueue(next)} onQueueJob={queueJob} setup={<SetupLine readiness={readiness} onOpen={() => showPage("setup-home")} />} />}
+          : <JobsHome jobs={jobs} onOrderChange={(ids) => { jobOrder.current = ids; }} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} onUpdateTracker={updateTracker} onToast={showToast} statusGroup={jobsStatusGroup} onStatusGroup={setJobsStatusGroup} queue={jobQueue} agyReady={agyReady} onOpenAgy={() => setRightPanelOpen(true)} onSaveQueue={(next) => void saveQueue(next)} onQueueJob={queueJob} setup={<SetupLine readiness={readiness} onOpen={() => showPage("setup-home")} />} />}
         {loading && <div className="viewer-state">Reading local workspace…</div>}
         {error && <p className="error-copy viewer-error">{error}</p>}
       </section>
@@ -1142,9 +1152,10 @@ function ToastRegion({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: n
 
 const SHORTCUTS: Array<[string, string]> = [
   ["⌘K or Ctrl K", "Search jobs, files, and actions"],
-  ["g then t / j / i / c / a", "Go to Today, Jobs, Interviews, Career context, or Agy"],
-  ["[ and ]", "Previous or next job (on a job page)"],
-  ["1 – 6", "Set the open job to Saved, Applied, Interviewing, Offer, Rejected, Withdrawn"],
+  ["g then t / j / s / i / c / a / d", "Go to Today, Jobs, Job Search, Interviews, Career context, Agy, or Docs"],
+  ["[ and ]", "Previous or next job in the Jobs list you came from (on a job page)"],
+  ["1 – 4", "Set the open job to Saved, Applied, Interviewing, or Offer"],
+  ["5 5 / 6 6", "Mark the open job Rejected or Withdrawn (press twice; Undo in the toast)"],
   ["⌘J or Ctrl J", "Show or hide Agy"],
   ["⌘, or Ctrl ,", "Settings"],
   ["Alt ← / Alt →", "Back or forward"],
