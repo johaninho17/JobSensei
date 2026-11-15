@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { clearChatHistory, loadChatHistory, saveChatHistory, type ChatEntry, type PastedBlock } from "./chat-history";
 import { chatRunState } from "../shared/job-queue";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -11,28 +12,6 @@ import { type PromptRequest, type QueueJob, formatBytes, formatRelativeDate, mes
 const AGY_GREETING = FEATURES.candidates
   ? "Working on the open candidate's folder only. Paste a job description or link to tailor their application, or choose an action below."
   : "Connected to local career evidence and job workspace. Paste a job description to screen and tailor your application, choose a recommended action, or enter a prompt below.";
-
-type PastedBlock = {
-  id: string;
-  lineCount: number;
-  byteCount: number;
-  content: string;
-  preview: string;
-};
-
-type ChatEntry = {
-  id: string;
-  sender: "user" | "assistant" | "system";
-  title?: string;
-  content: string;
-  pastedBlock?: PastedBlock;
-  steps?: string[];
-  rawOutput?: string[];
-  status?: "pending" | "running" | "success" | "error";
-  startTime?: number;
-  durationMs?: number;
-  timestamp: string;
-};
 
 function stripAnsi(raw: string): string {
   return raw
@@ -83,7 +62,7 @@ function RunStatusBar({ run, onOpen }: { run: RunStatus | null; onOpen: (run: Ru
   </section>;
 }
 
-export function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareerPaths, theme, visible, onClose, jobActions, promptRequest, onPromptHandled, onInsertPrompt, onOpenRun, onQueueJob, busyLabel }: { latestRun: RunStatus | null; onOpenRun: (run: RunStatus) => void; onQueueJob: QueueJob; busyLabel: string | null; cwd: string; selectedJobFiles: string[]; selectedCareerPaths: string[]; theme: "dark" | "light"; visible: boolean; onClose: () => void; jobActions: JobAction[]; promptRequest: PromptRequest | null; onPromptHandled: (id: number) => void; onInsertPrompt: (action: JobAction) => void }) {
+export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, selectedCareerPaths, theme, visible, onClose, jobActions, promptRequest, onPromptHandled, onInsertPrompt, onOpenRun, onQueueJob, busyLabel }: { latestRun: RunStatus | null; onOpenRun: (run: RunStatus) => void; onQueueJob: QueueJob; busyLabel: string | null; cwd: string; /** The open workspace (or candidate) folder: one chat history each. */ historyKey: string; selectedJobFiles: string[]; selectedCareerPaths: string[]; theme: "dark" | "light"; visible: boolean; onClose: () => void; jobActions: JobAction[]; promptRequest: PromptRequest | null; onPromptHandled: (id: number) => void; onInsertPrompt: (action: JobAction) => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -125,7 +104,7 @@ export function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareer
   const activeStartedAtRef = useRef(0);
   const beginChatRunRef = useRef<(text: string, label?: string, attachedPaste?: PastedBlock, fromQueue?: boolean) => string>(() => "");
   const finishChatRunRef = useRef<(status: "success" | "error", note?: string) => void>(() => undefined);
-  const [chatEntries, setChatEntries] = useState<ChatEntry[]>([
+  const [chatEntries, setChatEntries] = useState<ChatEntry[]>(() => [
     {
       id: "welcome",
       sender: "system",
@@ -133,7 +112,20 @@ export function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareer
       content: AGY_GREETING,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     },
+    // Earlier entries for this workspace (`chat-history.ts`): the chat survives a reload or a workspace switch.
+    ...loadChatHistory(window.localStorage, historyKey),
   ]);
+  const historyWorkspace = useRef(historyKey);
+  useEffect(() => {
+    // Another workspace: show its own history, never the previous one's.
+    if (historyWorkspace.current !== historyKey) {
+      historyWorkspace.current = historyKey;
+      activeAsstIdRef.current = null;
+      setChatEntries((prev) => [...prev.filter((entry) => entry.id.startsWith("welcome")).slice(0, 1), ...loadChatHistory(window.localStorage, historyKey)]);
+      return;
+    }
+    saveChatHistory(window.localStorage, historyKey, chatEntries);
+  }, [historyKey, chatEntries]);
 
   // A chat run ends when Agy is idle again (`chatRunState`, the queue's rule), not after a pause in its output.
   useEffect(() => {
@@ -324,6 +316,7 @@ export function TerminalPanel({ latestRun, cwd, selectedJobFiles, selectedCareer
 
   const handleClear = () => {
     if (viewMode === "chat") {
+      clearChatHistory(window.localStorage, historyKey);
       setChatEntries([
         {
           id: `welcome-${Date.now()}`,
