@@ -64,7 +64,7 @@ const JOB_TABS: Array<{ id: JobsTab; label: string; statuses: TrackerStatus[] | 
 ];
 const ACTIVE_STATUSES: TrackerStatus[] = ["saved", "applied", "interviewing", "offer"];
 
-export function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTrash, onUpdateTracker, onToast, statusGroup, onStatusGroup: setStatusGroup, queue, agyReady, onOpenAgy, onSaveQueue, onQueueJob, setup }: { agyReady: boolean; onOpenAgy: () => void; onToast: (message: string, undo?: () => void) => void; statusGroup: string | null; onStatusGroup: (group: string | null) => void; queue: JobQueue; onSaveQueue: (queue: JobQueue) => void; onQueueJob: QueueJob; setup: React.ReactNode; jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onOpenJobView: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onOpenEvaluation: (jobId: string) => void; onMoveToTrash: (jobId: string) => void; onUpdateTracker: (jobId: string, update: JobTrackerUpdate, options?: { quiet?: boolean }) => Promise<void> }) {
+export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTrash, onUpdateTracker, onToast, statusGroup, onStatusGroup: setStatusGroup, queue, agyReady, onOpenAgy, onSaveQueue, onQueueJob, setup }: { onOrderChange?: (ids: string[]) => void; agyReady: boolean; onOpenAgy: () => void; onToast: (message: string, undo?: () => void) => void; statusGroup: string | null; onStatusGroup: (group: string | null) => void; queue: JobQueue; onSaveQueue: (queue: JobQueue) => void; onQueueJob: QueueJob; setup: React.ReactNode; jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onOpenJobView: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onOpenEvaluation: (jobId: string) => void; onMoveToTrash: (jobId: string) => void; onUpdateTracker: (jobId: string, update: JobTrackerUpdate, options?: { quiet?: boolean }) => Promise<void> }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<JobsFilter>("all");
   const [exported, setExported] = useState("");
@@ -137,6 +137,8 @@ export function JobsHome({ jobs, onOpenJob, onOpenJobView, onOpenEvaluation, onM
   // Multi-select: click toggles, Shift-click selects the range from the last click, Escape leaves select mode.
   const visibleIds = visibleJobs.map((job) => job.id);
   useEffect(() => { setSelected((current) => { const next = new Set([...current].filter((id) => visibleIds.includes(id))); return next.size === current.size ? current : next; }); }, [visibleIds.join("|")]);
+  // [ and ] on a job page follow this list's order (tab, filters, search, sort).
+  useEffect(() => { onOrderChange?.(visibleIds); }, [visibleIds.join("|")]);
   useEffect(() => {
     if (!selecting) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !document.querySelector("[aria-modal='true']")) { setSelecting(false); setSelected(new Set()); } };
