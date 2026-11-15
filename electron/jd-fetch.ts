@@ -200,6 +200,8 @@ export function embeddedPostingUrl(html: string, pageUrl: string): string | null
   // A plain board link for the same job id (`gh_jid` pages that link `boards.greenhouse.io/<slug>`).
   const ghSlug = token ? html.match(/(?:boards|job-boards)\.greenhouse\.io\/(?!embed\b)([A-Za-z0-9_-]+)/i)?.[1] : null;
   if (token && ghSlug) return `https://job-boards.greenhouse.io/${ghSlug}/jobs/${token}`;
+  const oracle = new Set(html.match(/https:\/\/[a-z0-9.-]+\.oraclecloud\.com\/hcmUI\/CandidateExperience\/[a-z-]+\/sites\/[A-Za-z0-9_]+\/(?:job|requisitions\/preview)\/\d+/gi) ?? []);
+  if (oracle.size === 1) return [...oracle][0]!;
   const direct = html.match(/https:\/\/(?:jobs\.lever\.co\/[A-Za-z0-9_.-]+\/[0-9a-f-]{36}|jobs\.ashbyhq\.com\/[A-Za-z0-9_.%-]+\/[0-9a-f-]{36}|(?:boards|job-boards)\.greenhouse\.io\/[A-Za-z0-9_-]+\/jobs\/\d+)/i)?.[0];
   return direct && singlePostingOnPage(html, direct) ? direct : null;
 }
@@ -308,6 +310,27 @@ async function fetchWorkdayPosting(url: string, fetcher: typeof fetch): Promise<
   return { ...posting.extracted, url };
 }
 
+/** The company an Oracle Cloud career site belongs to, from its site name ("JPMC Candidate Experience page" → "JPMC"). */
+export function oracleCompanyFromSiteName(siteName: string | null | undefined): string | null {
+  const name = (siteName ?? "")
+    .replace(/\b(?:candidate\s+experience|career(?:s)?(?:\s+site)?|job(?:s)?(?:\s+site)?|external|internal|recruiting)\b/gi, " ")
+    .replace(/\b(?:page|site|portal|copy)\b/gi, " ")
+    .replace(/[()_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[-–—:|,]+$/, "")
+    .trim();
+  return name.length >= 2 ? name : null;
+}
+
+async function oracleSiteCompany(host: string, site: string, fetcher: typeof fetch): Promise<string | null> {
+  const api = `https://${host}/hcmRestApi/resources/latest/recruitingCESites?onlyData=true&q=SiteNumber=${encodeURIComponent(site)}`;
+  const response = await fetcher(api, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
+  if (!response?.ok) return null;
+  const item = ((await response.json().catch(() => null)) as { items?: Array<{ SiteName?: string }> } | null)?.items?.[0];
+  return oracleCompanyFromSiteName(item?.SiteName);
+}
+
 const ORACLE_CX = /^https:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)*\.oraclecloud\.com)\/hcmUI\/CandidateExperience\/[a-z-]+\/sites\/([A-Za-z0-9_]+)\/(?:job|requisitions\/preview)\/(\d+)/i;
 
 /**
@@ -333,8 +356,9 @@ async function fetchOracleCloudPosting(url: string, fetcher: typeof fetch): Prom
     .map((key) => htmlToText(decodeEntities(text(key))).trim())
     .filter(Boolean)
     .join("\n\n");
-  const header = [`# ${title ?? "Job Description"}`, "", ...(location ? [`**Location:** ${location}  `] : []), `**Source:** ${url}`, ""];
-  return { url, title, company: null, location, suggestedJobId: suggestJobId(null, title), markdown: `${header.join("\n")}\n${body}\n` };
+  const company = await oracleSiteCompany(host!, site!, fetcher);
+  const header = [`# ${title ?? "Job Description"}`, "", ...(company ? [`**Company:** ${company}  `] : []), ...(location ? [`**Location:** ${location}  `] : []), `**Source:** ${url}`, ""];
+  return { url, title, company, location, suggestedJobId: suggestJobId(company, title), markdown: `${header.join("\n")}\n${body}\n` };
 }
 
 export async function fetchJobDescription(workspacePath: string, url: string, fetcher: typeof fetch = fetch): Promise<FetchedJobDescription> {
