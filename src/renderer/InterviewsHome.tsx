@@ -105,6 +105,8 @@ function LearningsView({ jobs, overviews, onOpenFile }: { jobs: JobFolderSummary
     {(learn.bySetup.length > 0 || learn.pay.interviewed !== null) && <Section id="learn-3" title="Which jobs gave interviews" defaultOpen={false}>
       <table className="learn-table"><thead><tr><th>Jobs</th><th>Applied</th><th>Got an interview</th></tr></thead>
         <tbody>{learn.bySetup.map((row) => <tr key={row.label}><td>{row.label}</td><td className="tabular">{row.applied}</td><td className="tabular">{row.interviewed}{percent(row.interviewed, row.applied)}</td></tr>)}</tbody></table>
+      {learn.bySettings.length > 0 && <table className="learn-table"><thead><tr><th>Agy settings the drafts were made under</th><th>Applied</th><th>Got an interview</th></tr></thead>
+        <tbody>{learn.bySettings.map((row) => <tr key={row.band}><td>{row.label}</td><td className="tabular">{row.applied}</td><td className="tabular">{row.interviewed}{percent(row.interviewed, row.applied)}</td></tr>)}</tbody></table>}
       <p className="learn-note">Median posted pay: <strong className="tabular">{money(learn.pay.interviewed)}</strong> for jobs with an interview, <strong className="tabular">{money(learn.pay.notInterviewed)}</strong> for the rest.</p>
     </Section>}
     {learn.gapTerms.length > 0 && <Section id="learn-4" title="Gaps in applications that got no interview" defaultOpen={false}>
