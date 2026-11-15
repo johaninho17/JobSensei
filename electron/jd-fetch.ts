@@ -1,5 +1,7 @@
 import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { MIN_PASTED_POSTING_CHARS } from "../src/shared/paste-limits";
+import { normalCompany } from "../src/shared/posting-fields";
+import { postingTemplate } from "./posting-template";
 import { formatPay } from "../src/shared/pay";
 import { basename, join, resolve } from "node:path";
 import { writeJsonAtomic, writeTextAtomic } from "./persistence";
@@ -128,7 +130,16 @@ export function extractJobDescription(html: string, url: string): Omit<FetchedJo
     if (posting) break;
   }
   const rawPageTitle = decodeEntities(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim() ?? "") || null;
-  const pageTitle = rawPageTitle ? splitPageTitle(rawPageTitle) : null;
+  let pageTitle = rawPageTitle ? splitPageTitle(rawPageTitle) : null;
+  // "Role - Company" / "Role | Company Careers": the last part is the company when the page text names it too.
+  if (pageTitle && !pageTitle.company) {
+    const parts = pageTitle.title.split(/\s+(?:\||–|—|-|@| at )\s+/);
+    const last = normalCompany(parts.at(-1));
+    const text = htmlToText(html).toLowerCase();
+    if (parts.length > 1 && last && last.split(/\s+/).length <= 4 && text.split(last.toLowerCase()).length > 1) {
+      pageTitle = { title: parts.slice(0, -1).join(" - "), company: last };
+    }
+  }
   const title = (posting?.title ? decodeEntities(posting.title).trim() : "") || pageTitle?.title || null;
   const organization = typeof posting?.hiringOrganization === "string" ? posting.hiringOrganization : posting?.hiringOrganization?.name;
   const company = (organization ? decodeEntities(organization).trim() : "") || pageTitle?.company || null;
@@ -170,7 +181,7 @@ export function postingFromBoard(input: { url: string; title: string; company: s
 /** A fetched page through the shared cleanup: the form is split off, invisible characters and buttons removed. */
 function cleanExtracted(extracted: Extracted): { extracted: Extracted; form: string | null } {
   const { markdown, form } = cleanPosting(extracted.markdown, { title: extracted.title, company: extracted.company, location: extracted.location, source: extracted.url });
-  return { extracted: { ...extracted, markdown }, form };
+  return { extracted: { ...extracted, markdown: postingTemplate(markdown, { url: extracted.url }) }, form };
 }
 
 /**
@@ -439,7 +450,9 @@ export async function stagePastedJobDescription(workspacePath: string, input: un
     location: metadata.location,
     suggestedJobId: suggestJobId(metadata.company, metadata.title),
   };
-  const { markdown, form } = cleanPosting(text, { title: meta.title, company: meta.company, location: meta.location, source: meta.url });
+  const cleaned = cleanPosting(text, { title: meta.title, company: meta.company, location: meta.location, source: meta.url });
+  const { form } = cleaned;
+  const markdown = postingTemplate(cleaned.markdown, { url: meta.url });
   if (markdown.replace(/^[\s\S]*?\*\*Source:\*\*[^\n]*\n/, "").trim().length < MIN_PASTED_POSTING_CHARS / 2) throw new Error("That paste looks like an application form, not a job description. Paste the job description too.");
   const paths = stagedPaths(workspacePath, id);
   await mkdir(join(paths.markdown, ".."), { recursive: true });
