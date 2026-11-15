@@ -237,7 +237,48 @@ async function readPage(target: string, fetcher: typeof fetch, render: boolean, 
  */
 export async function fetchAndClean(url: string, fetcher: typeof fetch, options: { render?: boolean } = {}): Promise<{ extracted: Extracted; form: string | null }> {
   const target = postingUrl(url);
-  return cleanExtracted(await fetchOracleCloudPosting(target, fetcher) ?? await readPage(target, fetcher, options.render ?? true));
+  const fromApi = await fetchWorkdayPosting(target, fetcher) ?? await fetchOracleCloudPosting(target, fetcher);
+  return fromApi ? cleanExtracted(fromApi) : cleanExtracted(await readPage(target, fetcher, options.render ?? true));
+}
+
+const WORKDAY = /^https:\/\/([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com\/(?:[a-z]{2}-[A-Z]{2}\/)?([^/?#]+)\/job\/([^?#]+?)(?:\/apply(?:\/[^?#]*)?)?\/?(?:[?#].*)?$/i;
+
+/** The company a Workday site belongs to: its legal entity when that names the tenant, else the tenant's name. */
+export function workdayCompany(tenant: string, organization: string | null | undefined): string {
+  const name = (organization ?? "").trim();
+  if (name && !/^\d/.test(name) && name.toLowerCase().replace(/[^a-z0-9]/g, "").includes(tenant.toLowerCase().replace(/[^a-z0-9]/g, ""))) return name;
+  return tenant.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+/**
+ * Workday career sites draw postings with JavaScript; the same posting is public as JSON from the site's CXS API
+ * (`/wday/cxs/<tenant>/<site>/job/<path>`). Apply links (`…/apply`) read the posting itself.
+ */
+async function fetchWorkdayPosting(url: string, fetcher: typeof fetch): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
+  const match = WORKDAY.exec(url);
+  if (!match) return null;
+  const [, tenant, instance, site, path] = match;
+  const api = `https://${tenant}.${instance}.myworkdayjobs.com/wday/cxs/${tenant}/${site}/job/${path}`;
+  const response = await fetcher(api, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
+  if (!response.ok) return null;
+  const data = (await response.json().catch(() => null)) as { jobPostingInfo?: Record<string, unknown>; hiringOrganization?: { name?: string } } | null;
+  const info = data?.jobPostingInfo;
+  const text = (key: string) => typeof info?.[key] === "string" ? (info[key] as string).trim() : "";
+  if (!info || !text("jobDescription")) return null;
+  const facts = [
+    text("remoteType") && `Work setup: ${text("remoteType")}`,
+    text("timeType") && `Employment type: ${text("timeType")}`,
+    text("startDate") && `Posted: ${text("startDate")}`,
+    text("jobReqId") && `Job ID: ${text("jobReqId")}`,
+  ].filter(Boolean).map((line) => `<p>${line}</p>`).join("");
+  const posting = postingFromBoard({
+    url: text("externalUrl") || url,
+    title: text("title") || "Job Description",
+    company: workdayCompany(tenant!, data?.hiringOrganization?.name),
+    location: text("location") || null,
+    html: facts + text("jobDescription"),
+  });
+  return { ...posting.extracted, url };
 }
 
 const ORACLE_CX = /^https:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)*\.oraclecloud\.com)\/hcmUI\/CandidateExperience\/[a-z-]+\/sites\/([A-Za-z0-9_]+)\/(?:job|requisitions\/preview)\/(\d+)/i;
