@@ -344,7 +344,7 @@
 .app-check-docs li { display: flex; gap: 6px; }
 .app-check-docs li.is-ready { color: var(--ink); }
 .app-check-docs li.is-ready span { color: var(--leaf); }
-.app-check-details > summary, .app-check .application-fit-details > summary, .app-check .application-issues > summary { padding: var(--space-2) 0; color: var(--ink); font-weight: 600; cursor: pointer; }
+.app-check-details > summary, .app-check .application-issues > summary { padding: var(--space-2) 0; color: var(--ink); font-weight: 600; cursor: pointer; }
 .app-check-details { border-top: 1px solid var(--line); }
 
 /* ⋯ job actions button (cards, list rows, board cards). */
