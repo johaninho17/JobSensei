@@ -19,7 +19,7 @@ Write the letter exactly as `.sensei/application_context.json.coverLetterBrief` 
 
 - Candidate-first means the candidate's story exists independently of the JD. The JD picks which real episodes to tell; it never creates interests, passions, identity, or reasons for applying. Never invent motivation: `non-factual` sentences must come from the candidate profile, voice guidance, or the user's own words.
 - Never explain the employer's business, market, or the role's responsibilities back to them.
-- Frame real work with confidence, but every factual sentence must trace to the evidence rows and be defensible in an interview. Never add an event, metric, tool, or ownership that did not happen.
+- Word real work as the run's `Framing` line says (the candidate's setting; by default with confidence, every factual sentence tracing to the evidence rows and defensible in an interview). Never add an event, metric, tool, or result that did not happen.
 - Never name clients or partners; describe them by industry instead (naming the industry is fine).
 - Tense and order follow the timing rule in the career-evidence skill (owner): present tense only for the current phase.
 - Apply `styleRules` (the candidate's voice) after the facts are settled. The voice pass may simplify wording but never changes facts, scope, ownership, timeline, tools, metrics, or evidence mappings.

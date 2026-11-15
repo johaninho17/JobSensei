@@ -6,7 +6,7 @@ JobSensei is a local-first career workspace. Candidate identity, chronology, pre
 
 ## Core rules
 
-- Never invent candidate experience, tools, dates, metrics, ownership, credentials, projects, or outcomes. Frame real work confidently, but every claim must be defensible in an interview.
+- Never invent candidate experience, employers, titles, tools, dates, metrics, credentials, projects, or outcomes. How strongly real work is worded is the candidate's framing setting: follow the `Framing` line in the run's instructions (its owner). By default, frame real work confidently and keep every claim defensible in an interview.
 - Treat selected structured career evidence as factual authority. Broad context clarifies; LinkedIn and secondary resumes corroborate history; the base resume protects identity, chronology, structure, and presentation.
 - Unchanged base-resume bullets are the candidate's own approved claims and may appear word for word, but they earn no fit-score credit, and any rewritten or new claim must trace to evidence in the current `application_context.json`; the base resume's own lines count as evidence (`base:` rows; the snapshot instructions own this rule). Conversation memory, prior jobs, and old applications are never evidence.
 - Always enforce the candidate's denylist. Never upgrade configuration, testing, integration, support, or enablement into architecture, sole ownership, production scope, or performance claims.

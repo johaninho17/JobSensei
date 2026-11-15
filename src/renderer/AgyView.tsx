@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { AgyActivity } from "../shared/schemas";
 import howAgy from "../../docs/app/how-agy-uses-it.md?raw";
 import { AGY_ACTION_GROUPS, buildAgyActions, type AgyAction, type AgyActionContext } from "../shared/agy-actions";
-import { CONNECTED, DEFAULT_AGY_BEHAVIOR, FRAMING_LABELS, SETTINGS_BANDS, agyBehaviorSchema, bandFor, effectiveBehavior, settingScore, type AgyBehavior, type BehaviorSetting } from "../shared/agy-behavior";
+import { CONNECTED, DEFAULT_AGY_BEHAVIOR, FRAMING_FLOOR, FRAMING_LABELS, FRAMING_STOPS, type FramingStop, SETTINGS_BANDS, agyBehaviorSchema, bandFor, effectiveBehavior, settingScore, type AgyBehavior, type BehaviorSetting } from "../shared/agy-behavior";
 import { AgyMemory } from "./AgyMemory";
 import { AgyConversations } from "./AgyConversations";
 import { markdownHtml } from "./markdown";
@@ -15,7 +15,7 @@ type AgyTab = "actions" | "activity" | "behavior" | "conversations" | "memory" |
 const TABS: Array<{ id: AgyTab; label: string }> = [{ id: "actions", label: "Actions" }, { id: "activity", label: "Activity" }, { id: "behavior", label: "Behavior" }, { id: "conversations", label: "Conversations" }, { id: "memory", label: "Memory" }, { id: "how", label: "How it works" }];
 
 const SETTING_ROWS: Array<{ id: BehaviorSetting; title: string; value: (behavior: AgyBehavior) => string; help: string }> = [
-  { id: "framing", title: "How far wording may reach", value: (behavior) => FRAMING_LABELS[behavior.framing], help: "Real work worded at its strongest; never an event, number, tool, or ownership that didn't happen." },
+  { id: "framing", title: "How far wording may reach", value: (behavior) => FRAMING_LABELS[behavior.framing], help: `Lines that reach further than this are flagged after each run. No setting ever invents ${FRAMING_FLOOR}; at "beyond", every line past its evidence is listed so you can keep or reword it.` },
   { id: "fit-credit", title: "Credit for partial matches", value: (behavior) => `strong ${behavior.fit.strong}, adjacent ${behavior.fit.adjacent}, unclear ${behavior.fit.unclear} (a direct match is 1)`, help: "How much a transferable or unclear match counts toward the fit score." },
   { id: "fit-gate", title: "Fit needed to apply", value: (behavior) => `${behavior.fit.gate} of 5`, help: "Jobs at or above this fit are marked worth applying to." },
   { id: "lines-reworked", title: "Resume lines reworked", value: (behavior) => behavior.linesReworked === 4 ? "3–4 of the current role's lines" : behavior.linesReworked === 0 ? "None: bullets stay as written, skills lines are tailored" : `Up to ${behavior.linesReworked} of the current role's lines`, help: "How many of the current role's base-resume bullets are rewritten for a job; the rest stay as written." },
@@ -41,6 +41,7 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
     try { await onSave(agyBehaviorSchema.parse(next)); setState("saved"); } catch { setState("error"); }
   };
   const editors: Partial<Record<BehaviorSetting, ReactNode>> = {
+    framing: <div className="behavior-fields"><label className="behavior-field"><span>Setting</span><select value={draft.framing} onChange={(event) => { setDraft((current) => ({ ...current, framing: event.target.value as FramingStop })); setState("idle"); }}>{FRAMING_STOPS.map((stop) => <option key={stop} value={stop}>{FRAMING_LABELS[stop]}</option>)}</select></label></div>,
     "fit-credit": <div className="behavior-fields">
       <NumberField label="Strong match" value={draft.fit.strong} min={0} max={1} step={0.05} onChange={(value) => setFit("strong", value)} />
       <NumberField label="Adjacent match" value={draft.fit.adjacent} min={0} max={1} step={0.05} onChange={(value) => setFit("adjacent", value)} />

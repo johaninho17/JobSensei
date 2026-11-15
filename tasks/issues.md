@@ -12,18 +12,12 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 
 | # | Issue | Features | Blocked |
 |---|---|---|---|
-| #16 | Add recordings, debriefs, and mock transcripts from the app | FEAT-005, FEAT-008 |  |
-| #17 | Run Agy actions from the app and show what each recording was used for | FEAT-005, FEAT-006 |  |
 | #19 | Investigate one continuing Agy conversation in the regular app | FEAT-006 |  |
-| #21 | Job posting, evaluation, and files open inside the job page | FEAT-002 |  |
-| #33 | Agy page: Activity | FEAT-012 |  |
-| #34 | Agy page: Conversations | FEAT-012 |  |
 | #38 | Behavior: run settings, model and effort per task | FEAT-012 |  |
 | #39 | Behavior: Job Search ranking | FEAT-004, FEAT-012 |  |
 | #40 | Agy page: How it works | FEAT-012 |  |
-| #41 | Agy page: Memory | FEAT-012 |  |
-| #52 | Read postings on any careers site: structured data, main text, then the app's own browser | FEAT-013 |  |
 | #88 | Jobs and Learnings by settings band | FEAT-012 | yes |
+| #97 | Keep or revert each line flagged by the framing setting | FEAT-012 | yes |
 
 ## P3
 
@@ -31,4 +25,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 |---|---|---|---|
 | #92 | Behavior: category weights for the fit score | FEAT-012 |  |
 
-14 open.
+8 open.

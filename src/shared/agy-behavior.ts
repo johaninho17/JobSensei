@@ -19,6 +19,26 @@ export const FRAMING_LABELS: Record<FramingStop, string> = {
   beyond: "Beyond the evidence, with warnings",
 };
 
+/** The furthest stretch level (electron/stretch-score.ts: 0 as evidence, 1 reworded, 2 framed stronger, 3 unsupported)
+ * each framing stop allows without a warning. */
+export const FRAMING_MAX_LEVEL: Record<FramingStop, 0 | 1 | 2 | 3> = { "as-written": 0, reworded: 1, framed: 2, beyond: 3 };
+
+/** What no framing setting ever allows: these stay exactly as the evidence states. */
+export const FRAMING_FLOOR = "an employer, job title, degree, credential, date, number, or result";
+
+/**
+ * The framing rule Agy gets (owner of this rule; AGENTS.md and the skills point here). One sentence per stop.
+ */
+export function framingInstruction(stop: FramingStop): string {
+  const floor = `At every setting, never invent ${FRAMING_FLOOR}: those stay exactly as the cited rows state.`;
+  switch (stop) {
+    case "as-written": return `Framing (the candidate's setting: as written): keep rewritten bullets close to the cited rows' own wording; reorder and trim for this job, but use no stronger verb, scope, or ownership than the rows. ${floor}`;
+    case "reworded": return `Framing (the candidate's setting: reworded): reword rewritten bullets for this job at the same strength as the cited rows; plainer or more relevant words are fine, a stronger verb, scope, or ownership is not. ${floor}`;
+    case "beyond": return `Framing (the candidate's setting: beyond the evidence): you may present adjacent or partial experience as directly relevant and use stronger ownership and scope words than the rows state; the app marks every such line so the candidate can keep or revert it. ${floor}`;
+    default: return `Framing (the candidate's setting: framed at its strongest): frame rewritten bullets with the same confidence as the base resume: describe the kind of work clearly and strongly, but every rewritten claim must trace to evidenceRows. ${floor}`;
+  }
+}
+
 export const agyBehaviorSchema = z.object({
   /** How far a tailored line may reach past its evidence (#36). */
   framing: z.enum(FRAMING_STOPS).default("framed"),
@@ -37,7 +57,7 @@ export const DEFAULT_AGY_BEHAVIOR: AgyBehavior = agyBehaviorSchema.parse({});
 
 export type BehaviorSetting = "framing" | "fit-credit" | "fit-gate" | "lines-reworked";
 /** Settings whose profile value already reaches Agy. Each issue that connects one adds it here. */
-export const CONNECTED: ReadonlySet<BehaviorSetting> = new Set<BehaviorSetting>(["fit-credit", "fit-gate", "lines-reworked"]);
+export const CONNECTED: ReadonlySet<BehaviorSetting> = new Set<BehaviorSetting>(["framing", "fit-credit", "fit-gate", "lines-reworked"]);
 
 /** What the app does now: the profile's value for connected settings, the fixed rule for the rest. */
 export function effectiveBehavior(saved?: unknown): AgyBehavior {

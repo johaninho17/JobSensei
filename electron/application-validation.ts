@@ -37,6 +37,8 @@ import { currentManifestHash } from "./context-manifest-hash";
 import { writeJsonAtomic, readTextFile } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
 import { fitSettingsOf, normalizeEvidenceClassifications, scoreEvaluation } from "./fit-scoring";
+import { FRAMING_LABELS, FRAMING_MAX_LEVEL, type FramingStop } from "../src/shared/agy-behavior";
+import type { RatedLine } from "./stretch-score";
 import { canonicalCoverLetterDrifts, canonicalResumeDrifts } from "./canonical-resume";
 import { readCandidateProfile } from "./candidate-profile";
 import { scoreStretch } from "./stretch-score";
@@ -294,6 +296,7 @@ export async function validateJobApplication(workspacePath: string, jobId: strin
   validateRunIntegrity(loaded, issues);
   validateVisibleArtifacts(loaded, issues);
   const stretch = validateEvidenceMap(loaded, issues);
+  if (stretch && loaded.snapshot) issues.push(...framingIssues(stretch.lines, loaded.snapshot.settingsScore?.behavior.framing ?? "framed"));
   const ats = await inspectExportedResumePdf(loaded, issues);
 
   const hasErrors = issues.some((candidate) => candidate.severity === "error");
@@ -775,7 +778,25 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
 }
 
 /** Validates the claim map; returns the stretch score for the drafts it covers (null when it can't be read). */
-function validateEvidenceMap(loaded: LoadedApplication, issues: ValidationIssue[]): StretchScore | null {
+/**
+ * Lines that reach further than the candidate's framing setting allows (#36). Below the default, a line framed
+ * stronger than the setting is a warning; at "beyond", unsupported lines are allowed but listed so each can be kept
+ * or reverted. The grounding check's own warnings still apply at every setting.
+ */
+export function framingIssues(lines: RatedLine[], stop: FramingStop): ValidationIssue[] {
+  const max = FRAMING_MAX_LEVEL[stop];
+  if (stop === "beyond") {
+    const beyond = lines.filter((line) => line.level === 3);
+    return beyond.length ? [issue("LINES_BEYOND_EVIDENCE", beyond[0]!.artifact === "resume" ? "resume" : "cover_letter.md", null,
+      `${beyond.length} line${beyond.length === 1 ? " goes" : "s go"} past the evidence, as your framing setting allows: ${beyond.slice(0, 3).map((line) => `"${line.text.slice(0, 90)}"`).join("; ")}.`,
+      "Read each before you send: keep it only if you can explain it in an interview, or reword it closer to your evidence.", "warning")] : [];
+  }
+  return lines.filter((line) => line.level > max).slice(0, 10).map((line) => issue("LINE_PAST_FRAMING_SETTING", line.artifact === "resume" ? "resume" : "cover_letter.md", null,
+    `"${line.text.slice(0, 120)}" reaches further than your framing setting (${FRAMING_LABELS[stop].toLowerCase()}): ${line.reason}`,
+    "Reword it closer to the cited evidence, or change the setting in Agy → Behavior.", "warning"));
+}
+
+function validateEvidenceMap(loaded: LoadedApplication, issues: ValidationIssue[]): (StretchScore & { lines: RatedLine[] }) | null {
   if (loaded.evidenceUnreadable || !loaded.evidence) {
     issues.push(issue("EVIDENCE_MAP_INCOMPLETE", ".sensei/application_evidence.json", null, "The compact evidence map is missing or malformed.", "The drafts remain reviewable, but their claim grounding is not fully machine-verified.", "warning"));
     return null;
