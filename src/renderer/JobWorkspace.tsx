@@ -56,6 +56,8 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
   const [appView, setAppView] = useState<ApplicationView>(firstAppView);
   useEffect(() => { setAppView(firstAppView); }, [job.id]);
   function openChecks() { setAppView("checks"); onNavigate(job.id, "application"); }
+  // The posting and the evaluation open inside the job page (Application tab), keeping the header and tabs (#21).
+  function openAppView(view: ApplicationView) { setAppView(view); onNavigate(job.id, "application"); }
   const documents: Array<[string, FileTreeNode | undefined]> = [["Job description", jobDescription], ["Evaluation", evaluation], ["Resume", resumeMarkdown], ["Cover letter", coverLetterMarkdown]];
   return <section className="job-page">
     <header className="job-head">
@@ -75,7 +77,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
     <div className="workspace-tabs-row">
       <nav className="workspace-tabs" role="tablist" aria-label="Job sections">{tabs.map(([value, label, count]) => <button key={value} role="tab" aria-selected={activeTab === value} className={activeTab === value ? "is-active" : ""} onClick={() => onNavigate(job.id, value, value === "interview" ? activeRoundId : undefined)}>{label}{count !== null && <span>{count}</span>}</button>)}</nav>
       <div className="job-head-actions">
-        {jobDescription && <button className="btn-quiet" onClick={() => onSelect(jobDescription.relativePath)}>Job posting</button>}
+        {jobDescription && <button className="btn-quiet" onClick={() => openAppView("posting")}>Job posting</button>}
         <JobPdfExportButton resumePath={resumeMarkdown?.relativePath ?? null} coverLetterPath={coverLetterMarkdown?.relativePath ?? null} />
       </div>
     </div>
@@ -100,7 +102,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
           <section className="overview-panel">
             <h2>Fit</h2>
             {job.rating === null ? <p className="muted">Not rated yet. Ask Agy to evaluate this job.</p> : <>
-              <p className="fit-score"><strong className="tabular">{job.rating.toFixed(1)}</strong> of 5{job.ratingConfidence ? `, ${job.ratingConfidence} confidence` : ""}{evaluation && <> · <button className="btn-link" onClick={() => onSelect(evaluation.relativePath)}>evaluation</button></>}</p>
+              <p className="fit-score"><strong className="tabular">{job.rating.toFixed(1)}</strong> of 5{job.ratingConfidence ? `, ${job.ratingConfidence} confidence` : ""}{evaluation && <> · <button className="btn-link" onClick={() => openAppView("evaluation")}>evaluation</button></>}</p>
               <div className="fit-bar" aria-hidden="true"><span style={{ width: `${(job.rating / 5) * 100}%` }} /></div>
               {job.stretch && <StretchSummary stretch={job.stretch} />}
               <MustHaveGroups mustHaves={job.mustHaves} gaps={job.requirementGaps.length ? job.requirementGaps : job.ratingGaps.filter((item) => !/^none\b/i.test(item)).map((item) => item.replace(/^(?:must|req):\d+\s*/i, ""))} />
@@ -127,6 +129,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
           { id: "letter", label: "Cover letter", disabled: !coverLetterMarkdown && !letterSkipped },
           ...(FEATURES.applicationQuestions ? [{ id: "questions" as const, label: "Questions" }] : []),
           { id: "evaluation", label: "Evaluation", disabled: !evaluation },
+          { id: "posting", label: "Posting", disabled: !jobDescription },
           { id: "checks", label: "Checks" },
         ]}
       />
@@ -136,6 +139,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
         {appView === "letter" && (letterSkipped ? <p className="muted doc-skipped">No cover letter: {letterSkipped}</p> : <DocInline path={coverLetterMarkdown?.relativePath ?? null} label="cover letter" />)}
         {FEATURES.applicationQuestions && appView === "questions" && <QuestionsPanel jobId={job.id} />}
         {appView === "evaluation" && <DocInline path={evaluation?.relativePath ?? null} label="evaluation" />}
+        {appView === "posting" && <DocInline path={jobDescription?.relativePath ?? null} label="job posting" />}
         {appView === "checks" && <div className="dashboard-stack"><ApplicationHealth job={job} files={applicationFiles} status={status} loading={applicationLoading} onStatus={onStatus} /><section className="context-block"><h2>Application files</h2><ArtifactTable files={applicationFiles} onSelect={onSelect} empty="No application documents found." /></section></div>}
       </SubTabPanel>
     </>}
@@ -144,7 +148,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
   </section>;
 }
 
-type ApplicationView = "review" | "resume" | "letter" | "questions" | "evaluation" | "checks";
+type ApplicationView = "review" | "resume" | "letter" | "questions" | "evaluation" | "posting" | "checks";
 
 /** The answers file's sections ("### question" then the answer), so edits made in the file are what's shown and copied. */
 function answerSections(markdown: string): Map<string, string> {
@@ -269,6 +273,9 @@ function FilesTab({ files, onSelect }: { files: FileTreeNode[]; onSelect: (path:
   const [view, setView] = useState<"application" | "interview" | "other">("application");
   const group = (file: FileTreeNode) => file.relativePath.includes("/interviews/") ? "interview" : /evaluation|resume|cover_letter|original_jd/i.test(file.name) ? "application" : "other";
   const shown = files.filter((file) => group(file) === view);
+  // A file opens below the list, inside the job page; "Open full view" still opens the standalone document (#21).
+  const [openPath, setOpenPath] = useState<string | null>(null);
+  const open = openPath && files.some((file) => file.relativePath === openPath) ? openPath : null;
   return <>
     <SubTabs<"application" | "interview" | "other">
       idPrefix="files"
@@ -277,7 +284,13 @@ function FilesTab({ files, onSelect }: { files: FileTreeNode[]; onSelect: (path:
       onChange={setView}
       tabs={(["application", "interview", "other"] as const).map((id) => ({ id, label: id === "application" ? "Application" : id === "interview" ? "Interview" : "Other", count: files.filter((file) => group(file) === id).length }))}
     />
-    <SubTabPanel idPrefix="files" value={view}><section className="context-block"><ArtifactTable files={shown} onSelect={onSelect} empty="No files in this group." /></section></SubTabPanel>
+    <SubTabPanel idPrefix="files" value={view}>
+      <section className="context-block"><ArtifactTable files={shown} onSelect={setOpenPath} empty="No files in this group." /></section>
+      {open && <section className="context-block files-preview" aria-label="File preview">
+        <div className="files-preview-head"><strong>{open.split("/").pop()}</strong><span><button className="btn-link" onClick={() => onSelect(open)}>Open full view</button> <button className="btn-link" onClick={() => setOpenPath(null)}>Close</button></span></div>
+        <DocInline path={open} label="file" />
+      </section>}
+    </SubTabPanel>
   </>;
 }
 
