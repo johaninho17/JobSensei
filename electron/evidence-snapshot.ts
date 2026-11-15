@@ -41,6 +41,7 @@ import { APPLICATION_FORM_FILE } from "./posting-clean";
 import { BASE_ROW_PREFIX, FILE_ROW_PREFIX, baseEarnsFitCredit, baseResumeRows, candidateFileRows, noFitCredit } from "./candidate-evidence";
 import { currentEdition } from "./edition";
 import { featuresFor } from "../src/shared/edition";
+import { effectiveBehavior, settingScore } from "../src/shared/agy-behavior";
 import { countCareerFiles, coverLetterPlanFor } from "../src/shared/cover-letter-policy";
 
 const MANIFEST_PATH = ".sensei/active-context.json";
@@ -879,6 +880,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
     schemaVersion: 1 as const,
     jobId,
     manifestHash,
+    settingsScore: settingScore(effectiveBehavior(candidateProfile?.preferences.agy)),
     coverLetterPlan,
     baseResumePath: manifest.baseResumePath,
     baseResumeFootprint,

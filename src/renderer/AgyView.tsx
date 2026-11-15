@@ -3,17 +3,40 @@
 import { useState } from "react";
 import howAgy from "../../docs/app/how-agy-uses-it.md?raw";
 import { AGY_ACTION_GROUPS, buildAgyActions, type AgyAction, type AgyActionContext } from "../shared/agy-actions";
+import { CONNECTED, FRAMING_LABELS, SETTINGS_BANDS, bandFor, settingScore, type AgyBehavior, type BehaviorSetting } from "../shared/agy-behavior";
 import { markdownHtml } from "./markdown";
 import { Section } from "./Section";
 import { SubTabs, SubTabPanel } from "./SubTabs";
 
-type AgyTab = "actions" | "how";
-const TABS: Array<{ id: AgyTab; label: string }> = [{ id: "actions", label: "Actions" }, { id: "how", label: "How it works" }];
+type AgyTab = "actions" | "behavior" | "how";
+const TABS: Array<{ id: AgyTab; label: string }> = [{ id: "actions", label: "Actions" }, { id: "behavior", label: "Behavior" }, { id: "how", label: "How it works" }];
+
+const SETTING_ROWS: Array<{ id: BehaviorSetting; title: string; value: (behavior: AgyBehavior) => string; help: string }> = [
+  { id: "framing", title: "How far wording may reach", value: (behavior) => FRAMING_LABELS[behavior.framing], help: "Real work worded at its strongest; never an event, number, tool, or ownership that didn't happen." },
+  { id: "fit-credit", title: "Credit for partial matches", value: (behavior) => `strong ${behavior.fit.strong}, adjacent ${behavior.fit.adjacent}, unclear ${behavior.fit.unclear} (a direct match is 1)`, help: "How much a transferable or unclear match counts toward the fit score." },
+  { id: "fit-gate", title: "Fit needed to apply", value: (behavior) => `${behavior.fit.gate} of 5`, help: "Jobs at or above this fit are marked worth applying to." },
+  { id: "lines-reworked", title: "Resume lines reworked", value: (behavior) => behavior.linesReworked >= 4 ? "3–4 of the current role's lines" : `up to ${behavior.linesReworked}`, help: "How many of the current role's base-resume bullets are rewritten for a job; the rest stay as written." },
+];
+
+function BehaviorTab({ behavior }: { behavior: AgyBehavior }) {
+  const score = settingScore(behavior);
+  const band = bandFor(score.score);
+  return <>
+    <p className={`settings-score-big is-${score.band}`}><strong className="tabular">{score.score}</strong> of 100 · {band.label}</p>
+    <p className="muted">One number for how lenient Agy's settings are: {SETTINGS_BANDS.map((item) => `${item.label} from ${item.min}`).join(", ")}. Every job shows the score its drafts were made under, so you can compare how jobs did at different settings.</p>
+    <ul className="agy-actions">{SETTING_ROWS.map((row) => <li key={row.id}>
+      <div><strong>{row.title}</strong><p>{row.value(behavior)}. {row.help}</p></div>
+      <span className="agy-where">{score.parts[row.id]} of 10</span>
+      <span className="agy-where">{CONNECTED.has(row.id) ? "Your setting" : "App rule"}</span>
+    </li>)}</ul>
+    {SETTING_ROWS.some((row) => !CONNECTED.has(row.id)) && <p className="muted">These are the rules JobSensei follows today. Each becomes adjustable here once it is connected to Agy, so a change here always changes what Agy does.</p>}
+  </>;
+}
 const remembered = (): AgyTab => {
   try { const value = window.localStorage.getItem("sensei-agy-tab"); return TABS.some((tab) => tab.id === value) ? value as AgyTab : "actions"; } catch { return "actions"; }
 };
 
-export function AgyView({ context, busyLabel, onRun }: { context: AgyActionContext; /** The job Agy is working on now, if any. */ busyLabel: string | null; onRun: (action: AgyAction) => void }) {
+export function AgyView({ context, behavior, busyLabel, onRun }: { context: AgyActionContext; /** What Agy does now (`effectiveBehavior`). */ behavior: AgyBehavior; /** The job Agy is working on now, if any. */ busyLabel: string | null; onRun: (action: AgyAction) => void }) {
   const [tab, setTab] = useState<AgyTab>(remembered);
   const actions = buildAgyActions(context);
   return <section className="agy-home">
@@ -36,6 +59,7 @@ export function AgyView({ context, busyLabel, onRun }: { context: AgyActionConte
         })}
         {!context.job && <p className="muted">Open a job to see its actions here.</p>}
       </>}
+      {tab === "behavior" && <BehaviorTab behavior={behavior} />}
       {tab === "how" && <article className="docs-page iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(howAgy, [], { readable: true }) }} />}
     </SubTabPanel>
   </section>;

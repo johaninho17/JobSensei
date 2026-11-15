@@ -1,4 +1,5 @@
 import { readFile, readdir, stat } from "node:fs/promises";
+import { settingsScoreSchema } from "../src/shared/agy-behavior";
 import { normalCompany, normalTitle } from "../src/shared/posting-fields";
 import { basename, join } from "node:path";
 import { evidenceSnapshotSchema, stretchScoreSchema, type ArtifactFile, type FileTreeNode, type JobFolderSummary } from "../src/shared/schemas";
@@ -297,6 +298,7 @@ async function readJobSummary(path: string, name: string): Promise<JobFolderSumm
     health: record.health,
     gapTerms: record.gapTerms,
     stretch: await readJson(join(path, ".sensei", "validation_report.json")).then((report) => stretchScoreSchema.nullable().catch(null).parse(report.stretch ?? null)),
+    settingsScore: await readJson(join(path, ".sensei", "validation_report.json")).then((report) => settingsScoreSchema.nullable().catch(null).parse(report.settingsScore ?? null)),
   };
 }
 

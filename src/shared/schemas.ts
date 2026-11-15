@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agyBehaviorSchema, settingsScoreSchema } from "./agy-behavior";
 import { SENIORITY_LEVELS, WORK_MODES } from "./posting";
 import { jobHealthSchema } from "./job-record";
 import type { Readiness } from "./readiness";
@@ -188,6 +189,8 @@ export const candidateProfileSchema = z.object({
     applicationFacts: applicationFactsSchema.default({ extra: [] }),
     /** Recruiter Edition (plan Q3): the recruiter's instructions to Agy for this candidate; they win over the recruiter's own. */
     agyInstructions: agyInstructionsSchema.default([]),
+    /** How Agy behaves (src/shared/agy-behavior.ts owns the settings, their defaults, and which are connected). */
+    agy: agyBehaviorSchema.prefault({}),
   }),
   truth: z.object({
     factualAuthority: z.string().default("Selected structured career evidence"),
@@ -402,6 +405,8 @@ export const jobFolderSummarySchema = z.object({
   /** Posting requirements rated as a gap or unclear, in the posting's words. */
   requirementGaps: z.array(z.string()).default([]),
   stretch: stretchScoreSchema.nullable().default(null),
+  /** The settings score the job's drafts were made under (null: no drafts, or drafted before the score existed). */
+  settingsScore: settingsScoreSchema.nullable().default(null),
   location: z.string().nullable().default(null),
   interviewRoundLabel: z.string().nullable().default(null),
   /** Interview round folders under interviews/ (prepared rounds, old and new formats). */
@@ -760,6 +765,8 @@ export const evidenceSnapshotSchema = z.object({
   baseResumePath: z.string().min(1),
   baseResumeFootprint: resumeFootprintSchema.optional(),
   /** Whether this run writes a cover letter (src/shared/cover-letter-policy.ts); old snapshots always did. */
+  /** The settings score this run was made under (src/shared/agy-behavior.ts); older snapshots have none. */
+  settingsScore: settingsScoreSchema.optional(),
   coverLetterPlan: z.object({ write: z.boolean(), reason: z.string().nullable(), missing: z.array(z.string()).default([]), off: z.boolean().default(false) }).optional(),
   canonicalResume: canonicalResumeBaselineSchema.nullable().optional(),
   canonicalResumeWarnings: z.array(z.string()).default([]),
@@ -1139,6 +1146,8 @@ export const applicationValidationReportSchema = z.object({
   gateStatus: z.string().nullable().default(null),
   /** Why no cover letter was written for this run (null when one was); shown on the job page. */
   coverLetterSkipped: z.string().nullable().default(null),
+  /** The settings score the run was made under (copied from the snapshot). */
+  settingsScore: settingsScoreSchema.nullable().default(null),
   ats: z.object({
     status: z.enum(["passed", "warning", "not_exported", "unavailable"]),
     pdfPath: z.string().nullable(),
