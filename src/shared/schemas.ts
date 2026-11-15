@@ -1516,6 +1516,10 @@ export interface SenseiApi {
     restart(): Promise<{ cwd: string; agyStarted?: boolean }>;
     status(): Promise<{ running: boolean; agy: boolean; startedAt: number | null; lastOutputAt: number | null; screen: "ready" | "blocked" | "unknown"; recentOutput: string }>;
     stop(): Promise<void>;
+    /** Agy page → Memory: Agy's memory items in this workspace's Agy home, newest first. */
+    memory(): Promise<Array<{ id: string; bytes: number; updatedAt: string }>>;
+    /** Stops Agy, deletes the chosen memory items (or all), starts Agy again; returns the list after. */
+    deleteMemory(ids: string[] | "all"): Promise<Array<{ id: string; bytes: number; updatedAt: string }>>;
     onData(callback: (data: string) => void): () => void;
     onExit(callback: (code: number) => void): () => void;
   };

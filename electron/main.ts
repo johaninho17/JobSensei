@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, session, shell } from "electron";
+import { deleteMemory, listMemory } from "./agy-memory";
 import { handleLinks } from "./open-link";
 import { availableBrowsers, BROWSER_NAMES, browserOpener, readBrowserChoice, saveBrowserChoice } from "./browser-choice";
 import { pdfFreshness } from "./pdf-freshness";
@@ -560,6 +561,17 @@ ipcMain.handle("profile:save-voice", async (_event, text: unknown) => {
   return relativePath;
 });
 ipcMain.handle("terminal:restart", async () => terminal.restart());
+// Agy page → Memory (#41): Agy is stopped before anything is deleted, then started again.
+const memoryHome = async () => agyHomes.get(requireWorkspace()).catch(() => null);
+ipcMain.handle("agy:memory", async () => { const home = await memoryHome(); return home ? listMemory(home) : []; });
+ipcMain.handle("agy:delete-memory", async (_event, ids: unknown) => {
+  const home = await memoryHome();
+  if (!home || !(ids === "all" || Array.isArray(ids))) return [];
+  await terminal.stopAndWait();
+  await deleteMemory(home, ids === "all" ? "all" : ids.filter((id): id is string => typeof id === "string"));
+  await startAgyTerminal();
+  return listMemory(home);
+});
 ipcMain.handle("terminal:stop", async () => terminal.stop());
 
 // Feature-only IPC lives in its own modules, loaded only when this edition has the feature (src/shared/edition.ts);

@@ -4,12 +4,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import howAgy from "../../docs/app/how-agy-uses-it.md?raw";
 import { AGY_ACTION_GROUPS, buildAgyActions, type AgyAction, type AgyActionContext } from "../shared/agy-actions";
 import { CONNECTED, DEFAULT_AGY_BEHAVIOR, FRAMING_LABELS, SETTINGS_BANDS, agyBehaviorSchema, bandFor, effectiveBehavior, settingScore, type AgyBehavior, type BehaviorSetting } from "../shared/agy-behavior";
+import { AgyMemory } from "./AgyMemory";
 import { markdownHtml } from "./markdown";
 import { Section } from "./Section";
 import { SubTabs, SubTabPanel } from "./SubTabs";
 
-type AgyTab = "actions" | "behavior" | "how";
-const TABS: Array<{ id: AgyTab; label: string }> = [{ id: "actions", label: "Actions" }, { id: "behavior", label: "Behavior" }, { id: "how", label: "How it works" }];
+type AgyTab = "actions" | "behavior" | "memory" | "how";
+const TABS: Array<{ id: AgyTab; label: string }> = [{ id: "actions", label: "Actions" }, { id: "behavior", label: "Behavior" }, { id: "memory", label: "Memory" }, { id: "how", label: "How it works" }];
 
 const SETTING_ROWS: Array<{ id: BehaviorSetting; title: string; value: (behavior: AgyBehavior) => string; help: string }> = [
   { id: "framing", title: "How far wording may reach", value: (behavior) => FRAMING_LABELS[behavior.framing], help: "Real work worded at its strongest; never an event, number, tool, or ownership that didn't happen." },
@@ -89,6 +90,7 @@ export function AgyView({ context, saved, onSaveBehavior, busyLabel, onRun }: { 
         {!context.job && <p className="muted">Open a job to see its actions here.</p>}
       </>}
       {tab === "behavior" && <BehaviorTab saved={saved} onSave={onSaveBehavior} />}
+      {tab === "memory" && <AgyMemory />}
       {tab === "how" && <article className="docs-page iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(howAgy, [], { readable: true }) }} />}
     </SubTabPanel>
   </section>;

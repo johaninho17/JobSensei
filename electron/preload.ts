@@ -178,6 +178,8 @@ const api: SenseiApi = {
     restart: () => ipcRenderer.invoke("terminal:restart"),
     status: () => ipcRenderer.invoke("terminal:status"),
     stop: () => ipcRenderer.invoke("terminal:stop"),
+    memory: () => ipcRenderer.invoke("agy:memory"),
+    deleteMemory: (ids) => ipcRenderer.invoke("agy:delete-memory", ids),
     onData: (callback) => { const listener = (_event: Electron.IpcRendererEvent, data: string) => callback(data); ipcRenderer.on("terminal:data", listener); return () => ipcRenderer.removeListener("terminal:data", listener); },
     onExit: (callback) => { const listener = (_event: Electron.IpcRendererEvent, code: number) => callback(code); ipcRenderer.on("terminal:exit", listener); return () => ipcRenderer.removeListener("terminal:exit", listener); },
   },
