@@ -1046,7 +1046,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
       },
       footprint: snapshot.baseResumeFootprint,
       requirements: postingRecordFor(jobDescriptionText).requirements,
-      fitGate: FIT_GATE,
+      fitGate: snapshot.settingsScore?.behavior.fit.gate ?? FIT_GATE,
       evidenceRows: leanRows.map((row) => {
         const route = routeById.get(row.evidenceId);
         return {

@@ -30,7 +30,7 @@ import {
 import { pruneUnsupportedSkills } from "./application-artifacts";
 import { currentManifestHash } from "./context-manifest-hash";
 import { mergeEvaluationAudit } from "./evaluation-audit";
-import { gateStatusFor, normalizeEvaluationScore, scoreEvaluation } from "./fit-scoring";
+import { fitSettingsOf, gateStatusFor, normalizeEvaluationScore, scoreEvaluation } from "./fit-scoring";
 import { validateJobApplication } from "./application-validation";
 import { writeJsonAtomic, writeTextAtomic, readTextFile } from "./persistence";
 import { assertInsideWorkspace } from "./workspace";
@@ -382,12 +382,12 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
     ] : []),
   ]);
   const report = await validateJobApplication(workspace, jobId, persistRunState);
-  const fit = scoreEvaluation(normalizedEvaluation);
+  const fit = scoreEvaluation(normalizedEvaluation, fitSettingsOf(snapshot));
   const finalReport = applicationValidationReportSchema.parse({
     ...report,
     fitScore: fit?.score ?? null,
     fitConfidence: fit?.confidence ?? null,
-    gateStatus: fit ? gateStatusFor(fit) : null,
+    gateStatus: fit ? gateStatusFor(fit, fitSettingsOf(snapshot).gate) : null,
     coverLetterSkipped: draft.coverLetter ? null : snapshot.coverLetterPlan?.reason ?? null,
   });
   if (persistRunState) await writeJsonAtomic(join(statePath, "validation_report.json"), finalReport);

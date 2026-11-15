@@ -50,7 +50,7 @@ The finalizer then:
 
 - restores protected identity, contact details, employers, titles, dates, locations, education, and structure from the base-resume baseline;
 - derives the hidden draft and evidence map without another AI pass;
-- calculates the authoritative score: Agy rates each of the posting's own requirements against your evidence, and the app sets the weights, checks each rating against the cited evidence and the posting's wording, and derives the must-haves (met / to learn / blocker). A role you match only through transferable experience lands around 3.5; the gate is 3.2;
+- calculates the authoritative score: Agy rates each of the posting's own requirements against your evidence, and the app sets the weights, checks each rating against the cited evidence and the posting's wording, and derives the must-haves (met / to learn / blocker). A role you match only through transferable experience lands around 3.5 with the default credit; the gate is 3.2 by default. Both are yours to change in Agy → Behavior, and each job keeps the credit and gate it was rated under;
 - removes skills no evidence supports, keeps earlier roles exactly as in your base resume unless a change cites that employer, and measures the **stretch**: how much of the resume was tailored and how far each changed line reaches past its evidence (shown beside the fit score, never part of it);
 - writes the reviewable Markdown resume, cover letter, and evaluation;
 - stops after one attempt, even when review warnings exist.

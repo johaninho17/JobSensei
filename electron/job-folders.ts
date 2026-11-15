@@ -1,11 +1,11 @@
 import { readFile, readdir, stat } from "node:fs/promises";
-import { settingsScoreSchema } from "../src/shared/agy-behavior";
+import { jobSettingsScore, settingsScoreSchema } from "../src/shared/agy-behavior";
 import { normalCompany, normalTitle } from "../src/shared/posting-fields";
 import { basename, join } from "node:path";
 import { evidenceSnapshotSchema, stretchScoreSchema, type ArtifactFile, type FileTreeNode, type JobFolderSummary } from "../src/shared/schemas";
 import { previewFile } from "./files";
 import { assertInsideWorkspace } from "./workspace";
-import { normalizeEvidenceClassifications, parseFitRequirements, parseMustHaves, scoreEvaluation } from "./fit-scoring";
+import { fitSettingsOf, normalizeEvidenceClassifications, parseFitRequirements, parseMustHaves, scoreEvaluation } from "./fit-scoring";
 import { parseJobDescriptionMetadata } from "./job-description";
 import { readJobTracker } from "./tracker";
 import { readPostingRecord } from "./posting-record";
@@ -140,7 +140,8 @@ export async function readRating(jobPath: string, status: JsonRecord): Promise<n
       .then((raw) => evidenceSnapshotSchema.parse(JSON.parse(raw)))
       .catch(() => null);
     const boundedEvaluation = snapshot ? normalizeEvidenceClassifications(evaluation, snapshot).markdown : evaluation;
-    const deterministic = scoreEvaluation(boundedEvaluation);
+    // Each job keeps the score it was made under: the credit stamped on its snapshot, not today's settings (#37).
+    const deterministic = scoreEvaluation(boundedEvaluation, fitSettingsOf(snapshot));
     if (deterministic) return deterministic.score;
   } catch {
     // Preserve the declared legacy score when a generated scoring table is malformed.
@@ -273,6 +274,7 @@ async function readJobSummary(path: string, name: string): Promise<JobFolderSumm
     tracker,
     status: effectiveStatus({ tracker, hasApplicationMaterials, interviewRoundLabel, hasPdfs: pdfs > 0 }),
     letterSkipped: Boolean(await readJson(join(path, ".sensei", "validation_report.json")).then((report) => report.coverLetterSkipped)),
+    gate: await readJson(join(path, ".sensei", "validation_report.json")).then((report) => jobSettingsScore(report.settingsScore).behavior.fit.gate),
   });
   await saveJobRecord(path, record).catch(() => undefined);
   return {

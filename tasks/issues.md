@@ -6,7 +6,6 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 
 | # | Issue | Features | Blocked |
 |---|---|---|---|
-| #35 | Agy page: Behavior settings and the settings score | FEAT-003, FEAT-012 |  |
 | #36 | Behavior: framing dial | FEAT-003, FEAT-012 |  |
 | #37 | Behavior: fit weights, credit, and gate | FEAT-003, FEAT-012 |  |
 
@@ -28,5 +27,11 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #41 | Agy page: Memory | FEAT-012 |  |
 | #52 | Read postings on any careers site: structured data, main text, then the app's own browser | FEAT-013 |  |
 | #88 | Jobs and Learnings by settings band | FEAT-012 | yes |
+
+## P3
+
+| # | Issue | Features | Blocked |
+|---|---|---|---|
+| #92 | Behavior: category weights for the fit score | FEAT-012 |  |
 
 17 open.

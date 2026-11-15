@@ -1,9 +1,9 @@
 // The Agy page: what Agy can do for you, as buttons, and how it uses your data. `src/shared/agy-actions.ts` owns the
 // list of actions; the text of "How it works" is docs/app/how-agy-uses-it.md (the same owner the Docs page reads).
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import howAgy from "../../docs/app/how-agy-uses-it.md?raw";
 import { AGY_ACTION_GROUPS, buildAgyActions, type AgyAction, type AgyActionContext } from "../shared/agy-actions";
-import { CONNECTED, FRAMING_LABELS, SETTINGS_BANDS, bandFor, settingScore, type AgyBehavior, type BehaviorSetting } from "../shared/agy-behavior";
+import { CONNECTED, DEFAULT_AGY_BEHAVIOR, FRAMING_LABELS, SETTINGS_BANDS, agyBehaviorSchema, bandFor, effectiveBehavior, settingScore, type AgyBehavior, type BehaviorSetting } from "../shared/agy-behavior";
 import { markdownHtml } from "./markdown";
 import { Section } from "./Section";
 import { SubTabs, SubTabPanel } from "./SubTabs";
@@ -18,25 +18,54 @@ const SETTING_ROWS: Array<{ id: BehaviorSetting; title: string; value: (behavior
   { id: "lines-reworked", title: "Resume lines reworked", value: (behavior) => behavior.linesReworked >= 4 ? "3–4 of the current role's lines" : `up to ${behavior.linesReworked}`, help: "How many of the current role's base-resume bullets are rewritten for a job; the rest stay as written." },
 ];
 
-function BehaviorTab({ behavior }: { behavior: AgyBehavior }) {
+/** A number box for one fit setting; out-of-range values are clamped on save by the schema. */
+function NumberField({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void }) {
+  return <label className="behavior-field"><span>{label}</span><input type="number" inputMode="decimal" min={min} max={max} step={step} value={value} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next)) onChange(Math.min(max, Math.max(min, next))); }} /></label>;
+}
+
+function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: AgyBehavior) => Promise<void> }) {
+  const [draft, setDraft] = useState<AgyBehavior>(saved);
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  useEffect(() => { setDraft(saved); }, [JSON.stringify(saved)]);
+  // What Agy would do with this draft: connected settings from the draft, the app's rule for the rest.
+  const behavior = effectiveBehavior(draft);
   const score = settingScore(behavior);
   const band = bandFor(score.score);
+  const changed = JSON.stringify(agyBehaviorSchema.parse(draft)) !== JSON.stringify(agyBehaviorSchema.parse(saved));
+  const setFit = (key: keyof AgyBehavior["fit"], value: number) => { setDraft((current) => ({ ...current, fit: { ...current.fit, [key]: value } })); setState("idle"); };
+  const save = async (next: AgyBehavior) => {
+    setState("saving");
+    try { await onSave(agyBehaviorSchema.parse(next)); setState("saved"); } catch { setState("error"); }
+  };
+  const editors: Partial<Record<BehaviorSetting, ReactNode>> = {
+    "fit-credit": <div className="behavior-fields">
+      <NumberField label="Strong match" value={draft.fit.strong} min={0} max={1} step={0.05} onChange={(value) => setFit("strong", value)} />
+      <NumberField label="Adjacent match" value={draft.fit.adjacent} min={0} max={1} step={0.05} onChange={(value) => setFit("adjacent", value)} />
+      <NumberField label="Unclear" value={draft.fit.unclear} min={0} max={1} step={0.05} onChange={(value) => setFit("unclear", value)} />
+    </div>,
+    "fit-gate": <div className="behavior-fields"><NumberField label="Fit needed (of 5)" value={draft.fit.gate} min={1} max={5} step={0.1} onChange={(value) => setFit("gate", value)} /></div>,
+  };
   return <>
     <p className={`settings-score-big is-${score.band}`}><strong className="tabular">{score.score}</strong> of 100 · {band.label}</p>
-    <p className="muted">One number for how lenient Agy's settings are: {SETTINGS_BANDS.map((item) => `${item.label} from ${item.min}`).join(", ")}. Every job shows the score its drafts were made under, so you can compare how jobs did at different settings.</p>
+    <p className="muted">One number for how lenient Agy's settings are: {SETTINGS_BANDS.map((item) => `${item.label} from ${item.min}`).join(", ")}. Each job keeps the settings it was made under, so changes here apply to jobs drafted from now on.</p>
     <ul className="agy-actions">{SETTING_ROWS.map((row) => <li key={row.id}>
-      <div><strong>{row.title}</strong><p>{row.value(behavior)}. {row.help}</p></div>
+      <div><strong>{row.title}</strong><p>{row.value(behavior)}. {row.help}</p>{CONNECTED.has(row.id) && editors[row.id]}</div>
       <span className="agy-where">{score.parts[row.id]} of 10</span>
       <span className="agy-where">{CONNECTED.has(row.id) ? "Your setting" : "App rule"}</span>
     </li>)}</ul>
-    {SETTING_ROWS.some((row) => !CONNECTED.has(row.id)) && <p className="muted">These are the rules JobSensei follows today. Each becomes adjustable here once it is connected to Agy, so a change here always changes what Agy does.</p>}
+    <div className="behavior-actions">
+      <button className="btn-primary" disabled={!changed || state === "saving"} onClick={() => void save(draft)}>{state === "saving" ? "Saving…" : "Save settings"}</button>
+      <button className="btn-quiet" disabled={state === "saving" || JSON.stringify(agyBehaviorSchema.parse(draft)) === JSON.stringify(DEFAULT_AGY_BEHAVIOR)} onClick={() => { setDraft(DEFAULT_AGY_BEHAVIOR); void save(DEFAULT_AGY_BEHAVIOR); }}>Back to the app's defaults</button>
+      <span className="muted" role="status">{state === "saved" ? "Saved. Jobs drafted from now on use these settings." : state === "error" ? "Couldn't save. Try again." : changed ? "Not saved yet." : ""}</span>
+    </div>
+    {SETTING_ROWS.some((row) => !CONNECTED.has(row.id)) && <p className="muted">Settings marked "App rule" become adjustable here once they are connected to Agy, so a change here always changes what Agy does.</p>}
   </>;
 }
 const remembered = (): AgyTab => {
   try { const value = window.localStorage.getItem("sensei-agy-tab"); return TABS.some((tab) => tab.id === value) ? value as AgyTab : "actions"; } catch { return "actions"; }
 };
 
-export function AgyView({ context, behavior, busyLabel, onRun }: { context: AgyActionContext; /** What Agy does now (`effectiveBehavior`). */ behavior: AgyBehavior; /** The job Agy is working on now, if any. */ busyLabel: string | null; onRun: (action: AgyAction) => void }) {
+export function AgyView({ context, saved, onSaveBehavior, busyLabel, onRun }: { context: AgyActionContext; /** The settings in the profile (`preferences.agy`). */ saved: AgyBehavior; onSaveBehavior: (next: AgyBehavior) => Promise<void>; /** The job Agy is working on now, if any. */ busyLabel: string | null; onRun: (action: AgyAction) => void }) {
   const [tab, setTab] = useState<AgyTab>(remembered);
   const actions = buildAgyActions(context);
   return <section className="agy-home">
@@ -59,7 +88,7 @@ export function AgyView({ context, behavior, busyLabel, onRun }: { context: AgyA
         })}
         {!context.job && <p className="muted">Open a job to see its actions here.</p>}
       </>}
-      {tab === "behavior" && <BehaviorTab behavior={behavior} />}
+      {tab === "behavior" && <BehaviorTab saved={saved} onSave={onSaveBehavior} />}
       {tab === "how" && <article className="docs-page iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(howAgy, [], { readable: true }) }} />}
     </SubTabPanel>
   </section>;

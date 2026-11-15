@@ -28,6 +28,8 @@ export type JobRecordInput = {
   status: TrackerStatus;
   /** The last run wrote no cover letter on purpose (src/shared/cover-letter-policy.ts), so a resume alone is complete. */
   letterSkipped?: boolean;
+  /** The fit gate the job was rated under (its stamped settings); today's gate when absent. */
+  gate?: number;
 };
 
 const WEAK = new Set(["gap", "unclear", "adjacent_transferable"]);
@@ -102,7 +104,7 @@ function health(input: JobRecordInput, record: JobRecord): JobRecord["health"] {
   if (evaluation === "older") notes.push(record.fit.byRequirement ? "The posting was re-read since this rating. A fresh run rates its current requirements." : "Rated in an older format. A fresh run rates the posting's own requirements.");
 
   // Drafts are expected once a job is rated at or above the gate.
-  const belowGate = record.fit.score !== null && record.fit.score < FIT_GATE;
+  const belowGate = record.fit.score !== null && record.fit.score < (input.gate ?? FIT_GATE);
   const drafts = Number(record.documents.resume) + Number(record.documents.coverLetter);
   const expected = input.letterSkipped ? 1 : 2;
   const documents: HealthState = !record.documents.evaluation || belowGate ? (drafts ? "complete" : "not_needed") : drafts >= expected && (record.documents.resume || !input.letterSkipped) ? "complete" : drafts ? "partial" : "missing";

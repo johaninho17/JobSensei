@@ -1,5 +1,6 @@
 import { noFitCredit } from "./candidate-evidence";
 import { splitApplicationForm, stripInvisible } from "./posting-clean";
+import { DEFAULT_AGY_BEHAVIOR, type AgyBehavior } from "../src/shared/agy-behavior";
 import { FIT_CLASSIFICATION_CREDIT, FIT_GATE } from "../src/shared/fit-credit";
 export const FIT_CATEGORIES = ["core", "technical", "scope", "outcomes", "domain", "learning"] as const;
 export type FitCategory = typeof FIT_CATEGORIES[number];
@@ -53,7 +54,16 @@ export type FitClassificationAdjustment = {
   resolvedEvidence: string;
 };
 
-const CREDIT: Record<FitClassification, number> = FIT_CLASSIFICATION_CREDIT;
+/** Credit per match level and the gate a score is judged by. Each job is scored under the settings stamped on its snapshot (#37). */
+export type FitSettings = AgyBehavior["fit"];
+export const DEFAULT_FIT_SETTINGS: FitSettings = DEFAULT_AGY_BEHAVIOR.fit;
+/** The fit settings a run was made under; snapshots from before the settings score use today's defaults. */
+export function fitSettingsOf(snapshot?: { settingsScore?: { behavior: AgyBehavior } } | null): FitSettings {
+  return snapshot?.settingsScore?.behavior.fit ?? DEFAULT_FIT_SETTINGS;
+}
+function creditTable(settings: FitSettings = DEFAULT_FIT_SETTINGS): Record<FitClassification, number> {
+  return { ...FIT_CLASSIFICATION_CREDIT, strong_transferable: settings.strong, adjacent_transferable: settings.adjacent, unclear: settings.unclear };
+}
 
 const EXPECTED_CATEGORY_WEIGHTS: Record<FitCategory, number> = {
   core: 40,
@@ -74,7 +84,8 @@ export function categoryTargets(present: Iterable<FitCategory>): Record<FitCateg
   return Object.fromEntries(FIT_CATEGORIES.map((category) => [category, have.has(category) && total ? EXPECTED_CATEGORY_WEIGHTS[category] * 100 / total : 0])) as Record<FitCategory, number>;
 }
 
-export function calculateFitScore(requirements: FitRequirement[]): FitScoreResult {
+export function calculateFitScore(requirements: FitRequirement[], settings: FitSettings = DEFAULT_FIT_SETTINGS): FitScoreResult {
+  const CREDIT = creditTable(settings);
   if (!requirements.length) throw new Error("Requirement scoring needs at least one material JD requirement.");
   const categoryWeights = Object.fromEntries(FIT_CATEGORIES.map((category) => [category, 0])) as Record<FitCategory, number>;
   for (const row of requirements) {
@@ -204,14 +215,14 @@ export function applyMustHaves(result: FitScoreResult, mustHaves: MustHaveRequir
   return { ...result, score, confidence, scoreBeforeMustHaves: result.score, gateScore: result.score, mustHaves, learnablePenalty, blockers };
 }
 
-export function gateStatusFor(result: FitScoreResult): string {
+export function gateStatusFor(result: FitScoreResult, gate: number = FIT_GATE): string {
   if (result.blockers?.length) return "manual review: hard blocker";
-  return (result.gateScore ?? result.score) >= FIT_GATE ? "accepted" : "accepted at screening; evidence-calibrated score below threshold";
+  return (result.gateScore ?? result.score) >= gate ? "accepted" : "accepted at screening; evidence-calibrated score below threshold";
 }
 
-export function scoreEvaluation(markdown: string): FitScoreResult | null {
+export function scoreEvaluation(markdown: string, settings: FitSettings = DEFAULT_FIT_SETTINGS): FitScoreResult | null {
   const requirements = parseFitRequirements(completeFallbackTable(markdown));
-  return requirements ? applyMustHaves(calculateFitScore(requirements), parseMustHaves(markdown)) : null;
+  return requirements ? applyMustHaves(calculateFitScore(requirements, settings), parseMustHaves(markdown)) : null;
 }
 
 const CLASSIFICATION_ORDER: FitClassification[] = ["gap", "unclear", "adjacent_transferable", "strong_transferable", "direct"];
@@ -912,7 +923,7 @@ export function normalizeEvaluationScore(markdown: string, snapshot?: EvidenceSn
   const bounded = snapshot ? normalizeEvidenceClassifications(weighted, snapshot) : { markdown: weighted, adjustments: [] };
   const withMustHaves = requirements.length ? writeMustHaveTable(bounded.markdown, requirements) : bounded.markdown;
   const checked = verifyMustHaves(withMustHaves, requiredItems, snapshot).markdown;
-  const result = scoreEvaluation(checked);
+  const result = scoreEvaluation(checked, fitSettingsOf(snapshot));
   if (!result) return checked;
   const scoreLine = `- **Weighted Fit Score:** ${result.score.toFixed(2)} / 5`;
   const scorePattern = /^.*Weighted Fit Score\*{0,2}\s*:\*{0,2}\s*\d(?:\.\d+)?\s*\/\s*5(?:\.0)?.*$/im;
@@ -929,7 +940,7 @@ export function normalizeEvaluationScore(markdown: string, snapshot?: EvidenceSn
   normalized = confidencePattern.test(normalized)
     ? normalized.replace(confidencePattern, confidenceLine)
     : normalized.replace(scoreLine, `${scoreLine}\n${confidenceLine}`);
-  const gateLine = `- **Gate Status:** ${gateStatusFor(result)}`;
+  const gateLine = `- **Gate Status:** ${gateStatusFor(result, fitSettingsOf(snapshot).gate)}`;
   const gatePattern = /^.*Gate Status\*{0,2}\s*:\*{0,2}\s*[^\n]+$/im;
   normalized = gatePattern.test(normalized)
     ? normalized.replace(gatePattern, gateLine)
