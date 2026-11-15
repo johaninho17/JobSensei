@@ -1,7 +1,9 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, session, shell } from "electron";
+import { execFile } from "node:child_process";
 import { deleteMemory, listMemory } from "./agy-memory";
 import { conversationExists, deleteConversations, listConversations } from "./agy-conversations";
 import { agyActivity } from "./agy-activity";
+import { agyModelArgs, effectiveBehavior } from "../src/shared/agy-behavior";
 import { handleLinks } from "./open-link";
 import { availableBrowsers, BROWSER_NAMES, browserOpener, readBrowserChoice, saveBrowserChoice } from "./browser-choice";
 import { pdfFreshness } from "./pdf-freshness";
@@ -463,6 +465,8 @@ async function startAgyTerminal(requestedCwd?: string): Promise<{ cwd: string; a
   terminal.setAgyHome(agyHome);
   // A candidate's Agy picks up their own last conversation (their history is the only one in the home).
   terminal.setContinueConversation(Boolean(agyHomeName));
+  // The panel's model and effort, from Agy → Behavior (#38).
+  terminal.setModelArgs(agyModelArgs(effectiveBehavior((await readCandidateProfile(workspace).catch(() => null))?.preferences.agy).models.panel));
   // The terminal start rewrote the home's settings; background runs reuse it for this workspace.
   if (agyHome) agyHomes.set(workspace, agyHome);
   return terminal.start(cwd, workspace, manifest);
@@ -566,6 +570,21 @@ ipcMain.handle("profile:save-voice", async (_event, text: unknown) => {
 ipcMain.handle("terminal:restart", async () => terminal.restart());
 // Agy page → Memory (#41): Agy is stopped before anything is deleted, then started again.
 const memoryHome = async () => agyHomes.get(requireWorkspace()).catch(() => null);
+// Agy → Behavior (#38): the models Agy offers, read once per app run from `agy models`.
+let agyModelList: Promise<Array<{ id: string; name: string }>> | null = null;
+ipcMain.handle("agy:models", async () => {
+  const agyPath = resolveAgyExecutable();
+  if (!agyPath) return [];
+  agyModelList ??= new Promise((resolve) => {
+    execFile(agyPath, ["models"], { timeout: 30_000 }, (error, stdout) => {
+      const list = (error ? "" : stdout).split("\n").map((line) => line.split("\t")).filter((parts) => parts.length >= 2 && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(parts[0]!.trim()))
+        .map(([id, name]) => ({ id: id!.trim(), name: (name ?? id!).trim() }));
+      if (!list.length) agyModelList = null;
+      resolve(list);
+    });
+  });
+  return agyModelList;
+});
 ipcMain.handle("agy:memory", async () => { const home = await memoryHome(); return home ? listMemory(home) : []; });
 ipcMain.handle("agy:delete-memory", async (_event, ids: unknown) => {
   const home = await memoryHome();

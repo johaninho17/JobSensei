@@ -39,6 +39,19 @@ export function framingInstruction(stop: FramingStop): string {
   }
 }
 
+export const AGY_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+/** A model and effort for one kind of Agy run; null = Agy's own default. Names are checked before they reach a command line. */
+const agyModelChoiceSchema = z.object({
+  model: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/).nullable().default(null),
+  effort: z.enum(AGY_EFFORTS).nullable().default(null),
+}).prefault({});
+export type AgyModelChoice = z.infer<typeof agyModelChoiceSchema>;
+
+/** Agy's start flags for a model choice (`agy --model`, `--effort`). */
+export function agyModelArgs(choice: AgyModelChoice | null | undefined): string[] {
+  return [...(choice?.model ? ["--model", choice.model] : []), ...(choice?.effort ? ["--effort", choice.effort] : [])];
+}
+
 export const agyBehaviorSchema = z.object({
   /** How far a tailored line may reach past its evidence (#36). */
   framing: z.enum(FRAMING_STOPS).default("framed"),
@@ -71,6 +84,9 @@ export const agyBehaviorSchema = z.object({
     pay: z.number().min(0).max(1).default(0),
     likeInterviewed: z.number().min(0).max(1).default(0.25),
   }).prefault({}),
+  /** Model and effort for the Agy panel (applications, interview prep) and for background runs (job search,
+   * ratings, written answers, filing Today's answers) (#38). Not part of the settings score. */
+  models: z.object({ panel: agyModelChoiceSchema, background: agyModelChoiceSchema }).prefault({}),
 });
 export type AgyBehavior = z.infer<typeof agyBehaviorSchema>;
 export const DEFAULT_AGY_BEHAVIOR: AgyBehavior = agyBehaviorSchema.parse({});
@@ -92,6 +108,7 @@ export function effectiveBehavior(saved?: unknown): AgyBehavior {
     },
     linesReworked: CONNECTED.has("lines-reworked") ? chosen.linesReworked : DEFAULT_AGY_BEHAVIOR.linesReworked,
     search: chosen.search,
+    models: chosen.models,
   };
 }
 

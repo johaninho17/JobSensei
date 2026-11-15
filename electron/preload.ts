@@ -182,6 +182,7 @@ const api: SenseiApi = {
     status: () => ipcRenderer.invoke("terminal:status"),
     stop: () => ipcRenderer.invoke("terminal:stop"),
     memory: () => ipcRenderer.invoke("agy:memory"),
+    models: () => ipcRenderer.invoke("agy:models"),
     deleteMemory: (ids) => ipcRenderer.invoke("agy:delete-memory", ids),
     conversations: () => ipcRenderer.invoke("agy:conversations"),
     openConversation: (id) => ipcRenderer.invoke("agy:open-conversation", id),
