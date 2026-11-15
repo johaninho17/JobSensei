@@ -1,4 +1,5 @@
 import { logisticsUpdate, parseNames, readLogistics, readStoryFields, storyUpdate } from "../shared/profile-fields";
+import { IdentityForm, LogisticsForm, PrivateNamesField, StoryFieldsForm, VoiceFileField, type IdentityValues } from "./ProfileFields";
 import { BrowserSetting } from "./BrowserSetting";
 import { PrivacyAndTerms } from "./Privacy";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -11,13 +12,6 @@ const SETTINGS_TABS: SettingsTab[] = ["voice", "story", "truth", ...(FEATURES.in
 
 type ProfilePreview = { styleRules: string[]; instructions: string[]; baseResumeHasSummary: boolean | null; interviewLogistics: string[]; storyBankPath: string | null };
 
-const LOGISTICS_FIELDS: Array<{ key: keyof InterviewLogistics; label: string; placeholder: string }> = [
-  { key: "location", label: "Location", placeholder: "e.g., Portland, OR (open to relocating)" },
-  { key: "workAuthorization", label: "Work authorization", placeholder: "e.g., Authorized to work in the US, no sponsorship needed" },
-  { key: "compensation", label: "Compensation expectations", placeholder: "e.g., $90k+ base, flexible for the right role" },
-  { key: "noticePeriod", label: "Notice period / start date", placeholder: "e.g., Two weeks' notice" },
-  { key: "workArrangement", label: "Remote / hybrid / on-site", placeholder: "e.g., Hybrid or on-site; open to remote" },
-];
 
 export function SettingsModal({
   open,
@@ -58,6 +52,10 @@ export function SettingsModal({
   const [confidentialNamesText, setConfidentialNamesText] = useState("");
   const [boundariesText, setBoundariesText] = useState("");
   const [practiceEvidence, setPracticeEvidence] = useState(true);
+  const [identity, setIdentity] = useState<IdentityValues>({ fullName: "", artifactPrefix: "", email: "", phone: "", location: "" });
+  const [voiceFile, setVoiceFile] = useState<string | null>(null);
+  const voiceLoaded = useRef<string | null>(null);
+  const voicePath = profile?.sources.applicationVoicePath ?? "context/application_voice_profile.md";
   const [preview, setPreview] = useState<ProfilePreview | null>(null);
   const [logistics, setLogistics] = useState<InterviewLogistics>(EMPTY_INTERVIEW_LOGISTICS);
 
@@ -112,6 +110,8 @@ export function SettingsModal({
       setConfidentialNamesText((profile.truth?.confidentialNames ?? []).join(", "));
       setBoundariesText((profile.truth?.boundaries ?? []).join("\n"));
       setPracticeEvidence(profile.truth?.practiceInterviewsAsEvidence !== false);
+      if (!FEATURES.candidates) void window.sensei.files.preview(profile.sources.applicationVoicePath ?? "context/application_voice_profile.md").then((preview) => { voiceLoaded.current = preview.content ?? ""; setVoiceFile(preview.content ?? ""); }).catch(() => setVoiceFile(null));
+      setIdentity({ fullName: profile.identity.fullName, artifactPrefix: profile.identity.artifactPrefix, email: profile.identity.email ?? "", phone: profile.identity.phone ?? "", location: profile.identity.location ?? "" });
       setLogistics(readLogistics(profile));
     }
     void window.sensei.profile.preview().then(setPreview).catch(() => setPreview(null));
@@ -156,11 +156,13 @@ export function SettingsModal({
           narrativePillars: storyUpdate({ transitionSummary, turningPoints, workingStyle, personalValues }).narrativePillars,
         },
       });
+      if (voiceFile !== null && voiceFile.trim() && voiceFile !== voiceLoaded.current) { await window.sensei.profile.saveVoice(voiceFile); voiceLoaded.current = voiceFile; }
       const withDetails = await window.sensei.profile.updateDetails({
         transitionSummary: transitionSummary.trim(),
         confidentialNames: parseNames(confidentialNamesText),
         boundaries: boundariesText.split("\n").map((line) => line.trim()).filter(Boolean),
         practiceInterviewsAsEvidence: practiceEvidence,
+        identity,
         interviewLogistics: logisticsUpdate(logistics),
       });
       onProfileUpdated(withDetails ?? updated);
@@ -354,6 +356,11 @@ export function SettingsModal({
                 </div>
               </div>
 
+              {voiceFile !== null && <div className="settings-group">
+                <h3 className="settings-group-title" id="settings-writing-voice">Your writing voice</h3>
+                <VoiceFileField path={voicePath} value={voiceFile} onChange={setVoiceFile} />
+              </div>}
+
               <div className="settings-group">
                 <h3 className="settings-group-title" id="settings-custom-voice-and-tone-guidance-optional">Custom voice and tone guidance (optional)</h3>
                 <p className="settings-group-desc">Provide your own voice instructions to customize drafts further (e.g., "Keep sentences punchy and conversational; emphasize commercial deal sizes; avoid jargon").</p>
@@ -488,59 +495,8 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-career-direction">Career direction</h3>
-                <p className="settings-group-desc">
-                  One or two sentences: where your career has been and where you are heading. Agy opens your story with this.
-                </p>
-                <textarea aria-labelledby="settings-career-direction"
-                  className="settings-textarea"
-                  rows={2}
-                  placeholder="e.g., Started in backend development and moved into customer-facing technical work; now looking for solutions roles that keep me close to both the code and the customer."
-                  value={transitionSummary}
-                  onChange={(e) => setTransitionSummary(e.target.value)}
-                />
-              </div>
-
-              <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-1-career-transitions-and-turning-points">1. Career transitions and turning points</h3>
-                <p className="settings-group-desc">
-                  What motivated you to move between roles or step outside your comfort zone? What drives your career choices?
-                </p>
-                <textarea aria-labelledby="settings-1-career-transitions-and-turning-points"
-                  className="settings-textarea"
-                  rows={3}
-                  placeholder="e.g., I started my career focused on backend systems and architecture, but transitioned into solutions engineering to combine hands-on technical problem-solving with client-facing strategy."
-                  value={turningPoints}
-                  onChange={(e) => setTurningPoints(e.target.value)}
-                />
-              </div>
-
-              <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-2-operating-style-and-ownership">2. Operating style and ownership</h3>
-                <p className="settings-group-desc">
-                  When a client, partner, or teammate runs into friction, how do you handle it?
-                </p>
-                <textarea aria-labelledby="settings-2-operating-style-and-ownership"
-                  className="settings-textarea"
-                  rows={3}
-                  placeholder="e.g., I take proactive ownership of the issue, diagnose the technical root cause alongside internal engineering and external stakeholders, and resolve blockers collaboratively rather than passing off responsibility."
-                  value={workingStyle}
-                  onChange={(e) => setWorkingStyle(e.target.value)}
-                />
-              </div>
-
-              <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-3-fit-as-a-person-and-core-values">3. Fit as a person and core values</h3>
-                <p className="settings-group-desc">
-                  Who are you as a person? What defines your character and motivation beyond daily task descriptions?
-                </p>
-                <textarea aria-labelledby="settings-3-fit-as-a-person-and-core-values"
-                  className="settings-textarea"
-                  rows={3}
-                  placeholder="e.g., I care about the people on the other side of the problem. I stay with an issue until it's actually fixed, and I'd rather say 'I don't know yet, let me find out' than guess."
-                  value={personalValues}
-                  onChange={(e) => setPersonalValues(e.target.value)}
-                />
+                <h3 className="settings-group-title" id="settings-career-story">Career story</h3>
+                <StoryFieldsForm values={{ transitionSummary, turningPoints, workingStyle, personalValues }} onChange={(next) => { setTransitionSummary(next.transitionSummary); setTurningPoints(next.turningPoints); setWorkingStyle(next.workingStyle); setPersonalValues(next.personalValues); }} />
               </div>
             </div>
           )}
@@ -548,17 +504,8 @@ export function SettingsModal({
           {!FEATURES.candidates && activeTab === "truth" && (
             <div className="settings-section">
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-clients-and-partners-never-to-name">Clients and partners never to name</h3>
-                <p className="settings-group-desc">
-                  These names never appear in your resume or cover letter. Agy describes them by industry instead (for example, "a global professional-services firm"). Separate names with commas.
-                </p>
-                <textarea aria-labelledby="settings-clients-and-partners-never-to-name"
-                  className="settings-textarea"
-                  rows={2}
-                  placeholder="e.g., Northwind Partners, Contoso Health"
-                  value={confidentialNamesText}
-                  onChange={(e) => setConfidentialNamesText(e.target.value)}
-                />
+                <h3 className="settings-group-title" id="settings-private-names">Private names</h3>
+                <PrivateNamesField value={confidentialNamesText} onChange={setConfidentialNamesText} />
               </div>
               <div className="settings-group">
                 <h3 className="settings-group-title" id="settings-claims-i-never-make">Claims I never make</h3>
@@ -587,22 +534,7 @@ export function SettingsModal({
             <div className="settings-section">
               <div className="settings-group">
                 <h3 className="settings-group-title" id="settings-interview-logistics">Interview logistics</h3>
-                <p className="settings-group-desc">
-                  Interview prep uses these exactly as you write them. Leave a field blank and prep will remind you to fill it in; Agy never guesses.
-                </p>
-                <div className="settings-inputs-grid">
-                  {LOGISTICS_FIELDS.map((field) => (
-                    <label key={field.key}>
-                      {field.label}
-                      <input aria-labelledby="settings-interview-logistics"
-                        type="text"
-                        placeholder={field.placeholder}
-                        value={logistics[field.key]}
-                        onChange={(e) => setLogistics((current) => ({ ...current, [field.key]: e.target.value }))}
-                      />
-                    </label>
-                  ))}
-                </div>
+                <LogisticsForm values={logistics} onChange={setLogistics} />
               </div>
               <div className="settings-group">
                 <h3 className="settings-group-title" id="settings-story-bank">Story bank</h3>
@@ -736,12 +668,9 @@ export function SettingsModal({
             <div className="settings-section">
               <div className="settings-group">
                 <h3 className="settings-group-title" id="settings-candidate-identity">Candidate identity</h3>
-                <p className="settings-group-desc">{FEATURES.candidates ? "From the candidate's folder on this computer." : "Read dynamically from your local workspace. Never checked into Git."}</p>
+                <p className="settings-group-desc">{FEATURES.candidates ? "From the candidate's folder on this computer." : "Used on every resume, cover letter, and file name. Saved in your workspace on this computer."}</p>
+                <IdentityForm values={identity} onChange={setIdentity} />
                 <div className="identity-summary-card">
-                  <div><span>Full Name:</span> <strong>{profile?.identity.fullName ?? "Not set"}</strong></div>
-                  <div><span>Artifact Prefix:</span> <strong>{profile?.identity.artifactPrefix ?? "Candidate"}</strong></div>
-                  <div><span>Email:</span> <strong>{profile?.identity.email ?? "Not configured"}</strong></div>
-                  <div><span>Location:</span> <strong>{profile?.identity.location ?? "Not configured"}</strong></div>
                   <div><span>Base Resume:</span> <strong>{settings.baseResumePath ?? "None selected"}</strong></div>
                 </div>
                 <div className="identity-actions">

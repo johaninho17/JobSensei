@@ -1421,7 +1421,7 @@ export interface SenseiApi {
     updatePreferences(preferences: CandidateProfile["preferences"]): Promise<CandidateProfile>;
     /** Saves the writing-voice file (context/application_voice_profile.md); returns its path. */
     saveVoice(text: string): Promise<string>;
-    updateDetails(details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[]; interviewLogistics?: Partial<InterviewLogistics>; practiceInterviewsAsEvidence?: boolean }): Promise<CandidateProfile>;
+    updateDetails(details: { transitionSummary?: string; confidentialNames?: string[]; boundaries?: string[]; interviewLogistics?: Partial<InterviewLogistics>; practiceInterviewsAsEvidence?: boolean; identity?: { fullName?: string; artifactPrefix?: string; email?: string; phone?: string; location?: string } }): Promise<CandidateProfile>;
     /** What Agy will receive from the profile and voice profile on the next run. */
     preview(): Promise<{ styleRules: string[]; instructions: string[]; baseResumeHasSummary: boolean | null; interviewLogistics: string[]; storyBankPath: string | null }>;
   };

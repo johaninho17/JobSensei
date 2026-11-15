@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { LogisticsForm, PrivateNamesField, StoryFieldsForm, VoiceFileField } from "./ProfileFields";
 import { type CandidateProfile, type WorkspaceSummary, type InterviewLogistics } from "../shared/schemas";
 import { type Readiness, type ReadinessItem } from "../shared/readiness";
 import { SubTabPanel, SubTabs } from "./SubTabs";
@@ -219,29 +220,10 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
     {multiline ? <textarea rows={2} value={values[key]} onChange={set(key)} placeholder={hint} /> : <input value={values[key]} onChange={set(key)} placeholder={hint} />}
   </label>;
   return <div className="setup-editor">
-    {action === "story" && <>
-      <p className="muted">Used for cover letters, so they're about you and your path. Your own words; a sentence or two each is enough.</p>
-      {field("transitionSummary", "Career direction", "Where your career has been and where you're heading.", true)}
-      {field("turningPoints", "Why you made your key moves", "What made you change roles or step outside your comfort zone?", true)}
-      {field("workingStyle", "How you work when things go wrong", "How you handle a stuck customer, a failing project, or friction.", true)}
-      {field("personalValues", "Who you are beyond the job", "What you care about, as a person.", true)}
-    </>}
-    {action === "logistics" && <>
-      <p className="muted">Used word for word in interview prep and application answers. Leave a field empty if you'd rather not say; it's flagged, never guessed.</p>
-      {field("location", "Where you live or will work", "e.g. Denver, CO; open to relocating")}
-      {field("workAuthorization", "Work authorization", "e.g. US citizen; no sponsorship needed")}
-      {field("compensation", "Pay target", "e.g. $120,000–$140,000 base")}
-      {field("noticePeriod", "Start date or notice", "e.g. two weeks' notice")}
-      {field("workArrangement", "Work setup you want", "e.g. hybrid or on-site, up to 3 days")}
-    </>}
-    {action === "private-names" && <>
-      <p className="muted">Clients, partners, or projects that must never appear in a resume or cover letter. One per line. Drafts describe them generically instead ("a global retail client").</p>
-      <label className="setup-field"><span>Names to keep private</span><textarea rows={4} value={values.names} onChange={set("names")} placeholder={"Orbit Health\nProject Falcon"} /></label>
-    </>}
-    {action === "voice" && <>
-      <p className="muted">A few lines about how you sound. Agy reads them before every letter and answer. Edit the starting lines so they sound like you.</p>
-      <label className="setup-field"><span>{voicePath}</span><textarea rows={8} value={values.voice} onChange={set("voice")} /></label>
-    </>}
+    {action === "story" && <StoryFieldsForm values={values as unknown as StoryFields} onChange={(next) => setValues((current) => ({ ...current, ...next }))} />}
+    {action === "logistics" && <LogisticsForm values={values as unknown as InterviewLogistics} onChange={(next) => setValues((current) => ({ ...current, ...next }))} />}
+    {action === "private-names" && <PrivateNamesField value={values.names!} onChange={(names) => setValues((current) => ({ ...current, names }))} />}
+    {action === "voice" && <VoiceFileField path={voicePath} value={values.voice!} onChange={(voice) => setValues((current) => ({ ...current, voice }))} />}
     {action === "facts" && <>
       <p className="muted">What employer forms ask for. Each job shows these with copy buttons while you fill in its form. They are never sent to Agy and never guessed; leave anything blank you don't have.</p>
       {field("email", "Email", "alex@example.com")}
