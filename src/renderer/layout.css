@@ -51,7 +51,7 @@
 .segmented button:hover:not([aria-pressed="true"]) { color: var(--ink); }
 
 /* ---------- Shell ---------- */
-.shell { --sidebar-w: 236px; display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--right-resizer-width) var(--right-panel-width); width: 100%; height: 100%; min-height: 0; overflow: hidden; background: var(--canvas); }
+.shell { --sidebar-user-w: 236px; --sidebar-w: var(--sidebar-user-w); position: relative; display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--right-resizer-width) var(--right-panel-width); width: 100%; height: 100%; min-height: 0; overflow: hidden; background: var(--canvas); }
 .shell.is-sidebar-closed { --sidebar-w: 0px; }
 .shell.is-sidebar-closed .app-sidebar { visibility: hidden; }
 .shell-main { display: grid; grid-template-rows: 52px minmax(0, 1fr); min-width: 0; min-height: 0; }
@@ -71,6 +71,11 @@
 .side-nav button[aria-current="page"] { background: var(--raised); box-shadow: inset 3px 0 0 var(--accent), var(--shadow-s); font-weight: 650; }
 .nav-icon { flex: 0 0 auto; color: var(--muted); }
 .side-nav button[aria-current="page"] .nav-icon { color: var(--accent); }
+/* Labels shrink with an ellipsis so counts never overlap at the narrowest width (#12). */
+.side-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-nav .nav-icon, .side-count, .side-due { flex: none; }
+.sidebar-resizer { position: absolute; z-index: 12; top: 0; bottom: 0; left: calc(var(--sidebar-w) - 3px); width: 7px; background: transparent; }
+.sidebar-resizer::after { background: transparent; }
 .side-count { margin-left: auto; color: var(--muted); font-size: var(--fs-13); font-variant-numeric: tabular-nums; }
 .side-group-title { margin: var(--space-3) 0 var(--space-1); padding: 0 var(--space-3); color: var(--muted); font: 600 var(--fs-12) var(--font-ui); }
 .side-recent h2 { margin: 0 0 var(--space-2); padding: 0 var(--space-3); color: var(--muted); font: 600 var(--fs-13) var(--font-ui); }

@@ -86,7 +86,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const [editorDirty, setEditorDirty] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(() => window.localStorage.getItem("sensei-theme-v2") === "dark" ? "dark" : "light");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [leftPanelWidth, setLeftPanelWidth] = useState(() => storedPanelNumber("sensei-left-panel-width", 260));
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() => storedPanelNumber("sensei-left-panel-width", 236));
   const [rightPanelWidth, setRightPanelWidth] = useState(() => storedPanelNumber("sensei-right-panel-width", 430));
   const [leftPanelOpen, setLeftPanelOpen] = useState(() => storedPanelOpen("sensei-left-panel-state"));
   // The Recruiter Edition starts with the Agy chat hidden (it still runs); the queue and job pages show progress.
@@ -935,39 +935,42 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const shellStyle = {
     "--right-panel-width": `${rightPanelOpen ? rightPanelWidth : 0}px`,
     "--right-resizer-width": rightPanelOpen ? "7px" : "0px",
+    // The sidebar's width, dragged by its edge and remembered (#12); closing it or a narrow window still wins in CSS.
+    "--sidebar-user-w": `${leftPanelWidth}px`,
   } as CSSProperties;
   const contextSourcesBlock = <section className="context-block"><h2>{FEATURES.candidates ? "Candidate files" : "Career sources"}</h2><p>{FEATURES.candidates ? "Checked files are what Agy may use for this candidate." : "Checked files are what Agy reads as facts about you. Structured files are the strongest evidence."}</p><ContextAdder onAdd={(kind, paths) => void addContextFiles(kind, paths)} onReveal={() => void window.sensei.files.reveal("context").catch(() => undefined)} /><div className="context-tree">{tree.length ? tree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedCareerPaths} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No career context folders found.</p>}</div></section>;
   const contextResumesBlock = <section className="context-block"><h2>Resumes</h2><ResumeSources settings={resumeSettings} selectedPath={selectedPath} onSelect={selectFile} onChoose={chooseResume} onRemoveSecondary={removeSecondary} /></section>;
   const recruiterNotesBlock = FEATURES.candidates ? <RecruiterNotes name={candidateProfile?.identity.fullName ?? null} onSaved={(path) => void checkContextPath(path)} /> : null;
   return <main className={`shell ${leftPanelOpen ? "" : "is-sidebar-closed"}`} style={shellStyle}>
+    {leftPanelOpen && <div className="panel-resizer sidebar-resizer" role="separator" aria-label="Resize sidebar" aria-orientation="vertical" aria-valuemin={LEFT_PANEL_MIN} aria-valuemax={panelMaximum("left")} aria-valuenow={leftPanelWidth} tabIndex={0} onPointerDown={(event) => beginPanelResize("left", event)} onKeyDown={(event) => resizePanelWithKeyboard("left", event)} onDoubleClick={() => setLeftPanelWidth(236)} title="Drag to resize; double-click to reset" />}
     <nav className="app-sidebar" aria-label="Main" aria-hidden={!leftPanelOpen}>
       <button className="wordmark" aria-label={`${EDITION.productName}: all jobs`} onClick={showJobsHome}><span className="wordmark-mark" aria-hidden="true">S</span><span className="wordmark-name">Sensei{EDITION.subtitle && <small className="wordmark-edition">{EDITION.subtitle}</small>}</span></button>
       {FEATURES.candidates && candidates && <>
         {/* Recruiter Edition (plan Q1): the recruiter's own pages, then the open candidate's workspace. */}
         <h2 className="side-group-title">Recruiter</h2>
         <ul className="side-nav">
-          <li><button onClick={() => void window.sensei.candidates.showAll().then(() => window.location.reload())}><NavIcon name="people" />Candidates<span className="side-count">{candidates.candidates.filter((candidate) => candidate.status !== "archived").length}</span></button></li>
-          <li><button aria-current={activePage === "pipeline-home" ? "page" : undefined} onClick={() => showPage("pipeline-home")}><NavIcon name="pipeline" />Pipeline</button></li>
-          <li><button aria-current={activePage === "postings-home" ? "page" : undefined} onClick={() => showPage("postings-home")}><NavIcon name="jobs" />Postings</button></li>
-          <li><button aria-current={activePage === "reports-home" ? "page" : undefined} onClick={() => showPage("reports-home")}><NavIcon name="today" />Reports</button></li>
+          <li><button onClick={() => void window.sensei.candidates.showAll().then(() => window.location.reload())}><NavIcon name="people" /><span className="side-label">Candidates</span><span className="side-count">{candidates.candidates.filter((candidate) => candidate.status !== "archived").length}</span></button></li>
+          <li><button aria-current={activePage === "pipeline-home" ? "page" : undefined} onClick={() => showPage("pipeline-home")}><NavIcon name="pipeline" /><span className="side-label">Pipeline</span></button></li>
+          <li><button aria-current={activePage === "postings-home" ? "page" : undefined} onClick={() => showPage("postings-home")}><NavIcon name="jobs" /><span className="side-label">Postings</span></button></li>
+          <li><button aria-current={activePage === "reports-home" ? "page" : undefined} onClick={() => showPage("reports-home")}><NavIcon name="today" /><span className="side-label">Reports</span></button></li>
         </ul>
         <CandidateSwitcher state={candidates} />
       </>}
       <ul className="side-nav">
-        {FEATURES.today && <li><button aria-current={activePage === "today-home" ? "page" : undefined} onClick={() => showPage("today-home")}><NavIcon name="today" />Today</button></li>}
-        <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" />Jobs{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
-        {FEATURES.jobSearch && <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" />Job Search{searchStatus.running ? <span className="side-due" title={searchProgressText(searchStatus)}>Searching…</span> : searchNew > 0 && <span className="side-count" title={`${searchNew} new match${searchNew === 1 ? "" : "es"}`}>{searchNew}</span>}</button></li>}
-        {FEATURES.interviews && <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" />Interviews{activeInterviewCount > 0 && <span className="side-count" title={`${activeInterviewCount} active interview process${activeInterviewCount === 1 ? "" : "es"}`}>{activeInterviewCount}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>}
+        {FEATURES.today && <li><button aria-current={activePage === "today-home" ? "page" : undefined} onClick={() => showPage("today-home")}><NavIcon name="today" /><span className="side-label">Today</span></button></li>}
+        <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" /><span className="side-label">Jobs</span>{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
+        {FEATURES.jobSearch && <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" /><span className="side-label">Job Search</span>{searchStatus.running ? <span className="side-due" title={searchProgressText(searchStatus)}>Searching…</span> : searchNew > 0 && <span className="side-count" title={`${searchNew} new match${searchNew === 1 ? "" : "es"}`}>{searchNew}</span>}</button></li>}
+        {FEATURES.interviews && <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" /><span className="side-label">Interviews</span>{activeInterviewCount > 0 && <span className="side-count" title={`${activeInterviewCount} active interview process${activeInterviewCount === 1 ? "" : "es"}`}>{activeInterviewCount}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>}
         <li><button aria-current={activePage === "setup-home" ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />{FEATURES.candidates ? "Profile" : "Setup"}{readiness && (FEATURES.candidates ? <span className={readiness.ready ? "side-count" : "side-due"}>{readiness.ready ? "Ready" : "Needs a resume"}</span> : <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>)}</button></li>
-        {!FEATURES.candidates && <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" />Career context{FEATURES.nudges && newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>}
+        {!FEATURES.candidates && <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" /><span className="side-label">Career context</span>{FEATURES.nudges && newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>}
       </ul>
       {!FEATURES.candidates && recentJobs.length > 0 && <section className="side-recent" aria-labelledby="side-recent-title">
         <h2 id="side-recent-title">Recent jobs</h2>
         <ul>{recentJobs.map((job) => <li key={job.id}><button aria-current={activePage === "job" && viewedJobId === job.id ? "page" : undefined} onClick={() => openJob(job.id)}><strong>{job.company ?? displayJobName(job.name)}</strong><small>{job.title ?? "Role not recorded"}</small></button></li>)}</ul>
       </section>}
       <div className="side-foot">
-        <button aria-current={activePage === "docs-home" ? "page" : undefined} onClick={() => showPage("docs-home")}><NavIcon name="docs" />Docs</button>
-        <button onClick={() => setSettingsModalOpen(true)} disabled={!configured}><NavIcon name="settings" />Settings</button>
+        <button aria-current={activePage === "docs-home" ? "page" : undefined} onClick={() => showPage("docs-home")}><NavIcon name="docs" /><span className="side-label">Docs</span></button>
+        <button onClick={() => setSettingsModalOpen(true)} disabled={!configured}><NavIcon name="settings" /><span className="side-label">Settings</span></button>
       </div>
     </nav>
     <div className="shell-main">
