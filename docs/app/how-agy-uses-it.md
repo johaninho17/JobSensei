@@ -57,6 +57,42 @@ Each requirement from the posting is rated against your records: met, close, lea
 **It does:** puts each answer into the record it belongs to (your current job, an earlier one, education, or interview stories), keeping your exact limits. Drafts then use it from there.
 <!-- /feature -->
 
+## What runs in the background
+
+These run without the Agy panel open, and keep going when you switch pages. The ones that use Agy count against your Agy quota; the rest are the app's own work and cost nothing.
+
+<!-- feature:!candidates -->
+| What | When it runs | Uses Agy |
+|---|---|---|
+| Application drafts | Each job you add, one at a time, when it reaches the front of the queue. "Run automatically" pauses the queue | Yes, in the Agy panel's conversation |
+<!-- /feature -->
+<!-- feature:candidates -->
+| What | When it runs | Uses Agy |
+|---|---|---|
+| Application drafts | Each job in a candidate's queue, one at a time. When the open candidate's queue is done, the app opens the next candidate with jobs waiting | Yes, in that candidate's own conversation |
+<!-- /feature -->
+<!-- feature:applicationQuestions -->
+| Written application questions | Right after an application run starts, for Greenhouse, Ashby, and Lever postings | Yes, a separate background conversation per job |
+<!-- /feature -->
+<!-- feature:jobSearch -->
+| Job search | Run now, or once a day on your schedule: the first time the computer is on after your set time. Missed while the app was closed, it runs when the app opens or the computer wakes | Yes, for one search of up to five web searches (your schedule can skip Agy on some days); reading companies' job lists doesn't |
+| Watched companies | With every search, and alone with Check watched companies | No |
+| Light rating | After a search, up to 10 of the best new matches in one call; or Rate with Agy | Yes, one call |
+<!-- /feature -->
+<!-- feature:today -->
+| Filing your Today answers | About a minute after you answer, when the app opens with answers waiting, and after the morning search | Yes, one call for all waiting answers |
+| Closed postings | Once a day: when Today opens and after the morning search | No |
+| Morning summary | After a scheduled search | No |
+<!-- /feature -->
+<!-- feature:contentRefresh -->
+| Interview content update | Only when you press Update from new recordings | Yes |
+<!-- /feature -->
+<!-- feature:interviews -->
+| Interview prep | Only when you ask for a round | Yes |
+<!-- /feature -->
+
+Nothing here sends your files anywhere except to Agy for the task named, and each task gets only what it needs (see the sections above).
+
 ## What never uses Agy
 
 <!-- feature:!candidates -->
