@@ -1536,6 +1536,8 @@ export interface SenseiApi {
     stop(): Promise<void>;
     /** Agy page → Memory: Agy's memory items in this workspace's Agy home, newest first. */
     memory(): Promise<Array<{ id: string; bytes: number; updatedAt: string }>>;
+    /** The models Agy offers (`agy models`), for Agy → Behavior; empty when Agy isn't installed or the list fails. */
+    models(): Promise<Array<{ id: string; name: string }>>;
     /** Stops Agy, deletes the chosen memory items (or all), starts Agy again; returns the list after. */
     deleteMemory(ids: string[] | "all"): Promise<Array<{ id: string; bytes: number; updatedAt: string }>>;
     /** Agy page → Conversations: this workspace's past conversations, newest first. */

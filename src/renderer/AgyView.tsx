@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { AgyActivity } from "../shared/schemas";
 import howAgy from "../../docs/app/how-agy-uses-it.md?raw";
 import { AGY_ACTION_GROUPS, buildAgyActions, type AgyAction, type AgyActionContext } from "../shared/agy-actions";
-import { CONNECTED, DEFAULT_AGY_BEHAVIOR, FRAMING_FLOOR, FRAMING_LABELS, FRAMING_STOPS, type FramingStop, SETTINGS_BANDS, agyBehaviorSchema, bandFor, effectiveBehavior, settingScore, type AgyBehavior, type BehaviorSetting } from "../shared/agy-behavior";
+import { AGY_EFFORTS, CONNECTED, DEFAULT_AGY_BEHAVIOR, type AgyModelChoice, FRAMING_FLOOR, FRAMING_LABELS, FRAMING_STOPS, type FramingStop, SETTINGS_BANDS, agyBehaviorSchema, bandFor, effectiveBehavior, settingScore, type AgyBehavior, type BehaviorSetting } from "../shared/agy-behavior";
 import { AgyMemory } from "./AgyMemory";
 import { AgyConversations } from "./AgyConversations";
 import { markdownHtml } from "./markdown";
@@ -38,6 +38,9 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
   const valid = parsedDraft.success;
   const changed = JSON.stringify(draft) !== JSON.stringify(saved);
   const weightTotal = Object.values(draft.fit.weights).reduce((sum, value) => sum + value, 0);
+  const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => { void window.sensei.terminal.models?.().then(setModels, () => setModels([])); }, []);
+  const setModel = (kind: "panel" | "background", patch: Partial<AgyModelChoice>) => { setDraft((current) => ({ ...current, models: { ...current.models, [kind]: { ...current.models[kind], ...patch } } })); setState("idle"); };
   const setWeight = (key: keyof AgyBehavior["fit"]["weights"], value: number) => { setDraft((current) => ({ ...current, fit: { ...current.fit, weights: { ...current.fit.weights, [key]: Math.round(value) } } })); setState("idle"); };
   const setFit = (key: keyof AgyBehavior["fit"], value: number) => { setDraft((current) => ({ ...current, fit: { ...current.fit, [key]: value } })); setState("idle"); };
   const save = async (next: AgyBehavior) => {
@@ -83,6 +86,25 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
         <small id={`rank-${slider.key}`} className="muted">{slider.help}</small>
       </label>)}
     </section>}
+    <section className="behavior-weights" aria-labelledby="behavior-models-title">
+      <h2 id="behavior-models-title">Model and effort</h2>
+      <p className="muted">Which model Agy uses and how hard it thinks. Higher effort is more careful and uses more quota. The panel's choice applies the next time Agy starts (Restart in the Agy panel); background runs use theirs from the next run.</p>
+      {(["panel", "background"] as const).map((kind) => <div key={kind} className="behavior-fields">
+        <label className="behavior-field"><span>{kind === "panel" ? "Agy panel: applications, interview prep" : "Background: job search, ratings, written answers"}</span>
+          <select value={draft.models[kind].model ?? ""} onChange={(event) => setModel(kind, { model: event.target.value || null })}>
+            <option value="">Agy's default model</option>
+            {[...new Set([...(draft.models[kind].model ? [draft.models[kind].model!] : []), ...models.map((model) => model.id)])].map((id) => <option key={id} value={id}>{models.find((model) => model.id === id)?.name ?? id}</option>)}
+          </select>
+        </label>
+        <label className="behavior-field"><span>Effort</span>
+          <select value={draft.models[kind].effort ?? ""} onChange={(event) => setModel(kind, { effort: (event.target.value || null) as AgyModelChoice["effort"] })}>
+            <option value="">Default</option>
+            {AGY_EFFORTS.map((effort) => <option key={effort} value={effort}>{effort}</option>)}
+          </select>
+        </label>
+      </div>)}
+      {!models.length && <p className="muted">Agy's model list isn't available right now, so only "Agy's default" and a model you already chose are shown.</p>}
+    </section>
     <div className="behavior-actions">
       <button className="btn-primary" disabled={!changed || !valid || state === "saving"} onClick={() => void save(draft)}>{state === "saving" ? "Saving…" : "Save settings"}</button>
       <button className="btn-quiet" disabled={state === "saving" || JSON.stringify(draft) === JSON.stringify(DEFAULT_AGY_BEHAVIOR)} onClick={() => { setDraft(DEFAULT_AGY_BEHAVIOR); void save(DEFAULT_AGY_BEHAVIOR); }}>Back to the app's defaults</button>
