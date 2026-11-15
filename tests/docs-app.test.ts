@@ -42,4 +42,24 @@ describe("in-app docs", () => {
     const commands = read("agy-commands");
     for (const command of ["/help", "/model", "/effort", "/usage", "/config", "/skills", "/permissions"]) expect(commands).toContain(`\`${command}\``);
   });
+
+  // #40: what runs without the Agy panel, owned by how-agy-uses-it.md and shown per edition.
+  it("lists background processes per edition, as one unbroken table, with one owner", () => {
+    const table = (text: string) => {
+      const section = text.slice(text.indexOf("## What runs in the background"), text.indexOf("## What never uses Agy"));
+      return section.split("\n").filter((line) => line.startsWith("|"));
+    };
+    const solo = featureText(featuresFor("solo"), read("how-agy-uses-it"));
+    const recruiter = featureText(featuresFor("recruiter"), read("how-agy-uses-it"));
+    const soloRows = table(solo).slice(2).map((line) => line.split("|")[1]!.trim());
+    expect(soloRows).toEqual(["Application drafts", "Written application questions", "Job search", "Watched companies", "Light rating", "Filing your Today answers", "Closed postings", "Morning summary", "Interview content update", "Interview prep"]);
+    expect(table(recruiter).slice(2).map((line) => line.split("|")[1]!.trim())).toEqual(["Application drafts"]);
+    expect(recruiter).toContain("the app opens the next candidate with jobs waiting");
+    // The rows follow the header with no gap, so Markdown draws one table in both editions.
+    for (const text of [solo, recruiter]) {
+      const section = text.slice(text.indexOf("| What |"), text.indexOf("Nothing here sends"));
+      expect(section.trim().split("\n").every((line) => line.startsWith("|"))).toBe(true);
+    }
+    expect(readFileSync("PRODUCT_FLOWS.md", "utf8")).not.toContain("| Light rating");
+  });
 });
