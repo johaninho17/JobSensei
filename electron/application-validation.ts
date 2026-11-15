@@ -584,9 +584,11 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
         });
       }
       const tailoring = resumeTailoringSimilarity(loaded.resumeMarkdown, loaded.snapshot.canonicalResume, loaded.evidence);
-      const minBulletChanges = Math.min(2, Math.max(1, Math.ceil((tailoring.editableLineCount - 4) * 0.15)));
+      // The floor follows the user's "Resume lines reworked" setting (#38): fewer lines asked for, fewer required.
+      const linesAsked = loaded.snapshot.settingsScore?.behavior.linesReworked ?? 4;
+      const minBulletChanges = Math.min(linesAsked, 2, Math.max(1, Math.ceil((tailoring.editableLineCount - 4) * 0.15)));
       if (
-        tailoring.substantiveMappedChangeCount < 3
+        tailoring.substantiveMappedChangeCount < Math.min(3, linesAsked + 1)
         || tailoring.substantiveMappedBulletChangeCount < minBulletChanges
         || tailoring.nearIdenticalRatio >= 0.88
         || tailoring.nearIdenticalBulletRatio >= 0.88
@@ -596,7 +598,7 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
           loaded.resumeName,
           "skillsAndExperience",
           `The editable resume contains ${tailoring.substantiveMappedChangeCount} substantive evidence-mapped changes (${tailoring.substantiveMappedBulletChangeCount} experience bullets) and ${tailoring.nearIdenticalLineCount} of ${tailoring.editableLineCount} lines remain near-identical to the canonical baseline (${Math.round(tailoring.nearIdenticalRatio * 100)}% of lines, ${Math.round(tailoring.nearIdenticalBulletRatio * 100)}% of bullets).`,
-          "In the next explicit run, rework the 3-4 current-employer bullets most relevant to this job and curate the skills lines from selected evidence; keep earlier roles unchanged.",
+          `In the next explicit run, rework ${linesAsked === 4 ? "the 3-4" : `up to ${linesAsked}`} current-employer bullets most relevant to this job and curate the skills lines from selected evidence; keep earlier roles unchanged.`,
           "warning",
         ));
       }

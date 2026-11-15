@@ -16,7 +16,7 @@ const SETTING_ROWS: Array<{ id: BehaviorSetting; title: string; value: (behavior
   { id: "framing", title: "How far wording may reach", value: (behavior) => FRAMING_LABELS[behavior.framing], help: "Real work worded at its strongest; never an event, number, tool, or ownership that didn't happen." },
   { id: "fit-credit", title: "Credit for partial matches", value: (behavior) => `strong ${behavior.fit.strong}, adjacent ${behavior.fit.adjacent}, unclear ${behavior.fit.unclear} (a direct match is 1)`, help: "How much a transferable or unclear match counts toward the fit score." },
   { id: "fit-gate", title: "Fit needed to apply", value: (behavior) => `${behavior.fit.gate} of 5`, help: "Jobs at or above this fit are marked worth applying to." },
-  { id: "lines-reworked", title: "Resume lines reworked", value: (behavior) => behavior.linesReworked >= 4 ? "3–4 of the current role's lines" : `up to ${behavior.linesReworked}`, help: "How many of the current role's base-resume bullets are rewritten for a job; the rest stay as written." },
+  { id: "lines-reworked", title: "Resume lines reworked", value: (behavior) => behavior.linesReworked === 4 ? "3–4 of the current role's lines" : behavior.linesReworked === 0 ? "None: bullets stay as written, skills lines are tailored" : `Up to ${behavior.linesReworked} of the current role's lines`, help: "How many of the current role's base-resume bullets are rewritten for a job; the rest stay as written." },
 ];
 
 /** A number box for one fit setting; out-of-range values are clamped on save by the schema. */
@@ -45,6 +45,7 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
       <NumberField label="Unclear" value={draft.fit.unclear} min={0} max={1} step={0.05} onChange={(value) => setFit("unclear", value)} />
     </div>,
     "fit-gate": <div className="behavior-fields"><NumberField label="Fit needed (of 5)" value={draft.fit.gate} min={1} max={5} step={0.1} onChange={(value) => setFit("gate", value)} /></div>,
+    "lines-reworked": <div className="behavior-fields"><NumberField label="Lines (4 = today's 3–4)" value={draft.linesReworked} min={0} max={12} step={1} onChange={(value) => { setDraft((current) => ({ ...current, linesReworked: Math.round(value) })); setState("idle"); }} /></div>,
   };
   return <>
     <p className={`settings-score-big is-${score.band}`}><strong className="tabular">{score.score}</strong> of 100 · {band.label}</p>

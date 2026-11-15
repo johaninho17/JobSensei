@@ -57,10 +57,23 @@ describe("fit settings (#37)", () => {
   });
 
   it("lets the user change credit and gate, and nothing else yet", () => {
-    expect([...CONNECTED].sort()).toEqual(["fit-credit", "fit-gate"]);
+    expect([...CONNECTED].sort()).toEqual(["fit-credit", "fit-gate", "lines-reworked"]);
     const effective = effectiveBehavior({ framing: "beyond", fit: { strong: 0.9, gate: 2.5 }, linesReworked: 8 });
     expect(effective.fit).toMatchObject({ strong: 0.9, gate: 2.5 });
     expect(effective.framing).toBe("framed");
-    expect(effective.linesReworked).toBe(4);
+    expect(effective.linesReworked).toBe(8);
+  });
+});
+
+describe("resume lines reworked (#38)", () => {
+  it("tells Agy how many current-role bullets to rewrite, from the user's setting", async () => {
+    const { bulletPlanLine } = await import("../electron/evidence-snapshot");
+    const plan = (rewriteUpTo: number) => ({ employerTargets: [{ employer: "Northstar Labs", baseBullets: 6, maxBullets: 6, rewriteUpTo }, { employer: "Acme Corp", baseBullets: 3, maxBullets: 3, rewriteUpTo: 0 }] }) as never;
+    expect(bulletPlanLine(plan(4))).toContain("rewrite 3–4 of them");
+    expect(bulletPlanLine(plan(6))).toContain("rewrite up to 6 of them");
+    expect(bulletPlanLine(plan(2))).toContain("rewrite up to 2 of them");
+    const none = bulletPlanLine(plan(0));
+    expect(none).toContain("keep every Northstar Labs bullet as written");
+    expect(none).toContain("Acme Corp: leave out of the bundle");
   });
 });

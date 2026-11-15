@@ -37,7 +37,7 @@ export const DEFAULT_AGY_BEHAVIOR: AgyBehavior = agyBehaviorSchema.parse({});
 
 export type BehaviorSetting = "framing" | "fit-credit" | "fit-gate" | "lines-reworked";
 /** Settings whose profile value already reaches Agy. Each issue that connects one adds it here. */
-export const CONNECTED: ReadonlySet<BehaviorSetting> = new Set<BehaviorSetting>(["fit-credit", "fit-gate"]);
+export const CONNECTED: ReadonlySet<BehaviorSetting> = new Set<BehaviorSetting>(["fit-credit", "fit-gate", "lines-reworked"]);
 
 /** What the app does now: the profile's value for connected settings, the fixed rule for the rest. */
 export function effectiveBehavior(saved?: unknown): AgyBehavior {
