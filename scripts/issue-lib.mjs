@@ -41,22 +41,29 @@ export function issueBody({ features, dependsOn = [], blocks = [], correlates = 
 export function indexMarkdown(issues) {
   const names = (issue) => issue.labels.map((label) => label.name);
   const open = issues.filter((issue) => issue.state === "OPEN").sort((a, b) => a.number - b.number);
+  // Issues labeled `future` are decided for later: listed last, never under a priority.
+  const isFuture = (issue) => names(issue).includes("future");
+  const now = open.filter((issue) => !isFuture(issue));
   const lines = [
     "# Open issues",
     "",
     "Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; change the issue on GitHub and regenerate.",
     "",
   ];
-  for (const priority of [...PRIORITIES, null]) {
-    const group = open.filter((issue) => (priority ? names(issue).includes(priority) : !names(issue).some((name) => PRIORITIES.includes(name))));
-    if (!group.length) continue;
-    lines.push(`## ${priority ?? "No priority"}`, "", "| # | Issue | Features | Blocked |", "|---|---|---|---|");
+  const table = (title, group) => {
+    lines.push(`## ${title}`, "", "| # | Issue | Features | Blocked |", "|---|---|---|---|");
     for (const issue of group) {
       const features = names(issue).filter((name) => name.startsWith("FEAT-")).sort().join(", ") || "—";
       lines.push(`| #${issue.number} | ${issue.title.replace(/\|/g, "\\|")} | ${features} | ${names(issue).includes("status:blocked") ? "yes" : ""} |`);
     }
     lines.push("");
+  };
+  for (const priority of [...PRIORITIES, null]) {
+    const group = now.filter((issue) => (priority ? names(issue).includes(priority) : !names(issue).some((name) => PRIORITIES.includes(name))));
+    if (group.length) table(priority ?? "No priority", group);
   }
-  lines.push(`${open.length} open.`, "");
+  const later = open.filter(isFuture);
+  if (later.length) table("Later (future)", later);
+  lines.push(`${open.length} open, ${later.length} of them for later.`, "");
   return lines.join("\n");
 }
