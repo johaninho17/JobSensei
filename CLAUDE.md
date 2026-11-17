@@ -39,7 +39,7 @@ Commands: `npm run typecheck`, `npm test`, `npm run build`, `npm run dev`. Set `
 
 ## How we work
 
-1. **Check the decisions ledger first.** `dev-notes/decisions.md` (private; loaded via `CLAUDE.local.md` when present) records every product decision and where it is enforced. If a requested change conflicts with an entry, say so before making it. Add new decisions in the same session.
+1. **Check the decisions ledger first.** `dev-notes/decisions.md` (private) records every product decision and where it is enforced; `CLAUDE.local.md` loads only its short index. Read just the rows whose IDs touch the change, never the whole file. If a requested change conflicts with an entry, say so before making it. Add new decisions in the same session.
 2. **"Eval only" means no edits.** Read, diagnose, and report.
 3. **Plan, then wait.** For anything beyond a small fix, propose the plan and wait for an explicit go-ahead.
 4. **One rule, one owner.** Before changing a behavior, find every copy of it: `AGENTS.md`, `.agents/rules`, skill files, skill references, snapshot instructions and briefs in `electron/evidence-snapshot.ts`, validator messages, `PRODUCT_FLOWS.md`, and the profile schema. Keep exactly one owner and delete or point the rest to it. Never leave an old version beside a new one; that is how this project regresses.
