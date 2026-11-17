@@ -1,5 +1,7 @@
 // Learnings across jobs, from structured data only: recorded interviews and outcomes (tracker), fit and gap terms
 // (job record), and posting facts (role). Prep files never count as an interview here. Pure, so it is tested.
+import { SETTINGS_BANDS } from "./agy-behavior";
+import { settingsBandOf } from "./job-organize";
 import type { InterviewRoundKind, JobFolderSummary } from "./schemas";
 import { effectiveStatus } from "./tracker";
 
@@ -17,6 +19,8 @@ export type Learnings = {
   fitByStage: Array<{ stage: FunnelStage | "none"; jobs: number; averageFit: number | null }>;
   /** Interview rate by work mode and by level. */
   bySetup: Array<{ label: string; applied: number; interviewed: number }>;
+  /** Interview rate by the settings band the drafts were made under (#88); applied jobs with drafts only. */
+  bySettings: Array<{ band: string; label: string; applied: number; interviewed: number }>;
   /** Median posted pay (yearly) for jobs with and without interviews. */
   pay: { interviewed: number | null; notInterviewed: number | null };
   /** Gap terms most common among applications that got no interview, with how often they appear in interviewed ones. */
@@ -93,6 +97,7 @@ export function computeLearnings(jobs: JobFolderSummary[]): Learnings {
     funnel,
     fitByStage,
     bySetup,
+    bySettings: SETTINGS_BANDS.map((band) => { const group = applied.filter((job) => settingsBandOf(job) === band.band); return { band: band.band, label: band.label, applied: group.length, interviewed: group.filter((job) => stageOf.get(job.id)).length }; }).filter((row) => row.applied > 0),
     pay: { interviewed: median(interviewed.map(yearlyPay).filter((value): value is number => value !== null)), notInterviewed: median(notInterviewed.map(yearlyPay).filter((value): value is number => value !== null)) },
     gapTerms,
     reasons,

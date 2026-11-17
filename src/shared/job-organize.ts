@@ -3,6 +3,7 @@
 import { z } from "zod";
 import type { JobFolderSummary } from "./schemas";
 import { effectiveStatus, reachedInterview } from "./tracker";
+import { SETTINGS_BANDS, bandFor, jobSettingsScore, type SettingsBand } from "./agy-behavior";
 
 export const WORK_MODES = ["remote", "hybrid", "onsite", "unknown"] as const;
 export const FIT_BANDS = ["high", "mid", "low", "unrated"] as const;
@@ -10,6 +11,9 @@ export const GROUPINGS = ["none", "company", "role", "status", "work"] as const;
 export type WorkMode = (typeof WORK_MODES)[number];
 export type FitBand = (typeof FIT_BANDS)[number];
 export type Grouping = (typeof GROUPINGS)[number];
+/** The settings band a job's drafts were made under (#88); "none" when it has no drafts. */
+export const JOB_SETTINGS_BANDS = [...SETTINGS_BANDS.map((band) => band.band), "none"] as const;
+export type JobSettingsBand = SettingsBand | "none";
 
 export const jobFacetsSchema = z.object({
   company: z.string().nullable().default(null),
@@ -18,9 +22,11 @@ export const jobFacetsSchema = z.object({
   /** "yes": reached an interview; "no": did not. */
   interview: z.enum(["any", "yes", "no"]).default("any"),
   tags: z.array(z.string()).default([]),
+  /** Settings band the drafts were made under (#88). */
+  settings: z.array(z.enum(["strict", "careful", "balanced", "bold", "none"])).default([]),
 });
 export type JobFacets = z.infer<typeof jobFacetsSchema>;
-export const NO_FACETS: JobFacets = { company: null, work: [], fit: [], interview: "any", tags: [] };
+export const NO_FACETS: JobFacets = { company: null, work: [], fit: [], interview: "any", tags: [], settings: [] };
 
 /** A named combination the user saved: status tab, search text, filters, grouping, and sort. */
 export const jobViewSchema = z.object({
@@ -42,6 +48,13 @@ export const workModeOf = (job: Pick<JobFolderSummary, "role">): WorkMode => job
 export function fitBandOf(job: Pick<JobFolderSummary, "rating">): FitBand {
   if (job.rating === null || job.rating === undefined) return "unrated";
   return job.rating >= 4 ? "high" : job.rating >= 3 ? "mid" : "low";
+}
+
+/** The band of the settings a job's drafts were made under: its stamped score, or today's default rules for drafts made
+ * before scores were stamped (they followed those rules); "none" for a job without drafts (#88). */
+export function settingsBandOf(job: Pick<JobFolderSummary, "settingsScore" | "hasApplicationMaterials">): JobSettingsBand {
+  if (!job.settingsScore && !job.hasApplicationMaterials) return "none";
+  return bandFor(jobSettingsScore(job.settingsScore).score).band;
 }
 
 /** Tags as the user typed them, trimmed, without a leading #, no repeats (case-insensitive), at most 12. */
@@ -69,6 +82,7 @@ export function matchesFacets(job: JobFolderSummary, facets: JobFacets): boolean
   if (facets.work.length && !facets.work.includes(workModeOf(job))) return false;
   if (facets.fit.length && !facets.fit.includes(fitBandOf(job))) return false;
   if (facets.interview !== "any" && reachedInterview(job) !== (facets.interview === "yes")) return false;
+  if (facets.settings?.length && !facets.settings.includes(settingsBandOf(job))) return false;
   if (facets.tags.length) {
     const own = new Set((job.tracker?.tags ?? []).map((tag) => tag.toLowerCase()));
     if (!facets.tags.every((tag) => own.has(tag.toLowerCase()))) return false;
@@ -76,23 +90,25 @@ export function matchesFacets(job: JobFolderSummary, facets: JobFacets): boolean
   return true;
 }
 
-export const facetsActive = (facets: JobFacets) => Number(Boolean(facets.company)) + facets.work.length + facets.fit.length + Number(facets.interview !== "any") + facets.tags.length;
+export const facetsActive = (facets: JobFacets) => Number(Boolean(facets.company)) + facets.work.length + facets.fit.length + Number(facets.interview !== "any") + facets.tags.length + (facets.settings?.length ?? 0);
 
 /** What the filter menus offer: each choice with how many jobs have it. */
-export function facetOptions(jobs: JobFolderSummary[]): { companies: Array<{ name: string; count: number }>; tags: Array<{ name: string; count: number }>; work: Record<WorkMode, number>; fit: Record<FitBand, number> } {
+export function facetOptions(jobs: JobFolderSummary[]): { companies: Array<{ name: string; count: number }>; tags: Array<{ name: string; count: number }>; work: Record<WorkMode, number>; fit: Record<FitBand, number>; settings: Record<JobSettingsBand, number> } {
   const companies = new Map<string, { name: string; count: number }>();
   const tags = new Map<string, { name: string; count: number }>();
   const work = { remote: 0, hybrid: 0, onsite: 0, unknown: 0 };
   const fit = { high: 0, mid: 0, low: 0, unrated: 0 };
+  const settings: Record<JobSettingsBand, number> = { strict: 0, careful: 0, balanced: 0, bold: 0, none: 0 };
   for (const job of jobs) {
     const key = companyKey(companyOf(job));
     companies.set(key, { name: companies.get(key)?.name ?? companyOf(job), count: (companies.get(key)?.count ?? 0) + 1 });
     for (const tag of job.tracker?.tags ?? []) tags.set(tag.toLowerCase(), { name: tags.get(tag.toLowerCase())?.name ?? tag, count: (tags.get(tag.toLowerCase())?.count ?? 0) + 1 });
     work[workModeOf(job)] += 1;
     fit[fitBandOf(job)] += 1;
+    settings[settingsBandOf(job)] += 1;
   }
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
-  return { companies: [...companies.values()].sort(byName), tags: [...tags.values()].sort(byName), work, fit };
+  return { companies: [...companies.values()].sort(byName), tags: [...tags.values()].sort(byName), work, fit, settings };
 }
 
 const STATUS_LABEL: Record<string, string> = { saved: "Saved", applied: "Applied", interviewing: "Interviewing", offer: "Offer", rejected: "Rejected", withdrawn: "Withdrawn" };
@@ -157,4 +173,9 @@ export function findDuplicateJob(jobs: JobFolderSummary[], incoming: { url?: str
 export function countWithin<J, F extends string>(jobs: J[], inView: (job: J) => boolean, filters: F[], matches: (job: J, filter: F) => boolean): Record<F, number> {
   const shown = jobs.filter(inView);
   return Object.fromEntries(filters.map((filter) => [filter, shown.filter((job) => matches(job, filter)).length])) as Record<F, number>;
+}
+
+/** Sort key for "Settings score": the stamped score; jobs without drafts last (#88). */
+export function settingsSortKey(job: Pick<JobFolderSummary, "settingsScore" | "hasApplicationMaterials">): number {
+  return settingsBandOf(job) === "none" ? -1 : jobSettingsScore(job.settingsScore).score;
 }

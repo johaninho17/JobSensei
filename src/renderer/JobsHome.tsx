@@ -9,7 +9,7 @@ import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, readyT
 import { type Readiness } from "../shared/readiness";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { CompanyStrip, JobFilters, SavedViews, storeJobViews, storedJobViews } from "./JobOrganize";
-import { GROUPINGS, NO_FACETS, countWithin, groupJobs, matchesFacets, type Grouping, type JobFacets, type JobView } from "../shared/job-organize";
+import { GROUPINGS, NO_FACETS, countWithin, settingsSortKey, groupJobs, matchesFacets, type Grouping, type JobFacets, type JobView } from "../shared/job-organize";
 import { FitBadge, type JobWorkspaceTab, type QueueJob, TrackerPill, displayJobName, formatJobDate, formatTrackerDate, messageOf, plural, saveFavoriteJobIds, storedFavoriteJobIds } from "./app-shared";
 
 // CSV columns follow the edition: no follow-up or interview columns where those features are left out.
@@ -79,9 +79,9 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
   const [views, setViews] = useState<JobView[]>(storedJobViews);
   const [group, setGroup] = useState<Grouping>(() => { const stored = window.localStorage.getItem("sensei-jobs-group"); return GROUPINGS.includes(stored as Grouping) ? stored as Grouping : "none"; });
   useEffect(() => { window.localStorage.setItem("sensei-jobs-group", group); }, [group]);
-  const [sort, setSort] = useState<"added" | "company" | "role" | "follow-up" | "fit">(() => {
+  const [sort, setSort] = useState<"added" | "company" | "role" | "follow-up" | "fit" | "settings">(() => {
     const stored = window.localStorage.getItem("sensei-jobs-sort");
-    return ["added", "company", "role", "follow-up", "fit"].includes(stored ?? "") ? stored as "added" : "added";
+    return ["added", "company", "role", "follow-up", "fit", "settings"].includes(stored ?? "") ? stored as "added" : "added";
   });
   const [view, setView] = useState<JobsView>(() => {
     const stored = window.localStorage.getItem("sensei-jobs-view");
@@ -122,6 +122,7 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
         if (sort === "company") return text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
         if (sort === "role") return text(a.title, "").localeCompare(text(b.title, ""));
         if (sort === "fit") return (b.rating ?? -1) - (a.rating ?? -1);
+        if (sort === "settings") return settingsSortKey(b) - settingsSortKey(a);
         if (sort === "follow-up") return (followUpDays(a.tracker) ?? 9999) - (followUpDays(b.tracker) ?? 9999);
         return Date.parse(b.createdAt) - Date.parse(a.createdAt) || text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
       });
@@ -185,11 +186,11 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
     />
     <SubTabPanel idPrefix="jobs" value={tab}>
     <SavedViews views={views} current={{ tab, query, facets, group, sort }} onChange={(next) => { setViews(next); storeJobViews(next); }}
-      onApply={(saved) => { setStatusGroup(saved.tab); setQuery(saved.query); setFacets(saved.facets); setGroup(saved.group); if (["added", "company", "role", "follow-up", "fit"].includes(saved.sort)) setSort(saved.sort as typeof sort); setFilter("all"); }} />
+      onApply={(saved) => { setStatusGroup(saved.tab); setQuery(saved.query); setFacets(saved.facets); setGroup(saved.group); if (["added", "company", "role", "follow-up", "fit", "settings"].includes(saved.sort)) setSort(saved.sort as typeof sort); setFilter("all"); }} />
     <div className="jobs-toolbar">
       <label className="workspace-search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search jobs…" aria-label="Search jobs" /></label>
       {(["follow-up", "review", "favorites"] as JobsFilter[]).filter((value) => FEATURES.nudges || value !== "follow-up").filter((value) => filterCounts[value] > 0 || filter === value).map((value) => <button key={value} className="filter-toggle" aria-pressed={filter === value} onClick={() => setFilter(filter === value ? "all" : value)}>{filterLabels[value]}<span>{filterCounts[value]}</span></button>)}
-      <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option>{FEATURES.nudges && <option value="follow-up">Follow-up date</option>}<option value="fit">Best fit</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
+      <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option>{FEATURES.nudges && <option value="follow-up">Follow-up date</option>}<option value="fit">Best fit</option><option value="settings">Agy settings (boldest first)</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
       <JobFilters jobs={jobs.filter((job) => inTab(job, tab))} facets={facets} onChange={setFacets} />
       <label className="jobs-sort"><span>Group</span><select value={group} onChange={(event) => setGroup(event.target.value as Grouping)} aria-label="Group jobs"><option value="none">No groups</option><option value="company">Company</option><option value="role">Kind of role</option><option value="status">Status</option><option value="work">Work setup</option></select></label>
       <button className="filter-toggle" aria-pressed={selecting} title="Select several jobs to change their status at once (or Cmd/Ctrl-click a job)" onClick={() => selecting ? exitSelect() : setSelecting(true)}>{selecting ? "Done" : "Select"}</button>

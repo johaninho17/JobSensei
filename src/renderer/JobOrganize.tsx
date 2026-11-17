@@ -1,7 +1,8 @@
 // Jobs page organizing controls: filters, saved views, the company strip, and the tag editor.
 // The logic lives in src/shared/job-organize.ts; these only draw it.
 import { useState } from "react";
-import { FIT_BANDS, WORK_MODES, companySummary, facetOptions, facetsActive, jobViewsSchema, normalizeTags, NO_FACETS, type JobFacets, type JobView } from "../shared/job-organize";
+import { SETTINGS_BANDS } from "../shared/agy-behavior";
+import { FIT_BANDS, JOB_SETTINGS_BANDS, WORK_MODES, companySummary, facetOptions, facetsActive, jobViewsSchema, normalizeTags, NO_FACETS, type JobFacets, type JobView } from "../shared/job-organize";
 import type { JobFolderSummary } from "../shared/schemas";
 
 const VIEWS_KEY = "sensei-job-views";
@@ -12,6 +13,8 @@ export function storeJobViews(views: JobView[]) { try { window.localStorage.setI
 
 const WORK_LABEL = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site", unknown: "Not stated" } as const;
 const FIT_LABEL = { high: "4.0 and up", mid: "3.0 to 3.9", low: "Below 3.0", unrated: "Not rated" } as const;
+// Band names come from their owner, src/shared/agy-behavior.ts.
+const SETTINGS_LABEL: Record<string, string> = { ...Object.fromEntries(SETTINGS_BANDS.map((band) => [band.band, band.label])), none: "No drafts" };
 
 function toggle<T>(list: T[], value: T): T[] { return list.includes(value) ? list.filter((item) => item !== value) : [...list, value]; }
 
@@ -30,6 +33,7 @@ export function JobFilters({ jobs, facets, onChange }: { jobs: JobFolderSummary[
       </label>
       <div className="jobs-filter-row"><span>Work setup</span><div className="pill-group">{WORK_MODES.filter((mode) => options.work[mode] > 0 || facets.work.includes(mode)).map((mode) => <button key={mode} type="button" className="pill" aria-pressed={facets.work.includes(mode)} onClick={() => onChange({ ...facets, work: toggle(facets.work, mode) })}>{WORK_LABEL[mode]} <small>{options.work[mode]}</small></button>)}</div></div>
       <div className="jobs-filter-row"><span>Fit</span><div className="pill-group">{FIT_BANDS.filter((band) => options.fit[band] > 0 || facets.fit.includes(band)).map((band) => <button key={band} type="button" className="pill" aria-pressed={facets.fit.includes(band)} onClick={() => onChange({ ...facets, fit: toggle(facets.fit, band) })}>{FIT_LABEL[band]} <small>{options.fit[band]}</small></button>)}</div></div>
+      <div className="jobs-filter-row"><span>Agy settings</span><div className="pill-group">{JOB_SETTINGS_BANDS.filter((band) => options.settings[band] > 0 || (facets.settings ?? []).includes(band)).map((band) => <button key={band} type="button" className="pill" aria-pressed={(facets.settings ?? []).includes(band)} onClick={() => onChange({ ...facets, settings: toggle(facets.settings ?? [], band) })}>{SETTINGS_LABEL[band]} <small>{options.settings[band]}</small></button>)}</div></div>
       {FEATURES.interviews && <label className="jobs-filter-row"><span>Interview</span>
         <select value={facets.interview} onChange={(event) => onChange({ ...facets, interview: event.target.value as JobFacets["interview"] })}>
           <option value="any">Any</option><option value="yes">Went to interview</option><option value="no">No interview</option>
