@@ -168,7 +168,7 @@ See [Privacy](docs/privacy.md), [Workspace Format](docs/workspace-format.md), an
 
 - **Jobs page:** Filters (company, work setup, fit, went to interview, tags), Group (company, kind of role, status, work setup), and saved views that bring back a tab, search, filters, grouping, and sort in one click. Filtering to one company shows its summary (jobs by status, average fit, interviews, a link to its research and prep). Tags are added on a job's Overview under Tracking.
 - **Adding a job you already have** (same posting link, or same company and title) asks before adding it again.
-- **Your folders (Setup):** an optional tidy layout for the workspace folder with plain names. Preview first, apply, undo. Job folders and resumes are never moved. See `docs/workspace-format.md` § Folder layouts.
+- **Your folders (Setup):** a map of where each kind of file lives, named for the layout in use, and a quiet list of items at the top of the workspace that belong elsewhere, each with a suggested home (nothing is moved for you). Also an optional tidy layout for the workspace folder with plain names. Preview first, apply, undo. Job folders and resumes are never moved. See `docs/workspace-format.md` § Folder layouts.
 
 ## What runs in the background
 

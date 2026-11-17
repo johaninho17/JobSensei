@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, rmdir, stat } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
-import { LAYOUT_FILE, LAYOUT_V2_RULES, parseLayoutVersion } from "../src/shared/workspace-layout";
+import { LAYOUT_FILE, LAYOUT_V2_RULES, parseLayoutVersion, strayRootItems, type RootEntry } from "../src/shared/workspace-layout";
 import type { LayoutMove, LayoutPlan } from "../src/shared/schemas";
 import { forgetLayout } from "./layout";
 import { readJson, writeJsonAtomic } from "./persistence";
@@ -22,6 +22,12 @@ const disk = (root: string, path: string) => {
 };
 const kind = async (path: string) => { const info = await stat(path).catch(() => null); return !info ? null : info.isDirectory() ? "dir" : "file"; };
 const names = async (path: string) => (await readdir(path).catch(() => [] as string[])).filter((name) => name !== ".DS_Store").sort();
+
+/** The top of the workspace, one level, for spotting items that belong somewhere else. */
+async function rootEntries(root: string): Promise<RootEntry[]> {
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  return entries.filter((entry) => entry.isFile() || entry.isDirectory()).map((entry) => ({ name: entry.name, kind: entry.isDirectory() ? "dir" : "file" }));
+}
 
 async function filesUnder(root: string, folder: string): Promise<string[]> {
   const out: string[] = [];
@@ -67,7 +73,7 @@ export async function planMigration(workspacePath: string): Promise<MigrationPla
   const root = resolve(workspacePath);
   const log = await readJson<MigrationLog>(join(root, MIGRATION_LOG));
   const canUndo = Boolean(log?.done?.length);
-  if (await currentVersion(root) === 2) return { version: 2, moves: [], conflicts: [], notes: [], canUndo };
+  if (await currentVersion(root) === 2) return { version: 2, moves: [], conflicts: [], notes: [], canUndo, stray: strayRootItems(await rootEntries(root), 2) };
 
   const moves: LayoutMove[] = [];
   const notes: string[] = [];
@@ -130,7 +136,8 @@ export async function planMigration(workspacePath: string): Promise<MigrationPla
   const resumes = (await names(disk(root, "resumes"))).length;
   if (resumes > 6) notes.push(`resumes/ has ${resumes} files; they are not moved, because your profile points to them by name.`);
   notes.push("Job folders are not moved or renamed.");
-  return { version: 1, moves, conflicts, notes, canUndo };
+  const handled = new Set(moves.map((move) => move.from.split("/")[0]));
+  return { version: 1, moves, conflicts, notes, canUndo, stray: strayRootItems(await rootEntries(root), 1, handled) };
 }
 
 async function removeIfEmpty(root: string, folder: string): Promise<void> {
