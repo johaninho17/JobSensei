@@ -9,7 +9,7 @@ Apply risk-based verification across code, local data, AI behavior, and the visi
 
 ## Build the verification matrix
 
-1. Load `jobsensei-architecture` and check `dev-notes/decisions.md`.
+1. Load `jobsensei-architecture` and check the rows of `dev-notes/decisions.md` that touch the change (find them in its index).
 2. Inspect the actual diff and identify affected surfaces.
 3. Map each material risk to evidence that would catch it.
 4. Run the smallest decisive checks first, then broader regression checks.

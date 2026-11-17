@@ -32,7 +32,7 @@ Read the public output and `.sensei/application_bundle.json`. For each problem, 
 | Model variance | Instructions are clear and consistent, but the output still deviates |
 
 ## 4. Check the decision
-Look the behavior up in `dev-notes/decisions.md`. Report whether it is enforced, contradicted, or a gap.
+Look the behavior up in the decisions index, then read only its rows in `dev-notes/decisions.md`. Report whether it is enforced, contradicted, or a gap.
 
 ## 5. Report
 Give a short list: symptom → cause (file:line) → proposed fix at the owner → how a test would lock it. Don't fix until the user says go. Then follow `edit-agy-skill`.

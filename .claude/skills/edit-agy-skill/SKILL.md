@@ -8,7 +8,7 @@ description: Safe procedure for changing how Agy behaves in JobSensei. Covers AG
 Regressions in this project have come from rules being added beside old ones instead of replacing them. Follow these steps in order.
 
 ## 1. Check the decision
-Read `dev-notes/decisions.md` if present. If the change conflicts with a recorded decision, stop and ask. When the user decides something new, record it there with the date, then continue.
+Find the decisions that touch the change in the decisions index and read only those rows of `dev-notes/decisions.md`, if present. If the change conflicts with a recorded decision, stop and ask. When the user decides something new, record it there with the date, then continue.
 
 ## 2. Find every copy
 Start from `.claude/skills/jobsensei-architecture/references/rule-ownership-map.md`, then search for the behavior's key phrases:
