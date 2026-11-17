@@ -365,6 +365,23 @@ export const stretchScoreSchema = z.object({
 });
 export type StretchScore = z.infer<typeof stretchScoreSchema>;
 
+/** A line that reaches further than the framing setting, with what Revert would put back (#97). */
+export const framingLineSchema = z.object({
+  text: z.string(),
+  artifact: z.enum(["resume", "cover-letter"]),
+  level: z.number().int().min(0).max(3),
+  reason: z.string(),
+  /** The base resume's bullet in the same place; null when there is none (a new bullet, a letter line). */
+  revertTo: z.string().nullable(),
+  /** The user chose Keep, so the line raises no warning. */
+  kept: z.boolean(),
+});
+export type FramingLine = z.infer<typeof framingLineSchema>;
+
+/** Lines the user chose to keep, per job (`jobs/<id>/.sensei/framing-choices.json`). A changed line is checked again. */
+export const FRAMING_CHOICES_FILE = "framing-choices.json";
+export const framingChoicesSchema = z.object({ kept: z.array(z.string()).default([]) });
+
 /** What a job is, for the Overview (electron/role-facts.ts). */
 export const roleFactsSchema = z.object({
   summary: z.array(z.string()).default([]),
@@ -1161,6 +1178,7 @@ export const applicationValidationReportSchema = z.object({
     evidenceIds: z.array(z.string()),
   })).default([]),
   stretch: stretchScoreSchema.nullable().default(null),
+  framingLines: z.array(framingLineSchema).default([]),
   issues: z.array(validationIssueSchema),
 });
 export type ApplicationValidationReport = z.infer<typeof applicationValidationReportSchema>;
@@ -1480,6 +1498,10 @@ export interface SenseiApi {
     previewArtifact(jobId: string, relativePath: string): Promise<FilePreview>;
     getApplicationStatus(jobId: string): Promise<ApplicationStatus>;
     validateApplication(jobId: string): Promise<ApplicationValidationReport>;
+    /** Lines the framing setting flags, as the files are now (#97). */
+    framingLines(jobId: string): Promise<FramingLine[]>;
+    /** Keep a flagged line, or revert it to the base resume's bullet in the same place; returns the lines after. */
+    framingChoice(jobId: string, text: string, choice: "keep" | "revert"): Promise<FramingLine[]>;
     updateTracker(jobId: string, update: JobTrackerUpdate): Promise<JobTracker>;
     /** Saves a pasted JD where `jd:fetch` stages links; Agy then gets one short prompt. */
     /** Saves CSV text to a file the user picks; returns its path, or null when cancelled. */

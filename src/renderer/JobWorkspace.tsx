@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { jobSettingsScore, settingsScoreLabel } from "../shared/agy-behavior";
-import { DEFAULT_PDF_TEXT_SIZE, INTERVIEW_ROUNDS, OUTCOME_RESULTS, TRACKER_STATUSES, type InterviewEvent, type InterviewRoundKind, type JobOutcome, type JobTrackerUpdate, type TrackerStatus, type ApplicationStatus, type ApplicationValidationReport, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type PdfTextSize, type QuestionsState } from "../shared/schemas";
+import { DEFAULT_PDF_TEXT_SIZE, INTERVIEW_ROUNDS, OUTCOME_RESULTS, TRACKER_STATUSES, type InterviewEvent, type InterviewRoundKind, type JobOutcome, type JobTrackerUpdate, type TrackerStatus, type ApplicationStatus, type ApplicationValidationReport, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type PdfTextSize, type QuestionsState, type FramingLine } from "../shared/schemas";
 import { TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, draftedLabel } from "../shared/tracker";
 import { type JobAction } from "./job-actions";
 import { markdownHtml } from "./markdown";
@@ -54,6 +54,8 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
   const tabs: Array<[JobWorkspaceTab, string, number | null]> = [["overview", "Overview", null], ["application", "Application", null], ...(FEATURES.interviews ? [["interview", "Interview", rounds.length || null] as [JobWorkspaceTab, string, number | null]] : []), ["files", "Files", files.length]];
   // The Recruiter Edition opens drafts on Review: the posting beside the resume, then Mark applied (recruiter plan R8).
   const firstAppView: ApplicationView = FEATURES.candidates ? "review" : "resume";
+  /** Bumped after a Revert so the resume rereads its file. */
+  const [docVersion, setDocVersion] = useState(0);
   const [appView, setAppView] = useState<ApplicationView>(firstAppView);
   useEffect(() => { setAppView(firstAppView); }, [job.id]);
   function openChecks() { setAppView("checks"); onNavigate(job.id, "application"); }
@@ -137,8 +139,8 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
       />
       <SubTabPanel idPrefix="app" value={appView}>
         {FEATURES.candidates && appView === "review" && <ReviewPanel job={job} onUpdateTracker={onUpdateTracker} onOpenResume={() => setAppView("resume")} />}
-        {appView === "resume" && <DocInline path={resumeMarkdown?.relativePath ?? null} label="resume" />}
-        {appView === "letter" && (letterSkipped ? <p className="muted doc-skipped">No cover letter: {letterSkipped}</p> : <DocInline path={coverLetterMarkdown?.relativePath ?? null} label="cover letter" />)}
+        {appView === "resume" && <><FramingLines jobId={job.id} artifact="resume" onReverted={() => setDocVersion((value) => value + 1)} /><DocInline key={docVersion} path={resumeMarkdown?.relativePath ?? null} label="resume" /></>}
+        {appView === "letter" && (letterSkipped ? <p className="muted doc-skipped">No cover letter: {letterSkipped}</p> : <><FramingLines jobId={job.id} artifact="cover-letter" onReverted={() => undefined} /><DocInline path={coverLetterMarkdown?.relativePath ?? null} label="cover letter" /></>)}
         {FEATURES.applicationQuestions && appView === "questions" && <QuestionsPanel jobId={job.id} />}
         {appView === "evaluation" && <DocInline path={evaluation?.relativePath ?? null} label="evaluation" />}
         {appView === "posting" && <DocInline path={jobDescription?.relativePath ?? null} label="job posting" />}
@@ -400,6 +402,49 @@ export function DocInline({ path, label }: { path: string | null; label: string 
   if (failed) return <p className="doc-inline-empty">The {label} could not be read.</p>;
   if (!preview || preview.relativePath !== path) return <p className="doc-inline-empty">Reading the {label}…</p>;
   return <div className="doc-inline"><DocumentView key={`${preview.relativePath}:${preview.modifiedAt}`} preview={preview} isBaseResume={false} onExported={() => undefined} onDirtyChange={() => undefined} onSaved={async (saved) => setPreview(saved)} /></div>;
+}
+
+/**
+ * Lines that reach further than the framing setting (#97), above the resume or letter: each with its reason, Keep, and
+ * (when the base resume has a line in the same place) Revert. The validator decides the lines; this only asks.
+ */
+function FramingLines({ jobId, artifact, onReverted }: { jobId: string; artifact: FramingLine["artifact"]; onReverted: () => void }) {
+  const [lines, setLines] = useState<FramingLine[] | null>(null);
+  const [busy, setBusy] = useState("");
+  const [problem, setProblem] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    setLines(null);
+    setProblem("");
+    void window.sensei.jobs.framingLines(jobId).then((next) => { if (!cancelled) setLines(next); }).catch(() => { if (!cancelled) setLines([]); });
+    return () => { cancelled = true; };
+  }, [jobId]);
+  async function choose(line: FramingLine, choice: "keep" | "revert") {
+    setBusy(line.text);
+    setProblem("");
+    try {
+      setLines(await window.sensei.jobs.framingChoice(jobId, line.text, choice));
+      if (choice === "revert") onReverted();
+    } catch (caught) { setProblem(messageOf(caught, "That didn't work.")); } finally { setBusy(""); }
+  }
+  const mine = (lines ?? []).filter((line) => line.artifact === artifact);
+  const open = mine.filter((line) => !line.kept);
+  const kept = mine.length - open.length;
+  if (!open.length && !kept) return null;
+  const plain = (text: string) => text.replace(/[*_`]/g, "");
+  return <section className="framing-lines" aria-label="Lines past your framing setting">
+    {open.length > 0 && <p className="framing-lines-note"><strong>{plural(open.length, "line")} {open.length === 1 ? "reaches" : "reach"} further than your framing setting.</strong> Keep a line if you can explain it in an interview{artifact === "resume" ? ", or revert it to your base resume's line" : ""}.</p>}
+    {open.length > 0 && <ul>{open.map((line) => <li key={line.text}>
+      <p className="framing-line-text">{plain(line.text)}</p>
+      <p className="muted">{line.reason}{line.revertTo ? <> Revert puts back: “{plain(line.revertTo)}”</> : null}</p>
+      <div className="framing-line-actions">
+        {line.revertTo && <button className="btn-quiet" disabled={Boolean(busy)} onClick={() => void choose(line, "revert")}>{busy === line.text ? "Working…" : "Revert"}</button>}
+        <button className="btn-link" disabled={Boolean(busy)} onClick={() => void choose(line, "keep")}>Keep</button>
+      </div>
+    </li>)}</ul>}
+    {kept > 0 && <p className="muted">{plural(kept, "line")} kept as written.</p>}
+    {problem && <p className="inline-error" role="alert">{problem}</p>}
+  </section>;
 }
 
 const STRETCH_LABEL = { low: "Low", medium: "Medium", high: "High" } as const;

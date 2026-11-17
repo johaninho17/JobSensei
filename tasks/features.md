@@ -19,7 +19,7 @@ When an issue changes a feature's files or data contracts, update its entry here
 | FEAT-009 | Design system and shell | `src/renderer/tokens.css`, `layout.css`, `styles.css`, `SubTabs.tsx`, `Section.tsx`, sidebar and shortcuts in `App.tsx`, `UI_DESIGN_SYSTEM.md` | design tokens |
 | FEAT-010 | Recruiter Edition | `src/shared/edition.ts`, `src/shared/candidates.ts`, `electron/candidates.ts`, `src/renderer/CandidateProfile.tsx`, `Review.tsx` | `FEATURES.*`, roster |
 | FEAT-011 | Build, CI, release | `.github/workflows/`, `scripts/`, `tasks/`, `build-config/` | — |
-| FEAT-012 | Agy page | planned: `src/renderer/AgyView.tsx`, `src/shared/agy-actions.ts`, `src/shared/agy-behavior.ts`, `electron/agy-activity.ts`; settings band on Jobs and Learnings: `src/shared/job-organize.ts` (`settingsBandOf`), `src/shared/learnings.ts` (`bySettings`) | `preferences.agy`, settings score |
+| FEAT-012 | Agy page | planned: `src/renderer/AgyView.tsx`, `src/shared/agy-actions.ts`, `src/shared/agy-behavior.ts`, `electron/agy-activity.ts`; settings band on Jobs and Learnings: `src/shared/job-organize.ts` (`settingsBandOf`), `src/shared/learnings.ts` (`bySettings`); keep or revert flagged lines: `electron/framing-choices.ts`, `framingLines` in `electron/application-validation.ts`, `baseBulletInPlace` in `electron/canonical-resume.ts`, `FramingLines` in `src/renderer/JobWorkspace.tsx` | `.sensei/framing-choices.json`, `preferences.agy`, settings score |
 
 ## Issue history
 

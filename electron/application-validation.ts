@@ -19,6 +19,9 @@ import {
   type CandidateProfile,
   type EvidenceSnapshot,
   type ValidationIssue,
+  FRAMING_CHOICES_FILE,
+  framingChoicesSchema,
+  type FramingLine,
 } from "../src/shared/schemas";
 import {
   MIN_COVER_LETTER_PARAGRAPHS,
@@ -39,9 +42,9 @@ import { assertInsideWorkspace } from "./workspace";
 import { fitSettingsOf, normalizeEvidenceClassifications, scoreEvaluation } from "./fit-scoring";
 import { FRAMING_LABELS, FRAMING_MAX_LEVEL, type FramingStop } from "../src/shared/agy-behavior";
 import type { RatedLine } from "./stretch-score";
-import { canonicalCoverLetterDrifts, canonicalResumeDrifts } from "./canonical-resume";
+import { baseBulletInPlace, canonicalCoverLetterDrifts, canonicalResumeDrifts } from "./canonical-resume";
 import { readCandidateProfile } from "./candidate-profile";
-import { scoreStretch } from "./stretch-score";
+import { lineKey, scoreStretch } from "./stretch-score";
 
 interface LoadedApplication {
   jobPath: string;
@@ -55,6 +58,8 @@ interface LoadedApplication {
   resumeName: string | null;
   resumeMarkdown: string | null;
   coverMarkdown: string | null;
+  /** Keys (lineKey) of lines the user chose to keep despite the framing setting (#97). */
+  keptLines: Set<string>;
   applicationContext: ApplicationContext | null;
   candidateProfile: CandidateProfile | null;
   jobDescriptionText: string | null;
@@ -296,7 +301,11 @@ export async function validateJobApplication(workspacePath: string, jobId: strin
   validateRunIntegrity(loaded, issues);
   validateVisibleArtifacts(loaded, issues);
   const stretch = validateEvidenceMap(loaded, issues);
-  if (stretch && loaded.snapshot) issues.push(...framingIssues(stretch.lines, loaded.snapshot.settingsScore?.behavior.framing ?? "framed"));
+  const framingStop = loaded.snapshot?.settingsScore?.behavior.framing ?? "framed";
+  // Lines edited or reverted since drafting are no longer in the documents, so they aren't flagged.
+  const currentLines = (stretch?.lines ?? []).filter((line) => inDocument(line.artifact === "resume" ? loaded.resumeMarkdown : loaded.coverMarkdown, line.text));
+  const framingLines = loaded.snapshot ? flaggedFramingLines(loaded, currentLines, framingStop) : [];
+  if (stretch && loaded.snapshot) issues.push(...framingIssues(currentLines.filter((line) => !loaded.keptLines.has(lineKey(line.text))), framingStop));
   const ats = await inspectExportedResumePdf(loaded, issues);
 
   const hasErrors = issues.some((candidate) => candidate.severity === "error");
@@ -308,6 +317,7 @@ export async function validateJobApplication(workspacePath: string, jobId: strin
     manifestHash: loaded.manifestHash,
     ats,
     stretch,
+    framingLines,
     keywordClasses: keywordClasses(loaded),
     coverLetterSkipped: loaded.snapshot?.coverLetterPlan?.write === false ? loaded.snapshot.coverLetterPlan.reason : null,
     settingsScore: loaded.snapshot?.settingsScore ?? null,
@@ -783,6 +793,26 @@ function validateVisibleArtifacts(loaded: LoadedApplication, issues: ValidationI
  * stronger than the setting is a warning; at "beyond", unsupported lines are allowed but listed so each can be kept
  * or reverted. The grounding check's own warnings still apply at every setting.
  */
+const inDocument = (markdown: string | null, text: string) => Boolean(markdown) && lineKey(markdown!).includes(lineKey(text));
+
+/** The lines the framing setting flags: past the setting, or (at "beyond") past the evidence. */
+export function linesPastFraming(lines: RatedLine[], stop: FramingStop): RatedLine[] {
+  return stop === "beyond" ? lines.filter((line) => line.level === 3) : lines.filter((line) => line.level > FRAMING_MAX_LEVEL[stop]);
+}
+
+/** Flagged lines with what Revert would put back and whether the user kept them; kept lines raise no warning (#97). */
+function flaggedFramingLines(loaded: LoadedApplication, lines: RatedLine[], stop: FramingStop): FramingLine[] {
+  const baseline = loaded.snapshot?.canonicalResume ?? null;
+  return linesPastFraming(lines, stop).map((line) => ({
+    text: line.text,
+    artifact: line.artifact,
+    level: line.level,
+    reason: line.reason,
+    revertTo: line.artifact === "resume" && baseline && loaded.resumeMarkdown ? baseBulletInPlace(loaded.resumeMarkdown, baseline, line.text, lineKey) : null,
+    kept: loaded.keptLines.has(lineKey(line.text)),
+  }));
+}
+
 export function framingIssues(lines: RatedLine[], stop: FramingStop): ValidationIssue[] {
   const max = FRAMING_MAX_LEVEL[stop];
   if (stop === "beyond") {
@@ -887,6 +917,15 @@ function coverAuditFromEvidence(evidence: ApplicationEvidence, letter: NonNullab
   };
 }
 
+/** The job's resume Markdown among its files: `<prefix>_<Company>_Resume.md`. */
+export function resumeFileIn(files: string[], artifactPrefix: string | null | undefined): string | null {
+  const escapedPrefix = artifactPrefix?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const resumePattern = escapedPrefix
+    ? new RegExp(`^${escapedPrefix}_[A-Za-z0-9][A-Za-z0-9_-]*_Resume\\.md$`)
+    : /^[A-Za-z0-9][A-Za-z0-9_-]*_[A-Za-z0-9][A-Za-z0-9_-]*_Resume\.md$/;
+  return files.find((name) => resumePattern.test(name)) ?? null;
+}
+
 async function loadApplication(workspacePath: string, jobId: string): Promise<LoadedApplication> {
   if (!/^[a-z0-9][a-z0-9-]*$/i.test(jobId)) throw new Error("The canonical job ID is invalid.");
   const workspace = resolve(workspacePath);
@@ -895,11 +934,7 @@ async function loadApplication(workspacePath: string, jobId: string): Promise<Lo
   const statePath = assertInsideWorkspace(workspace, join(jobPath, ".sensei"));
   const files = await readdir(jobPath);
   const candidateProfile = await readCandidateProfile(workspace);
-  const escapedPrefix = candidateProfile?.identity.artifactPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const resumePattern = escapedPrefix
-    ? new RegExp(`^${escapedPrefix}_[A-Za-z0-9][A-Za-z0-9_-]*_Resume\\.md$`)
-    : /^[A-Za-z0-9][A-Za-z0-9_-]*_[A-Za-z0-9][A-Za-z0-9_-]*_Resume\.md$/;
-  const resumeName = files.find((name) => resumePattern.test(name)) ?? null;
+  const resumeName = resumeFileIn(files, candidateProfile?.identity.artifactPrefix);
   const manifest = await readOptionalJson(join(workspace, ".sensei", "active-context.json"), contextManifestSchema);
   const evidenceResult = await readJsonState(join(statePath, "application_evidence.json"), applicationEvidenceSchema);
   const applicationContext = await readOptionalJson(join(statePath, "application_context.json"), applicationContextSchema);
@@ -916,6 +951,7 @@ async function loadApplication(workspacePath: string, jobId: string): Promise<Lo
     resumeName,
     resumeMarkdown: resumeName ? await readOptionalText(join(jobPath, resumeName)) : null,
     coverMarkdown: await readOptionalText(join(jobPath, "cover_letter.md")),
+    keptLines: new Set((await readOptionalJson(join(statePath, FRAMING_CHOICES_FILE), framingChoicesSchema))?.kept.map(lineKey) ?? []),
     applicationContext,
     candidateProfile,
     jobDescriptionText: await readOptionalText(join(jobPath, "original_jd.md")) ?? await readOptionalText(join(jobPath, "original_jd.txt")),
