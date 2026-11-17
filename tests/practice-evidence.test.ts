@@ -1,5 +1,5 @@
 // #18: practice (mock) interviews count as career evidence only when the candidate says so. Fictional candidate.
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -48,7 +48,13 @@ describe("practice interviews as career evidence (#18)", () => {
     await mkdir(join(root, "debrief", "mock-interviews"), { recursive: true });
     await writeFile(join(root, "debrief", "mock-interviews", "mock-1.md"), "Interviewer: ...\n");
     const recordings = [{ path: "debrief/mock-interviews/mock-1.md", size: 16, state: "new" as const, duplicateOf: null, jobId: null }];
-    expect((await startUpdate(root, recordings, {}, new Date(), false)).prompt).toMatch(/propose no interview-story rows/);
-    expect((await startUpdate(root, recordings, {}, new Date(), true)).prompt).not.toMatch(/propose no interview-story rows/);
+    const brief = () => readFile(join(root, ".sensei/content-update.md"), "utf8");
+    await startUpdate(root, recordings, {}, new Date(), false);
+    expect(await brief()).toMatch(/propose no interview-story rows/);
+    // A practice interview belongs to no job: Agy is never asked which job it was.
+    expect(await brief()).toMatch(/\(practice interview, no job/);
+    expect(await brief()).not.toMatch(/ask me which job/);
+    await startUpdate(root, recordings, {}, new Date(), true);
+    expect(await brief()).not.toMatch(/propose no interview-story rows/);
   });
 });

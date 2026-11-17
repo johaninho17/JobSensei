@@ -52,6 +52,13 @@ export function recordingFolder(kind: RecordingKind, jobId: string | null): stri
   return `debrief/${jobId && /^[a-z0-9][a-z0-9-]*$/.test(jobId) ? jobId : "other"}`;
 }
 
+/** A practice interview (a mock with an AI interviewer or a friend): saved under mock-interviews/, or named mock,
+ * simulation, or practice. It belongs to no job (review workflow step 6). */
+export function isPracticeRecording(path: string): boolean {
+  const normal = path.replace(/\\/g, "/");
+  return /(^|\/)mock-interviews\//.test(normal) || /\b(mock|simulation|practice)\b/i.test(normal.split("/").pop() ?? "");
+}
+
 /** A changed path (logical or tidy-layout disk path) is a recording, so the Interviews badge and list refresh. */
 export function isRecordingPath(path: string): boolean {
   return /^(?:debrief|interviews\/recordings)\//.test(path.replace(/\\/g, "/")) && !/^debrief\/interview-memory\//.test(path);
