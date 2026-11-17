@@ -1,4 +1,4 @@
-// A small .zip writer (deflate, no dependencies) for exporting a candidate's folder (recruiter plan R6).
+// A small .zip writer (deflate, no dependencies) for exporting a candidate's folder (recruiter plan R6) or a workspace backup (#127).
 import { createWriteStream } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
@@ -25,9 +25,12 @@ async function filesUnder(root: string, dir = root): Promise<string[]> {
   return nested.flat();
 }
 
-/** Zips every file under `folder` (symbolic links skipped) into `target`, with paths under `prefix/`. Returns the file count. */
-export async function zipFolder(folder: string, target: string, prefix: string): Promise<number> {
-  const files = (await filesUnder(folder)).sort();
+/**
+ * Zips every file under `folder` (symbolic links skipped) into `target`, with paths under `prefix/`. Returns the file count.
+ * `skip` gets each file's path relative to `folder` (forward slashes) and leaves it out when it returns true.
+ */
+export async function zipFolder(folder: string, target: string, prefix: string, skip?: (relativePath: string) => boolean): Promise<number> {
+  const files = (await filesUnder(folder)).filter((file) => !skip?.(relative(folder, file).split(sep).join("/"))).sort();
   if (files.length > 0xffff) throw new Error("This folder has too many files to export as one .zip.");
   const out = createWriteStream(target);
   const write = (chunk: Buffer) => new Promise<void>((resolve, reject) => out.write(chunk, (error) => (error ? reject(error) : resolve())));

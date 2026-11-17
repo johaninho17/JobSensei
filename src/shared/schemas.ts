@@ -3,6 +3,7 @@ import { agyBehaviorSchema, settingsScoreSchema } from "./agy-behavior";
 import { SENIORITY_LEVELS, WORK_MODES } from "./posting";
 import { jobHealthSchema } from "./job-record";
 import type { Readiness } from "./readiness";
+import type { StrayItem } from "./workspace-layout";
 import type { JobSearchSettings, JobSearchState, ScheduleInfo, SearchRun, SearchStatus, WatchedSuggestion } from "./job-search";
 import type { TodayData } from "./today";
 
@@ -1465,6 +1466,12 @@ export interface SenseiApi {
     exportMarkdownPdf(relativePath: string, textSize?: PdfTextSize): Promise<ExportedPdf>;
     /** The job's resume and cover letter, each with whether its PDF is missing, current, or out of date. */
     pdfFreshness(jobId: string): Promise<PdfFreshness[]>;
+    /** A job's PDF (`jobs/<id>/pdfs/…pdf`): copy its full path, show it in Finder/Explorer, or drag it out of the app. */
+    copyPdfPath(relativePath: string): Promise<void>;
+    revealPdf(relativePath: string): Promise<void>;
+    startPdfDrag(relativePath: string): void;
+    /** Regular app: the whole workspace as a .zip where the user picks; null when they cancel. */
+    exportBackup(): Promise<{ path: string; files: number } | null>;
   };
   jobs: {
     list(): Promise<JobFolderSummary[]>;
@@ -1536,6 +1543,8 @@ export interface SenseiApi {
     stop(): Promise<void>;
     /** Agy page → Memory: Agy's memory items in this workspace's Agy home, newest first. */
     memory(): Promise<Array<{ id: string; bytes: number; updatedAt: string }>>;
+    /** The models Agy offers (`agy models`), for Agy → Behavior; empty when Agy isn't installed or the list fails. */
+    models(): Promise<Array<{ id: string; name: string }>>;
     /** Stops Agy, deletes the chosen memory items (or all), starts Agy again; returns the list after. */
     deleteMemory(ids: string[] | "all"): Promise<Array<{ id: string; bytes: number; updatedAt: string }>>;
     /** Agy page → Conversations: this workspace's past conversations, newest first. */
@@ -1553,4 +1562,5 @@ export type AgyConversationSummary = { id: string; prompt: string; jobId: string
 
 export type LayoutMove = { from: string; to: string; kind: "move" | "archive"; reason: string };
 /** What tidying the workspace folders would do (version 2 = already tidy). */
-export type LayoutPlan = { version: 1 | 2; moves: LayoutMove[]; conflicts: string[]; notes: string[]; canUndo: boolean };
+/** `stray`: items at the top of the workspace the app doesn't expect, with where each belongs (src/shared/workspace-layout.ts). */
+export type LayoutPlan = { version: 1 | 2; moves: LayoutMove[]; conflicts: string[]; notes: string[]; canUndo: boolean; stray: StrayItem[] };

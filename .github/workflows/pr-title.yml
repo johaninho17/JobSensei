@@ -1,0 +1,22 @@
+name: PR title
+
+# Runs on every PR, docs-only ones included. scripts/issue-lib.mjs owns the title pattern.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+concurrency:
+  group: pr-title-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-title.mjs "$PR_TITLE"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}

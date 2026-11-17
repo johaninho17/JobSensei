@@ -6,7 +6,7 @@ import { candidateProfileSchema } from "../src/shared/schemas";
 
 describe("Agy behavior settings and the settings score", () => {
   it("defaults to the rules the app follows today", () => {
-    expect(DEFAULT_AGY_BEHAVIOR).toEqual({ framing: "framed", fit: { strong: FIT_CLASSIFICATION_CREDIT.strong_transferable, adjacent: FIT_CLASSIFICATION_CREDIT.adjacent_transferable, unclear: FIT_CLASSIFICATION_CREDIT.unclear, gate: FIT_GATE, weights: { core: 40, technical: 25, scope: 15, outcomes: 10, domain: 5, learning: 5 } }, linesReworked: 4 , search: { fit: 1, freshness: 0, pay: 0, likeInterviewed: 0.25 } });
+    expect(DEFAULT_AGY_BEHAVIOR).toEqual({ framing: "framed", fit: { strong: FIT_CLASSIFICATION_CREDIT.strong_transferable, adjacent: FIT_CLASSIFICATION_CREDIT.adjacent_transferable, unclear: FIT_CLASSIFICATION_CREDIT.unclear, gate: FIT_GATE, weights: { core: 40, technical: 25, scope: 15, outcomes: 10, domain: 5, learning: 5 } }, linesReworked: 4 , search: { fit: 1, freshness: 0, pay: 0, likeInterviewed: 0.25 }, models: { panel: { model: null, effort: null }, background: { model: null, effort: null } } });
     const parts = leniencyParts(DEFAULT_AGY_BEHAVIOR);
     expect(parts).toEqual({ framing: 6, "fit-credit": 5, "fit-gate": 5, "lines-reworked": 5 });
     expect(settingScore(DEFAULT_AGY_BEHAVIOR)).toMatchObject({ score: 53, band: "balanced" });
@@ -132,5 +132,28 @@ describe("category weights (#92)", () => {
     expect(calculateFitScore(rows, settings).score).toBeGreaterThan(3.5);
     // Rows weighted for other targets are refused, so a job is never scored with weights it wasn't rated under.
     expect(() => calculateFitScore(rows)).toThrow(/must total/);
+  });
+});
+
+describe("model and effort per kind of run (#38)", () => {
+  it("turns a choice into Agy's flags, and refuses unsafe model names", async () => {
+    const { agyModelArgs } = await import("../src/shared/agy-behavior");
+    const { agyArgs } = await import("../electron/terminal");
+    expect(agyModelArgs(null)).toEqual([]);
+    expect(agyModelArgs({ model: "gemini-3.8-flash-low", effort: null })).toEqual(["--model", "gemini-3.8-flash-low"]);
+    expect(agyModelArgs({ model: null, effort: "high" })).toEqual(["--effort", "high"]);
+    expect(agyArgs(false, false, null, ["--model", "m1", "--effort", "low"])).toEqual(["--sandbox", "--model", "m1", "--effort", "low"]);
+    expect(agyArgs(false, true)).toEqual(["--sandbox", "--continue"]);
+    for (const bad of ["--sandbox=false", "a b", "x;rm", ""]) expect(agyBehaviorSchema.safeParse({ models: { panel: { model: bad } } }).success).toBe(false);
+    const chosen = effectiveBehavior({ models: { background: { model: "gemini-3.8-flash-low", effort: "low" } } });
+    expect(chosen.models.background).toEqual({ model: "gemini-3.8-flash-low", effort: "low" });
+    expect(chosen.models.panel).toEqual({ model: null, effort: null });
+  });
+
+  it("gives every background run the background choice through one place", async () => {
+    const { readFileSync } = await import("node:fs");
+    const agent = readFileSync("electron/question-agent.ts", "utf8");
+    expect(agent).toContain("models.background");
+    expect(readFileSync("electron/main.ts", "utf8")).toContain("terminal.setModelArgs(agyModelArgs(");
   });
 });

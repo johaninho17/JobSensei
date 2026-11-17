@@ -62,9 +62,9 @@ export function resolveAgyExecutable(): string | null {
  * Agy's start flags: `--sandbox` keeps its shell commands inside the workspace (macOS/Linux; untested on Windows);
  * `--continue` resumes the open candidate's last conversation (Recruiter Edition).
  */
-export function agyArgs(windows: boolean, continueConversation: boolean, conversationId: string | null = null): string[] {
+export function agyArgs(windows: boolean, continueConversation: boolean, conversationId: string | null = null, modelArgs: string[] = []): string[] {
   const resume = conversationId ? ["--conversation", conversationId] : continueConversation ? ["--continue"] : [];
-  return [...(windows ? [] : ["--sandbox"]), ...resume];
+  return [...(windows ? [] : ["--sandbox"]), ...resume, ...modelArgs];
 }
 
 /** Repository root holding package.json (compiled: dist-electron/electron → ../..; source: electron → ..). */
@@ -109,6 +109,9 @@ export class TerminalSession {
    * for the same candidate starts from what Agy already read for them, which is much faster (2026-11-12: 114 s → 33 s).
    */
   setContinueConversation(on: boolean): void { this.continueConversation = on; }
+  /** The panel's model and effort (Agy → Behavior); used the next time Agy starts. */
+  setModelArgs(args: string[]): void { this.modelArgs = args; }
+  private modelArgs: string[] = [];
   private continueConversation = false;
 
   /** For the next start only: resume this conversation (Agy page → Conversations), or start a new one (`null`). */
@@ -133,7 +136,7 @@ export class TerminalSession {
     const executable = agyPath ?? shell;
     const chosen = this.nextConversation;
     this.nextConversation = undefined;
-    const args = agyPath ? agyArgs(windows, chosen === undefined ? this.continueConversation : false, chosen ?? null) : (windows ? [] : ["-l"]);
+    const args = agyPath ? agyArgs(windows, chosen === undefined ? this.continueConversation : false, chosen ?? null, this.modelArgs) : (windows ? [] : ["-l"]);
     this.process = ptyModule.spawn(executable, args, { name: "xterm-256color", cols: 100, rows: 28, cwd: this.cwd, env: this.environment(Boolean(agyPath)) });
     this.startedAt = Date.now();
     this.runningAgy = Boolean(agyPath);

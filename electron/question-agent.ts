@@ -4,6 +4,8 @@
 // question whether to answer, skip, or give notes, and answers by question kind; the answers are checked here before
 // they are saved. Owner of the answer rules (application-questions.ts only drops form fields and plain logistics).
 import { recordHeadlessConversation } from "./agy-home";
+import { readCandidateProfile } from "./candidate-profile";
+import { agyModelArgs, effectiveBehavior } from "../src/shared/agy-behavior";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -223,8 +225,14 @@ const DEADLINE_CHECK_MS = 15_000;
 
 export function headlessAgy(options: { agyPath: string; agyHome: string; cwd: string; timeoutSeconds?: number; jsonSchema?: string; clock?: () => number; checkMs?: number }): AgyRunner {
   const clock = options.clock ?? Date.now;
-  return (prompt, { conversationId }) => new Promise((resolve, reject) => {
-    const args = ["--sandbox", "-p", prompt, "--output-format", "json", "--json-schema", options.jsonSchema ?? ANSWER_SCHEMA, "--print-timeout", `${options.timeoutSeconds ?? 240}s`, ...(conversationId ? ["--conversation", conversationId] : [])];
+  return async (prompt, context) => {
+    // Background runs use the model and effort chosen in Agy → Behavior (#38); the workspace's profile is read per run.
+    const modelArgs = agyModelArgs(effectiveBehavior((await readCandidateProfile(options.cwd).catch(() => null))?.preferences.agy).models.background);
+    return runHeadless(prompt, context, modelArgs);
+  };
+  function runHeadless(prompt: string, { conversationId }: { conversationId: string | null }, modelArgs: string[]): Promise<{ response: string; conversationId: string | null }> {
+  return new Promise((resolve, reject) => {
+    const args = ["--sandbox", "-p", prompt, ...modelArgs, "--output-format", "json", "--json-schema", options.jsonSchema ?? ANSWER_SCHEMA, "--print-timeout", `${options.timeoutSeconds ?? 240}s`, ...(conversationId ? ["--conversation", conversationId] : [])];
     const child = spawn(options.agyPath, args, { cwd: options.cwd, env: { ...process.env, HOME: options.agyHome, ...(process.platform === "win32" ? { USERPROFILE: options.agyHome } : {}) }, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
@@ -257,6 +265,7 @@ export function headlessAgy(options: { agyPath: string; agyHome: string; cwd: st
       }
     });
   });
+}
 }
 
 const read = (path: string) => readTextFile(path).catch(() => "");

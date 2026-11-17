@@ -67,9 +67,14 @@ describe("recording ledger", () => {
   it("an update names only new files, backs up content, and marks them imported when finished", async () => {
     await workspace();
     const { prompt, update } = await startUpdate(dir, await scanRecordings(dir, ["northstar-support-engineer"]), { "northstar-support-engineer": "Northstar Labs, Support Engineer" });
-    expect(prompt).toContain("debrief/northstar/hiring-manager.md (job: northstar-support-engineer, Northstar Labs, Support Engineer)");
-    expect(prompt).not.toContain("recruiter.md");
-    expect(prompt).not.toContain("copy.md");
+    // The Console accepts one safe line of up to 500 characters: the details go in the brief file.
+    expect(prompt).not.toMatch(/[\r\n]/);
+    expect(prompt.length).toBeLessThanOrEqual(500);
+    expect(prompt).toContain(".sensei/content-update.md");
+    const brief = await readFile(join(dir, ".sensei/content-update.md"), "utf8");
+    expect(brief).toContain("debrief/northstar/hiring-manager.md (job: northstar-support-engineer, Northstar Labs, Support Engineer)");
+    expect(brief).not.toContain("recruiter.md");
+    expect(brief).not.toContain("copy.md");
     expect(await readFile(join(dir, update.backup, "profile/story_bank.md"), "utf8")).toBe(BANK);
     // Agy adds a story but drops S2 without listing it: finishing puts S2 back.
     await writeFile(join(dir, "profile/story_bank.md"), BANK.split("\n## S2")[0] + "\n\n## S3 · New partner story\n- Partner unsure where the product fit\n");

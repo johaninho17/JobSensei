@@ -1,10 +1,14 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, powerMonitor, session, shell } from "electron";
+import { execFile } from "node:child_process";
 import { deleteMemory, listMemory } from "./agy-memory";
 import { conversationExists, deleteConversations, listConversations } from "./agy-conversations";
 import { agyActivity } from "./agy-activity";
+import { agyModelArgs, effectiveBehavior } from "../src/shared/agy-behavior";
 import { handleLinks } from "./open-link";
 import { availableBrowsers, BROWSER_NAMES, browserOpener, readBrowserChoice, saveBrowserChoice } from "./browser-choice";
 import { pdfFreshness } from "./pdf-freshness";
+import { backupName, jobPdfPath, skipInBackup } from "./pdf-file-actions";
+import { zipFolder } from "./zip-folder";
 import { installLogFile } from "./log-file";
 import { recruiterInstructionsFor } from "./recruiter-defaults";
 import { textContextMenu } from "./context-menu";
@@ -21,7 +25,7 @@ import { readJobQueue, saveJobQueue } from "./job-queue";
 import { RunWatcher } from "./run-watcher";
 import { createAgyHomeCache, prepareAgyHome, pruneHeadlessConversations, writeSenseiLauncher } from "./agy-home";
 import { reachedInterview } from "../src/shared/tracker";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import type { Settings } from "../src/shared/schemas";
 import { markdownSaveInputSchema, pdfExportRequestSchema } from "../src/shared/schemas";
@@ -357,6 +361,41 @@ ipcMain.handle("files:pdf-freshness", async (_event, jobId: unknown) => {
   const workspace = requireWorkspace();
   return pdfFreshness(workspace, jobId, (await readCandidateProfile(workspace))?.identity.artifactPrefix ?? undefined);
 });
+// A job's PDFs outside the app (#127): drag one onto a browser's file field, copy its path, or show it in Finder/Explorer.
+ipcMain.handle("files:copy-pdf-path", async (_event, relativePath: unknown) => { clipboard.writeText(await jobPdfPath(requireWorkspace(), relativePath)); });
+ipcMain.handle("files:reveal-pdf", async (_event, relativePath: unknown) => { shell.showItemInFolder(await jobPdfPath(requireWorkspace(), relativePath)); });
+let pdfDragIcon: Electron.NativeImage | null = null;
+/** A small page shape for the drag image (macOS refuses a drag without one); drawn once, no image file needed. */
+function dragIcon(): Electron.NativeImage {
+  if (pdfDragIcon) return pdfDragIcon;
+  const width = 28, height = 36, pixels = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+    const edge = x === 0 || y === 0 || x === width - 1 || y === height - 1;
+    const line = !edge && x > 5 && x < width - 6 && y > 8 && y < height - 6 && y % 5 === 0;
+    const shade = edge || line ? 110 : 250;
+    pixels.set([shade, shade, shade, 255], (y * width + x) * 4);
+  }
+  pdfDragIcon = nativeImage.createFromBitmap(pixels, { width, height });
+  return pdfDragIcon;
+}
+// Drags start synchronously from the page's dragstart, so this is a send, not an invoke; a bad path just doesn't drag.
+ipcMain.on("files:start-pdf-drag", (event, relativePath: unknown) => {
+  void (async () => {
+    const path = await jobPdfPath(requireWorkspace(), relativePath).catch(() => null);
+    if (path) event.sender.startDrag({ file: path, icon: dragIcon() });
+  })();
+});
+// Regular app: the whole workspace as one .zip, written only where the user picks (caches and rebuilt copies left out).
+ipcMain.handle("workspace:export-backup", async () => {
+  const workspace = requireWorkspace();
+  const prefix = (await readCandidateProfile(workspace))?.identity.artifactPrefix;
+  const options = { title: "Export backup", defaultPath: join(app.getPath("downloads"), backupName(prefix)), filters: [{ name: "Zip archive", extensions: ["zip"] }] };
+  const result = mainWindow ? await dialog.showSaveDialog(mainWindow, options) : await dialog.showSaveDialog(options);
+  if (result.canceled || !result.filePath) return null;
+  if (resolve(result.filePath).startsWith(resolve(workspace) + sep)) throw new Error("Save the backup outside your workspace folder.");
+  const files = await zipFolder(workspace, result.filePath, "JobSensei-backup", skipInBackup);
+  return { path: result.filePath, files };
+});
 ipcMain.handle("files:export-markdown-pdf", async (_event, input) => {
   const request = pdfExportRequestSchema.parse(input);
   return exportMarkdownPdf(requireWorkspace(), request.relativePath, request.textSize);
@@ -463,6 +502,8 @@ async function startAgyTerminal(requestedCwd?: string): Promise<{ cwd: string; a
   terminal.setAgyHome(agyHome);
   // A candidate's Agy picks up their own last conversation (their history is the only one in the home).
   terminal.setContinueConversation(Boolean(agyHomeName));
+  // The panel's model and effort, from Agy → Behavior (#38).
+  terminal.setModelArgs(agyModelArgs(effectiveBehavior((await readCandidateProfile(workspace).catch(() => null))?.preferences.agy).models.panel));
   // The terminal start rewrote the home's settings; background runs reuse it for this workspace.
   if (agyHome) agyHomes.set(workspace, agyHome);
   return terminal.start(cwd, workspace, manifest);
@@ -566,6 +607,21 @@ ipcMain.handle("profile:save-voice", async (_event, text: unknown) => {
 ipcMain.handle("terminal:restart", async () => terminal.restart());
 // Agy page → Memory (#41): Agy is stopped before anything is deleted, then started again.
 const memoryHome = async () => agyHomes.get(requireWorkspace()).catch(() => null);
+// Agy → Behavior (#38): the models Agy offers, read once per app run from `agy models`.
+let agyModelList: Promise<Array<{ id: string; name: string }>> | null = null;
+ipcMain.handle("agy:models", async () => {
+  const agyPath = resolveAgyExecutable();
+  if (!agyPath) return [];
+  agyModelList ??= new Promise((resolve) => {
+    execFile(agyPath, ["models"], { timeout: 30_000 }, (error, stdout) => {
+      const list = (error ? "" : stdout).split("\n").map((line) => line.split("\t")).filter((parts) => parts.length >= 2 && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(parts[0]!.trim()))
+        .map(([id, name]) => ({ id: id!.trim(), name: (name ?? id!).trim() }));
+      if (!list.length) agyModelList = null;
+      resolve(list);
+    });
+  });
+  return agyModelList;
+});
 ipcMain.handle("agy:memory", async () => { const home = await memoryHome(); return home ? listMemory(home) : []; });
 ipcMain.handle("agy:delete-memory", async (_event, ids: unknown) => {
   const home = await memoryHome();

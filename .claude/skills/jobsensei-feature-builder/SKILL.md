@@ -8,7 +8,7 @@ description: Build or modify a JobSensei product feature end to end across the R
 Build vertical slices that work end to end and keep JobSensei local-first.
 
 ## Start from repository truth
-1. Load `jobsensei-architecture` and check `dev-notes/decisions.md`.
+1. Load `jobsensei-architecture` and check the rows of `dev-notes/decisions.md` that touch the change (find them in its index).
 2. Inspect the current source and `package.json` scripts. Plans in local notes are intent, not current API documentation.
 3. Check `git status` and preserve unrelated changes.
 4. State the user-visible outcome, the data contracts affected, and how you'll verify it before editing. For anything non-trivial, get the user's go-ahead on that plan.
