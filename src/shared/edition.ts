@@ -114,7 +114,6 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   "candidate-ipc": "candidates",
   "posting-library": "candidates",
   pipeline: "candidates",
-  "zip-folder": "candidates",
   "candidate-intake": "candidates",
   "application-review": "candidates",
   "candidate-facts": "candidates",

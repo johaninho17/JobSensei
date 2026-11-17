@@ -1465,6 +1465,12 @@ export interface SenseiApi {
     exportMarkdownPdf(relativePath: string, textSize?: PdfTextSize): Promise<ExportedPdf>;
     /** The job's resume and cover letter, each with whether its PDF is missing, current, or out of date. */
     pdfFreshness(jobId: string): Promise<PdfFreshness[]>;
+    /** A job's PDF (`jobs/<id>/pdfs/…pdf`): copy its full path, show it in Finder/Explorer, or drag it out of the app. */
+    copyPdfPath(relativePath: string): Promise<void>;
+    revealPdf(relativePath: string): Promise<void>;
+    startPdfDrag(relativePath: string): void;
+    /** Regular app: the whole workspace as a .zip where the user picks; null when they cancel. */
+    exportBackup(): Promise<{ path: string; files: number } | null>;
   };
   jobs: {
     list(): Promise<JobFolderSummary[]>;
