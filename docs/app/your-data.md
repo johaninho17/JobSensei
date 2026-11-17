@@ -6,7 +6,7 @@ Everything lives in your workspace folder on this computer. Setup → Show in Fi
 | Folder or file | What it is | Who changes it |
 |---|---|---|
 | `profile/candidate.json` | Your name, contact details, preferences, and settings | You, in Setup and Settings |
-| `resumes/` | Your base resume and other versions | You |
+| `resumes/` | Your base resume and other versions | You (Agy reads them but can never change them) |
 | `context/structured/` | **Work records**: the facts drafts are built from, one table row per fact, each with when it happened | You; Agy adds rows when it files your answers |
 | `context/broad/` | Notes and documents that add background (not used as facts on their own) | You |
 | `context/denylist.md` | Names to keep private and claims never to make | You, in Setup |

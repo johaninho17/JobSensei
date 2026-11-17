@@ -170,6 +170,15 @@ export function boundaryDenyRules(workspacePath: string, extraPaths: string[] = 
 }
 
 /**
+ * Base resumes are the user's own files (#111): Agy reads them but never writes, renames, or deletes anything in
+ * `resumes/`. Tailored resumes live in job folders; only the app (Setup, Settings) adds files here. The sandbox turns
+ * this rule into its profile too, so shell writes are blocked as well as file tools.
+ */
+export function resumeWriteDenies(workspacePath: string): string[] {
+  return [`write_file(${join(realPath(workspacePath), "resumes")})`];
+}
+
+/**
  * What the `sensei` command reads when it runs inside Agy's sandbox: the launcher itself, the app runtime, and
  * (from a source checkout) the compiled scripts and their dependencies.
  */
@@ -230,7 +239,7 @@ async function prepareAgyHomeNow(userDataPath: string, workspacePath: string, ex
   const historyDenies = candidateId ? [`read_file(${agyHistoryRoot(userDataPath)})`, `write_file(${agyHistoryRoot(userDataPath)})`] : [];
   const agentPaths = agentPathsAbove(workspacePath);
   const readable = [...agentPaths, ...(launcher ? launcherReadPaths(home, launcher) : [])];
-  const generated = [...new Set([...boundaryDenyRules(workspacePath, extraPaths, readable), ...keychainDenies, ...historyDenies, ...COMMAND_DENIES])];
+  const generated = [...new Set([...boundaryDenyRules(workspacePath, extraPaths, readable), ...resumeWriteDenies(workspacePath), ...keychainDenies, ...historyDenies, ...COMMAND_DENIES])];
   // Reads outside the workspace ask first in proceed-in-sandbox mode, and the sandbox can't read them at all
   // unless allowed; these reads are expected, so allow them.
   const generatedAllow = readable.map((path) => `read_file(${path})`);

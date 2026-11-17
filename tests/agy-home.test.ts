@@ -2,7 +2,7 @@ import { lstat, mkdir, mkdtemp, readFile, readlink, realpath, rm, writeFile } fr
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { agentPathsAbove, boundaryDenyRules, createAgyHomeCache, linkKeychains, prepareAgyHome } from "../electron/agy-home";
+import { agentPathsAbove, boundaryDenyRules, createAgyHomeCache, linkKeychains, prepareAgyHome, resumeWriteDenies } from "../electron/agy-home";
 
 async function tree() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "sensei-agyhome-")));
@@ -26,6 +26,17 @@ describe("app-owned Agy home", () => {
       expect(rules).not.toContain(`read_file(${allowed})`);
       expect(rules).not.toContain(`write_file(${allowed})`);
     }
+  });
+
+  it("lets Agy read base resumes but never write in resumes/ (#111)", async () => {
+    const { root, workspace } = await tree();
+    expect(resumeWriteDenies(workspace)).toEqual([`write_file(${join(workspace, "resumes")})`]);
+    const userData = join(root, "userdata");
+    await prepareAgyHome(userData, workspace);
+    const deny: string[] = JSON.parse(await readFile(join(userData, "agy-home", ".gemini", "antigravity-cli", "settings.json"), "utf8")).permissions.deny;
+    expect(deny).toContain(`write_file(${join(workspace, "resumes")})`);
+    expect(deny).not.toContain(`read_file(${join(workspace, "resumes")})`);
+    expect(deny.some((rule) => rule === `write_file(${workspace})` || rule === `write_file(${join(workspace, "jobs")})`)).toBe(false);
   });
 
   it("lets Agy read, never write, .agents and AGENTS.md in each folder up to the project root", async () => {
