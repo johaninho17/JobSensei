@@ -24,11 +24,14 @@ describe("issue flow helpers", () => {
       { number: 7, title: "Later", state: "OPEN", labels: [label("P2"), label("FEAT-005")] },
       { number: 4, title: "Links | open", state: "OPEN", labels: [label("P1"), label("FEAT-002"), label("status:blocked")] },
       { number: 1, title: "Done", state: "CLOSED", labels: [label("P0")] },
+      { number: 9, title: "Someday", state: "OPEN", labels: [label("P1"), label("future")] },
     ]);
     expect(text.indexOf("## P1")).toBeLessThan(text.indexOf("## P2"));
     expect(text).toContain("| #4 | Links \\| open | FEAT-002 | yes |");
     expect(text).not.toContain("Done");
-    expect(text).toContain("2 open.");
+    expect(text.indexOf("## Later (future)")).toBeGreaterThan(text.indexOf("## P2"));
+    expect(text.indexOf("Someday")).toBeGreaterThan(text.indexOf("## Later (future)"));
+    expect(text).toContain("3 open, 1 of them for later.");
   });
 
   it("prints a new issue without creating it on a dry run", () => {
