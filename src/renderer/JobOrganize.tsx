@@ -1,6 +1,7 @@
 // Jobs page organizing controls: filters, saved views, the company strip, and the tag editor.
 // The logic lives in src/shared/job-organize.ts; these only draw it.
 import { useState } from "react";
+import { SETTINGS_BANDS } from "../shared/agy-behavior";
 import { FIT_BANDS, JOB_SETTINGS_BANDS, WORK_MODES, companySummary, facetOptions, facetsActive, jobViewsSchema, normalizeTags, NO_FACETS, type JobFacets, type JobView } from "../shared/job-organize";
 import type { JobFolderSummary } from "../shared/schemas";
 
@@ -12,7 +13,8 @@ export function storeJobViews(views: JobView[]) { try { window.localStorage.setI
 
 const WORK_LABEL = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site", unknown: "Not stated" } as const;
 const FIT_LABEL = { high: "4.0 and up", mid: "3.0 to 3.9", low: "Below 3.0", unrated: "Not rated" } as const;
-const SETTINGS_LABEL = { strict: "Strict", careful: "Careful", balanced: "Balanced", bold: "Bold", none: "No drafts" } as const;
+// Band names come from their owner, src/shared/agy-behavior.ts.
+const SETTINGS_LABEL: Record<string, string> = { ...Object.fromEntries(SETTINGS_BANDS.map((band) => [band.band, band.label])), none: "No drafts" };
 
 function toggle<T>(list: T[], value: T): T[] { return list.includes(value) ? list.filter((item) => item !== value) : [...list, value]; }
 
