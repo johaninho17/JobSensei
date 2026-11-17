@@ -3,6 +3,7 @@ import { agyBehaviorSchema, settingsScoreSchema } from "./agy-behavior";
 import { SENIORITY_LEVELS, WORK_MODES } from "./posting";
 import { jobHealthSchema } from "./job-record";
 import type { Readiness } from "./readiness";
+import type { StrayItem } from "./workspace-layout";
 import type { JobSearchSettings, JobSearchState, ScheduleInfo, SearchRun, SearchStatus, WatchedSuggestion } from "./job-search";
 import type { TodayData } from "./today";
 
@@ -1561,4 +1562,5 @@ export type AgyConversationSummary = { id: string; prompt: string; jobId: string
 
 export type LayoutMove = { from: string; to: string; kind: "move" | "archive"; reason: string };
 /** What tidying the workspace folders would do (version 2 = already tidy). */
-export type LayoutPlan = { version: 1 | 2; moves: LayoutMove[]; conflicts: string[]; notes: string[]; canUndo: boolean };
+/** `stray`: items at the top of the workspace the app doesn't expect, with where each belongs (src/shared/workspace-layout.ts). */
+export type LayoutPlan = { version: 1 | 2; moves: LayoutMove[]; conflicts: string[]; notes: string[]; canUndo: boolean; stray: StrayItem[] };

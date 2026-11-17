@@ -15,7 +15,7 @@ When an issue changes a feature's files or data contracts, update its entry here
 | FEAT-005 | Interviews and content | `src/renderer/InterviewView.tsx`, `electron/interview-context.ts`, `electron/interview-check.ts`, `electron/content-refresh.ts`, `src/shared/learnings.ts` | question cards, recording record, story bank |
 | FEAT-006 | Agy panel and queue | `src/renderer/TerminalPanel.tsx`, `src/shared/job-queue.ts`, `electron/terminal.ts`, `electron/run-watcher.ts`, `electron/agy-home.ts` | queue items, run status |
 | FEAT-007 | Today | `src/renderer/TodayView.tsx`, `src/shared/today.ts`, `electron/today.ts` | `today.json`, questions |
-| FEAT-008 | Setup, Settings, Career context | `src/renderer/SettingsModal.tsx`, `src/renderer/SetupAndContext.tsx`, `electron/setup-readiness.ts`, `electron/context-import.ts`, `src/shared/profile-fields.ts` | candidate profile, context manifest |
+| FEAT-008 | Setup, Settings, Career context | `src/renderer/SettingsModal.tsx`, `src/renderer/SetupAndContext.tsx`, `src/renderer/WorkspaceFolders.tsx`, `src/shared/workspace-layout.ts` (folder map, stray items), `electron/layout-migration.ts`, `electron/setup-readiness.ts`, `electron/context-import.ts`, `src/shared/profile-fields.ts` | candidate profile, context manifest |
 | FEAT-009 | Design system and shell | `src/renderer/tokens.css`, `layout.css`, `styles.css`, `SubTabs.tsx`, `Section.tsx`, sidebar and shortcuts in `App.tsx`, `UI_DESIGN_SYSTEM.md` | design tokens |
 | FEAT-010 | Recruiter Edition | `src/shared/edition.ts`, `src/shared/candidates.ts`, `electron/candidates.ts`, `src/renderer/CandidateProfile.tsx`, `Review.tsx` | `FEATURES.*`, roster |
 | FEAT-011 | Build, CI, release | `.github/workflows/`, `scripts/`, `tasks/`, `build-config/` | — |

@@ -9,7 +9,7 @@ import { previewFile } from "../electron/files";
 import { applyMigration, healStrayPaths, planMigration, undoMigration } from "../electron/layout-migration";
 import { layoutVersion, logicalPath, workspaceFile } from "../electron/layout";
 import { initializeWorkspace, syncWorkspaceAgentFiles } from "../electron/workspace-init";
-import { LAYOUT_V2_RULES, agentTextForLayout, toDisk, toLogical } from "../src/shared/workspace-layout";
+import { LAYOUT_V2_RULES, agentTextForLayout, strayRootItems, toDisk, toLogical, workspaceMap } from "../src/shared/workspace-layout";
 
 const made: string[] = [];
 afterEach(async () => { await Promise.all(made.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
@@ -99,6 +99,50 @@ describe("workspace layout", () => {
     // A second sync changes nothing (no backup set every time the app starts).
     const again = await syncWorkspaceAgentFiles(root, { sourceRoots: [join(__dirname, "..")] });
     expect([...again.updated, ...again.added]).toEqual([]);
+  });
+});
+
+describe("workspace map and stray items", () => {
+  it("names the folders that exist in each layout", async () => {
+    expect(workspaceMap(2).map((row) => row.folder)).toEqual(["profile", "resumes", "career/records", "career/notes", "jobs", "interviews/recordings", "interviews/memory", "archive"]);
+    const original = workspaceMap(1).map((row) => row.folder);
+    expect(original).toEqual(["profile", "resumes", "context", "context/structured", "context/broad", "jobs", "debrief", "debrief/interview-memory"]);
+    // Every folder the original map names is one a fresh workspace on that layout really has.
+    const root = await workspace();
+    for (const folder of original) expect((await stat(join(root, folder))).isDirectory()).toBe(true);
+    expect(workspaceMap(1).find((row) => row.folder === "profile")?.purpose).not.toMatch(/private/);
+  });
+
+  it("suggests a home for each item at the top of the workspace", () => {
+    const stray = strayRootItems([
+      { name: "AGENTS.md", kind: "file" }, { name: ".DS_Store", kind: "file" }, { name: "Thumbs.db", kind: "file" }, { name: "jobs", kind: "dir" },
+      { name: "Alex Morgan Resume.pdf", kind: "file" }, { name: "notes.md", kind: "file" }, { name: "call.m4a", kind: "file" },
+      { name: "old-drafts", kind: "dir" }, { name: "run.paste-2.json", kind: "file" }, { name: "photo.heic", kind: "file" },
+    ], 1);
+    const by = Object.fromEntries(stray.map((item) => [item.name, item.suggestion]));
+    expect(Object.keys(by).sort()).toEqual(["Alex Morgan Resume.pdf", "call.m4a", "notes.md", "old-drafts", "photo.heic", "run.paste-2.json"]);
+    expect(by["Alex Morgan Resume.pdf"]).toMatch(/resumes\//);
+    expect(by["notes.md"]).toMatch(/context\/broad\//);
+    expect(by["call.m4a"]).toMatch(/debrief\/<company>\//);
+    expect(by["old-drafts"]).toMatch(/doesn't read this folder/);
+    expect(by["run.paste-2.json"]).toMatch(/archive\//);
+    expect(by["photo.heic"]).toMatch(/doesn't read files here/);
+    // The tidy layout names its own folders, and old folder names are pointed home.
+    const tidy = Object.fromEntries(strayRootItems([{ name: "notes.md", kind: "file" }, { name: "context", kind: "dir" }, { name: "career", kind: "dir" }], 2).map((item) => [item.name, item.suggestion]));
+    expect(tidy["notes.md"]).toMatch(/career\/notes\//);
+    expect(tidy.context).toMatch(/old folder name/i);
+    expect(tidy.career).toBeUndefined();
+  });
+
+  it("lists stray items in the folders preview, once", async () => {
+    const root = await workspace();
+    await put(root, "cover letter draft.docx", "x");
+    await put(root, "cover-letters/acme.md", "# Letter\n");
+    const plan = await planMigration(root);
+    expect(plan.stray.map((item) => item.name)).toEqual(["cover letter draft.docx", "cover-letters"]);
+    // run.paste-1.json and screened-jobs/ are already in the tidy preview, so they aren't listed again.
+    await applyMigration(root);
+    expect((await planMigration(root)).stray.map((item) => item.name)).toEqual(["cover letter draft.docx", "cover-letters"]);
   });
 });
 

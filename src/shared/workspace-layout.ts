@@ -29,7 +29,7 @@ export const LAYOUT_V2_RULES: ReadonlyArray<readonly [logical: string, disk: str
   ["debrief", "interviews/recordings"],
 ];
 
-/** What each version-2 folder is for, shown in the migration preview and the docs. */
+/** What each version-2 folder is for. Read it through workspaceMap(), which names folders for the active layout. */
 export const LAYOUT_V2_FOLDERS: ReadonlyArray<readonly [folder: string, purpose: string]> = [
   ["profile", "Who you are: your profile, story bank, interview voice, writing voice, and names to keep private"],
   ["resumes", "Your base resume and other versions"],
@@ -40,6 +40,60 @@ export const LAYOUT_V2_FOLDERS: ReadonlyArray<readonly [folder: string, purpose:
   ["interviews/memory", "What interviewers asked, by kind of role"],
   ["archive", "Older and duplicate files the app no longer uses; nothing is deleted"],
 ];
+
+export type WorkspaceMapRow = { folder: string; purpose: string };
+
+/** In the original layout the voice profile and denylist sit in context/, so profile/ holds less. */
+const ORIGINAL_PURPOSES: Readonly<Record<string, string>> = {
+  profile: "Who you are: your profile, story bank, and interview voice",
+};
+
+/** What each folder is for, named as it sits on disk in this layout (Setup → Your folders). */
+export function workspaceMap(version: LayoutVersion): WorkspaceMapRow[] {
+  if (version === 2) return LAYOUT_V2_FOLDERS.map(([folder, purpose]) => ({ folder, purpose }));
+  const rows = LAYOUT_V2_FOLDERS.filter(([folder]) => folder !== "archive")
+    .map(([folder, purpose]) => ({ folder: toLogical(folder, 2), purpose: ORIGINAL_PURPOSES[folder] ?? purpose }));
+  rows.splice(rows.findIndex((row) => row.folder.startsWith("context/")), 0, { folder: "context", purpose: "Your career files, plus your writing voice and names to keep private" });
+  return rows;
+}
+
+/** Everything the app expects at the top of a workspace in this layout. Hidden and system files are never listed. */
+export function knownRootEntries(version: LayoutVersion): Set<string> {
+  return new Set(["AGENTS.md", ".agents", ".sensei", "archive", ...workspaceMap(version).map((row) => row.folder.split("/")[0])]);
+}
+
+export type RootEntry = { name: string; kind: "file" | "dir" };
+export type StrayItem = RootEntry & { suggestion: string };
+
+const SYSTEM_FILE = /^(\..*|Thumbs\.db|desktop\.ini|Icon\r?)$/i;
+const DOCUMENT = /\.(md|txt|pdf|docx?|rtf|odt|pages)$/i;
+const RECORDING = /\.(m4a|mp3|mp4|wav|mov|webm|vtt|srt)$/i;
+
+/**
+ * Items at the top of a workspace the app doesn't expect, each with a suggestion for where it belongs. `handled`
+ * names items something else already deals with (the tidy-folders preview), so they aren't listed twice.
+ */
+export function strayRootItems(entries: RootEntry[], version: LayoutVersion, handled: ReadonlySet<string> = new Set()): StrayItem[] {
+  const known = knownRootEntries(version);
+  const notes = toDisk("context/broad", version);
+  const recordings = toDisk("debrief", version);
+  return entries
+    .filter((entry) => !known.has(entry.name) && !handled.has(entry.name) && !SYSTEM_FILE.test(entry.name))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((entry) => ({ ...entry, suggestion: suggestHome(entry, version, notes, recordings) }));
+}
+
+function suggestHome(entry: RootEntry, version: LayoutVersion, notes: string, recordings: string): string {
+  if (entry.kind === "dir") {
+    if (version === 2 && (entry.name === "context" || entry.name === "debrief")) return `An old folder name. Its files belong in ${entry.name === "context" ? "career/" : "interviews/"}.`;
+    return `The app doesn't read this folder. Move what you need into ${notes}/, or the rest to archive/.`;
+  }
+  if (/^run\.paste-.*\.json$/i.test(entry.name)) return "Leftover from an old run. Move it to archive/.";
+  if (DOCUMENT.test(entry.name) && /(resume|résumé|\bcv\b)/i.test(entry.name)) return "Looks like a resume. Move it to resumes/.";
+  if (RECORDING.test(entry.name)) return `Looks like an interview recording. Move it to ${recordings}/<company>/.`;
+  if (DOCUMENT.test(entry.name)) return `If it's about your career, add it from Career context → Sources (it goes to ${notes}/).`;
+  return "The app doesn't read files here. Move it into a folder, or to archive/.";
+}
 
 const clean = (path: string) => path.replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+$/, "");
 const under = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
