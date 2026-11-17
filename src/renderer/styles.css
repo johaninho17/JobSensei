@@ -851,4 +851,5 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden}
 .settings-inline-fields label { display: grid; gap: 4px; color: var(--muted); }
 .settings-inline-fields input { width: 120px; font: inherit; }
 .settings-group > .segmented { display: inline-flex; width: auto; }
+.settings-group > .btn-quiet { align-self: flex-start; width: auto; }
 .settings-browser { width: auto; max-width: 280px; }

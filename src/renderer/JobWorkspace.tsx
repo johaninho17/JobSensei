@@ -10,6 +10,7 @@ import { ReviewPanel } from "./Review";
 import { TagEditor } from "./JobOrganize";
 import { type JobWorkspaceTab, StatusPill, TrackerPill, displayJobName, fileNodes, findNode, formatJobDate, formatRelativeDate, messageOf, plural, useAnnounce } from "./app-shared";
 import { DocumentView, PdfTextSizeSelect, documentsChanged, pdfsCreated, usePdfFreshness } from "./Documents";
+import { askConfirm } from "./confirm";
 
 function TrackerPanel({ job, onUpdate }: { job: JobFolderSummary; onUpdate: (update: JobTrackerUpdate) => Promise<void> }) {
   const tracker = job.tracker;
@@ -81,6 +82,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
         <JobPdfExportButton resumePath={resumeMarkdown?.relativePath ?? null} coverLetterPath={coverLetterMarkdown?.relativePath ?? null} />
       </div>
     </div>
+    {(activeTab === "overview" || activeTab === "application") && <JobPdfFiles jobId={job.id} />}
     {activeTab === "overview" && <div className="job-overview">
       {next && trackerStatus !== "rejected" && trackerStatus !== "withdrawn" && <section className="next-bar" aria-label="Next step">
         <span className="next-bar-label">Next</span>
@@ -428,6 +430,36 @@ function MustHaveGroups({ mustHaves, gaps = [] }: { mustHaves: JobFolderSummary[
       </details>;
     })}
     {gaps.length > 0 && <details className="must-group is-gap"><summary>Gaps ({gaps.length})</summary><ul>{gaps.slice(0, 6).map((item) => <li key={item}>{item}</li>)}</ul></details>}
+  </div>;
+}
+
+/**
+ * The job's PDFs, ready to send (#127): drag one onto an application's file field, show it in Finder/Explorer, or copy
+ * its path. A PDF older than its document is marked, and copying it asks first (`electron/pdf-freshness.ts` owns the rule).
+ */
+function JobPdfFiles({ jobId }: { jobId: string }) {
+  const announce = useAnnounce();
+  const pdfs = usePdfFreshness(jobId).filter((item): item is typeof item & { pdf: string } => Boolean(item.pdf));
+  if (!pdfs.length) return null;
+  const folderApp = navigator.userAgent.includes("Mac") ? "Finder" : "Explorer";
+  const label = (kind: string) => kind === "resume" ? "Resume PDF" : "Cover letter PDF";
+  async function copyPath(pdf: string, kind: string, stale: boolean) {
+    if (stale && !await askConfirm({ title: `Copy the out-of-date ${kind === "resume" ? "resume" : "cover letter"} PDF?`, body: "It was made before your last edit, so it has the old text. Update PDFs first to send the new one.", confirmLabel: "Copy anyway" })) return;
+    try { await window.sensei.files.copyPdfPath(pdf); announce(`${label(kind)} path copied.`); }
+    catch (caught) { announce(messageOf(caught, "Couldn't copy the path.")); }
+  }
+  return <div className="job-pdf-files" aria-label="This job's PDFs">
+    <span className="job-pdf-files-hint">Drag a PDF onto an application</span>
+    {pdfs.map((item) => {
+      const stale = item.state === "stale";
+      return <span key={item.pdf} className={`pdf-pill ${stale ? "is-stale" : ""}`}>
+        <span className="pdf-pill-file" draggable title={stale ? "Out of date: made before your last edit. Drag it onto a file field, or Update PDFs first." : "Drag onto an application's file field"} onDragStart={(event) => { event.preventDefault(); window.sensei.files.startPdfDrag(item.pdf); }}>
+          {label(item.kind)}{stale && <em>out of date</em>}
+        </span>
+        <button className="btn-link" onClick={() => void window.sensei.files.revealPdf(item.pdf).catch((caught: unknown) => announce(messageOf(caught, "Couldn't show the PDF.")))}>Show in {folderApp}</button>
+        <button className="btn-link" onClick={() => void copyPath(item.pdf, item.kind, stale)}>Copy path</button>
+      </span>;
+    })}
   </div>;
 }
 

@@ -1,5 +1,6 @@
 import { logisticsUpdate, parseNames, readLogistics, readStoryFields, storyUpdate } from "../shared/profile-fields";
 import { IdentityForm, LogisticsForm, PrivateNamesField, StoryFieldsForm, VoiceFileField, type IdentityValues } from "./ProfileFields";
+import { BackupSetting } from "./BackupSetting";
 import { BrowserSetting } from "./BrowserSetting";
 import { PrivacyAndTerms } from "./Privacy";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -550,7 +551,7 @@ export function SettingsModal({
             </div>
           )}
 
-          {activeTab === "privacy" && <div className="settings-section"><BrowserSetting /><PrivacyAndTerms /></div>}
+          {activeTab === "privacy" && <div className="settings-section"><BrowserSetting />{!FEATURES.candidates && <BackupSetting />}<PrivacyAndTerms /></div>}
           {activeTab === "preview" && (
             <div className="settings-section">
               <div className="settings-group">

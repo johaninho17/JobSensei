@@ -9,7 +9,7 @@ When an issue changes a feature's files or data contracts, update its entry here
 | ID | Feature | Main files | Shared contracts |
 |---|---|---|---|
 | FEAT-001 | Jobs list and tracker | `src/renderer/JobsHome.tsx`, `src/shared/tracker.ts`, `electron/tracker.ts`, `src/shared/job-organize.ts` | `tracker.json`, `TrackedJob`, `effectiveStatus` |
-| FEAT-002 | Job workspace and documents | `src/renderer/JobWorkspace.tsx`, `src/renderer/Documents.tsx`, `electron/role-facts.ts`, `electron/pdf-export.ts` | job record, validation report |
+| FEAT-002 | Job workspace and documents | `src/renderer/JobWorkspace.tsx`, `src/renderer/Documents.tsx`, `electron/role-facts.ts`, `electron/pdf-export.ts`, `electron/pdf-file-actions.ts` | job record, validation report |
 | FEAT-003 | Application pipeline | `electron/evidence-snapshot.ts`, `electron/application-artifacts.ts`, `electron/application-validation.ts`, `electron/fit-scoring.ts`, `.agents/skills/` | application context, evidence rows, bundle |
 | FEAT-004 | Job Search | `src/renderer/JobSearchView.tsx`, `electron/job-search.ts`, `electron/job-boards.ts`, `src/shared/job-search.ts` | search settings, found-job items |
 | FEAT-005 | Interviews and content | `src/renderer/InterviewView.tsx`, `electron/interview-context.ts`, `electron/interview-check.ts`, `electron/content-refresh.ts`, `src/shared/learnings.ts` | question cards, recording record, story bank |

@@ -31,6 +31,9 @@ Nothing else leaves your computer.
 - **Export a candidate:** Candidate menu → Export saves a .zip of their folder.
 - **Delete a candidate:** Candidate menu → Delete. You type their name to confirm. It removes their folder, their Agy history, and their place on the candidate list. Export first if you may need the files.
 <!-- /feature -->
+<!-- feature:!candidates -->
+- **Export a backup:** Settings → Privacy and data → Export backup saves a .zip of your workspace (caches the app rebuilds are left out).
+<!-- /feature -->
 - **Everything:** your workspace is an ordinary folder. Copy it to keep a backup, or delete it to remove everything. Deleting the app's data folder removes its settings and Agy's sign-in and history.
 
 <!-- feature:candidates -->
