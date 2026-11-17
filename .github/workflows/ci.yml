@@ -1,22 +1,20 @@
 name: Verify source release
 
+# One verify run per PR commit: pushes run only on main, a newer push cancels the older run,
+# and a change only to tasks/ (the generated issue index) skips it; the local gate still runs the privacy scan on it. The PR title check lives in pr-title.yml.
 on:
   push:
+    branches: [main]
+    paths-ignore: ['tasks/**']
   pull_request:
+    paths-ignore: ['tasks/**']
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  pr-title:
-    # Titles follow <type>(<scope>): <summary> (refs #N); scripts/issue-lib.mjs owns the pattern.
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: node scripts/check-title.mjs "$PR_TITLE"
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
   verify:
     strategy:
       fail-fast: false
