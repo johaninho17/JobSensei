@@ -84,7 +84,7 @@ The exporter uses artifact-specific layouts, checks page count and extraction, a
 
 **Orchestrator:** `jobsensei-interview-pipeline`
 
-The interview pipeline resolves one existing job, identifies the requested stage, researches the company or process when appropriate, and creates stage-aware `research.md`, `prep.md`, and the round's questions. Agy writes the questions as `question_bank.json`; `interview:check` writes `question_bank.md` from it, so cards look the same every run. If you edited a round's `question_bank.md` by hand, new questions wait on the round's Questions tab for you to replace or keep. A pasted JD never activates this flow.
+The interview pipeline resolves one existing job, identifies the requested stage, researches the company or process when appropriate, and creates stage-aware company research, prep notes, and the round's questions. Agy writes them as JSON (`company_research.json`, `prep.json`, `question_bank.json`); `interview:check` writes the Markdown from it, so they look the same every run. If you edited one of those Markdown files by hand, the new version waits on the round page for you to replace or keep. A pasted JD never activates this flow.
 
 | Skill | Responsibility |
 | --- | --- |

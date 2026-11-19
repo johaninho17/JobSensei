@@ -24,9 +24,9 @@ About half of these are pressure questions (pipeline `SKILL.md` § Question mix)
 
 `questionsToAsk`: 4–5 manager questions (what success looks like in 6 months, how work reaches the team, biggest current challenge, how the team works with product or engineering, next steps).
 
-## `prep.md` sections
+## `prep.json` sections
 
-1. `## Before you start` and `## Learn before the interview` (pipeline-owned).
+1. `beforeYouStart` and `learnBeforeInterview` (pipeline-owned). Each item below is one `sections` entry, its heading as `heading`.
 2. `## How I work`: 3–4 points of operating principles drawn from the candidate's real stories, each with a story ID.
 3. `## My stories for this round`: the story IDs chosen for this round (none used in Round 01), each with one cue and its framing limit.
 4. `## First 30-60-90 days`: realistic, short, learning-first for any gap areas.

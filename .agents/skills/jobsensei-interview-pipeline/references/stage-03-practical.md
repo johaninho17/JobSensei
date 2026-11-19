@@ -30,9 +30,9 @@ Practical scenarios and live-design prompts as question cards. Use `approach` fo
 
 `questionsToAsk`: 4–5 peer questions (how the team works day to day, common customer or project problems, tools they use, what good looks like in this exercise).
 
-## `prep.md` sections
+## `prep.json` sections
 
-1. `## Before you start` and `## Learn before the interview` (pipeline-owned).
+1. `beforeYouStart` and `learnBeforeInterview` (pipeline-owned). Each item below is one `sections` entry, its heading as `heading`.
 2. `## How I approach these`: 2–3 short decision checklists (e.g. clarify → isolate → test → communicate) in the candidate's own words.
 3. `## Trade-offs to have ready`: 2–3 small tables (speed vs. quality, custom vs. standard, cost vs. coverage) relevant to the JD.
 4. `## Presentation outline` (when the family uses one): 5–6 slide titles with one cue each, plus 3 likely Q&A questions.

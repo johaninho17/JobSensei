@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { checkInterviewRound } from "../electron/interview-check";
-import { hasPendingQuestionBank, renderRoundQuestionBank, resolvePendingQuestionBank } from "../electron/question-bank-render";
+import { pendingInterviewDocs, renderInterviewDoc, resolvePendingInterviewDoc } from "../electron/interview-render";
+
+const renderRoundQuestionBank = (root: string, job: string, round: string, title: string) => renderInterviewDoc(root, job, round, "question_bank", title);
+const hasPendingQuestionBank = async (root: string, job: string, round: string) => (await pendingInterviewDocs(root, job, round)).includes(`${round}/question_bank.md`);
+const resolvePendingQuestionBank = (root: string, job: string, round: string, choice: "replace" | "keep") => resolvePendingInterviewDoc(root, job, `${round}/question_bank.md`, choice);
 import { questionBankSchema, renderQuestionBank, type QuestionBankInput } from "../src/shared/question-bank";
 import { parseInterviewCards } from "../src/renderer/interview-cards";
 
@@ -124,7 +128,7 @@ describe("Agy's instructions (#113)", () => {
   it("tell Agy to write question_bank.json, never question_bank.md, with I18's card fields", async () => {
     const skill = await readFile(".agents/skills/jobsensei-interview-pipeline/SKILL.md", "utf8");
     expect(skill).toContain("`interviews/<round-id>/question_bank.json`");
-    expect(skill).toContain("Never write `question_bank.md`");
+    expect(skill).toContain("Never write `prep.md` or `question_bank.md`");
     for (const key of ["whyTheyAsk", "say", "proof", "approach", "followUp", "landOn", "careful", "questionsToAsk"]) expect(skill).toContain(`"${key}"`);
     expect(skill).not.toContain("### Question <N>:");
   });

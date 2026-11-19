@@ -1,6 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
+import { PREP_JSON, RESEARCH_JSON } from "../src/shared/interview-docs";
 import { QUESTION_BANK_JSON } from "../src/shared/question-bank";
-import { renderRoundQuestionBank } from "./question-bank-render";
+import { renderInterviewDoc, type RenderResult } from "./interview-render";
+import { withIdentityOverrides } from "./job-overrides";
 import { basename, join, resolve } from "node:path";
 import { candidateProfileSchema, challengePracticeSchema, type EvidenceSnapshot } from "../src/shared/schemas";
 import { BANNED_PHRASES } from "./evidence-snapshot";
@@ -112,15 +114,25 @@ export async function checkInterviewRound(workspacePath: string, jobId: string, 
   const roundRoot = `${interviewsRoot}/${roundId}`;
   const issues: InterviewCheckIssue[] = [];
   const add = (severity: InterviewCheckIssue["severity"], code: string, file: string, message: string) => issues.push({ code, severity, file, message });
-  // Agy writes the questions as JSON (#113); the app writes question_bank.md from it, then checks it like any bank.
-  const rendered = await renderRoundQuestionBank(workspace, jobId, roundId, spec.label);
-  if (rendered.kind === "invalid") add("error", "QUESTION_BANK_JSON_INVALID", QUESTION_BANK_JSON, `question_bank.json doesn't match the card format: ${rendered.problems.join("; ")}.`);
-  if (rendered.kind === "pending") add("warning", "QUESTION_BANK_EDITED", "question_bank.md", "question_bank.md was changed by hand, so the new questions wait on the round's Questions tab for the user to replace or keep.");
+  // Agy writes the questions, prep, and research as JSON (#113); the app writes the Markdown from it, then checks it.
+  const identity = await withIdentityOverrides(join(resolve(workspace), "jobs", jobId), await readText(workspace, `jobs/${jobId}/.sensei/job.json`).then((text) => { try { return JSON.parse(text || "{}") as { company?: string | null }; } catch { return {}; } }));
+  const rendered = {
+    bank: await renderInterviewDoc(workspace, jobId, roundId, "question_bank", spec.label),
+    prep: await renderInterviewDoc(workspace, jobId, roundId, "prep", spec.label),
+    research: await renderInterviewDoc(workspace, jobId, roundId, "research", identity.company || "Company"),
+  };
+  const RENDER_CODES = { bank: ["QUESTION_BANK", QUESTION_BANK_JSON, "question_bank.md", "card format"], prep: ["PREP", PREP_JSON, "prep.md", "prep format"], research: ["RESEARCH", RESEARCH_JSON, "company_research.md", "research format"] } as const;
+  for (const [name, result] of Object.entries(rendered) as Array<[keyof typeof rendered, RenderResult]>) {
+    const [code, json, markdown, format] = RENDER_CODES[name];
+    if (result.kind === "invalid") add("error", `${code}_JSON_INVALID`, json, `${json} doesn't match the ${format}: ${result.problems.join("; ")}.`);
+    if (result.kind === "pending") add("warning", `${code}_EDITED`, markdown, `${markdown} was changed by hand, so the new version waits on the round page for the user to replace or keep.`);
+  }
+  const renderedText = (result: RenderResult, path: string) => result.kind === "written" || result.kind === "pending" ? Promise.resolve(result.markdown) : readText(workspace, path);
 
   const [prep, bank, research, storyBankText, evaluation, profileText, snapshotText, labsText, jobText, jobDescription] = await Promise.all([
-    readText(workspace, `${roundRoot}/prep.md`),
-    rendered.kind === "written" || rendered.kind === "pending" ? Promise.resolve(rendered.markdown) : readText(workspace, `${roundRoot}/question_bank.md`),
-    readText(workspace, `${interviewsRoot}/company_research.md`),
+    renderedText(rendered.prep, `${roundRoot}/prep.md`),
+    renderedText(rendered.bank, `${roundRoot}/question_bank.md`),
+    renderedText(rendered.research, `${interviewsRoot}/company_research.md`),
     readText(workspace, STORY_BANK_PATH),
     readText(workspace, `jobs/${jobId}/evaluation.md`),
     readText(workspace, "profile/candidate.json"),
