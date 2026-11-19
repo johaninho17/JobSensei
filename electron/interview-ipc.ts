@@ -4,7 +4,7 @@ import { handleLinks } from "./open-link";
 import { join } from "node:path";
 import type { FeatureContext } from "./feature-context";
 import { getInterviewOverview, listInterviewRounds, refreshInterviewDashboard, setCurrentInterviewRound } from "./interviews";
-import { hasPendingQuestionBank, resolvePendingQuestionBank } from "./question-bank-render";
+import { pendingInterviewDocs, resolvePendingInterviewDoc } from "./interview-render";
 
 let interviewWindow: BrowserWindow | undefined;
 /** Set when the IPC is registered: web links open in the browser chosen in Settings. */
@@ -73,10 +73,10 @@ export function registerInterviewIpc(ctx: FeatureContext): void {
   ipcMain.handle("interviews:list-rounds", async (_event, jobId: string) => listInterviewRounds(ctx.requireWorkspace(), jobId));
   ipcMain.handle("interviews:set-current-round", async (_event, input: { jobId: string; roundId: string }) => setCurrentInterviewRound(ctx.requireWorkspace(), input?.jobId, input?.roundId));
   ipcMain.handle("interviews:refresh-dashboard", async (_event, jobId: string) => refreshInterviewDashboard(ctx.requireWorkspace(), jobId));
-  // New questions that wait because question_bank.md was edited by hand (electron/question-bank-render.ts, #113).
-  ipcMain.handle("interviews:question-bank-pending", async (_event, input: { jobId?: unknown; roundId?: unknown }) => hasPendingQuestionBank(ctx.requireWorkspace(), String(input?.jobId ?? ""), String(input?.roundId ?? "")));
-  ipcMain.handle("interviews:resolve-question-bank", async (_event, input: { jobId?: unknown; roundId?: unknown; choice?: unknown }) =>
-    resolvePendingQuestionBank(ctx.requireWorkspace(), String(input?.jobId ?? ""), String(input?.roundId ?? ""), input?.choice === "replace" ? "replace" : "keep"));
+  // New versions that wait because a round's Markdown was edited by hand (electron/interview-render.ts, #113).
+  ipcMain.handle("interviews:pending-docs", async (_event, input: { jobId?: unknown; roundId?: unknown }) => pendingInterviewDocs(ctx.requireWorkspace(), String(input?.jobId ?? ""), String(input?.roundId ?? "")));
+  ipcMain.handle("interviews:resolve-doc", async (_event, input: { jobId?: unknown; key?: unknown; choice?: unknown }) =>
+    resolvePendingInterviewDoc(ctx.requireWorkspace(), String(input?.jobId ?? ""), String(input?.key ?? ""), input?.choice === "replace" ? "replace" : "keep"));
   ipcMain.handle("interviews:open-workspace-window", async (_event, input: { jobId: string; roundId: string; live?: boolean }) => input?.live ? openLiveWindow(String(input.jobId), String(input.roundId)) : openInterviewWorkspaceWindow(input?.jobId, input?.roundId));
   ipcMain.handle("interviews:set-live-collapsed", async (_event, collapsed: unknown) => {
     if (!liveWindow || liveWindow.isDestroyed()) return;

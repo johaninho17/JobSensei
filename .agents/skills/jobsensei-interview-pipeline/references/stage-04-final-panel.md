@@ -21,9 +21,9 @@ About half are pressure questions (pipeline `SKILL.md` § Question mix): 2 and 3
 
 `questionsToAsk`: 3–4 leadership questions (where the company is heading, the bets behind it, what would make this hire a success, how the team will change).
 
-## `prep.md` sections
+## `prep.json` sections
 
-1. `## Before you start` and `## Learn before the interview` (pipeline-owned).
+1. `beforeYouStart` and `learnBeforeInterview` (pipeline-owned). Each item below is one `sections` entry, its heading as `heading`.
 2. `## Where I'm heading`: 2–3 points tying the candidate's real direction to the company's public direction.
 3. `## My stories for this round`: story IDs not used in Rounds 01–03.
 
