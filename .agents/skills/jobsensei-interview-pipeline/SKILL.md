@@ -25,8 +25,8 @@ Paths below are relative to the workspace, where your terminal starts.
 2. Run `sensei interview:context <job-id> <stage>` exactly once.
 3. Read `jobs/<job-id>/interviews/.sensei/interview_context.json` once, in a single full read. It holds the JD's required items and responsibilities, the candidate's gaps, citable evidence, the story bank, the candidate's career story and interview voice, logistics from the candidate profile (`profile/candidate.json`), matched role memory, everything earlier rounds already used, and the question limits. Do not read context files, other jobs, or transcripts separately.
 4. Company research (owner of this rule): if the context's `companyResearch.path` is set, reuse that file. If `companyResearch.reuseFrom` is set (a recent file from another job at the same company), copy its company, news, and interview-process sections into `interviews/company_research.md` and write the role sections (role decoded, requirement match, words to know, posted pay) fresh for this job, following `references/research.md`. Otherwise, with internet access, write it from scratch.
-5. In one file-writing turn, write `interviews/<round-id>/prep.md` and `interviews/<round-id>/question_bank.md` following this skill and the round's stage reference.
-6. Run `sensei interview:check <job-id> <round-id>` once. It validates the files and registers the round in `interview.json` (the app builds the dashboard from the files; never write `dashboardBrief`). Report its status, duration, and at most five issues, then stop. Do not repair in a loop; a warning is a finished run.
+5. In one file-writing turn, write `interviews/<round-id>/prep.md` and `interviews/<round-id>/question_bank.json` following this skill and the round's stage reference. Never write `question_bank.md`: the app writes it from the JSON.
+6. Run `sensei interview:check <job-id> <round-id>` once. It checks the JSON, writes `question_bank.md` from it, validates the files, and registers the round in `interview.json` (the app builds the dashboard from the files; never write `dashboardBrief`). Report its status, duration, and at most five issues, then stop. Do not repair in a loop; a warning is a finished run.
 
 ## Framing: honest and strong
 
@@ -62,28 +62,39 @@ Pressure cards always carry a **Likely follow-up**: the drill-down a sharp inter
 
 ## Question card (the only format)
 
-`question_bank.md` sections, in order: `## Primary for this round`, `## Gap questions`, `## Questions to ask`. The primary count must stay inside `questionLimits`; hypotheticals and scenarios are primary questions too.
+`question_bank.json` holds the round's cards. `primary` must stay inside `questionLimits`; hypotheticals and scenarios are primary questions too. One line per text field; IDs go in `ids`, never in the text.
 
-```markdown
-### Question <N>: <question as an interviewer would ask it>?
-- **Why they ask:** <what they are checking, one line>
-- **Say:** <point> · <point> · <point>   (3–5 points, each up to 10 words; on experience questions the first point, which names the experience, may run to 15)
-- **Proof:** <one fact the candidate can name, in plain words> (S2)   (story or evidence ID in the trailing parentheses)
-- **Your approach:** 1) <step> 2) <step> 3) <step>   (only for hypotheticals and scenarios)
-- **Likely follow-up:** <the question they will probably ask next> → <2–3 word cue>   (only when likely)
-- **Land on:** <3–6 plain spoken words naming the point to finish on>
-- **Careful:** <one scope boundary>   (optional)
+```json
+{
+  "schemaVersion": 1,
+  "primary": [
+    {
+      "question": "<question as an interviewer would ask it>?",
+      "whyTheyAsk": "<what they are checking, one line>",
+      "say": ["<point>", "<point>", "<point>"],
+      "proof": { "text": "<one fact the candidate can name, in plain words>", "ids": ["S2"] },
+      "approach": ["<step>", "<step>", "<step>"],
+      "followUp": { "question": "<the question they will probably ask next>?", "cue": "<2–3 word cue>" },
+      "landOn": "<3–6 plain spoken words naming the point to finish on>",
+      "careful": "<one scope boundary>"
+    }
+  ],
+  "gaps": [
+    {
+      "question": "<how an interviewer would raise the gap>?",
+      "gap": "<the requirement>",
+      "closestExperience": { "text": "<plain-words fact>", "ids": ["S1"] },
+      "rampPlan": "<concrete, short>",
+      "landOn": "<3–6 words>"
+    }
+  ],
+  "questionsToAsk": ["<question for the interviewer>?"]
+}
 ```
 
-```markdown
-### Gap <N>: <how an interviewer would raise the gap>?
-- **Gap:** <the requirement>
-- **Closest real experience:** <plain-words fact> (S1)
-- **Ramp plan:** <concrete, short>
-- **Land on:** <3–6 words>
-```
+`say` has 3–5 points, each up to 10 words (on experience questions the first point, which names the experience, may run to 15). `proof`, `approach`, `followUp`, and `careful` are left out of a card when the rules below say so.
 
-- **Say** points are what the answer is made of. Each names something concrete: a tool, a kind of customer or team, a step taken, or a result from the evidence. "Clear communication" or "technical bridge" alone is not a point; "weekly call with the partner's IT lead" is.
+- **Say** (`say`) points are what the answer is made of. Each names something concrete: a tool, a kind of customer or team, a step taken, or a result from the evidence. "Clear communication" or "technical bridge" alone is not a point; "weekly call with the partner's IT lead" is.
 - Experience questions ("tell me about a time", "walk me through a project you led"): the first Say point says what the experience was, in plain words, with who and roughly when ("Oct 2026: partner needed platform on his laptop"); the middle points are what the candidate did; the last point is how it ended. Take these from the story's cues. A listener must know which experience it is from the first point alone.
 - Background questions ("walk me through your background", "tell me about yourself"): Say points in order, oldest first, one per employer, school, or phase, each naming it ("Started at <school>, data and AI", "Built <kind of product> at <employer>", "Since <when>: customer-facing at <employer>") → why this role. Never present an earlier phase as current.
 - **Proof**: use a story when it honestly answers the question ("tell me about a time", how you work, tools you use), following the story fit rule above. Leave Proof out of motivation and logistics cards, and never attach a story that doesn't answer the question.

@@ -1,4 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
+import { QUESTION_BANK_JSON } from "../src/shared/question-bank";
+import { renderRoundQuestionBank } from "./question-bank-render";
 import { basename, join, resolve } from "node:path";
 import { candidateProfileSchema, challengePracticeSchema, type EvidenceSnapshot } from "../src/shared/schemas";
 import { BANNED_PHRASES } from "./evidence-snapshot";
@@ -110,10 +112,14 @@ export async function checkInterviewRound(workspacePath: string, jobId: string, 
   const roundRoot = `${interviewsRoot}/${roundId}`;
   const issues: InterviewCheckIssue[] = [];
   const add = (severity: InterviewCheckIssue["severity"], code: string, file: string, message: string) => issues.push({ code, severity, file, message });
+  // Agy writes the questions as JSON (#113); the app writes question_bank.md from it, then checks it like any bank.
+  const rendered = await renderRoundQuestionBank(workspace, jobId, roundId, spec.label);
+  if (rendered.kind === "invalid") add("error", "QUESTION_BANK_JSON_INVALID", QUESTION_BANK_JSON, `question_bank.json doesn't match the card format: ${rendered.problems.join("; ")}.`);
+  if (rendered.kind === "pending") add("warning", "QUESTION_BANK_EDITED", "question_bank.md", "question_bank.md was changed by hand, so the new questions wait on the round's Questions tab for the user to replace or keep.");
 
   const [prep, bank, research, storyBankText, evaluation, profileText, snapshotText, labsText, jobText, jobDescription] = await Promise.all([
     readText(workspace, `${roundRoot}/prep.md`),
-    readText(workspace, `${roundRoot}/question_bank.md`),
+    rendered.kind === "written" || rendered.kind === "pending" ? Promise.resolve(rendered.markdown) : readText(workspace, `${roundRoot}/question_bank.md`),
     readText(workspace, `${interviewsRoot}/company_research.md`),
     readText(workspace, STORY_BANK_PATH),
     readText(workspace, `jobs/${jobId}/evaluation.md`),

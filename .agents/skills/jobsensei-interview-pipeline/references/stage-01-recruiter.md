@@ -12,7 +12,7 @@ Card format, framing, gap questions, and limits are owned by the pipeline `SKILL
 
 Some recruiters also ask one or two light judgment scenarios (prioritizing several customers, a conflict between stakeholders, telling a customer they are wrong). Include up to two when `roleMemory` shows recruiters for this role family ask them. Keep them at the approach level; no deep technical design.
 
-## `question_bank.md` primary archetypes (6–8)
+## Primary question archetypes (6–8)
 
 1. Walk me through your background / what you focus on today.
 2. Why are you looking to leave now, and what are you looking for next? (Say points come from `careerStory`, never generic ambition lines.)
@@ -25,7 +25,7 @@ Some recruiters also ask one or two light judgment scenarios (prioritizing sever
 
 Recruiters press less, but two of these become pressure questions (pipeline `SKILL.md` § Question mix): 5 asks for one specific example (with "give me one specific example" as the follow-up), and 6 probes the posting's hardest must-have tool at working depth.
 
-`## Questions to ask`: 3–4 recruiter questions (process and timeline, why the role is open, how the team works, what successful new hires do in the first months).
+`questionsToAsk`: 3–4 recruiter questions (process and timeline, why the role is open, how the team works, what successful new hires do in the first months).
 
 ## `prep.md` sections
 
