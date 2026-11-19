@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { fencePosting, POSTING_DATA_RULE } from "../src/shared/prompt-fence";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import type { CandidateProfile, JobFolderSummary } from "../src/shared/schemas";
@@ -725,13 +726,18 @@ export function buildRatingPrompt(card: string, jobs: Array<{ id: string; title:
     "Rate how well this candidate fits each job below, from 1 (poor) to 5 (excellent). Use only the candidate card and each job's requirements: do not search, read files, or run commands.",
     "Score the work itself: transferable experience counts, tools that can be learned quickly are a small gap, and missing core experience is a big one. Be honest, not generous.",
     "For each job return its id, a score (one decimal), why in one plain sentence under 25 words (say \"you\", not \"the candidate\"), and up to 3 gaps of a few words each.",
+    POSTING_DATA_RULE,
     "",
     "Candidate:",
     card,
     "",
     ...jobs.flatMap((job) => [
-      `Job ${job.id}: ${job.title ?? "Untitled"} at ${job.company ?? "an unnamed company"}${job.level ? ` (${job.level})` : ""}`,
-      ...(job.requirements.length ? job.requirements.map((text) => `- ${clip(plain(text), 180)}`) : ["- (the posting lists no requirements)"]),
+      `Job ${job.id}:`,
+      // Title, company, and requirements all come from the posting, so all of them sit inside the fence.
+      fencePosting([
+        `${job.title ?? "Untitled"} at ${job.company ?? "an unnamed company"}${job.level ? ` (${job.level})` : ""}`,
+        ...(job.requirements.length ? job.requirements.map((text) => `- ${clip(plain(text), 180)}`) : ["- (the posting lists no requirements)"]),
+      ].join("\n")),
       "",
     ]),
   ].join("\n");
