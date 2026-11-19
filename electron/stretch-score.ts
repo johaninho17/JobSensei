@@ -16,6 +16,11 @@ export type StretchLine = {
 
 const FRAMING_WORDS = /\b(?:led|lead|owned|own|spearheaded|architected|drove|directed|managed|headed|championed|pioneered|enterprise(?:-wide)?|global|strategic|across|all|every|end-to-end|large-scale|multiple|organization-wide|company-wide|always|consistently|strictly)\b/gi;
 
+/** How two versions of a line are compared: markdown marks, spacing, and case ignored. */
+export function lineKey(value: string): string {
+  return normalize(value);
+}
+
 function normalize(value: string): string {
   return value.replaceAll("\\-", "-").replace(/[*_`#|]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
 }

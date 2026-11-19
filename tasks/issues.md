@@ -25,7 +25,6 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | # | Issue | Features | Blocked |
 |---|---|---|---|
 | #19 | Investigate one continuing Agy conversation in the regular app | FEAT-006 |  |
-| #88 | Jobs and Learnings by settings band | FEAT-012 |  |
 | #97 | Keep or revert each line flagged by the framing setting | FEAT-012 |  |
 | #112 | Phase 1.5: Add scoped --continue settings (Solo terminal, auto-reset after Tune, per-job interview continuity) | FEAT-006 | yes |
 
@@ -48,4 +47,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #124 | Phase 4.4: Global Connectors tab, per-job Activity & Emails timeline, Email Prep PDF action, and Undo toasts | FEAT-002, FEAT-014 | yes |
 | #133 | Multi-AI groundwork: agent brief, activity log, headless streaming, prompt caching, quota backoff | FEAT-006 |  |
 
-26 open, 8 of them for later.
+25 open, 8 of them for later.

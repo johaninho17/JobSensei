@@ -35,6 +35,7 @@ import { invalidateJobCache, listJobArtifacts, listJobFolders, listJobTree } fro
 import { assertInsideWorkspace, indexContext, layoutVersion, summarizeWorkspace } from "./workspace";
 import { toLogical } from "../src/shared/workspace-layout";
 import { applyMigration, healStrayPaths, planMigration, undoMigration } from "./layout-migration";
+import { framingLinesFor, keepFramingLine, revertFramingLine } from "./framing-choices";
 import { capWorkspaceNpmCache, initializeWorkspace, syncWorkspaceAgentFiles, type AgentSyncReport } from "./workspace-init";
 import { TerminalSession, appRoot as terminalAppRoot, resolveAgyExecutable } from "./terminal";
 import { buildContextManifest, contextSources, readActiveContextManifest } from "./context";
@@ -475,6 +476,18 @@ ipcMain.handle("runs:latest", async () => runWatcher.current());
 const agyHomes = createAgyHomeCache((workspace) => prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath }, agyHomeName));
 ipcMain.handle("jobs:update-tracker", async (_event, jobId: unknown, update: unknown) => updateJobTracker(requireWorkspace(), String(jobId), update));
 ipcMain.handle("jobs:validate-application", async (_event, jobId: string) => validateJobApplication(requireWorkspace(), jobId, false));
+// Keep or revert a line the framing setting flags (electron/framing-choices.ts, #97).
+ipcMain.handle("jobs:framing-lines", async (_event, jobId: string) => framingLinesFor(requireWorkspace(), String(jobId)));
+ipcMain.handle("jobs:framing-choice", async (_event, input: { jobId?: unknown; text?: unknown; choice?: unknown }) => {
+  const workspace = requireWorkspace();
+  const jobId = String(input?.jobId ?? "");
+  const text = String(input?.text ?? "");
+  if (input?.choice === "keep") return keepFramingLine(workspace, jobId, text);
+  if (input?.choice !== "revert") throw new Error("Choose keep or revert.");
+  const lines = await revertFramingLine(workspace, jobId, text);
+  invalidateSearchIndex(workspace);
+  return lines;
+});
 
 ipcMain.handle("search:query", async (_event, input) => searchWorkspace(requireWorkspace(), input));
 

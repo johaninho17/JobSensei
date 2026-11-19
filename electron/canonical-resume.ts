@@ -338,6 +338,30 @@ export function composeCanonicalCoverLetter(baseline: CanonicalResumeBaseline, d
   ].join("\n\n")}\n`;
 }
 
+/**
+ * The base resume's bullet in the same place (same role, same position) as a line of a drafted resume, for putting a
+ * line back (#97). Null when the base resume has no bullet there, the role gained or lost bullets, the line isn't a
+ * role bullet, or both say the same.
+ */
+export function baseBulletInPlace(markdown: string, baseline: CanonicalResumeBaseline, lineText: string, key: (value: string) => string): string | null {
+  let drafted: CanonicalResumeBaseline;
+  try {
+    drafted = parseCanonicalMarkdown(markdown, baseline.sourcePath, baseline.sourceSha256, baseline.structureSource, baseline.footprint, []);
+  } catch {
+    return null;
+  }
+  const wanted = key(lineText);
+  for (const [index, employer] of drafted.employers.entries()) {
+    const position = employer.originalBullets.findIndex((bullet) => key(bullet) === wanted);
+    if (position < 0) continue;
+    const bases = baseline.employers[index]?.originalBullets ?? [];
+    // Positions only line up when the role kept its bullet count; an added or removed bullet shifts them.
+    const base = bases.length === employer.originalBullets.length ? bases[position] : undefined;
+    return base && key(base) !== wanted ? base : null;
+  }
+  return null;
+}
+
 export function canonicalResumeDrifts(markdown: string, baseline: CanonicalResumeBaseline): CanonicalDrift[] {
   let candidate: CanonicalResumeBaseline;
   try {
