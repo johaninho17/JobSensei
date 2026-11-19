@@ -3,6 +3,7 @@ import { PRACTICE_NOT_EVIDENCE_LINE, fromPracticeInterview, practiceCountsAsEvid
 import { recruiterDefaultsFor, recruiterInstructionsFor } from "./recruiter-defaults";
 import { createHash } from "node:crypto";
 import { postingRecordFor, writePostingRecord } from "./posting-record";
+import { withIdentityOverrides } from "./job-overrides";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { extname } from "node:path";
@@ -944,6 +945,8 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
     // The JD had no "Company:" line; the run named the employer (`--company`).
     canonicalJob = { ...(canonicalJob ?? {}), company: await recordJobCompany(workspace, jobId, options.company) };
   }
+  // The user's corrections (Edit details, #114) win over job.json and `--company`.
+  if (canonicalJob) canonicalJob = await withIdentityOverrides(jobPath, canonicalJob);
   if (snapshot.canonicalResume && snapshot.applicationRouting) {
     const bulletBank = await readBulletBank(workspace).catch(() => null);
     const bankBulletsByText = new Map<string, string[]>();

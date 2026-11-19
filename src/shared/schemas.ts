@@ -4,6 +4,7 @@ import { SENIORITY_LEVELS, WORK_MODES } from "./posting";
 import { jobHealthSchema } from "./job-record";
 import type { Readiness } from "./readiness";
 import type { StrayItem } from "./workspace-layout";
+import type { JobOverrides, JobOverridesInput } from "./job-overrides";
 import type { JobSearchSettings, JobSearchState, ScheduleInfo, SearchRun, SearchStatus, WatchedSuggestion } from "./job-search";
 import type { TodayData } from "./today";
 
@@ -430,6 +431,8 @@ export const jobFolderSummarySchema = z.object({
   /** Interview round folders under interviews/ (prepared rounds, old and new formats). */
   interviewRoundCount: z.number().int().nonnegative().default(0),
   role: roleFactsSchema.nullable().default(null),
+  /** Details the user corrected on the job page (src/shared/job-overrides.ts, #114). */
+  editedFields: z.array(z.enum(["company", "title", "location", "workMode", "pay"])).default([]),
   hasApplicationMaterials: z.boolean().default(false),
   /** PDFs exist under the job's `pdfs/` folder, and when the newest was made (drafted vs applied, `src/shared/tracker.ts`). */
   hasPdfs: z.boolean().default(false),
@@ -1503,6 +1506,10 @@ export interface SenseiApi {
     /** Keep a flagged line, or revert it to the base resume's bullet in the same place; returns the lines after. */
     framingChoice(jobId: string, text: string, choice: "keep" | "revert"): Promise<FramingLine[]>;
     updateTracker(jobId: string, update: JobTrackerUpdate): Promise<JobTracker>;
+    /** The user's corrections to the job's details (#114). */
+    getOverrides(jobId: string): Promise<JobOverrides>;
+    /** Saves Edit details; returns the job as shown after the change. A blank field goes back to the posting's value. */
+    saveOverrides(jobId: string, input: JobOverridesInput): Promise<JobFolderSummary>;
     /** Saves a pasted JD where `jd:fetch` stages links; Agy then gets one short prompt. */
     /** Saves CSV text to a file the user picks; returns its path, or null when cancelled. */
     exportCsv(csv: string): Promise<string | null>;

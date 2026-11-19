@@ -32,10 +32,12 @@ import { markdownSaveInputSchema, pdfExportRequestSchema } from "../src/shared/s
 import { SettingsStore } from "./settings";
 import { deleteWorkspacePath, getBaseResume, listFileTree, listResumePaths, previewFile, revealWorkspacePath, saveMarkdownFile } from "./files";
 import { invalidateJobCache, listJobArtifacts, listJobFolders, listJobTree } from "./job-folders";
-import { assertInsideWorkspace, indexContext, layoutVersion, summarizeWorkspace } from "./workspace";
+import { assertInsideWorkspace, indexContext, layoutVersion, summarizeWorkspace, workspaceFile } from "./workspace";
 import { toLogical } from "../src/shared/workspace-layout";
 import { applyMigration, healStrayPaths, planMigration, undoMigration } from "./layout-migration";
 import { framingLinesFor, keepFramingLine, revertFramingLine } from "./framing-choices";
+import { readJobOverrides, saveJobOverrides } from "./job-overrides";
+import type { JobOverridesInput } from "../src/shared/job-overrides";
 import { capWorkspaceNpmCache, initializeWorkspace, syncWorkspaceAgentFiles, type AgentSyncReport } from "./workspace-init";
 import { TerminalSession, appRoot as terminalAppRoot, resolveAgyExecutable } from "./terminal";
 import { buildContextManifest, contextSources, readActiveContextManifest } from "./context";
@@ -475,6 +477,15 @@ ipcMain.handle("runs:latest", async () => runWatcher.current());
 // folder in the Recruiter Edition shares it, with that candidate's Agy history swapped in).
 const agyHomes = createAgyHomeCache((workspace) => prepareAgyHome(app.getPath("userData"), workspace, [], { appRoot: terminalAppRoot(), runtimePath: process.execPath }, agyHomeName));
 ipcMain.handle("jobs:update-tracker", async (_event, jobId: unknown, update: unknown) => updateJobTracker(requireWorkspace(), String(jobId), update));
+// The job page's Edit details (electron/job-overrides.ts, #114): returns the job as shown after the change.
+ipcMain.handle("jobs:get-overrides", async (_event, jobId: unknown) => readJobOverrides(workspaceFile(requireWorkspace(), `jobs/${String(jobId).replace(/[^a-z0-9-]/gi, "")}`)));
+ipcMain.handle("jobs:save-overrides", async (_event, jobId: unknown, input: unknown) => {
+  const workspace = requireWorkspace();
+  await saveJobOverrides(workspace, String(jobId), (input ?? {}) as JobOverridesInput);
+  const job = (await listJobFolders(workspace)).find((candidate) => candidate.id === String(jobId));
+  if (!job) throw new Error("The job could not be found.");
+  return job;
+});
 ipcMain.handle("jobs:validate-application", async (_event, jobId: string) => validateJobApplication(requireWorkspace(), jobId, false));
 // Keep or revert a line the framing setting flags (electron/framing-choices.ts, #97).
 ipcMain.handle("jobs:framing-lines", async (_event, jobId: string) => framingLinesFor(requireWorkspace(), String(jobId)));

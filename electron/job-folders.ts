@@ -9,6 +9,8 @@ import { fitSettingsOf, normalizeEvidenceClassifications, parseFitRequirements, 
 import { parseJobDescriptionMetadata } from "./job-description";
 import { readJobTracker } from "./tracker";
 import { readPostingRecord } from "./posting-record";
+import { readJobOverrides } from "./job-overrides";
+import { applyJobOverrides, JOB_OVERRIDES_FILE } from "../src/shared/job-overrides";
 import { buildJobRecord, saveJobRecord } from "./job-record";
 import { effectiveStatus } from "../src/shared/tracker";
 import { roleFacts } from "./role-facts";
@@ -196,7 +198,7 @@ async function readCurrentInterviewLabel(jobPath: string): Promise<string | null
 const SUMMARY_INPUTS = [
   "", ".sensei", "interviews", ".sensei/job.json", "job.json", ".sensei/status.json", "status.json", "evaluation.md",
   "original_jd.md", "original_jd.txt", ".sensei/application_run.json", ".sensei/evidence_snapshot.json", ".sensei/tracker.json",
-  "interviews/interview.json", ".sensei/validation_report.json", "interviews/company_research.md", "pdfs",
+  "interviews/interview.json", ".sensei/validation_report.json", "interviews/company_research.md", "pdfs", JOB_OVERRIDES_FILE,
 ];
 const summaryCache = new Map<string, { key: string; summary: JobFolderSummary }>();
 const treeCache = new Map<string, { key: string; node: FileTreeNode | null }>();
@@ -277,7 +279,8 @@ async function readJobSummary(path: string, name: string): Promise<JobFolderSumm
     gate: await readJson(join(path, ".sensei", "validation_report.json")).then((report) => jobSettingsScore(report.settingsScore).behavior.fit.gate),
   });
   await saveJobRecord(path, record).catch(() => undefined);
-  return {
+  // The user's corrections (Edit details, #114) win over what the app read.
+  return applyJobOverrides({
     id: name,
     relativePath: `jobs/${name}`,
     name: name,
@@ -301,7 +304,8 @@ async function readJobSummary(path: string, name: string): Promise<JobFolderSumm
     gapTerms: record.gapTerms,
     stretch: await readJson(join(path, ".sensei", "validation_report.json")).then((report) => stretchScoreSchema.nullable().catch(null).parse(report.stretch ?? null)),
     settingsScore: await readJson(join(path, ".sensei", "validation_report.json")).then((report) => settingsScoreSchema.nullable().catch(null).parse(report.settingsScore ?? null)),
-  };
+    editedFields: [],
+  }, await readJobOverrides(path));
 }
 
 export async function listJobArtifacts(workspacePath: string, jobId: string): Promise<ArtifactFile[]> {

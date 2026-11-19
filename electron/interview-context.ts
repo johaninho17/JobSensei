@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { postingRecordFor } from "./posting-record";
+import { withIdentityOverrides } from "./job-overrides";
 import { basename, join, resolve } from "node:path";
 import { candidateProfileSchema, type CandidateProfile, type EvidenceSnapshot, type InterviewLogistics } from "../src/shared/schemas";
 import { BANNED_PHRASES, createEvidenceSnapshot, narrativeStoryLines } from "./evidence-snapshot";
@@ -7,7 +8,7 @@ import { readActiveContextManifest } from "./context";
 import { bestEvidenceForRequirement, parseMustHaves } from "./fit-scoring";
 import { writeJsonAtomic, readTextFile } from "./persistence";
 import { toDisk } from "../src/shared/workspace-layout";
-import { assertInsideWorkspace, layoutVersion } from "./workspace";
+import { assertInsideWorkspace, layoutVersion, workspaceFile } from "./workspace";
 
 /** The four canonical rounds and their question limits. Single owner for round IDs and bounds. */
 export const INTERVIEW_STAGES = {
@@ -212,8 +213,10 @@ export async function buildInterviewContext(workspacePath: string, jobId: string
   const stage = normalizeInterviewStage(stageInput);
   const spec = INTERVIEW_STAGES[stage];
   const jobRoot = `jobs/${jobId}`;
-  const job = await readJsonFile<{ company?: string; title?: string; role?: string }>(workspace, `${jobRoot}/.sensei/job.json`)
+  const savedJob = await readJsonFile<{ company?: string; title?: string; role?: string }>(workspace, `${jobRoot}/.sensei/job.json`)
     ?? await readJsonFile<{ company?: string; title?: string; role?: string }>(workspace, `${jobRoot}/job.json`);
+  // The user's corrections (Edit details, #114) win over job.json.
+  const job = savedJob && await withIdentityOverrides(workspaceFile(workspace, jobRoot), savedJob);
   const jobDescription = await readText(workspace, `${jobRoot}/original_jd.md`) || await readText(workspace, `${jobRoot}/original_jd.txt`);
   if (!job || !jobDescription) throw new Error(`No job workspace with job.json and original_jd.md found for "${jobId}".`);
   // Fetched postings may leave job.json without a title; the JD's first heading is the fallback.
