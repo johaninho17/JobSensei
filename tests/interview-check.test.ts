@@ -358,12 +358,13 @@ describe("interview parsing and shared rules", () => {
     const skill = await read(".agents/skills/jobsensei-interview-pipeline/SKILL.md");
     expect(skill).toContain("interview:context");
     expect(skill).toContain("interview:check");
-    expect(skill).toContain("**Land on:**");
+    // Card fields are JSON keys since #113 (question_bank.json); the app renders the **Say:** / **Proof:** labels.
+    expect(skill).toContain('"landOn"');
     expect(skill).toMatch(/never write `dashboardBrief`/i);
     expect(skill).toContain("## 3 things to get across");
     // Card v3: Say / Proof, follow-ups only where likely, no follow-ups section.
-    expect(skill).toContain("**Say:**");
-    expect(skill).toContain("**Proof:**");
+    expect(skill).toContain('"say"');
+    expect(skill).toContain('"proof"');
     expect(skill).toMatch(/Likely follow-up\*\*: always on pressure cards; on the other cards only where/);
     expect(skill).not.toContain("**Real example:**");
     expect(skill).not.toContain("## Likely follow-ups");

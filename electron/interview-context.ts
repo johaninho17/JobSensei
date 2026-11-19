@@ -282,7 +282,7 @@ export async function buildInterviewContext(workspacePath: string, jobId: string
       questionLimits: { min: spec.min, max: spec.max },
       bannedPhrases: BANNED_PHRASES,
       confidentialNamesAllowedInPrep: true,
-      outputFiles: [`${interviewsRoot}/${spec.roundId}/prep.md`, `${interviewsRoot}/${spec.roundId}/question_bank.md`, `${interviewsRoot}/company_research.md`],
+      outputFiles: [`${interviewsRoot}/${spec.roundId}/prep.md`, `${interviewsRoot}/${spec.roundId}/question_bank.json`, `${interviewsRoot}/company_research.md`],
     },
   };
   const stateDir = assertInsideWorkspace(workspace, join(workspace, interviewsRoot, ".sensei"));

@@ -196,6 +196,9 @@
 .stretch-tag { font-weight: 600; }
 .framing-lines { margin: 0 0 var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: var(--radius-m); font-size: var(--fs-13); }
 .framing-lines-note { margin: 0 0 var(--space-2); }
+.iv-pending { margin: 0 0 var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: var(--radius-m); font-size: var(--fs-13); }
+.iv-pending p { margin: 0 0 var(--space-2); }
+.iv-pending-actions { display: flex; gap: var(--space-2); align-items: center; }
 .framing-lines ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
 .framing-lines li p { margin: 0 0 var(--space-1); }
 .framing-line-text { font-weight: 600; }

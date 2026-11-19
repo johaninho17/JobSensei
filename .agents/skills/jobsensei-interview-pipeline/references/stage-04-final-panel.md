@@ -7,7 +7,7 @@ Card format, framing, gap questions, and limits are owned by the pipeline `SKILL
 
 Fit with the company's direction, accountability and learning from mistakes, working across functions, and clear communication of risk and trade-offs. Speak about impact and judgment, not low-level mechanics or resume repetition.
 
-## `question_bank.md` primary archetypes (6–8)
+## Primary question archetypes (6–8)
 
 1. Why this company and this direction for your career, longer term.
 2. A time you were wrong or changed your mind.
@@ -19,7 +19,7 @@ Fit with the company's direction, accountability and learning from mistakes, wor
 
 About half are pressure questions (pipeline `SKILL.md` § Question mix): 2 and 3 as one specific case with what changed, 4 as a compound example, plus what you'd do differently.
 
-`## Questions to ask`: 3–4 leadership questions (where the company is heading, the bets behind it, what would make this hire a success, how the team will change).
+`questionsToAsk`: 3–4 leadership questions (where the company is heading, the bets behind it, what would make this hire a success, how the team will change).
 
 ## `prep.md` sections
 

@@ -150,6 +150,8 @@ const api: SenseiApi = {
     listRounds: (jobId) => ipcRenderer.invoke("interviews:list-rounds", jobId),
     setCurrentRound: (jobId, roundId) => ipcRenderer.invoke("interviews:set-current-round", { jobId, roundId }),
     refreshDashboard: (jobId) => ipcRenderer.invoke("interviews:refresh-dashboard", jobId),
+    questionBankPending: (jobId, roundId) => ipcRenderer.invoke("interviews:question-bank-pending", { jobId, roundId }),
+    resolveQuestionBank: (jobId, roundId, choice) => ipcRenderer.invoke("interviews:resolve-question-bank", { jobId, roundId, choice }),
     openWorkspaceWindow: (jobId, roundId, live) => ipcRenderer.invoke("interviews:open-workspace-window", { jobId, roundId, live: live === true }),
     setLiveCollapsed: (collapsed) => ipcRenderer.invoke("interviews:set-live-collapsed", collapsed === true),
   },

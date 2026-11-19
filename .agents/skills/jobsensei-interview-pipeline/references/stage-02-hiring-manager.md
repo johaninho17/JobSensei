@@ -7,7 +7,7 @@ Card format, framing, gap questions, and limits are owned by the pipeline `SKILL
 
 How the candidate actually operates: ownership, judgment under ambiguity, handling pushback, balancing urgent and long-term work, and working across teams. Managers often ask "give me a real case if you have one, otherwise walk me through your approach." Every card therefore offers a **Proof** (story ID) and **Your approach**.
 
-## `question_bank.md` primary archetypes (8–10)
+## Primary question archetypes (8–10)
 
 1. Career walkthrough for a manager: why you chose this kind of work and how you operate.
 2. An engagement, project, or customer you owned end to end.
@@ -22,7 +22,7 @@ How the candidate actually operates: ownership, judgment under ambiguity, handli
 
 About half of these are pressure questions (pipeline `SKILL.md` § Question mix). For a hiring manager the strongest are: a compound example (2 with several stakeholders and a deadline), pain to product (5 as one specific customer problem that became a change), a failure-mode scenario in the posting's domain (8 or 10), a depth probe on the hardest must-have, and what you'd do differently (9).
 
-`## Questions to ask`: 4–5 manager questions (what success looks like in 6 months, how work reaches the team, biggest current challenge, how the team works with product or engineering, next steps).
+`questionsToAsk`: 4–5 manager questions (what success looks like in 6 months, how work reaches the team, biggest current challenge, how the team works with product or engineering, next steps).
 
 ## `prep.md` sections
 
