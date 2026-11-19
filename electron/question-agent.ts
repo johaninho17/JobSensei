@@ -3,6 +3,7 @@
 // job's evidence rows, stories, voice, the cover letter, the truth rules), so Agy reads no files. Agy decides per
 // question whether to answer, skip, or give notes, and answers by question kind; the answers are checked here before
 // they are saved. Owner of the answer rules (application-questions.ts only drops form fields and plain logistics).
+import { fencePosting, POSTING_DATA_RULE } from "../src/shared/prompt-fence";
 import { recordHeadlessConversation } from "./agy-home";
 import { readCandidateProfile } from "./candidate-profile";
 import { agyModelArgs, effectiveBehavior } from "../src/shared/agy-behavior";
@@ -120,7 +121,7 @@ export function buildQuestionPrompt(input: PromptInput): string {
     ...rows,
     ...(stories.length ? ["", "## Stories", ...stories] : []),
     ...(input.coverLetter?.trim() ? ["", "## The cover letter already written for this job (stay consistent with it; don't reuse its sentences)", input.coverLetter.trim()] : []),
-    ...(posting ? ["", "## The posting (for motivation questions; don't repeat it back)", posting] : []),
+    ...(posting ? ["", "## The posting (for motivation questions; don't repeat it back)", POSTING_DATA_RULE, fencePosting(posting)] : []),
     "",
     "## Questions",
     ...questions,

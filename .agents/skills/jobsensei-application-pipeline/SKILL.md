@@ -30,7 +30,7 @@ For a JD pasted in the app ("Evaluate the job description I pasted (paste ID <id
    - Skills lines: start from `resumeTemplate.editableSkillCategories` and follow the snapshot `instructions` (keep the base resume's items).
    - `evaluationMarkdown`: the Requirement Scoring table and at most three one-line bullets (top strength, main gap, apply recommendation). The app writes the Must-Have table (only when `requirements` is empty do you write it; see Evaluation Table).
    - Draft the cover letter exactly as `coverLetterBrief` specifies. If the application context has no `coverLetterBrief`, its instructions say why: leave `coverLetter` out of the bundle.
-6. Run `sensei application:finalize <job-id>` exactly once. Report its `fitScore`, `fitConfidence`, `gateStatus`, `durationSeconds`, and warnings, then stop. Never inspect code, patch output, or retry after finalization.
+6. Run `sensei application:finalize <job-id>`. If it fails with a message or `repairHint` starting "Fix the draft and run finalize once more:", correct only what it names in the bundle (or add `--company` as it says) and run finalize one more time. Any other failure ("Stop: begin a fresh run."), or a second failure, ends the run: report the errors and stop. This is the owner of the retry rule. Report `fitScore`, `fitConfidence`, `gateStatus`, `durationSeconds`, and warnings, then stop. Never inspect code or patch output files.
 
 For an explicit regeneration, the saved JD is the only job-specific input. Existing generated files are stale outputs, not references. Never read them before replacement.
 

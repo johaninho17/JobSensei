@@ -256,7 +256,8 @@ describe("Agy light rating", () => {
   it("asks with the card and requirements only, and keeps only known ids", () => {
     const prompt = buildRatingPrompt("Roles: Support Engineer (2022 – present)", [{ id: "find-abc1", title: "Solutions Engineer", company: "Northstar Labs", level: "mid", requirements: ["Strong SQL"] }]);
     expect(prompt).toContain("do not search, read files");
-    expect(prompt).toContain("Job find-abc1: Solutions Engineer at Northstar Labs (mid)");
+    // #109: the job's own text sits inside the posting fence, after its id.
+    expect(prompt).toContain("Job find-abc1:\n<posting>\nSolutions Engineer at Northstar Labs (mid)");
     expect(prompt).toContain("- Strong SQL");
     const parsed = parseRatingReply('{"ratings":[{"id":"find-abc1","score":7,"why":"Close **match**.","gaps":["Kotlin","a","b","c"]},{"id":"find-other","score":4,"why":"x"}]}', ["find-abc1"]);
     expect([...parsed.keys()]).toEqual(["find-abc1"]);

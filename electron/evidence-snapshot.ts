@@ -1094,7 +1094,7 @@ export async function createEvidenceSnapshot(workspacePath: string, jobId: strin
         "Use direct, natural wording; denylistRules always win. Apply styleRules to wording only, never as evidence.",
         // Only when the posting is customer-facing; otherwise there is nothing for Agy to weigh.
         ...(resumePlan.customerFacingRole ? [`Include ${resumePlan.targetCurrentEmployerCustomerBullets} supported current-employer customer-facing bullets and retain a technical foundation.`] : []),
-        "Write one application_bundle.json with evidence IDs beside each generated claim, then finalize once.",
+        "Write one application_bundle.json with evidence IDs beside each generated claim, then finalize (one retry only when finalize says \"Fix the draft\"; the pipeline skill owns this).",
       ],
     });
     const compactSerialized = serializeCompactApplicationContext(applicationContext);

@@ -37,6 +37,20 @@ import { assertInsideWorkspace } from "./workspace";
 import { companyArgument, recordJobCompany } from "./job-company";
 import { readCandidateProfile } from "./candidate-profile";
 
+/**
+ * How a failed finalize tells Agy what to do next (#109). A "Fix" error is something Agy can correct in its own draft
+ * (the bundle, or the company name), so the pipeline skill allows one more finalize; anything else stops the run.
+ * Step 6 of the application pipeline skill owns the retry rule; these two prefixes are the only signal it reads.
+ */
+export const FIX_DRAFT = "Fix the draft and run finalize once more:";
+export const STOP_RUN = "Stop: begin a fresh run.";
+const BUNDLE = ".sensei/application_bundle.json";
+
+/** The message a finalize failure prints: labeled Fix or Stop. */
+export function finalizeFailureMessage(message: string): string {
+  return message.startsWith(FIX_DRAFT) || message.startsWith(STOP_RUN) ? message : `${STOP_RUN} ${message}`;
+}
+
 class ApplicationInputError extends Error {
   constructor(
     readonly artifact: string,
@@ -59,7 +73,7 @@ async function readOptionalBundle(path: string): Promise<ApplicationBundle | nul
     return applicationBundleSchema.parse(JSON.parse(await readFile(path, "utf8")));
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return null;
-    throw new ApplicationInputError(".sensei/application_bundle.json", error);
+    throw new ApplicationInputError(BUNDLE, error);
   }
 }
 
@@ -90,7 +104,7 @@ export function expandBundleBaselines(
     if (!("baseline" in bullet)) return bullet;
     const reference = baselinesFor(name, occurrence)[bullet.baseline - 1];
     if (!reference) {
-      throw new ApplicationInputError(".sensei/application_bundle.json", new Error(`${name} has no base-resume bullet ${bullet.baseline}.`));
+      throw new ApplicationInputError(BUNDLE, new Error(`${name} has no base-resume bullet ${bullet.baseline}.`));
     }
     return { text: reference.text, evidenceIds: [...reference.evidenceIds] };
   });
@@ -186,7 +200,7 @@ function materializeBundle(
   // A run whose snapshot says no letter (src/shared/cover-letter-policy.ts) ignores any letter in the bundle.
   const letter = snapshot.coverLetterPlan?.write === false ? null : bundle.coverLetter ?? null;
   if (snapshot.coverLetterPlan?.write !== false && !letter) {
-    throw new ApplicationInputError(".sensei/application_bundle.json", new Error("coverLetter is missing; this run writes a cover letter (follow coverLetterBrief)."));
+    throw new ApplicationInputError(BUNDLE, new Error("coverLetter is missing; this run writes a cover letter (follow coverLetterBrief)."));
   }
   const coverItems = letter ? letter.bodyParagraphs.flatMap((paragraph) => paragraph.sentences) : [];
   // Letter sentences retell real work in the candidate voice: framed, never a new fact (ledger T4).
@@ -262,7 +276,9 @@ function inputValidationIssues(error: ApplicationInputError): ValidationIssue[] 
       message: issue.message || "The generated JSON does not match the application contract.",
       expected: "The exact Hidden Evidence or Hidden Draft Contract from jobsensei-application-pipeline.",
       actual: null,
-      repairHint: "Keep this run pending review. Use the exact documented JSON shape in the next explicit generation run; do not start an automatic repair loop.",
+      repairHint: error.artifact === BUNDLE
+        ? `${FIX_DRAFT} make ${issue.path?.length ? issue.path.join(".") : "the bundle"} match the Hidden Draft Contract (${issue.message || "wrong shape"}).`
+        : `${STOP_RUN} ${error.artifact} is not the app's own output; do not edit it.`,
       severity: "error",
       explanation: null,
     }));
@@ -275,7 +291,9 @@ function inputValidationIssues(error: ApplicationInputError): ValidationIssue[] 
     message: missing ? "A required hidden application input is missing." : (cause?.message || "The generated application input is not valid JSON."),
     expected: "A present, parseable file matching the exact JobSensei contract.",
     actual: null,
-    repairHint: "Keep this run pending review. Regenerate the complete hidden input in the next explicit run; do not patch this run automatically.",
+    repairHint: error.artifact === BUNDLE
+      ? `${FIX_DRAFT} ${missing ? "write" : "rewrite"} ${BUNDLE} as one complete JSON file${!missing && cause?.message ? ` (${cause.message})` : ""}.`
+      : `${STOP_RUN} ${missing ? `${error.artifact} is missing` : `${error.artifact} can't be read`}.`,
     severity: "error",
     explanation: null,
   }];
@@ -319,7 +337,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
     ? await recordJobCompany(workspace, jobId, options.company)
     : applicationContext?.schemaVersion === 2 ? applicationContext.job.company : null;
   if (bundle && !jobCompany) {
-    throw new Error(`The job has no company name, so the resume can't be named. Rerun: sensei application:finalize ${jobId} --company "<employer name from the JD>"`);
+    throw new Error(`${FIX_DRAFT} the job has no company name, so the resume can't be named. Run: sensei application:finalize ${jobId} --company "<employer name from the JD>"`);
   }
   const expandedBundle = bundle ? pruneBundleSkills(expandBundleBaselines(bundle, snapshot.canonicalResume, applicationContext), snapshot) : null;
   const summaryEditable = summaryIsEditable(snapshot.canonicalResume, candidateProfile, (await recruiterDefaultsFor(workspace))?.tailorSummary ?? false);
@@ -361,7 +379,7 @@ async function finalizeApplicationUnchecked(workspacePath: string, jobId: string
   const resumeDrifts = canonicalResumeDrifts(resumeMarkdown, snapshot.canonicalResume);
   const coverDrifts = coverMarkdown ? canonicalCoverLetterDrifts(coverMarkdown, snapshot.canonicalResume) : [];
   if (resumeDrifts.length || coverDrifts.length) {
-    throw new Error(`Canonical composition failed: ${[...resumeDrifts, ...coverDrifts].map((drift) => drift.code).join(", ")}.`);
+    throw new Error(`${FIX_DRAFT} canonical composition failed (${[...resumeDrifts, ...coverDrifts].map((drift) => drift.code).join(", ")}). Keep the base resume's headings, roles, dates, and order; change only bullet and skills wording in the bundle.`);
   }
   const evaluationPath = assertInsideWorkspace(jobPath, join(jobPath, "evaluation.md"));
   const evaluationMarkdown = generated?.evaluationMarkdown
@@ -472,7 +490,7 @@ if (require.main === module) {
         if (report.status !== "passed") process.exitCode = 1;
       })
       .catch((error: unknown) => {
-        process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+        process.stderr.write(`${finalizeFailureMessage(error instanceof Error ? error.message : String(error))}\n`);
         process.exitCode = 1;
       });
   }
