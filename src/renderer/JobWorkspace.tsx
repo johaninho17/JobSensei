@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { jobSettingsScore, settingsScoreLabel } from "../shared/agy-behavior";
 import { DEFAULT_PDF_TEXT_SIZE, INTERVIEW_ROUNDS, OUTCOME_RESULTS, TRACKER_STATUSES, type InterviewEvent, type InterviewRoundKind, type JobOutcome, type JobTrackerUpdate, type TrackerStatus, type ApplicationStatus, type ApplicationValidationReport, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type PdfTextSize, type QuestionsState, type FramingLine } from "../shared/schemas";
+import { overrideLabel } from "../shared/job-overrides";
 import { TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, draftedLabel } from "../shared/tracker";
 import { type JobAction } from "./job-actions";
 import { markdownHtml } from "./markdown";
@@ -29,7 +30,8 @@ function TrackerPanel({ job, onUpdate }: { job: JobFolderSummary; onUpdate: (upd
   </section>;
 }
 
-export function JobWorkspaceDashboard({ job, status, applicationLoading, overview, interviewLoading, jobTree, jobActions, onStatus, onSelect, activeTab, activeRoundId, onNavigate, onInsertPrompt, onUpdateTracker }: { job: JobFolderSummary; status: ApplicationStatus | null; applicationLoading: boolean; overview: InterviewOverview | null; interviewLoading: boolean; jobTree: FileTreeNode[]; jobActions: JobAction[]; onStatus: (status: ApplicationStatus) => void; onSelect: (path: string, anchor?: string) => void; activeTab: JobWorkspaceTab; activeRoundId?: string; onNavigate: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onInsertPrompt: (action: Pick<JobAction, "prompt" | "label">) => void; onUpdateTracker: (update: JobTrackerUpdate) => Promise<void> }) {
+export function JobWorkspaceDashboard({ job, status, applicationLoading, overview, interviewLoading, jobTree, jobActions, onStatus, onSelect, activeTab, activeRoundId, onNavigate, onInsertPrompt, onUpdateTracker, onJobChanged }: { job: JobFolderSummary; status: ApplicationStatus | null; applicationLoading: boolean; overview: InterviewOverview | null; interviewLoading: boolean; jobTree: FileTreeNode[]; jobActions: JobAction[]; onStatus: (status: ApplicationStatus) => void; onSelect: (path: string, anchor?: string) => void; activeTab: JobWorkspaceTab; activeRoundId?: string; onNavigate: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onInsertPrompt: (action: Pick<JobAction, "prompt" | "label">) => void; onUpdateTracker: (update: JobTrackerUpdate) => Promise<void>; onJobChanged: (job: JobFolderSummary) => void }) {
+  const [editingDetails, setEditingDetails] = useState(false);
   const trackerStatus = effectiveStatus(job);
   const files = useMemo(() => {
     const root = findNode(jobTree, `jobs/${job.id}`);
@@ -74,9 +76,12 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
           {job.hasApplicationMaterials && (() => { const score = jobSettingsScore(job.settingsScore); return <span className={`settings-score is-${score.band}`} title={`Agy's settings when these drafts were made: ${score.score} of 100 (${settingsScoreLabel(score).split(" ")[1]}). Higher means more lenient. See Agy → Behavior.`}>Settings <strong className="tabular">{score.score}</strong> {settingsScoreLabel(score).split(" ")[1]}</span>; })()}
           {job.location && <span>{job.location}</span>}
           <span>Added {formatJobDate(job.createdAt)}</span>
+          {job.editedFields.length > 0 && <span className="job-edited" title="You corrected these; re-reading the posting never changes them.">Edited: {job.editedFields.map((field) => overrideLabel(field).toLowerCase()).join(", ")}</span>}
+          {!editingDetails && <button className="btn-link" onClick={() => setEditingDetails(true)}>Edit details</button>}
         </div>
       </div>
     </header>
+    {editingDetails && <EditJobDetails job={job} onClose={() => setEditingDetails(false)} onSaved={(next) => { onJobChanged(next); setEditingDetails(false); }} />}
     <div className="workspace-tabs-row">
       <nav className="workspace-tabs" role="tablist" aria-label="Job sections">{tabs.map(([value, label, count]) => <button key={value} role="tab" aria-selected={activeTab === value} className={activeTab === value ? "is-active" : ""} onClick={() => onNavigate(job.id, value, value === "interview" ? activeRoundId : undefined)}>{label}{count !== null && <span>{count}</span>}</button>)}</nav>
       <div className="job-head-actions">
@@ -402,6 +407,58 @@ export function DocInline({ path, label }: { path: string | null; label: string 
   if (failed) return <p className="doc-inline-empty">The {label} could not be read.</p>;
   if (!preview || preview.relativePath !== path) return <p className="doc-inline-empty">Reading the {label}…</p>;
   return <div className="doc-inline"><DocumentView key={`${preview.relativePath}:${preview.modifiedAt}`} preview={preview} isBaseResume={false} onExported={() => undefined} onDirtyChange={() => undefined} onSaved={async (saved) => setPreview(saved)} /></div>;
+}
+
+/**
+ * Edit details (#114): correct the company, title, location, work setup, or pay the app read from the posting. Saved to
+ * the job's `.sensei/job-overrides.json`; a blank field goes back to what the posting says.
+ */
+function EditJobDetails({ job, onClose, onSaved }: { job: JobFolderSummary; onClose: () => void; onSaved: (job: JobFolderSummary) => void }) {
+  const [form, setForm] = useState<{ company: string; title: string; location: string; workMode: string; min: string; max: string; currency: string; period: "year" | "month" | "hour" } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState("");
+  useEffect(() => {
+    void window.sensei.jobs.getOverrides(job.id).then((saved) => setForm({
+      company: saved.company ?? "", title: saved.title ?? "", location: saved.location ?? "", workMode: saved.workMode ?? "",
+      min: saved.pay?.min?.toString() ?? "", max: saved.pay?.max?.toString() ?? "", currency: saved.pay?.currency ?? job.role?.payRange?.currency ?? "USD", period: saved.pay?.period ?? "year",
+    })).catch((caught) => setProblem(messageOf(caught, "The details could not be read.")));
+  }, [job.id]);
+  if (!form) return problem ? <p className="inline-error" role="alert">{problem}</p> : null;
+  const set = (key: keyof NonNullable<typeof form>) => (event: { target: { value: string } }) => setForm({ ...form, [key]: event.target.value });
+  const number = (value: string) => { const parsed = Number(value.replace(/[^0-9.]/g, "")); return value.trim() && Number.isFinite(parsed) ? parsed : null; };
+  async function save() {
+    if (!form) return;
+    setSaving(true);
+    setProblem("");
+    try {
+      const min = number(form.min);
+      const max = number(form.max);
+      onSaved(await window.sensei.jobs.saveOverrides(job.id, {
+        company: form.company, title: form.title, location: form.location,
+        workMode: form.workMode === "remote" || form.workMode === "hybrid" || form.workMode === "onsite" ? form.workMode : null,
+        pay: min !== null || max !== null ? { min, max, currency: form.currency || "USD", period: form.period } : null,
+      }));
+    } catch (caught) { setProblem(messageOf(caught, "The details could not be saved.")); } finally { setSaving(false); }
+  }
+  const posting = (value: string | null | undefined) => value ? `From the posting: ${value}` : "Not in the posting";
+  return <section className="job-details-form" aria-label="Edit job details">
+    <p className="muted">Correct anything the app read wrong. Leave a field blank to use what the posting says. New drafts use these; files already made keep their names.</p>
+    <div className="job-details-grid">
+      <label><span>Company</span><input value={form.company} onChange={set("company")} placeholder={posting(job.editedFields.includes("company") ? null : job.company)} /></label>
+      <label><span>Title</span><input value={form.title} onChange={set("title")} placeholder={posting(job.editedFields.includes("title") ? null : job.title)} /></label>
+      <label><span>Location</span><input value={form.location} onChange={set("location")} placeholder={posting(job.editedFields.includes("location") ? null : job.location)} /></label>
+      <label><span>Work setup</span><select value={form.workMode} onChange={set("workMode")}><option value="">From the posting</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="onsite">On-site</option></select></label>
+      <label><span>Pay from</span><input inputMode="numeric" value={form.min} onChange={set("min")} placeholder="e.g. 120000" /></label>
+      <label><span>Pay to</span><input inputMode="numeric" value={form.max} onChange={set("max")} placeholder="e.g. 150000" /></label>
+      <label><span>Currency</span><input value={form.currency} onChange={set("currency")} maxLength={8} /></label>
+      <label><span>Per</span><select value={form.period} onChange={set("period")}><option value="year">Year</option><option value="month">Month</option><option value="hour">Hour</option></select></label>
+    </div>
+    {problem && <p className="inline-error" role="alert">{problem}</p>}
+    <div className="job-details-actions">
+      <button className="btn-primary" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save details"}</button>
+      <button className="btn-link" disabled={saving} onClick={onClose}>Cancel</button>
+    </div>
+  </section>;
 }
 
 /**
