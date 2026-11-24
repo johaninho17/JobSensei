@@ -298,6 +298,14 @@ export async function finishUpdate(workspacePath: string, keepOld: string[] = []
   });
 }
 
+/** Marks recordings imported once Tune has read them (electron/tune-runner.ts), so they stop counting as new. */
+export async function markRecordingsImported(workspacePath: string, recordings: Array<{ path: string; hash: string; size: number }>, now = new Date()): Promise<void> {
+  const root = assertInsideWorkspace(workspacePath, workspacePath);
+  const ledger = await readLedger(root);
+  for (const recording of recordings) ledger.files[recording.path] = { hash: recording.hash, size: recording.size, firstSeen: ledger.files[recording.path]?.firstSeen ?? now.toISOString(), status: "imported", importedAt: now.toISOString(), usedIn: ledger.files[recording.path]?.usedIn ?? [], usedInShared: ledger.files[recording.path]?.usedInShared ?? false };
+  await writeJsonAtomic(workspaceFile(root, LEDGER_FILE), ledger);
+}
+
 /** Puts every content file back as it was before the update and cancels it (the recordings stay new). */
 export async function undoUpdate(workspacePath: string): Promise<void> {
   return withWriteLock(CAREER_LOCK, async () => {

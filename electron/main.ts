@@ -693,6 +693,7 @@ async function registerFeatureIpc(): Promise<void> {
   if (features.interviews) { const module = await import("./interview-ipc.js"); module.registerInterviewIpc(featureContext); interviewIpc = module; }
   if (features.applicationQuestions) (await import("./question-ipc.js")).registerQuestionIpc(featureContext);
   if (features.contentRefresh) (await import("./content-ipc.js")).registerContentIpc(featureContext);
+  if (features.tune) (await import("./tune-ipc.js")).registerTuneIpc(featureContext);
   if (features.jobSearch) (await import("./search-ipc.js")).registerSearchIpc(featureContext);
   if (features.today) (await import("./today-ipc.js")).registerTodayIpc(featureContext, { readiness: () => readinessNow() });
   if (features.candidates) (await import("./candidate-ipc.js")).registerCandidateIpc({

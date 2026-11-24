@@ -11,6 +11,8 @@ export type Features = {
   applicationQuestions: boolean;
   /** Interview content refresh from new recordings (debrief folder). */
   contentRefresh: boolean;
+  /** Tune: Agy suggests updates to interview content, career records, story bank, and writing voice (ledger U76). */
+  tune: boolean;
   /** Interviews → Learnings. */
   learnings: boolean;
   /** Story bank and interview voice. */
@@ -36,8 +38,8 @@ export type Features = {
 };
 
 const FEATURES: Record<Edition, Features> = {
-  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, today: true, pdfsMarkApplied: true, pdfResumes: false, agyPage: true },
-  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, today: false, pdfsMarkApplied: false, pdfResumes: true, agyPage: false },
+  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, tune: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, today: true, pdfsMarkApplied: true, pdfResumes: false, agyPage: true },
+  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, tune: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, today: false, pdfsMarkApplied: false, pdfResumes: true, agyPage: false },
 };
 
 export type EditionInfo = {
@@ -80,6 +82,7 @@ export const FEATURE_AGENT_ENTRIES: Record<string, keyof Features> = {
   "skills/jobsensei-technical-challenge": "interviews",
   "workflows/jobsensei-challenge.md": "interviews",
   "workflows/jobsensei-interview-review.md": "contentRefresh",
+  "workflows/jobsensei-tune.md": "tune",
   "workflows/jobsensei-story-bank.md": "interviewProfile",
   "workflows/jobsensei-file-answers.md": "today",
 };
@@ -102,6 +105,9 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   "application-questions": "applicationQuestions",
   "content-ipc": "contentRefresh",
   "content-refresh": "contentRefresh",
+  "tune-ipc": "tune",
+  "tune-runner": "tune",
+  "tune-apply": "tune",
   "today-ipc": "today",
   "today": "today",
   "answer-filing": "today",

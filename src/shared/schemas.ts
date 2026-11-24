@@ -1,3 +1,4 @@
+import type { TuneArea, TuneSuggestion } from "./tune-schemas";
 import { z } from "zod";
 import { agyBehaviorSchema, settingsScoreSchema } from "./agy-behavior";
 import { SENIORITY_LEVELS, WORK_MODES } from "./posting";
@@ -1392,6 +1393,17 @@ export interface SenseiApi {
     readiness(): Promise<Readiness>;
   };
   /** Interview content refresh: recordings the app has seen, and the update Agy runs on only the new ones. */
+  /** Tune (ledger U76): Agy suggests, the app applies what the user picks. Regular app only. */
+  tune: {
+    status(): Promise<Array<{ area: TuneArea; changed: number; waitingForAgy: boolean; suggestionsReady: boolean; banked: number }>>;
+    /** Returns the one-line prompt to send to Agy. */
+    start(area: TuneArea): Promise<string>;
+    collect(area: TuneArea): Promise<{ shown: TuneSuggestion[]; banked: number; added: number; problems: string[] }>;
+    view(area: TuneArea): Promise<{ shown: TuneSuggestion[]; banked: number }>;
+    apply(area: TuneArea, apply: string[], decline: string[]): Promise<{ applied: string[]; skipped: Array<{ id: string; reason: string }>; declined: string[] }>;
+    undo(): Promise<{ restored: number }>;
+    cancel(area: TuneArea): Promise<void>;
+  };
   content: {
     recordings(): Promise<{ recordings: RecordingInfo[]; pending: { startedAt: string; recordings: Array<{ path: string }> } | null }>;
     startUpdate(): Promise<string>;
