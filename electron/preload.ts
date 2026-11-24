@@ -14,6 +14,15 @@ const api: SenseiApi = {
   setup: {
     readiness: () => ipcRenderer.invoke("setup:readiness"),
   },
+  tune: {
+    status: () => ipcRenderer.invoke("tune:status"),
+    start: (area) => ipcRenderer.invoke("tune:start", area),
+    collect: (area) => ipcRenderer.invoke("tune:collect", area),
+    view: (area) => ipcRenderer.invoke("tune:view", area),
+    apply: (area, apply, decline) => ipcRenderer.invoke("tune:apply", area, apply, decline),
+    undo: () => ipcRenderer.invoke("tune:undo"),
+    cancel: (area) => ipcRenderer.invoke("tune:cancel", area),
+  },
   content: {
     recordings: () => ipcRenderer.invoke("content:recordings"),
     startUpdate: () => ipcRenderer.invoke("content:start-update"),
