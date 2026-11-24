@@ -1,6 +1,7 @@
 // Answers to Today questions are filed into the candidate's career records in the background: Agy decides where each
 // belongs (rules: .agents/workflows/jobsensei-file-answers.md), the app checks the choice and writes the row, after a
 // backup. Answers wait in `.sensei/today-answers.json` until filed; drafts never read that file directly.
+import { CAREER_LOCK, withWriteLock } from "./write-lock";
 import { copyFile, mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
@@ -83,24 +84,26 @@ const cell = (value: string) => value.replace(/\|/g, "/").replace(/\s+/g, " ").t
 
 /** Adds one row to a record file's evidence table (after its last row), after backing the file up. */
 export async function appendRecordRow(workspace: string, file: string, row: { evidenceId: string; year: string; project: string; claim: string; scope: string; locator: string; publicUse: string }, now = new Date()): Promise<string> {
-  if (!/^context\/structured\/[A-Za-z0-9._-]+\.md$/.test(file)) throw new Error(`Not a career record file: ${file}`);
-  const path = workspaceFile(workspace, file);
-  const text = await readFile(path, "utf8");
-  const lines = text.split("\n");
-  const last = lines.reduce((found, line, index) => (/^\|\s*context:/.test(line) ? index : found), -1);
-  const headerAt = lines.findIndex((line) => /^\|\s*Evidence ID\s*\|/.test(line));
-  if (headerAt < 0) throw new Error(`${file} has no evidence table.`);
-  let id = row.evidenceId.toLowerCase().replace(/[^a-z0-9:-]+/g, "-");
-  if (!/^context:[a-z0-9-]+:[a-z0-9:-]+$/.test(id)) id = `context:today:${id.replace(/[^a-z0-9]+/g, "-")}`;
-  const base = id;
-  for (let n = 2; text.includes(`| ${id} |`); n += 1) id = `${base}-${n}`;
-  const line = `| ${id} | ${cell(row.year)} | ${cell(row.project)} | ${cell(row.claim)} | ${cell(row.scope)} | ${cell(row.locator)} | high | ${cell(row.publicUse) || "eligible"} |`;
-  const backup = assertInsideWorkspace(workspace, join(workspace, ".sensei", "backups", "answer-filing", now.toISOString().slice(0, 10), file.split("/").pop()!));
-  await mkdir(dirname(backup), { recursive: true });
-  if (!(await stat(backup).catch(() => null))) await copyFile(path, backup);
-  lines.splice(last >= 0 ? last + 1 : headerAt + 2, 0, line);
-  await writeTextAtomic(path, lines.join("\n"));
-  return id;
+  return withWriteLock(CAREER_LOCK, async () => {
+    if (!/^context\/structured\/[A-Za-z0-9._-]+\.md$/.test(file)) throw new Error(`Not a career record file: ${file}`);
+    const path = workspaceFile(workspace, file);
+    const text = await readFile(path, "utf8");
+    const lines = text.split("\n");
+    const last = lines.reduce((found, line, index) => (/^\|\s*context:/.test(line) ? index : found), -1);
+    const headerAt = lines.findIndex((line) => /^\|\s*Evidence ID\s*\|/.test(line));
+    if (headerAt < 0) throw new Error(`${file} has no evidence table.`);
+    let id = row.evidenceId.toLowerCase().replace(/[^a-z0-9:-]+/g, "-");
+    if (!/^context:[a-z0-9-]+:[a-z0-9:-]+$/.test(id)) id = `context:today:${id.replace(/[^a-z0-9]+/g, "-")}`;
+    const base = id;
+    for (let n = 2; text.includes(`| ${id} |`); n += 1) id = `${base}-${n}`;
+    const line = `| ${id} | ${cell(row.year)} | ${cell(row.project)} | ${cell(row.claim)} | ${cell(row.scope)} | ${cell(row.locator)} | high | ${cell(row.publicUse) || "eligible"} |`;
+    const backup = assertInsideWorkspace(workspace, join(workspace, ".sensei", "backups", "answer-filing", now.toISOString().slice(0, 10), file.split("/").pop()!));
+    await mkdir(dirname(backup), { recursive: true });
+    if (!(await stat(backup).catch(() => null))) await copyFile(path, backup);
+    lines.splice(last >= 0 ? last + 1 : headerAt + 2, 0, line);
+    await writeTextAtomic(path, lines.join("\n"));
+    return id;
+  });
 }
 
 /** Files every pending answer with one Agy call. Returns what happened to each. */

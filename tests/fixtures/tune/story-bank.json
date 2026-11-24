@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "area": "story-bank",
+  "suggestions": [
+    { "operation": "add", "file": "profile/story_bank.md", "section": "S7 · Import that kept failing", "text": "## S7 · Import that kept failing\n- Situation: a retail customer's nightly import failed for a week\n- What I did: traced it to one column, fixed it, wrote the guide\n- Result: imports ran again; the guide is still used\n- Evidence: context:work:imports", "reason": "Strong evidence row with no story yet", "source": "context/structured/work-evidence.md", "urgency": 3, "impact": 5 }
+  ]
+}
