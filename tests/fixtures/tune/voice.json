@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "area": "voice",
+  "suggestions": [
+    { "operation": "add", "file": "profile/application_voice_profile.md", "section": "Rules", "text": "Open with the career move, not the company", "reason": "Both approved letters open this way after Alex's edits", "source": "jobs/northstar-support-analyst/Alex_Morgan_Cover_Letter.md", "urgency": 2, "impact": 4 }
+  ]
+}

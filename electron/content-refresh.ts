@@ -1,6 +1,7 @@
 // Interview content refresh: the app knows which recordings are new, sends Agy only those, and checks that an update
 // never loses content without a better replacement (`.agents/workflows/jobsensei-interview-review.md` step 4 owns the
 // rule for Agy; this file owns the check).
+import { CAREER_LOCK, withWriteLock } from "./write-lock";
 import { isPracticeRecording, usageByRecording, waitingToImport, type UsedIn } from "../src/shared/recordings";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -212,36 +213,38 @@ export type PendingUpdate = z.infer<typeof updateSchema>;
 
 /** Starts an update: backs up the content files and records which recordings it covers. Returns the prompt for Agy. */
 export async function startUpdate(workspacePath: string, recordings: Recording[], jobNames: Record<string, string>, now = new Date(), practiceStories = true): Promise<{ prompt: string; update: PendingUpdate }> {
-  const root = assertInsideWorkspace(workspacePath, workspacePath);
-  const chosen = waitingToImport(recordings);
-  if (!chosen.length) throw new Error("There are no new recordings to import.");
-  const backup = `${BACKUP_ROOT}/${now.toISOString().replace(/[:.]/g, "-")}`;
-  const files = await contentPaths(root);
-  for (const file of files) {
-    const source = workspaceFile(root, file);
-    if (!(await stat(source).catch(() => null))?.isFile()) continue;
-    await mkdir(join(root, backup, file, ".."), { recursive: true });
-    await copyFile(source, join(root, backup, file));
-  }
-  await pruneBackups(root);
-  await rm(workspaceFile(root, CHANGES_FILE), { force: true });
-  const update: PendingUpdate = { startedAt: now.toISOString(), backup, files, recordings: await Promise.all(chosen.map(async (recording) => { const data = await readFile(workspaceFile(root, recording.path)); return { path: recording.path, hash: sha(data), size: data.length }; })) };
-  await writeJsonAtomic(workspaceFile(root, UPDATE_FILE), update);
-  const version = layoutVersion(root);
-  const list = chosen.map((recording) => `- ${toDisk(recording.path, version)}${isPracticeRecording(recording.path) ? " (practice interview, no job: follow step 6 of the workflow)" : recording.jobId ? ` (job: ${recording.jobId}${jobNames[recording.jobId] ? `, ${jobNames[recording.jobId]}` : ""})` : " (job not matched: ask me which job it was)"}${recording.state === "changed" ? " — a newer version of a recording imported before; import only what's new in it" : ""}`).join("\n");
-  const brief = [
-    "# Interview content update",
-    "",
-    "Run the interview review import (.agents/workflows/jobsensei-interview-review.md) on only these new recordings:",
-    list,
-    "",
-    "Read only these files plus the current story bank, interview voice, role memory, and interview stories. Add, merge, or upgrade; remove or shorten something only when a better version replaces it, and show me each one as old → new with why. After I confirm and you save, write the change list to .sensei/content-changes.json as step 4 describes.",
-    ...(practiceStories ? [] : ["", "Practice interviews are not evidence for me (my setting): from practice interviews, update only interview voice and hard questions to practice; propose no interview-story rows."]),
-  ].join("\n");
-  await writeTextAtomic(workspaceFile(root, UPDATE_BRIEF_FILE), `${brief}\n`);
-  // One short line: the Agy panel's Console only accepts a single line, and the brief holds the details.
-  const prompt = `Update my interview content: read ${UPDATE_BRIEF_FILE} first (it lists ${chosen.length === 1 ? "the new recording" : `${chosen.length} new recordings`} and what to do), then follow it.`;
-  return { prompt, update };
+  return withWriteLock(CAREER_LOCK, async () => {
+    const root = assertInsideWorkspace(workspacePath, workspacePath);
+    const chosen = waitingToImport(recordings);
+    if (!chosen.length) throw new Error("There are no new recordings to import.");
+    const backup = `${BACKUP_ROOT}/${now.toISOString().replace(/[:.]/g, "-")}`;
+    const files = await contentPaths(root);
+    for (const file of files) {
+      const source = workspaceFile(root, file);
+      if (!(await stat(source).catch(() => null))?.isFile()) continue;
+      await mkdir(join(root, backup, file, ".."), { recursive: true });
+      await copyFile(source, join(root, backup, file));
+    }
+    await pruneBackups(root);
+    await rm(workspaceFile(root, CHANGES_FILE), { force: true });
+    const update: PendingUpdate = { startedAt: now.toISOString(), backup, files, recordings: await Promise.all(chosen.map(async (recording) => { const data = await readFile(workspaceFile(root, recording.path)); return { path: recording.path, hash: sha(data), size: data.length }; })) };
+    await writeJsonAtomic(workspaceFile(root, UPDATE_FILE), update);
+    const version = layoutVersion(root);
+    const list = chosen.map((recording) => `- ${toDisk(recording.path, version)}${isPracticeRecording(recording.path) ? " (practice interview, no job: follow step 6 of the workflow)" : recording.jobId ? ` (job: ${recording.jobId}${jobNames[recording.jobId] ? `, ${jobNames[recording.jobId]}` : ""})` : " (job not matched: ask me which job it was)"}${recording.state === "changed" ? " — a newer version of a recording imported before; import only what's new in it" : ""}`).join("\n");
+    const brief = [
+      "# Interview content update",
+      "",
+      "Run the interview review import (.agents/workflows/jobsensei-interview-review.md) on only these new recordings:",
+      list,
+      "",
+      "Read only these files plus the current story bank, interview voice, role memory, and interview stories. Add, merge, or upgrade; remove or shorten something only when a better version replaces it, and show me each one as old → new with why. After I confirm and you save, write the change list to .sensei/content-changes.json as step 4 describes.",
+      ...(practiceStories ? [] : ["", "Practice interviews are not evidence for me (my setting): from practice interviews, update only interview voice and hard questions to practice; propose no interview-story rows."]),
+    ].join("\n");
+    await writeTextAtomic(workspaceFile(root, UPDATE_BRIEF_FILE), `${brief}\n`);
+    // One short line: the Agy panel's Console only accepts a single line, and the brief holds the details.
+    const prompt = `Update my interview content: read ${UPDATE_BRIEF_FILE} first (it lists ${chosen.length === 1 ? "the new recording" : `${chosen.length} new recordings`} and what to do), then follow it.`;
+    return { prompt, update };
+  });
 }
 
 export async function readPendingUpdate(workspacePath: string): Promise<PendingUpdate | null> {
@@ -273,38 +276,42 @@ export async function reviewUpdate(workspacePath: string): Promise<ContentReview
  * versions too), marks the recordings imported, and clears the pending update.
  */
 export async function finishUpdate(workspacePath: string, keepOld: string[] = [], now = new Date()): Promise<{ restored: number }> {
-  const root = assertInsideWorkspace(workspacePath, workspacePath);
-  const update = await readPendingUpdate(root);
-  if (!update) throw new Error("No content update is in progress.");
-  const review = await reviewUpdate(root);
-  const putBack = [...review.lost, ...review.replaced.filter((entry) => keepOld.includes(`${entry.before.file}#${entry.before.key}`)).map(({ before, after }) => ({ before, after }))];
-  for (const file of new Set(putBack.map((entry) => entry.before.file))) {
-    const path = assertInsideWorkspace(root, workspaceFile(root, file));
-    await writeFile(path, restoreLost(await readText(root, file), putBack.filter((entry) => entry.before.file === file)), "utf8");
-  }
-  const ledger = await readLedger(root);
-  const changes = (await readJson<{ changes?: ChangeEntry[] }>(workspaceFile(root, CHANGES_FILE)))?.changes ?? [];
-  const version = layoutVersion(root);
-  const usage = usageByRecording(update.recordings.map((recording) => recording.path), Array.isArray(changes) ? changes.filter((change) => change && typeof change.file === "string") : [], (path) => toLogical(path, version) ?? path);
-  for (const recording of update.recordings) ledger.files[recording.path] = { hash: recording.hash, size: recording.size, firstSeen: ledger.files[recording.path]?.firstSeen ?? now.toISOString(), status: "imported", importedAt: now.toISOString(), usedIn: usage[recording.path]?.usedIn ?? [], usedInShared: usage[recording.path]?.shared ?? false };
-  await writeJsonAtomic(workspaceFile(root, LEDGER_FILE), ledger);
-  await rm(workspaceFile(root, UPDATE_FILE), { force: true });
-  await rm(workspaceFile(root, UPDATE_BRIEF_FILE), { force: true });
-  return { restored: putBack.length };
+  return withWriteLock(CAREER_LOCK, async () => {
+    const root = assertInsideWorkspace(workspacePath, workspacePath);
+    const update = await readPendingUpdate(root);
+    if (!update) throw new Error("No content update is in progress.");
+    const review = await reviewUpdate(root);
+    const putBack = [...review.lost, ...review.replaced.filter((entry) => keepOld.includes(`${entry.before.file}#${entry.before.key}`)).map(({ before, after }) => ({ before, after }))];
+    for (const file of new Set(putBack.map((entry) => entry.before.file))) {
+      const path = assertInsideWorkspace(root, workspaceFile(root, file));
+      await writeFile(path, restoreLost(await readText(root, file), putBack.filter((entry) => entry.before.file === file)), "utf8");
+    }
+    const ledger = await readLedger(root);
+    const changes = (await readJson<{ changes?: ChangeEntry[] }>(workspaceFile(root, CHANGES_FILE)))?.changes ?? [];
+    const version = layoutVersion(root);
+    const usage = usageByRecording(update.recordings.map((recording) => recording.path), Array.isArray(changes) ? changes.filter((change) => change && typeof change.file === "string") : [], (path) => toLogical(path, version) ?? path);
+    for (const recording of update.recordings) ledger.files[recording.path] = { hash: recording.hash, size: recording.size, firstSeen: ledger.files[recording.path]?.firstSeen ?? now.toISOString(), status: "imported", importedAt: now.toISOString(), usedIn: usage[recording.path]?.usedIn ?? [], usedInShared: usage[recording.path]?.shared ?? false };
+    await writeJsonAtomic(workspaceFile(root, LEDGER_FILE), ledger);
+    await rm(workspaceFile(root, UPDATE_FILE), { force: true });
+    await rm(workspaceFile(root, UPDATE_BRIEF_FILE), { force: true });
+    return { restored: putBack.length };
+  });
 }
 
 /** Puts every content file back as it was before the update and cancels it (the recordings stay new). */
 export async function undoUpdate(workspacePath: string): Promise<void> {
-  const root = assertInsideWorkspace(workspacePath, workspacePath);
-  const update = await readPendingUpdate(root);
-  if (!update) return;
-  for (const file of update.files) {
-    const saved = join(root, update.backup, file);
-    if ((await stat(saved).catch(() => null))?.isFile()) await copyFile(saved, workspaceFile(root, file));
-    else await rm(workspaceFile(root, file), { force: true });
-  }
-  await rm(workspaceFile(root, UPDATE_FILE), { force: true });
-  await rm(workspaceFile(root, UPDATE_BRIEF_FILE), { force: true });
+  return withWriteLock(CAREER_LOCK, async () => {
+    const root = assertInsideWorkspace(workspacePath, workspacePath);
+    const update = await readPendingUpdate(root);
+    if (!update) return;
+    for (const file of update.files) {
+      const saved = join(root, update.backup, file);
+      if ((await stat(saved).catch(() => null))?.isFile()) await copyFile(saved, workspaceFile(root, file));
+      else await rm(workspaceFile(root, file), { force: true });
+    }
+    await rm(workspaceFile(root, UPDATE_FILE), { force: true });
+    await rm(workspaceFile(root, UPDATE_BRIEF_FILE), { force: true });
+  });
 }
 
 /** Marks recordings skipped (not interview recordings, or not worth importing); they stop showing as new. */

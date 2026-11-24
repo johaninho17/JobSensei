@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "area": "interviews",
+  "suggestions": [
+    { "operation": "add", "file": "context/structured/interview-stories.md", "section": "Stories", "text": "| Fixed a stalled nightly import for a retail customer | 2025 | found the bad column, wrote the fix guide |", "reason": "Told in the recruiter screen; not in the stories yet", "source": "debrief/northstar/recruiter-screen.md", "urgency": 4, "impact": 4 },
+    { "operation": "enrich", "file": "profile/story_bank.md", "section": "S2 · Runbooks support still uses", "target": "S2", "text": "## S2 · Runbooks support still uses\n- Wrote 12 runbooks; support now opens one before escalating", "reason": "Adds the number Alex gave in the interview", "source": "debrief/northstar/recruiter-screen.md", "urgency": 3, "impact": 4 },
+    { "operation": "replace", "file": "profile/interview_voice.md", "section": "Delivery fixes", "target": "Slow down", "text": "Answer first, then context", "reason": "The recording shows long setups before answers", "source": "debrief/northstar/recruiter-screen.md", "urgency": 5, "impact": 3 },
+    { "operation": "archive", "file": "profile/interview_voice.md", "section": "Phrases", "target": "synergy", "reason": "Alex said they never use this word", "source": "debrief/northstar/recruiter-screen.md", "urgency": 2, "impact": 2 }
+  ]
+}
