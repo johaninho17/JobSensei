@@ -23,6 +23,9 @@ async function readText(relativePath: string | null): Promise<string> {
   try { return (await window.sensei.files.preview(relativePath)).content ?? ""; } catch { return ""; }
 }
 
+/** What each file waiting for Replace / Keep mine is called on the round page. */
+const PENDING_LABELS: Record<string, string> = { "question_bank.md": "questions", "prep.md": "prep notes", "company_research.md": "company research" };
+
 export function InterviewView({ job, overview, loading, initialRoundId, standalone = false, onRoundChange, onOpenFile, onInsertPrompt }: {
   job: JobFolderSummary;
   overview: InterviewOverview | null;
@@ -38,8 +41,8 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
   const round = rounds.find((candidate) => candidate.id === roundId) ?? rounds.find((candidate) => candidate.id === overview?.currentRoundId) ?? rounds[rounds.length - 1] ?? null;
   const [files, setFiles] = useState<{ prep: string; bank: string; research: string; stories: Record<string, string> }>({ prep: "", bank: "", research: "", stories: {} });
   const [filesLoading, setFilesLoading] = useState(false);
-  /** New questions wait because question_bank.md was edited by hand (#113); bumped reload rereads the files. */
-  const [pendingBank, setPendingBank] = useState(false);
+  /** New versions wait because a file was edited by hand (#113); bumped reload rereads the files. */
+  const [pendingDocs, setPendingDocs] = useState<string[]>([]);
   const [reload, setReload] = useState(0);
   const [view, setView] = useState<RoundView>("questions");
   const [query, setQuery] = useState("");
@@ -60,13 +63,12 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
   }, [round?.id, round?.artifactPaths.prep, round?.artifactPaths.questionBank, round?.artifactPaths.research, reload]);
   useEffect(() => {
     let cancelled = false;
-    setPendingBank(false);
-    if (round) void window.sensei.interviews.questionBankPending(job.id, round.id).then((pending) => { if (!cancelled) setPendingBank(pending); }).catch(() => undefined);
+    setPendingDocs([]);
+    if (round) void window.sensei.interviews.pendingDocs(job.id, round.id).then((pending) => { if (!cancelled) setPendingDocs(pending); }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [job.id, round?.id, reload]);
-  async function resolveBank(choice: "replace" | "keep") {
-    if (!round) return;
-    await window.sensei.interviews.resolveQuestionBank(job.id, round.id, choice).catch(() => undefined);
+  async function resolveDoc(key: string, choice: "replace" | "keep") {
+    await window.sensei.interviews.resolveDoc(job.id, key, choice).catch(() => undefined);
     setReload((value) => value + 1);
   }
 
@@ -182,10 +184,10 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
         <section className="iv-section"><h3>Ready for this round</h3><ul className="iv-checklist">{checklist.map(([label, done]) => <li key={label} className={done ? "is-done" : ""}><span aria-hidden="true">{done ? "✓" : "○"}</span>{label}<span className="sr-only">{done ? " (done)" : " (not yet)"}</span></li>)}</ul></section>
       </div>}
 
-      {view === "questions" && pendingBank && <div className="iv-pending" role="status">
-        <p><strong>Agy wrote new questions for this round.</strong> You had edited these by hand, so they weren't replaced.</p>
-        <div className="iv-pending-actions"><button className="btn-primary" onClick={() => void resolveBank("replace")}>Replace with the new questions</button><button className="btn-link" onClick={() => void resolveBank("keep")}>Keep mine</button></div>
-      </div>}
+      {pendingDocs.map((key) => <div key={key} className="iv-pending" role="status">
+        <p><strong>Agy wrote a new version of the {PENDING_LABELS[key.split("/").pop() ?? ""] ?? key}.</strong> You had edited it by hand, so it wasn't replaced.</p>
+        <div className="iv-pending-actions"><button className="btn-primary" onClick={() => void resolveDoc(key, "replace")}>Replace with the new version</button><button className="btn-link" onClick={() => void resolveDoc(key, "keep")}>Keep mine</button></div>
+      </div>)}
       {view === "questions" && (filesLoading ? <p className="iv-empty">Reading the question bank…</p>
         : !cards.length ? <div className="iv-empty-state"><h3>No question bank for this round</h3><p>{round.artifactPaths.questionBank ? "The question bank has no question headings this view can read." : "Ask Agy to prepare this round to get questions, talking points, and what to land on."}</p>{round.artifactPaths.questionBank && <button className="btn-quiet" onClick={() => onOpenFile(round.artifactPaths.questionBank!)}>Open question bank</button>}</div>
         : <div className="iv-qlayout">

@@ -24,9 +24,9 @@ Paths below are relative to the workspace, where your terminal starts.
 1. If `profile/story_bank.md` does not exist, run `.agents/workflows/jobsensei-story-bank.md` first (once per candidate), then continue.
 2. Run `sensei interview:context <job-id> <stage>` exactly once.
 3. Read `jobs/<job-id>/interviews/.sensei/interview_context.json` once, in a single full read. It holds the JD's required items and responsibilities, the candidate's gaps, citable evidence, the story bank, the candidate's career story and interview voice, logistics from the candidate profile (`profile/candidate.json`), matched role memory, everything earlier rounds already used, and the question limits. Do not read context files, other jobs, or transcripts separately.
-4. Company research (owner of this rule): if the context's `companyResearch.path` is set, reuse that file. If `companyResearch.reuseFrom` is set (a recent file from another job at the same company), copy its company, news, and interview-process sections into `interviews/company_research.md` and write the role sections (role decoded, requirement match, words to know, posted pay) fresh for this job, following `references/research.md`. Otherwise, with internet access, write it from scratch.
-5. In one file-writing turn, write `interviews/<round-id>/prep.md` and `interviews/<round-id>/question_bank.json` following this skill and the round's stage reference. Never write `question_bank.md`: the app writes it from the JSON.
-6. Run `sensei interview:check <job-id> <round-id>` once. It checks the JSON, writes `question_bank.md` from it, validates the files, and registers the round in `interview.json` (the app builds the dashboard from the files; never write `dashboardBrief`). Report its status, duration, and at most five issues, then stop. Do not repair in a loop; a warning is a finished run.
+4. Company research (owner of this rule): if the context's `companyResearch.path` is set, reuse that file. If `companyResearch.reuseFrom` is set (a recent file from another job at the same company), reuse its company, news, and interview-process parts and write the role parts fresh, following `references/research.md`. Otherwise, with internet access, write `interviews/company_research.json` from scratch. Never write `company_research.md`.
+5. In one file-writing turn, write `interviews/<round-id>/prep.json` and `interviews/<round-id>/question_bank.json` following this skill and the round's stage reference. Never write `prep.md` or `question_bank.md`: the app writes them from the JSON.
+6. Run `sensei interview:check <job-id> <round-id>` once. It checks the JSON, writes `question_bank.md`, `prep.md`, and `company_research.md` from it, validates the files, and registers the round in `interview.json` (the app builds the dashboard from the files; never write `dashboardBrief`). Report its status, duration, and at most five issues, then stop. Do not repair in a loop; a warning is a finished run.
 
 ## Framing: honest and strong
 
@@ -43,7 +43,7 @@ Paths below are relative to the workspace, where your terminal starts.
 Every question and exercise must be answerable by a strong outside candidate using general skill in the field, the JD, and public information.
 - Out: the company's internal systems, unreleased products, private architecture, and niche protocols the JD does not list as required.
 - Tailor through the JD's responsibilities and required items, translated into generic situations ("a customer's data sync is failing", not the company's product name).
-- Public product knowledge belongs in `prep.md` under `## Learn before the interview` (what they sell in one line, who buys it, public docs worth skimming, and a ready "why this company" answer), marked as study, not expected knowledge.
+- Public product knowledge belongs in `prep.json` under `learnBeforeInterview` (what they sell in one line, who buys it, public docs worth skimming, and a ready "why this company" answer), marked as study, not expected knowledge.
 
 ## Question mix: common and pressure
 
@@ -105,11 +105,26 @@ Pressure cards always carry a **Likely follow-up**: the drill-down a sharp inter
 - When `roleMemory` shows interviewers in this role family ask a question (e.g. "why are you leaving", "how do you rate your performance without metrics", "a time you told a customer no"), prepare it in the round it was asked.
 - No overlap: never repeat a question, story ID, or reverse question listed in `priorRounds`.
 
-## `prep.md`
+## `prep.json`
 
-Starts with `## 3 things to get across`: the three points this interviewer should remember, each one line of at most 20 plain words pairing one of the JD's top required items with the candidate's strongest true evidence, with the story or evidence ID only in trailing parentheses (`… onboarding partner GPUs (S1)`). No praise words ("proven track record", "solid background"). Then `## Before you start`: the candidate's `voice.deliveryFixes` (at most 3), each at most 8 words ("Answer first, then context"). Then `## Learn before the interview`, then the stage reference's sections. Keep it to one screen per section; no scripts.
+`prep.json` holds the round's prep notes; the app writes `prep.md` from it. Never write `prep.md`. One line per text field; IDs go in `ids`, never in the text.
 
-Every `prep.md` also has `## Story map`: one line per kind of question this round will ask → the story to use ("a customer problem that became a feature → S5"), so the right story is found in a second. Every story the round's cards use appears once.
+```json
+{
+  "schemaVersion": 1,
+  "keyPoints": [{ "text": "Kept customer imports running across two data platforms", "ids": ["S1"] }],
+  "beforeYouStart": ["Answer first, then context"],
+  "learnBeforeInterview": ["What they sell, in one line"],
+  "sections": [{ "heading": "45-second career story", "points": ["..."], "tables": [{ "columns": ["Item", "Answer"], "rows": [["Start date", "..."]] }] }],
+  "storyMap": [{ "question": "a customer problem that became a feature", "story": "S5" }]
+}
+```
+
+- `keyPoints`: exactly three points this interviewer should remember, each one line of at most 20 plain words pairing one of the JD's top required items with the candidate's strongest true evidence. No praise words ("proven track record", "solid background").
+- `beforeYouStart`: the candidate's `voice.deliveryFixes` (at most 3), each at most 8 words.
+- `learnBeforeInterview`: public product knowledge, marked as study (see the knowability test).
+- `sections`: the stage reference's sections, in its order, each with `points`, `tables`, or both. One screen per section; no scripts.
+- `storyMap`: one entry per kind of question this round will ask → the story to use, so the right story is found in a second. Every story the round's cards use appears once.
 
 ## Debrief Mode
 

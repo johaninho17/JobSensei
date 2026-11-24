@@ -1527,10 +1527,10 @@ export interface SenseiApi {
     listRounds(jobId: string): Promise<InterviewRound[]>;
     setCurrentRound(jobId: string, roundId: string): Promise<InterviewOverview | null>;
     refreshDashboard(jobId: string): Promise<InterviewOverview | null>;
-    /** New questions wait because the round's question_bank.md was edited by hand (#113). */
-    questionBankPending(jobId: string, roundId: string): Promise<boolean>;
-    /** Replace the edited question_bank.md with the new questions, or keep it and drop them. */
-    resolveQuestionBank(jobId: string, roundId: string, choice: "replace" | "keep"): Promise<void>;
+    /** Files with a new version waiting because they were edited by hand (#113): keys under `interviews/`, e.g. `01-recruiter-screen/prep.md`. */
+    pendingDocs(jobId: string, roundId: string): Promise<string[]>;
+    /** Replace the edited file with the new version, or keep it and drop the new version. */
+    resolveDoc(jobId: string, key: string, choice: "replace" | "keep"): Promise<void>;
     /** `live` opens the compact always-on-top live window instead of the full interview window. */
     openWorkspaceWindow(jobId: string, roundId: string, live?: boolean): Promise<void>;
     setLiveCollapsed(collapsed: boolean): Promise<void>;

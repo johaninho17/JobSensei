@@ -189,8 +189,17 @@ async function roleMemoryFor(workspace: string, title: string): Promise<{ family
  * always written fresh for this job.
  */
 export async function companyResearchFor(workspace: string, jobId: string, company: string | null, now = new Date()): Promise<{ path: string | null; reuseFrom: string | null; reuseAgeDays: number | null }> {
-  const own = `jobs/${jobId}/interviews/company_research.md`;
-  if (await stat(join(workspace, own)).catch(() => null)) return { path: own, reuseFrom: null, reuseAgeDays: null };
+  // The JSON Agy writes (#113) when there is one, else an older job's Markdown.
+  const researchIn = async (id: string) => {
+    for (const name of ["company_research.json", "company_research.md"]) {
+      const path = `jobs/${id}/interviews/${name}`;
+      const info = await stat(join(workspace, path)).catch(() => null);
+      if (info) return { path, mtime: info.mtimeMs };
+    }
+    return null;
+  };
+  const own = await researchIn(jobId);
+  if (own) return { path: own.path, reuseFrom: null, reuseAgeDays: null };
   const key = (company ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(inc|llc|ltd|corp|co)\b/g, "").trim();
   if (!key) return { path: null, reuseFrom: null, reuseAgeDays: null };
   let best: { path: string; mtime: number } | null = null;
@@ -199,9 +208,8 @@ export async function companyResearchFor(workspace: string, jobId: string, compa
     const other = await readJsonFile<{ company?: string }>(workspace, `jobs/${entry.name}/.sensei/job.json`);
     const otherKey = (other?.company ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(inc|llc|ltd|corp|co)\b/g, "").trim();
     if (otherKey !== key) continue;
-    const path = `jobs/${entry.name}/interviews/company_research.md`;
-    const info = await stat(join(workspace, path)).catch(() => null);
-    if (info && (!best || info.mtimeMs > best.mtime)) best = { path, mtime: info.mtimeMs };
+    const found = await researchIn(entry.name);
+    if (found && (!best || found.mtime > best.mtime)) best = found;
   }
   const age = best ? Math.floor((now.getTime() - best.mtime) / 86_400_000) : null;
   return best && age !== null && age <= 60 ? { path: null, reuseFrom: best.path, reuseAgeDays: age } : { path: null, reuseFrom: null, reuseAgeDays: null };
@@ -282,7 +290,7 @@ export async function buildInterviewContext(workspacePath: string, jobId: string
       questionLimits: { min: spec.min, max: spec.max },
       bannedPhrases: BANNED_PHRASES,
       confidentialNamesAllowedInPrep: true,
-      outputFiles: [`${interviewsRoot}/${spec.roundId}/prep.md`, `${interviewsRoot}/${spec.roundId}/question_bank.json`, `${interviewsRoot}/company_research.md`],
+      outputFiles: [`${interviewsRoot}/${spec.roundId}/prep.json`, `${interviewsRoot}/${spec.roundId}/question_bank.json`, `${interviewsRoot}/company_research.json`],
     },
   };
   const stateDir = assertInsideWorkspace(workspace, join(workspace, interviewsRoot, ".sensei"));

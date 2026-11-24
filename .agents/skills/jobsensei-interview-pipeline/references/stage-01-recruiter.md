@@ -16,7 +16,7 @@ Some recruiters also ask one or two light judgment scenarios (prioritizing sever
 
 1. Walk me through your background / what you focus on today.
 2. Why are you looking to leave now, and what are you looking for next? (Say points come from `careerStory`, never generic ambition lines.)
-3. How familiar are you with us, and why this company? (Answer from `## Learn before the interview`.)
+3. How familiar are you with us, and why this company? (Answer from `learnBeforeInterview`.)
 4. Why this kind of role (e.g. customer-facing vs. pure engineering, post-sales vs. pre-sales)?
 5. Working with customers, partners, or cross-functional teams.
 6. Day-to-day tools and skills the JD requires (including how you use AI tools, when relevant).
@@ -27,9 +27,9 @@ Recruiters press less, but two of these become pressure questions (pipeline `SKI
 
 `questionsToAsk`: 3–4 recruiter questions (process and timeline, why the role is open, how the team works, what successful new hires do in the first months).
 
-## `prep.md` sections
+## `prep.json` sections
 
-1. `## Before you start` and `## Learn before the interview` (pipeline-owned).
+1. `beforeYouStart` and `learnBeforeInterview` (pipeline-owned). Each item below is one `sections` entry, its heading as `heading`.
 2. `## 45-second career story`: 3–4 Say-style points: where you started, the turn you chose, what you do now, why this role is next.
 3. `## Why this company, why now`: 2–3 points.
 4. `## Logistics`: a table filled only from `logistics`.

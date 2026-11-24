@@ -361,14 +361,14 @@ describe("interview parsing and shared rules", () => {
     // Card fields are JSON keys since #113 (question_bank.json); the app renders the **Say:** / **Proof:** labels.
     expect(skill).toContain('"landOn"');
     expect(skill).toMatch(/never write `dashboardBrief`/i);
-    expect(skill).toContain("## 3 things to get across");
+    expect(skill).toContain('"keyPoints"');
     // Card v3: Say / Proof, follow-ups only where likely, no follow-ups section.
     expect(skill).toContain('"say"');
     expect(skill).toContain('"proof"');
     expect(skill).toMatch(/Likely follow-up\*\*: always on pressure cards; on the other cards only where/);
     expect(skill).not.toContain("**Real example:**");
     expect(skill).not.toContain("## Likely follow-ups");
-    expect(await read(".agents/skills/jobsensei-interview-pipeline/references/research.md")).toContain("## Requirement match");
+    expect(await read(".agents/skills/jobsensei-interview-pipeline/references/research.md")).toContain('"requirementMatch"');
     const practical = await read(".agents/skills/jobsensei-interview-pipeline/references/stage-03-practical.md");
     expect(practical).not.toMatch(/telemetry pipelines|token cost|distributed tracing/i);
     expect(practical).toContain("Role family");
@@ -404,7 +404,7 @@ describe("pressure questions", () => {
   it("are part of every round's rules, with story fit and a story map", async () => {
     const { readFileSync } = await import("node:fs");
     const skill = readFileSync(".agents/skills/jobsensei-interview-pipeline/SKILL.md", "utf8");
-    for (const text of ["## Question mix: common and pressure", "**Depth probe**", "**Failure-mode scenario**", "**Pain to product:**", "**Story fit.**", "## Story map", "**Your approach** belongs only on hypotheticals and depth probes"]) expect(skill).toContain(text);
+    for (const text of ["## Question mix: common and pressure", "**Depth probe**", "**Failure-mode scenario**", "**Pain to product:**", "**Story fit.**", '"storyMap"', "**Your approach** belongs only on hypotheticals and depth probes"]) expect(skill).toContain(text);
     for (const stage of ["stage-01-recruiter", "stage-02-hiring-manager", "stage-03-practical", "stage-04-final-panel"]) {
       expect(readFileSync(`.agents/skills/jobsensei-interview-pipeline/references/${stage}.md`, "utf8"), stage).toMatch(/pressure questions|failure-mode scenarios/i);
     }
