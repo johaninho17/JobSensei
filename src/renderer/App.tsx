@@ -96,6 +96,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => storedPanelNumber("sensei-left-panel-width", 236));
   const [rightPanelWidth, setRightPanelWidth] = useState(() => storedPanelNumber("sensei-right-panel-width", 430));
   const [leftPanelOpen, setLeftPanelOpen] = useState(() => storedPanelOpen("sensei-left-panel-state"));
+  // Today's Tune tile opens Career context on its Tune tab (U77); any other way in starts on Sources.
+  const [contextStart, setContextStart] = useState<"tune" | null>(null);
   // The Recruiter Edition starts with the Agy chat hidden (it still runs); the queue and job pages show progress.
   const [rightPanelOpen, setRightPanelOpen] = useState(() => FEATURES.candidates ? window.localStorage.getItem("sensei-right-panel-state") === "open" : storedPanelOpen("sensei-right-panel-state"));
   const [searchOpen, setSearchOpen] = useState(false);
@@ -592,6 +594,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   }
 
   async function showPage(kind: PageLocation["kind"]) {
+    setContextStart(null);
     if (editorDirty && !(await confirmDiscard())) return;
     setEditorDirty(false);
     if (currentLocation.kind === kind) return;
@@ -1051,7 +1054,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
           <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} onJobChanged={(next) => { setJobs((current) => current.map((job) => job.id === next.id ? next : job)); showToast(`${next.company ?? displayJobName(next.name)}: details saved`); }} />
-          : FEATURES.today && currentLocation.kind === "today-home" ? <TodayView onOpenJob={openJob} onToast={showToast}
+          : FEATURES.today && currentLocation.kind === "today-home" ? <TodayView onOpenJob={openJob} onToast={showToast} onOpenTune={() => void showPage("context-home").then(() => setContextStart("tune"))}
               onOpenMatch={(id) => pushLocation({ kind: "search-home", focus: id })}
               onQueueFound={(id) => queueJob({ kind: "found", id, auto: false }, true)}
               onGo={(target) => showPage(({ setup: "setup-home", jobs: "jobs-home", "job-search": "search-home", interviews: "interviews-home", learnings: "interviews-home", context: "context-home" } as const)[target])}
@@ -1095,6 +1098,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
           />
           : currentLocation.kind === "setup-home" ? <SetupHome onToast={showToast} readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
           : currentLocation.kind === "context-home" ? <ContextHome
+            startView={contextStart}
             onOpen={(path) => void selectFile(path)}
             notes={recruiterNotesBlock}
             notice={FEATURES.nudges && newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">

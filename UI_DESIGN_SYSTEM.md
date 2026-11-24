@@ -58,6 +58,7 @@ Today only (ledger U77, #125, #126); every other page keeps flat sections until 
 - `.bento-page` is a size container; `.bento` is a 4-column grid that steps to 2 and then 1 column by the page's own width (`@container`), so the Agy panel never causes side scroll.
 - `BentoCard` (`BentoPrimitives.tsx`): a raised card with `--shadow-card` and `--specular-edge`, lifting to `--shadow-card-hover` when a control in it is hovered. `--raised-nested` is a well inside a card. Optional left stripe: leaf, accent, risk.
 - The hero (`tone="hero"`) is the screen's one brass element: brass left edge and a brass "Do this next" label, with a pine `btn-primary`. Never a filled brass or green card.
+- Today: a top row (`.bento-row`, wraps to fill its width) with the hero, picked by `pickNextStep` in `src/shared/today-next.ts`, and up to three KPIs (interviews in the next 7 days, new matches, new files to tune), then Due, New matches, Questions, Your answers, For the coming days, and Today's activity, each a card holding its collapsible `Section`.
 - `Kpi`: one big tabular number, a muted label, at most one link. `FitRing`: the 1–5 fit rating as a ring (leaf strong, muted fair, risk weak) with the number inside and a text label for screen readers.
 
 ## Accessibility

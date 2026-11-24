@@ -319,8 +319,9 @@ export function ContextAdder({ onAdd, onReveal }: { onAdd: (kind: "structured" |
   </div>;
 }
 
-export function ContextHome({ notice, sources, notes, resumes, jobFiles, tune, onOpen }: { notice: React.ReactNode; tune?: React.ReactNode; sources: React.ReactNode; notes: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
+export function ContextHome({ notice, sources, notes, resumes, jobFiles, tune, startView, onOpen }: { notice: React.ReactNode; tune?: React.ReactNode; /** A tab to switch to when another page asks (Today's Tune tile). */ startView?: "tune" | null; sources: React.ReactNode; notes: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
   const [view, setView] = useState<ContextView>("sources");
+  useEffect(() => { if (startView && tune) setView(startView); }, [startView, tune !== undefined]);
   return <section className="jobs-home context-home">
     <header className="page-head"><div><h1>Career context</h1><p>{FEATURES.candidates ? "The candidate's resume, files, and your notes: what Agy may use when tailoring. Files are only read, never changed." : "The sources Agy treats as facts about you. Source files are only read, never changed."}</p></div></header>
     {notice}
