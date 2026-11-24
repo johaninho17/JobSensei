@@ -7,12 +7,10 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | # | Issue | Features | Blocked |
 |---|---|---|---|
 | #104 | Phase 0.1: Default new workspaces to Tidy Layout v2 (Solo and Recruiter) | FEAT-008, FEAT-010 |  |
-| #107 | Phase 0.4: Add versioned Tune/Question Zod schemas, golden test fixtures, and workspace concurrency locks | FEAT-003, FEAT-011 |  |
-| #109 | Retry finalize once with its errors, and fence posting text in background prompts | FEAT-003, FEAT-006 | yes |
 | #113 | Phase 2.1: JSON-first interview_bundle.json, interview-finalize.ts, deterministic markdown, and lazy legacy fallback | FEAT-005 |  |
 | #116 | Read Ashby's embedded page data when the API leaves fields out | FEAT-013 |  |
-| #117 | Phase 3.1: Extend content-refresh.ts into non-destructive Tune engine (Solo only) | FEAT-005, FEAT-008 | yes |
-| #118 | Phase 3.2: Tune Suggestion UI with top-5 ranked selection, suggestion bank.json, and rejected-ID tracking | FEAT-008, FEAT-012 | yes |
+| #117 | Phase 3.1: Extend content-refresh.ts into non-destructive Tune engine (Solo only) | FEAT-005, FEAT-008 |  |
+| #118 | Phase 3.2: Tune Suggestion UI with top-5 ranked selection, suggestion bank.json, and rejected-ID tracking | FEAT-008, FEAT-012 |  |
 | #120 | Questions for new users: Ask me 10, fewer as coverage fills | FEAT-007 | yes |
 | #121 | Show why postings were left out (Filtered out breakdown) | FEAT-004 |  |
 | #125 | Phase 5.1: Soft 3D Bento CSS tokens (Light/Dark parity), Container Queries for AI panel, and BentoPrimitives.tsx | FEAT-009 |  |
@@ -31,6 +29,7 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | # | Issue | Features | Blocked |
 |---|---|---|---|
 | #128 | Bento for more screens, after the Today pilot | FEAT-005, FEAT-008, FEAT-009, FEAT-010, FEAT-012 | yes |
+| #147 | Remove the old in-place interview content update once Tune is proven | FEAT-005 |  |
 
 ## Later (future)
 
@@ -45,4 +44,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #124 | Phase 4.4: Global Connectors tab, per-job Activity & Emails timeline, Email Prep PDF action, and Undo toasts | FEAT-002, FEAT-014 | yes |
 | #133 | Multi-AI groundwork: agent brief, activity log, headless streaming, prompt caching, quota backoff | FEAT-006 |  |
 
-23 open, 8 of them for later.
+22 open, 8 of them for later.
