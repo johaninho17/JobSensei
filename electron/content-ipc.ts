@@ -1,21 +1,14 @@
 // Interview content refresh IPC. Loaded only when the edition has `features.contentRefresh` (src/shared/edition.ts).
 import { RECORDING_EXTENSIONS, importRecordings } from "./recording-import";
 import type { RecordingKind } from "../src/shared/recordings";
-import { readCandidateProfile } from "./candidate-profile";
-import { practiceCountsAsEvidence } from "../src/shared/practice-evidence";
 import { dialog, ipcMain } from "electron";
-import { finishUpdate, readPendingUpdate, reviewUpdate, scanRecordings, skipRecordings, startUpdate, undoUpdate } from "./content-refresh";
+import { finishUpdate, readPendingUpdate, reviewUpdate, scanRecordings, skipRecordings, undoUpdate } from "./content-refresh";
 import type { FeatureContext } from "./feature-context";
 
 export function registerContentIpc(ctx: FeatureContext): void {
   ipcMain.handle("content:recordings", async () => {
     const names = await ctx.jobNames();
     return { recordings: await scanRecordings(ctx.requireWorkspace(), Object.keys(names)), pending: await readPendingUpdate(ctx.requireWorkspace()) };
-  });
-  ipcMain.handle("content:start-update", async () => {
-    const names = await ctx.jobNames();
-    const workspace = ctx.requireWorkspace();
-    return (await startUpdate(workspace, await scanRecordings(workspace, Object.keys(names)), names, new Date(), practiceCountsAsEvidence(await readCandidateProfile(workspace)))).prompt;
   });
   // Recordings added from Interviews → Your content: a file dialog, or paths of dropped files (electron/recording-import.ts).
   const kindOf = (kind: unknown): RecordingKind => kind === "practice" ? "practice" : "interview";

@@ -285,7 +285,7 @@ export function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAct
   </section>;
 }
 
-type ContextView = "sources" | "notes" | "resumes" | "jobs" | "stories" | "voice";
+type ContextView = "sources" | "notes" | "resumes" | "jobs" | "stories" | "voice" | "tune";
 
 /** Career context: subtabs for sources, resumes, job files, and the profile's story bank and interview voice. */
 /**
@@ -319,7 +319,7 @@ export function ContextAdder({ onAdd, onReveal }: { onAdd: (kind: "structured" |
   </div>;
 }
 
-export function ContextHome({ notice, sources, notes, resumes, jobFiles, onOpen }: { notice: React.ReactNode; sources: React.ReactNode; notes: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
+export function ContextHome({ notice, sources, notes, resumes, jobFiles, tune, onOpen }: { notice: React.ReactNode; tune?: React.ReactNode; sources: React.ReactNode; notes: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
   const [view, setView] = useState<ContextView>("sources");
   return <section className="jobs-home context-home">
     <header className="page-head"><div><h1>Career context</h1><p>{FEATURES.candidates ? "The candidate's resume, files, and your notes: what Agy may use when tailoring. Files are only read, never changed." : "The sources Agy treats as facts about you. Source files are only read, never changed."}</p></div></header>
@@ -329,13 +329,14 @@ export function ContextHome({ notice, sources, notes, resumes, jobFiles, onOpen 
       label="Career context sections"
       value={view}
       onChange={setView}
-      tabs={[{ id: "sources", label: "Sources" }, ...(notes ? [{ id: "notes" as const, label: "Recruiter notes" }] : []), { id: "resumes", label: "Resumes" }, { id: "jobs", label: "Job files" }, ...(FEATURES.interviewProfile ? [{ id: "stories" as const, label: "Story bank" }, { id: "voice" as const, label: "Interview voice" }] : [])]}
+      tabs={[{ id: "sources", label: "Sources" }, ...(notes ? [{ id: "notes" as const, label: "Recruiter notes" }] : []), { id: "resumes", label: "Resumes" }, { id: "jobs", label: "Job files" }, ...(tune ? [{ id: "tune" as const, label: "Tune" }] : []), ...(FEATURES.interviewProfile ? [{ id: "stories" as const, label: "Story bank" }, { id: "voice" as const, label: "Interview voice" }] : [])]}
     />
     <SubTabPanel idPrefix="ctx" value={view}>
       {view === "sources" && sources}
       {view === "notes" && notes}
       {view === "resumes" && resumes}
       {view === "jobs" && jobFiles}
+      {view === "tune" && tune}
       {FEATURES.interviewProfile && view === "stories" && <DocInline path="profile/story_bank.md" label="story bank (it is made on your first interview prep)" />}
       {FEATURES.interviewProfile && view === "voice" && <DocInline path="profile/interview_voice.md" label="interview voice (it is made when you import an interview)" />}
     </SubTabPanel>

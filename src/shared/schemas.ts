@@ -1406,7 +1406,6 @@ export interface SenseiApi {
   };
   content: {
     recordings(): Promise<{ recordings: RecordingInfo[]; pending: { startedAt: string; recordings: Array<{ path: string }> } | null }>;
-    startUpdate(): Promise<string>;
     reviewUpdate(): Promise<ContentReviewInfo>;
     finishUpdate(keepOld: string[]): Promise<{ restored: number }>;
     undoUpdate(): Promise<void>;

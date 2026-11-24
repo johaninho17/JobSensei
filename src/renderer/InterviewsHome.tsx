@@ -7,6 +7,7 @@ import { type JobAction } from "./job-actions";
 import { markdownHtml } from "./markdown";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { Section } from "./Section";
+import { TunePanel } from "./TunePanel";
 import { interviewIsPast, nextInterviewStep } from "../shared/interview-progress";
 import { storyTitles } from "./interview-cards";
 import { TrackerPill, displayJobName, messageOf, plural } from "./app-shared";
@@ -165,7 +166,6 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
     setBusy(true); setMessage("");
     try { await task(); } catch (caught) { setMessage(messageOf(caught, failure)); } finally { setBusy(false); await load(); onChanged(); }
   }
-  const start = () => run(async () => { const prompt = await window.sensei.content.startUpdate(); onSendPrompt({ prompt, label: "Import new recordings" }); }, "Couldn't start the update.");
   const check = () => run(async () => { setReview(await window.sensei.content.reviewUpdate()); setKeepOld(new Set()); }, "Couldn't check the update.");
   const finish = () => run(async () => { const { restored } = await window.sensei.content.finishUpdate([...keepOld]); setReview(null); setMessage(restored ? `Update saved. ${plural(restored, "item")} removed without a better replacement ${restored === 1 ? "was" : "were"} put back.` : "Update saved."); }, "Couldn't finish the update.");
   const undo = () => run(async () => { await window.sensei.content.undoUpdate(); setReview(null); setMessage("The update was undone; your content is back as it was."); }, "Couldn't undo the update.");
@@ -173,7 +173,7 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
   return <div className="your-content">
     <section className="iv-section">
       <h3>New recordings</h3>
-      <p className="learn-note">Transcripts and notes in your <code>debrief</code> folder that Agy hasn't read yet. An update reads only these, plus the content below, so old recordings are never read again.</p>
+      <p className="learn-note">Transcripts and notes in your <code>debrief</code> folder that Agy hasn't read yet. Tune reads only these, plus the content below, so old recordings are never read again.</p>
       {data?.pending ? <div className="onboarding-result" role="status">
         <strong>Update in progress</strong>
         <p>Agy is importing {plural(data.pending.recordings.length, "recording")} (started {new Date(data.pending.startedAt).toLocaleString()}). Confirm its proposals in the Agy panel; once it has saved, review the changes here.</p>
@@ -188,10 +188,10 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
         </li>)}</ul> : <p className="muted">No new recordings. Add a transcript or your notes below and it shows up here.</p>}
         <RecordingAdder jobs={jobs} onAdded={(message) => { setMessage(message); void load(); onChanged(); }} />
         {flagged.length > 0 && <p className="learn-note">{flagged.map((recording) => `${recording.path.replace(/^debrief\//, "")} is an exact copy of ${recording.duplicateOf?.replace(/^debrief\//, "")}`).join("; ")}. Copies are never imported twice; if one is filed under the wrong company, move or delete it.</p>}
-        <div className="onboarding-actions"><button className="btn-primary" disabled={busy || !waiting.length} onClick={() => void start()}>{waiting.length ? `Update from ${plural(waiting.length, "new recording")}` : "Nothing new to update"}</button></div>
       </>}
       {message && <p role="status" className="export-note">{message}</p>}
     </section>
+    {!data?.pending && <TunePanel area="interviews" title="Tune from new recordings" what="Agy reads only the new recordings above and suggests updates to your story bank, interview voice, role memory, and interview stories. Nothing changes until you apply a suggestion." onSendPrompt={onSendPrompt} onOpenFile={onOpenFile} onApplied={() => { void load(); onChanged(); }} />}
     {review && <section className="iv-section content-review" aria-label="What the update changed">
       <h3>What the update changed</h3>
       {!review.changeListFound && <p className="learn-note">Agy didn't write its change list, so anything removed or shortened will be put back.</p>}
