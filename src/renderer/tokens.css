@@ -25,6 +25,11 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 8px 24px rgba(0, 0, 0, .22);
   /* A hairline lift for selected tabs and nav items. */
   --shadow-s: 0 1px 2px rgba(0, 0, 0, .14);
+  /* Bento cards on Today only (U77, #125): a soft lift, a light top edge, and a nested surface one step off --raised. */
+  --raised-nested: #2a312d;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .24);
+  --shadow-card-hover: 0 2px 4px rgba(0, 0, 0, .34), 0 12px 28px rgba(0, 0, 0, .3);
+  --specular-edge: inset 0 1px 0 rgba(255, 255, 255, .06);
 
   /* The terminal stays dark in both themes. */
   --term-bg: #0e1913;
@@ -78,6 +83,10 @@
   --scrim: rgba(21, 39, 30, .32);
   --shadow: 0 1px 2px rgba(21, 39, 30, .08), 0 8px 24px rgba(21, 39, 30, .08);
   --shadow-s: 0 1px 2px rgba(21, 39, 30, .1);
+  --raised-nested: #f2f4f1;
+  --shadow-card: 0 1px 2px rgba(21, 39, 30, .06), 0 4px 14px rgba(21, 39, 30, .07);
+  --shadow-card-hover: 0 2px 4px rgba(21, 39, 30, .08), 0 10px 24px rgba(21, 39, 30, .11);
+  --specular-edge: inset 0 1px 0 rgba(255, 255, 255, .9);
 }
 
 :root { color: var(--ink); background: var(--canvas); font-family: var(--font-ui); font-size: var(--fs-15); line-height: 1.5; font-synthesis: none; -webkit-font-smoothing: antialiased; }

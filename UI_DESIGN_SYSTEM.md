@@ -53,5 +53,12 @@ Light is the default theme. Dark is neutral graphite with green accents, not dar
 - `tracker-pill` / `tracker-select` (Saved muted, Applied accent, Interviewing leaf, Offer solid accent, Rejected risk, Withdrawn dashed), `status-pill` for pipeline state, `fit-badge`, `next-badge` (brass only when a follow-up is due): never color alone; the text carries the meaning.
 - Interview card (`icard`): question in the UI font (15px, semibold), kind badge for non-questions, Say points as a short list, Proof in plain words (story and evidence IDs only in the tooltip), "Land on" with a leaf rule, "They may ask next" muted, "Careful" in risk color.
 
+## Bento (Today pilot)
+Today only (ledger U77, #125, #126); every other page keeps flat sections until the pilot is judged (#128).
+- `.bento-page` is a size container; `.bento` is a 4-column grid that steps to 2 and then 1 column by the page's own width (`@container`), so the Agy panel never causes side scroll.
+- `BentoCard` (`BentoPrimitives.tsx`): a raised card with `--shadow-card` and `--specular-edge`, lifting to `--shadow-card-hover` when a control in it is hovered. `--raised-nested` is a well inside a card. Optional left stripe: leaf, accent, risk.
+- The hero (`tone="hero"`) is the screen's one brass element: brass left edge and a brass "Do this next" label, with a pine `btn-primary`. Never a filled brass or green card.
+- `Kpi`: one big tabular number, a muted label, at most one link. `FitRing`: the 1–5 fit rating as a ring (leaf strong, muted fair, risk weak) with the number inside and a text label for screen readers.
+
 ## Accessibility
 Native buttons and inputs; visible focus (`--focus`); `aria-current` for navigation, `aria-pressed` for toggles, `aria-expanded` for cards; menus and dialogs close on Escape and return focus; keyboard paths for the interview view (↑ ↓, Enter, /, L; live mode ← → R Esc); `prefers-reduced-motion` honored.

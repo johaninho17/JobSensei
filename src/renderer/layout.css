@@ -1084,3 +1084,43 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .behavior-slider { display: grid; gap: 2px; max-width: 460px; }
 .behavior-slider small { font-size: var(--fs-12); }
 .find-rank { font-size: var(--fs-12); }
+
+/* Bento pilot, Today only (ledger U77, #125). Depth stays inside .bento-page; other pages keep flat sections (U54).
+   The grid follows the page's own width (@container), so opening the Agy panel steps it 4 → 2 → 1 without side scroll. */
+.bento-page { container: bento / inline-size; }
+.bento { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
+.bento-card { display: grid; gap: var(--space-2); min-width: 0; padding: var(--space-4) var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); box-shadow: var(--specular-edge), var(--shadow-card); transition: box-shadow .15s ease; }
+.bento-card:has(button:hover, a:hover) { box-shadow: var(--specular-edge), var(--shadow-card-hover); }
+.bento-card.span-2 { grid-column: span 2; }
+.bento-card.span-3 { grid-column: span 3; }
+.bento-card.span-4 { grid-column: 1 / -1; }
+.bento-card.has-stripe { border-left-width: 4px; border-radius: 0 var(--radius-m) var(--radius-m) 0; }
+.bento-card.stripe-brass { border-left-color: var(--brass); }
+.bento-card.stripe-leaf { border-left-color: var(--leaf); }
+.bento-card.stripe-accent { border-left-color: var(--accent); }
+.bento-card.stripe-risk { border-left-color: var(--risk); }
+.bento-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.bento-card-head h2 { margin: 0; font-size: var(--fs-18); }
+.bento-eyebrow { margin: 0; color: var(--brass); font-size: var(--fs-13); font-weight: 650; }
+.bento-card .bento-nested { padding: var(--space-3); border-radius: var(--radius-s); background: var(--raised-nested); }
+.bento-kpi { align-content: start; }
+.bento-kpi-value { margin: 0; font: 600 var(--fs-35) / 1 var(--font-ui); }
+.bento-kpi-label { margin: 0; color: var(--muted); font-size: var(--fs-13); }
+.bento-kpi .btn-link { justify-self: start; }
+.fit-ring { position: relative; display: inline-grid; flex: none; place-items: center; }
+.fit-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.fit-ring circle { fill: none; stroke-width: 4; }
+.fit-ring-track { stroke: var(--line); }
+.fit-ring-value { stroke-linecap: round; stroke: var(--muted); }
+.fit-ring.band-high .fit-ring-value { stroke: var(--leaf); }
+.fit-ring.band-low .fit-ring-value { stroke: var(--risk); }
+.fit-ring-number { font-size: var(--fs-12); font-weight: 650; }
+@container bento (max-width: 900px) {
+  .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bento-card.span-3, .bento-card.span-4 { grid-column: 1 / -1; }
+}
+@container bento (max-width: 520px) {
+  .bento { grid-template-columns: minmax(0, 1fr); }
+  .bento-card.span-2 { grid-column: auto; }
+}
+@media (prefers-reduced-motion: reduce) { .bento-card { transition: none; } }
