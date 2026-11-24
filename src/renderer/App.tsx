@@ -32,6 +32,7 @@ import { IS_MAC, type JobWorkspaceTab, type PromptRequest, displayJobName, fileP
 import { RUN_KIND_LABEL, RUN_STATE_LABEL, TerminalPanel } from "./TerminalPanel";
 import { CSV_COLUMNS, JobsHome, SetupLine } from "./JobsHome";
 import { ContextAdder, ContextHome, Onboarding, SetupHome } from "./SetupAndContext";
+import { TunePanel } from "./TunePanel";
 import { DocumentView } from "./Documents";
 import { DocInline, JobWorkspaceDashboard } from "./JobWorkspace";
 import { InterviewsHome } from "./InterviewsHome";
@@ -1104,6 +1105,11 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
             </section>}
             resumes={contextResumesBlock}
             sources={contextSourcesBlock}
+            tune={FEATURES.tune ? <div className="tune-areas">
+              <TunePanel area="career" title="Career records" what="Agy reads career files and base resumes that are new or changed since the last Tune, and suggests rows for your structured career records." onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} />
+              {FEATURES.interviewProfile && <TunePanel area="story-bank" title="Story bank" what="Agy reads your career records and interview stories that changed, and suggests new or better stories for interview prep." onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} />}
+              <TunePanel area="voice" title="Writing voice" what="Agy reads the cover letters of jobs you applied to, with your edits, and suggests rules for your writing voice." onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} />
+            </div> : undefined}
             jobFiles={<section className="context-block"><h2>Job files in context</h2><p>Add a job's files when you want Agy to use them outside that job, for example an earlier letter that worked well.</p><button className="btn-link" onClick={() => { setSelectedJobFiles([]); void updateContext(selectedCareerPaths, []); }} disabled={!selectedJobFiles.length}>Clear job files ({selectedJobFiles.length})</button><div className="context-tree">{jobTree.length ? jobTree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedJobFiles} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No job folders yet.</p>}</div></section>}
           />
           : <JobsHome jobs={jobs} onOrderChange={(ids) => { jobOrder.current = ids; }} onOpenJob={openJob} onOpenJobView={openJobView} onOpenEvaluation={(jobId) => void selectFile(`jobs/${jobId}/evaluation.md`)} onMoveToTrash={(jobId) => deletePath(`jobs/${jobId}`)} onUpdateTracker={updateTracker} onToast={showToast} statusGroup={jobsStatusGroup} onStatusGroup={setJobsStatusGroup} queue={jobQueue} agyReady={agyReady} onOpenAgy={() => setRightPanelOpen(true)} onSaveQueue={(next) => void saveQueue(next)} onQueueJob={queueJob} setup={<SetupLine readiness={readiness} onOpen={() => showPage("setup-home")} />} />}

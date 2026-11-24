@@ -25,7 +25,6 @@ const api: SenseiApi = {
   },
   content: {
     recordings: () => ipcRenderer.invoke("content:recordings"),
-    startUpdate: () => ipcRenderer.invoke("content:start-update"),
     reviewUpdate: () => ipcRenderer.invoke("content:review-update"),
     finishUpdate: (keepOld) => ipcRenderer.invoke("content:finish-update", keepOld),
     undoUpdate: () => ipcRenderer.invoke("content:undo-update"),
