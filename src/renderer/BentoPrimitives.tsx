@@ -5,7 +5,8 @@ import type { ReactNode } from "react";
 export type BentoStripe = "brass" | "leaf" | "accent" | "risk";
 
 /** A raised card. tone "hero" is the one "Do this next" card per screen: brass edge and label (U2). */
-export function BentoCard({ title, tone = "raised", stripe, span, action, className, children }: {
+export function BentoCard({ id, title, tone = "raised", stripe, span, action, className, children }: {
+  id?: string;
   title?: string;
   tone?: "raised" | "hero";
   /** A colored left edge; the hero always has the brass one. */
@@ -19,7 +20,7 @@ export function BentoCard({ title, tone = "raised", stripe, span, action, classN
 }) {
   const edge = tone === "hero" ? "brass" : stripe;
   const classes = ["bento-card", tone === "hero" ? "is-hero" : "", edge ? `has-stripe stripe-${edge}` : "", span && span > 1 ? `span-${span}` : "", className ?? ""].filter(Boolean).join(" ");
-  return <section className={classes} aria-label={title}>
+  return <section id={id} className={classes} aria-label={title}>
     {(title || action) && <header className="bento-card-head">
       {title && (tone === "hero" ? <p className="bento-eyebrow">{title}</p> : <h2>{title}</h2>)}
       {action}
