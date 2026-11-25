@@ -1,5 +1,6 @@
 // Job Search page: search settings, Run now, and the inbox of found postings ranked by quick fit.
 // Agy only finds links; the app opened, saved, and rated every posting shown here (electron/job-search.ts).
+import { FitRing } from "./BentoPrimitives";
 import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_JOB_SEARCH_SETTINGS, SEARCH_BOARDS, SEARCH_LEVELS, SKIPPED_BOARDS, WORK_SETUPS, DEFAULT_RANKING, effectiveFit, rankInbox, rankReason, searchProgressText, type RankingWeights,
@@ -15,7 +16,6 @@ type Sort = "fit" | "newest" | "company";
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : /(?:ch|sh|s|x)$/.test(word) ? "es" : "s"}`;
 const capital = (text: string | null) => text ? text[0].toUpperCase() + text.slice(1) : null;
-const fitClass = (score: number) => score >= 4 ? "is-high" : score >= 3 ? "is-mid" : "is-low";
 const SETUP_LABEL: Record<(typeof WORK_SETUPS)[number], string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
 
 /** Why a finished run added nothing (or what it left out), in plain words. */
@@ -185,7 +185,7 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
     const facts = [item.location, item.workSetup, item.pay, capital(item.level), item.postedAt ? `Posted ${item.postedAt}` : null, boardName(item.board)].filter(Boolean);
     return <li key={item.id} id={foundRowId(item.id)} className={`find-row${isSelected ? " is-selected" : ""}${item.id === focusId ? " is-focused" : ""}`} onClick={selecting ? () => toggle(item.id) : undefined}>
       {selecting && <input type="checkbox" checked={isSelected} onChange={() => toggle(item.id)} onClick={(event) => event.stopPropagation()} aria-label={`Select ${item.company ?? ""} ${item.title ?? ""}`} />}
-      <span className={`fit-badge ${fitClass(effectiveFit(item))}`} title={item.agyFit ? `Agy's light rating (quick fit ${item.fit.score.toFixed(1)}); the full rating runs when you draft` : "Quick fit: the app's own check of your files against the posting, not a full rating"}>{effectiveFit(item).toFixed(1)}{item.agyFit && <small className="fit-badge-source">Agy</small>}</span>
+      <span className="find-fit" title={item.agyFit ? `Agy's light rating (quick fit ${item.fit.score.toFixed(1)}); the full rating runs when you draft` : "Quick fit: the app's own check of your files against the posting, not a full rating"}><FitRing rating={effectiveFit(item)} size={40} />{item.agyFit && <small className="fit-badge-source">Agy</small>}</span>
       <div className="find-main">
         {selecting ? <strong>{item.title ?? "Untitled role"}</strong> : <button className="find-title" title="Open the posting in your browser" onClick={() => void window.sensei.jobSearch.openPosting(item.id)}>{item.title ?? "Untitled role"}</button>} <span className="muted">· {item.company ?? "Company not named"}</span>{item.watched && <span className="find-tag">Watched company</span>}{item.likeInterviewed && <span className="find-tag" title="Ranked a little higher: similar to a job where you got a real interview">{item.likeInterviewed}</span>}
         {facts.length > 0 && <p className="find-facts">{facts.join(" · ")}</p>}

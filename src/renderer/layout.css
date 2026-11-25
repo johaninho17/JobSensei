@@ -763,7 +763,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .find-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .find-row { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3); align-items: start; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); }
 .find-row:has(> input[type="checkbox"]) { grid-template-columns: auto auto 1fr; cursor: pointer; }
-.find-row.is-selected { border-color: var(--line-strong); box-shadow: inset 3px 0 0 var(--brass); }
+.find-row.is-selected { border-color: var(--line-strong); box-shadow: inset 3px 0 0 var(--accent); }
 .find-main { min-width: 0; }
 /* A match's title opens it (Job Search: the posting; Today: the match in Job Search). */
 .find-title { padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
@@ -1092,7 +1092,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .bento-page { container: bento / inline-size; }
 .bento { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
 .bento-card { display: grid; gap: var(--space-2); min-width: 0; padding: var(--space-4) var(--space-5); }
-.bento-card, .job-card, .jobs-table-wrap, .add-job, .overview-panel, .icard, .job-head, .document:not(.challenge-practice), .docs-page, .bento-surface { border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); box-shadow: var(--specular-edge), var(--shadow-card); transition: box-shadow .15s ease, border-color .15s ease; }
+.bento-card, .job-card, .jobs-table-wrap, .add-job, .overview-panel, .icard, .find-row, .job-head, .section, .iv-section, .context-block, .document:not(.challenge-practice), .docs-page, .bento-surface { border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); box-shadow: var(--specular-edge), var(--shadow-card); transition: box-shadow .15s ease, border-color .15s ease; }
 .bento-card:has(button:hover, a:hover), .job-card:hover, .job-card:focus-within, .icard.is-open { box-shadow: var(--specular-edge), var(--shadow-card-hover); }
 .job-card:hover, .job-card:focus-within { transform: none; }
 .job-card.has-stripe, .overview-panel.has-stripe, .bento-surface.has-stripe { border-left-width: 4px; border-radius: 0 var(--radius-m) var(--radius-m) 0; }
@@ -1105,6 +1105,11 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .document:not(.challenge-practice), .docs-page { padding: var(--space-5) clamp(16px, 4vw, 48px); }
 .overview-panel { padding: var(--space-4) var(--space-5); }
 .document, .docs-page { min-width: 0; overflow-wrap: anywhere; }
+.find-fit { display: grid; justify-items: center; gap: 2px; }
+/* Flat sections become cards (U78); a section already inside a card stays flat. */
+.section, .iv-section, .context-block { margin: 0 0 var(--space-4); padding: var(--space-4) var(--space-5); }
+.iv-section:last-child { border-bottom: 1px solid var(--line); }
+.bento-card > .section, .bento-card .iv-section, .tune-panel .iv-section { margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
 .subtabs, .workspace-tabs-row { min-width: 0; }
 .subtabs-list, .workspace-tabs { min-width: 0; overflow-x: auto; scrollbar-width: none; }
 /* The top row fills its width with however many cards it has (hero and KPIs depend on the edition and the day). */
