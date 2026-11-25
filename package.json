@@ -23,7 +23,7 @@
     "jd:fetch": "tsc -p tsconfig.electron.json && node dist-electron/electron/jd-fetch.js",
     "application:validate": "tsc -p tsconfig.electron.json && node dist-electron/electron/application-validation-cli.js",
     "demo:seed": "node scripts/seed-demo.mjs",
-    "screenshot:today": "node scripts/screenshot-today.mjs",
+    "screenshot": "node scripts/screenshot-pages.mjs",
     "demo:reset": "node scripts/seed-demo.mjs --clean",
     "migrate:job-descriptions": "node scripts/migrate-original-jds.mjs",
     "start": "electron .",

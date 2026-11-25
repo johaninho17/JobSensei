@@ -13,8 +13,6 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #118 | Phase 3.2: Tune Suggestion UI with top-5 ranked selection, suggestion bank.json, and rejected-ID tracking | FEAT-008, FEAT-012 |  |
 | #120 | Questions for new users: Ask me 10, fewer as coverage fills | FEAT-007 | yes |
 | #121 | Show why postings were left out (Filtered out breakdown) | FEAT-004 |  |
-| #125 | Phase 5.1: Soft 3D Bento CSS tokens (Light/Dark parity), Container Queries for AI panel, and BentoPrimitives.tsx | FEAT-009 |  |
-| #126 | Bento pilot on Today | FEAT-007, FEAT-009 | yes |
 | #127 | Phase 5.3: Split-pane Paper Sheet Resume/JD Viewer, pdf-freshness stale warnings, Apply-time drag-out/Finder, and Solo ZIP backup | FEAT-002, FEAT-009 |  |
 
 ## P2
@@ -44,4 +42,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #124 | Phase 4.4: Global Connectors tab, per-job Activity & Emails timeline, Email Prep PDF action, and Undo toasts | FEAT-002, FEAT-014 | yes |
 | #133 | Multi-AI groundwork: agent brief, activity log, headless streaming, prompt caching, quota backoff | FEAT-006 |  |
 
-22 open, 8 of them for later.
+20 open, 8 of them for later.

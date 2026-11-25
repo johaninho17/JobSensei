@@ -1,6 +1,6 @@
-// Screenshots of the built app's Today page (ledger U77, #126) for visual QA: light and dark, wide and narrow, with
-// the Agy panel open and closed. Runs on a scratch copy of the fictional demo workspace, never on data/.
-// Usage: npm run build && node scripts/screenshot-today.mjs <out-dir>
+// Screenshots of the built app's pages (ledger U77, U78) for visual QA: light and dark, wide and narrow, with the Agy
+// panel open and closed. Runs on a scratch copy of the fictional demo workspace, never on data/.
+// Usage: npm run build && node scripts/screenshot-pages.mjs <out-dir> [Today,Jobs,...]  (sidebar names; default Today)
 import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { _electron } from "playwright-core";
 
 const out = resolve(process.argv[2] ?? "screenshots");
+const pages = (process.argv[3] ?? "Today").split(",").map((name) => name.trim()).filter(Boolean);
 const root = process.cwd();
 const require = createRequire(import.meta.url);
 const scratch = await mkdtemp(join(tmpdir(), "sensei-shot-"));
@@ -31,7 +32,7 @@ try {
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
   const size = (width, height) => app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setSize(w, h), [width, height]);
-  const openToday = async () => { await page.getByRole("button", { name: "Today", exact: true }).first().click(); await page.locator(".today.bento-page").waitFor(); await page.waitForTimeout(600); };
+  const open = async (name) => { await page.locator(".app-sidebar button", { hasText: name }).first().click(); await page.waitForTimeout(900); };
   const toggle = page.locator(".topbar-toggle");
   const panelOpen = async () => (await toggle.getAttribute("aria-pressed")) === "true";
   const togglePanel = () => toggle.click().then(() => page.waitForTimeout(500));
@@ -40,15 +41,16 @@ try {
     await page.evaluate((value) => { window.localStorage.setItem("sensei-theme-v2", value); }, theme);
     await page.reload();
     await page.waitForLoadState("domcontentloaded");
-    for (const [label, width] of [["wide", 1480], ["narrow", 1000]]) {
+    for (const name of pages) for (const [label, width] of [["wide", 1480], ["narrow", 1000]]) {
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
       await size(width, 940);
-      await openToday();
+      await open(name);
       if (await panelOpen()) await togglePanel();
-      await page.screenshot({ path: join(out, `today-${theme}-${label}.png`), fullPage: false });
+      await page.screenshot({ path: join(out, `${slug}-${theme}-${label}.png`), fullPage: false });
       await togglePanel();
-      await page.screenshot({ path: join(out, `today-${theme}-${label}-agy.png`), fullPage: false });
+      await page.screenshot({ path: join(out, `${slug}-${theme}-${label}-agy.png`), fullPage: false });
       const overflow = await page.evaluate(() => { const pane = document.querySelector(".viewer-panel"); return pane ? pane.scrollWidth > pane.clientWidth + 1 : false; });
-      console.log(`${theme} ${label}: ${overflow ? "SIDE SCROLL" : "no side scroll"} with the Agy panel open`);
+      console.log(`${name} ${theme} ${label}: ${overflow ? "SIDE SCROLL" : "no side scroll"} with the Agy panel open`);
       await togglePanel();
     }
   }

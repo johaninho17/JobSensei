@@ -50,9 +50,22 @@ describe("Today layout (#126)", () => {
     expect(await readFile("src/renderer/SetupAndContext.tsx", "utf8")).toContain("if (startView && tune) setView(startView);");
   });
 
-  it("no other page uses the bento", async () => {
-    const { readdirSync } = await import("node:fs");
-    const users = readdirSync("src/renderer").filter((name) => name.endsWith(".tsx") && !["TodayView.tsx", "BentoPrimitives.tsx"].includes(name));
-    for (const name of users) expect(await readFile(`src/renderer/${name}`, "utf8"), name).not.toMatch(/bento|BentoCard|<Kpi|<FitRing/);
+  it("job cards use the shared fit ring and status edge (U78)", async () => {
+    const jobs = await readFile("src/renderer/JobsHome.tsx", "utf8");
+    expect(jobs).toContain("<FitRing rating={job.rating} size={46} />");
+    expect(jobs).toContain("has-stripe stripe-${edge}");
+  });
+});
+
+describe("job card edge (U78)", () => {
+  it("interviewing leaf, applied pine, a blocker while saved risk, otherwise none", async () => {
+    const { jobEdgeOf } = await import("../src/shared/job-organize");
+    const job = (status: string | null, mustHaves: Array<{ requirement: string; status: "met" | "learnable" | "blocker" }> = []) => ({ tracker: status ? { status } : null, hasApplicationMaterials: false, mustHaves }) as unknown as Parameters<typeof jobEdgeOf>[0];
+    expect(jobEdgeOf(job("interviewing"))).toBe("leaf");
+    expect(jobEdgeOf(job("offer"))).toBe("leaf");
+    expect(jobEdgeOf(job("applied"))).toBe("accent");
+    expect(jobEdgeOf(job(null, [{ requirement: "License", status: "blocker" }]))).toBe("risk");
+    expect(jobEdgeOf(job(null))).toBeNull();
+    expect(jobEdgeOf(job("rejected", [{ requirement: "License", status: "blocker" }]))).toBeNull();
   });
 });

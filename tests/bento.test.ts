@@ -56,10 +56,10 @@ describe("Bento layout (#125)", () => {
     expect(layout).toMatch(/@container bento \(max-width: 520px\) \{\s*\.bento \{ grid-template-columns: minmax\(0, 1fr\)/);
   });
 
-  it("keeps depth inside the bento: no other rule uses the card shadows", () => {
+  it("one shared surfaces block owns the card shadows, and covers every card template (U78)", () => {
     const users = [...`${layout}\n${renderer("styles.css")}`.matchAll(/([^{}]+)\{[^}]*var\(--(?:shadow-card|specular-edge)/g)].map((match) => match[1]!.trim());
-    expect(users.length).toBeGreaterThan(0);
-    for (const selector of users) expect(selector).toMatch(/^\.bento-card/);
+    expect(users).toHaveLength(2);
+    for (const template of [".bento-card", ".job-card", ".jobs-table-wrap", ".add-job", ".overview-panel", ".icard", ".bento-surface"]) expect(users[0]).toContain(template);
   });
 });
 

@@ -586,7 +586,7 @@ a.src-link:hover { color: var(--accent); }
 .iv-markdown li { margin: 4px 0; line-height: 1.5; }
 
 /* Jobs page: one toolbar row (search grows; filters are toggles; extras in the ⋯ menu), and Closed split in two groups. */
-.jobs-toolbar { flex-wrap: nowrap; gap: var(--space-2); }
+.jobs-toolbar { flex-wrap: wrap; gap: var(--space-2); }
 .jobs-toolbar .workspace-search { flex: 1 1 220px; min-width: 160px; }
 .filter-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-pill); color: var(--muted); background: none; font: 600 var(--fs-12) var(--font-ui); white-space: nowrap; cursor: pointer; }
 .filter-toggle span { font-weight: 400; font-variant-numeric: tabular-nums; }
@@ -604,7 +604,6 @@ a.src-link:hover { color: var(--accent); }
 .jobs-group h2 span { margin-left: 6px; color: var(--muted); font-weight: 400; }
 .jobs-group > p { margin: 0 0 var(--space-2); color: var(--muted); font-size: var(--fs-13); }
 details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid var(--line); cursor: pointer; }
-@container (max-width: 720px) { .jobs-toolbar { flex-wrap: wrap; } }
 
 /* Job page header actions, one aligned row at the right of the title block. */
 .job-head { align-items: flex-start; }
@@ -1088,12 +1087,19 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .behavior-slider small { font-size: var(--fs-12); }
 .find-rank { font-size: var(--fs-12); }
 
-/* Bento pilot, Today only (ledger U77, #125). Depth stays inside .bento-page; other pages keep flat sections (U54).
-   The grid follows the page's own width (@container), so opening the Agy panel steps it 4 → 2 → 1 without side scroll. */
+/* Bento (ledger U77 Today pilot, U78 every page). Shared surfaces: every card-like template gets the same raised card
+   (shadow, specular edge, radius). This block is the only place the card shadows are used. The Today grid follows the
+   page's own width (@container), so opening the Agy panel steps it 4 → 2 → 1 without side scroll. */
 .bento-page { container: bento / inline-size; }
 .bento { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
-.bento-card { display: grid; gap: var(--space-2); min-width: 0; padding: var(--space-4) var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); box-shadow: var(--specular-edge), var(--shadow-card); transition: box-shadow .15s ease; }
-.bento-card:has(button:hover, a:hover) { box-shadow: var(--specular-edge), var(--shadow-card-hover); }
+.bento-card { display: grid; gap: var(--space-2); min-width: 0; padding: var(--space-4) var(--space-5); }
+.bento-card, .job-card, .jobs-table-wrap, .add-job, .overview-panel, .icard, .bento-surface { border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); box-shadow: var(--specular-edge), var(--shadow-card); transition: box-shadow .15s ease, border-color .15s ease; }
+.bento-card:has(button:hover, a:hover), .job-card:hover, .job-card:focus-within, .icard.is-open { box-shadow: var(--specular-edge), var(--shadow-card-hover); }
+.job-card:hover, .job-card:focus-within { transform: none; }
+.job-card.has-stripe, .overview-panel.has-stripe, .bento-surface.has-stripe { border-left-width: 4px; border-radius: 0 var(--radius-m) var(--radius-m) 0; }
+.job-card.stripe-leaf { border-left-color: var(--leaf); }
+.job-card.stripe-accent { border-left-color: var(--accent); }
+.job-card.stripe-risk { border-left-color: var(--risk); }
 /* The top row fills its width with however many cards it has (hero and KPIs depend on the edition and the day). */
 .bento-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--space-4); }
 .bento-row > .bento-card { flex: 1 1 200px; }
