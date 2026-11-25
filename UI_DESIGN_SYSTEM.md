@@ -32,12 +32,13 @@ Light is the default theme. Dark is neutral graphite with green accents, not dar
 │ Sensei           ├──────────────────────────────────────────────────┤ (toggle)  │
 │ Jobs         159 │ Page title (serif)                               │           │
 │ Interviews    12 │ one line of help text                            │           │
-│ Career context   │ toolbar: search · segmented filters · sort       │           │
+│ Profile     5/10 │ toolbar: search · segmented filters · sort       │           │
 │                  │ content                                          │           │
 │ Recent jobs      │                                                  │           │
 │ Settings         │                                                  │           │
 └──────────────────┴──────────────────────────────────────────────────┴───────────┘
 ```
+- Profile (U78): Setup and Career context are one page and one sidebar item, with tabs Setup · Sources · Resumes · Job files · Tune · Story bank · Interview voice (the Recruiter Edition's candidate page already worked this way).
 - Pages: Jobs (add-jobs box with the waiting/running queue under it, a one-line setup banner, status subtabs Active · Interviewing · Applied · Saved · Closed · All with Active as the default; Closed splits "Reached interviews" from a collapsed "No interview"; one toolbar row: search, filter toggles, sort, Select, Cards/List, ⋯ menu; Select (or Cmd/Ctrl-click a job) adds checkboxes and a sticky bar to change the status of many jobs at once, with Shift-click for a range and one Undo toast), Interviews (subtabs Active · Past · Learnings), Career context (subtabs Sources · Resumes · Job files · Story bank · Interview voice).
 - First run (new workspace, or name/resume missing): a compact stepper (Your name · Base resume · Agy · Make it better) over one card per step; one primary button per step, Back below the card. Setup page in the sidebar lists the same items afterwards.
 - Job page: company, title (serif h1), stage, fit, location, then tabs Overview, Application, Interview, Files. The header carries Job posting · Export PDFs · Check. Overview has a one-line next step (hidden for closed jobs), "What happened?" for closed jobs that reached interviews, one line for checks to review, then flat Role, Fit, Tracking, and Interviews sections. Files has subtabs Application · Interview · Other. The Application tab has subtabs Resume · Cover letter · Questions · Evaluation · Checks (documents shown in place, Export PDF in the subtab row); Checks states the result in words, with pipeline diagnostics under "Pipeline details".

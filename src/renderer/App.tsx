@@ -148,7 +148,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   async function queueJob(input: { kind: "link"; url: string; batch?: { index: number; size: number } } | { kind: "paste"; text: string; note?: string } | { kind: "found"; id: string; auto?: boolean } | { kind: "saved"; jobId: string }, manual: boolean): Promise<number> {
     // The app says what setup is missing before a job reaches Agy (electron/setup-readiness.ts owns the rules).
     const ready = await loadReadiness();
-    if (ready && !ready.ready) throw new Error(`${ready.blocker} Open Setup in the sidebar.`);
+    if (ready && !ready.ready) throw new Error(`${ready.blocker} Open Profile in the sidebar.`);
     // Links are fetched here, by the app: Agy's sandbox has no network. The saved posting is queued like a paste,
     // and a page that can't be read is reported now instead of stalling the queue.
     const item = newQueueItem({ kind: "paste", label: null, note: input.kind === "paste" ? input.note : null }, new Date(), manual);
@@ -909,7 +909,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     { id: "go-docs", title: "Go to Docs", subtitle: "How to get the best results, your data, how Agy uses it, Agy commands", keywords: "help guide documentation commands model theme", shortcut: "g d", run: () => showPage("docs-home") },
     { id: "go-jobs", title: "Go to Jobs", subtitle: "All jobs, the queue, and the status strip", keywords: "home list cards", shortcut: "g j", run: () => showPage("jobs-home") },
     ...(FEATURES.interviews ? [{ id: "go-interviews", title: "Go to Interviews", subtitle: "Every job with interview prep", keywords: "rounds prep", shortcut: "g i", run: () => showPage("interviews-home") }] : []),
-    { id: "go-context", title: FEATURES.candidates ? "Go to the candidate's files" : "Go to Career context", subtitle: FEATURES.candidates ? "Their resume, files, and your notes" : "Resumes and sources Agy reads", keywords: "files sources resume", shortcut: "g c", run: () => showPage("context-home") },
+    { id: "go-context", title: FEATURES.candidates ? "Go to the candidate's files" : "Go to Profile: career sources", subtitle: FEATURES.candidates ? "Their resume, files, and your notes" : "Resumes and sources Agy reads", keywords: "files sources resume", shortcut: "g c", run: () => showPage("context-home") },
     ...[["interviewing", "Interviewing"], ["applied", "Applied"], ["offer", "Offer"], ["closed", "Closed"], ["saved", "Saved"]].map(([group, label]) => ({ id: `filter:${group}`, title: `Show ${label.toLowerCase()} jobs`, subtitle: "Filter the Jobs page by status", keywords: `status:${group} filter`, run: () => { setJobsStatusGroup(group!); showPage("jobs-home"); } })),
     ...recentForStatus.flatMap((job) => TRACKER_STATUSES.filter((status) => status !== effectiveStatus(job)).map((status) => ({ id: `tracker:${job.id}:${status}`, title: `Mark ${job.company ?? displayJobName(job.name)} as ${TRACKER_LABELS[status].toLowerCase()}`, subtitle: job.title ?? "Recent job", keywords: `status ${status}`, run: () => void updateTracker(job.id, { status }) }))),
     { id: "export-csv", title: "Export all jobs to CSV", subtitle: "Save a spreadsheet of every job", keywords: "csv excel spreadsheet download", run: () => void window.sensei.jobs.exportCsv(jobsToCsv(jobs, CSV_COLUMNS)).then((path) => { if (path) showToast(`Saved ${jobs.length} jobs to ${path.split(/[\\/]/).pop()}`); }) },
@@ -1165,7 +1165,7 @@ function ToastRegion({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: n
 
 const SHORTCUTS: Array<[string, string]> = [
   ["⌘K or Ctrl K", "Search jobs, files, and actions"],
-  ["g then t / j / s / i / c / a / d", "Go to Today, Jobs, Job Search, Interviews, Career context, Agy, or Docs"],
+  ["g then t / j / s / i / c / a / d", "Go to Today, Jobs, Job Search, Interviews, Profile (career sources), Agy, or Docs"],
   ["[ and ]", "Previous or next job in the Jobs list you came from (on a job page)"],
   ["1 – 4", "Set the open job to Saved, Applied, Interviewing, or Offer"],
   ["5 5 / 6 6", "Mark the open job Rejected or Withdrawn (press twice; Undo in the toast)"],

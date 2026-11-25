@@ -1092,7 +1092,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .bento-page { container: bento / inline-size; }
 .bento { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
 .bento-card { display: grid; gap: var(--space-2); min-width: 0; padding: var(--space-4) var(--space-5); }
-.bento-card, .job-card, .jobs-table-wrap, .add-job, .overview-panel, .icard, .find-row, .job-head, .section, .iv-section, .context-block, .document:not(.challenge-practice), .docs-page, .bento-surface { border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); box-shadow: var(--specular-edge), var(--shadow-card); transition: box-shadow .15s ease, border-color .15s ease; }
+.bento-card, .job-card, .jobs-table-wrap, .add-job, .overview-panel, .icard, .find-row, .job-head, .section, .iv-section, .context-block, .pipeline-table, .document:not(.challenge-practice), .docs-page, .bento-surface { border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); box-shadow: var(--specular-edge), var(--shadow-card); transition: box-shadow .15s ease, border-color .15s ease; }
 .bento-card:has(button:hover, a:hover), .job-card:hover, .job-card:focus-within, .icard.is-open { box-shadow: var(--specular-edge), var(--shadow-card-hover); }
 .job-card:hover, .job-card:focus-within { transform: none; }
 .job-card.has-stripe, .overview-panel.has-stripe, .bento-surface.has-stripe { border-left-width: 4px; border-radius: 0 var(--radius-m) var(--radius-m) 0; }
@@ -1153,3 +1153,5 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .setup-home { container: setup / inline-size; }
 @container setup (max-width: 560px) { .setup-row { grid-template-columns: minmax(0, 1fr); } }
 .setup-text { min-width: 0; overflow-wrap: anywhere; }
+/* Recruiter tables (Pipeline, Candidates, Postings, Reports) sit in the same card (U78). */
+.pipeline-table { border-collapse: separate; border-spacing: 0; overflow: hidden; }

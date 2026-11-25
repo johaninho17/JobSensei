@@ -28,7 +28,7 @@ const resumeCache = new Map<string, { key: string; check: ResumeCheck }>();
 /** Whether the base resume's structure can be read, cached by path and modification time. */
 export async function checkBaseResume(workspacePath: string, relativePath: string): Promise<ResumeCheck> {
   const absolute = resolve(workspacePath, relativePath);
-  if (absolute !== resolve(workspacePath) && !absolute.startsWith(`${resolve(workspacePath)}${sep}`)) return { ok: false, message: "The base resume must be inside the workspace's resumes folder. Choose it again in Setup." };
+  if (absolute !== resolve(workspacePath) && !absolute.startsWith(`${resolve(workspacePath)}${sep}`)) return { ok: false, message: "The base resume must be inside the workspace's resumes folder. Choose it again in Profile → Setup." };
   const info = await stat(absolute).catch(() => null);
   if (!info?.isFile()) return { ok: false, message: `The base resume file is missing (${relativePath}). Choose it again in Setup.` };
   // A PDF's structure comes from the .docx/.md beside it, so those files are part of the cache key.

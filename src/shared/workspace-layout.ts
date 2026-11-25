@@ -91,7 +91,7 @@ function suggestHome(entry: RootEntry, version: LayoutVersion, notes: string, re
   if (/^run\.paste-.*\.json$/i.test(entry.name)) return "Leftover from an old run. Move it to archive/.";
   if (DOCUMENT.test(entry.name) && /(resume|résumé|\bcv\b)/i.test(entry.name)) return "Looks like a resume. Move it to resumes/.";
   if (RECORDING.test(entry.name)) return `Looks like an interview recording. Move it to ${recordings}/<company>/.`;
-  if (DOCUMENT.test(entry.name)) return `If it's about your career, add it from Career context → Sources (it goes to ${notes}/).`;
+  if (DOCUMENT.test(entry.name)) return `If it's about your career, add it from Profile → Sources (it goes to ${notes}/).`;
   return "The app doesn't read files here. Move it into a folder, or to archive/.";
 }
 
