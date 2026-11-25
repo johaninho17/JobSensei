@@ -68,10 +68,10 @@ describe("Bento primitives (#125)", () => {
 
   it("the hero has the brass edge and its title as the brass label", () => {
     const hero = html(createElement(BentoCard, { title: "Do this next", tone: "hero", children: "x" }));
-    expect(hero).toContain('class="bento-card is-hero has-stripe stripe-brass"');
+    expect(hero).toContain('class="bento-card is-hero"');
     expect(hero).toContain('<p class="bento-eyebrow">Do this next</p>');
-    const plain = html(createElement(BentoCard, { title: "Due", stripe: "risk", span: 2, children: "x" }));
-    expect(plain).toContain("stripe-risk span-2");
+    const plain = html(createElement(BentoCard, { title: "Due", span: 2, children: "x" }));
+    expect(plain).toContain('class="bento-card span-2"');
     expect(plain).toContain("<h2>Due</h2>");
   });
 

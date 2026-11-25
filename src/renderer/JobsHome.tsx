@@ -5,12 +5,12 @@ import { askConfirm } from "./confirm";
 import { createPortal } from "react-dom";
 import { TRACKER_STATUSES, type JobQueue, type JobTrackerUpdate, type TrackerStatus, type JobFolderSummary } from "../shared/schemas";
 import { jobsToCsv } from "../shared/jobs-csv";
-import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, readyToSend, followUpDays, reachedInterview, staleApplications } from "../shared/tracker";
+import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, readyToSend, statusLabel, followUpDays, reachedInterview, staleApplications } from "../shared/tracker";
 import { type Readiness } from "../shared/readiness";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { CompanyStrip, JobFilters, SavedViews, storeJobViews, storedJobViews } from "./JobOrganize";
 import { FitRing } from "./BentoPrimitives";
-import { GROUPINGS, NO_FACETS, countWithin, jobEdgeOf, settingsSortKey, groupJobs, matchesFacets, type Grouping, type JobFacets, type JobView } from "../shared/job-organize";
+import { GROUPINGS, NO_FACETS, countWithin, jobDotOf, settingsSortKey, groupJobs, matchesFacets, type Grouping, type JobFacets, type JobView } from "../shared/job-organize";
 import { FitBadge, type JobWorkspaceTab, type QueueJob, TrackerPill, displayJobName, formatJobDate, formatTrackerDate, messageOf, plural, saveFavoriteJobIds, storedFavoriteJobIds } from "./app-shared";
 
 // CSV columns follow the edition: no follow-up or interview columns where those features are left out.
@@ -382,6 +382,23 @@ function JobCard({ job, favorite, onToggleFavorite, handlers, selecting = false,
   const onOpen = handlers.onOpen;
   const onCardClick = (event: MouseEvent) => { if (selecting || event.metaKey || event.ctrlKey) { event.preventDefault(); onSelect?.(event); } else onOpen(); };
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const edge = jobEdgeOf(job);
-  return <article className={`job-card${edge ? ` has-stripe stripe-${edge}` : ""}${selecting ? " is-selecting" : ""}${selected ? " is-selected" : ""}`} aria-selected={selecting ? selected : undefined} onClick={onCardClick} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setMenu({ x: event.clientX, y: event.clientY }); }}><div className="job-card-heading">{selecting ? <input type="checkbox" className="job-select" checked={selected} aria-label={`Select ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelect?.(event as unknown as MouseEvent)} /> : <FitRing rating={job.rating} size={46} />}<div><h2>{job.company ?? displayJobName(job.name)}</h2><p>{job.title ?? "Role not recorded"}</p></div><span className="job-card-badges"><JobMenuButton job={job} handlers={handlers} /></span></div><dl><div><dt>Status</dt><dd><TrackerPill status={effectiveStatus(job)} job={job} /></dd></div>{FEATURES.interviews && <div><dt>Interview</dt><dd>{job.interviewRoundLabel ?? "Not prepared"}</dd></div>}<div><dt>Added</dt><dd className="job-card-added"><span>{formatJobDate(job.createdAt)}</span><button className={`job-favorite ${favorite ? "is-favorite" : ""}`} aria-label={`${favorite ? "Remove" : "Add"} ${job.company ?? displayJobName(job.name)} ${favorite ? "from" : "to"} favorites`} aria-pressed={favorite} title={favorite ? "Remove from favorites" : "Add to favorites"} onClick={(event) => { event.stopPropagation(); onToggleFavorite(); }}>{favorite ? "★" : "☆"}</button></dd></div></dl>{!selecting && <button onClick={(event) => { event.stopPropagation(); onOpen(); }}>Open job</button>}{menu && <JobMenu job={job} at={menu} handlers={handlers} onClose={() => setMenu(null)} />}</article>;
+  const dot = jobDotOf(job);
+  const name = job.company ?? displayJobName(job.name);
+  const blocker = effectiveStatus(job) === "saved" && (job.mustHaves ?? []).some((item) => item.status === "blocker");
+  return <article className={`job-card${selecting ? " is-selecting" : ""}${selected ? " is-selected" : ""}`} aria-selected={selecting ? selected : undefined} tabIndex={0} aria-label={`${name}, ${job.title ?? "role"}`} onClick={onCardClick} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); if (selecting) onSelect?.(event); else onOpen(); } }} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setMenu({ x: event.clientX, y: event.clientY }); }}>
+    <div className="job-card-heading">
+      {selecting ? <input type="checkbox" className="job-select" checked={selected} aria-label={`Select ${name}, ${job.title ?? "role"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelect?.(event as unknown as MouseEvent)} /> : <FitRing rating={job.rating} size={40} />}
+      <div><h2>{name}</h2><p>{job.title ?? "Role not recorded"}</p></div>
+      <span className="job-card-badges">
+        <button className={`job-favorite ${favorite ? "is-favorite" : ""}`} aria-label={`${favorite ? "Remove" : "Add"} ${name} ${favorite ? "from" : "to"} favorites`} aria-pressed={favorite} title={favorite ? "Remove from favorites" : "Add to favorites"} onClick={(event) => { event.stopPropagation(); onToggleFavorite(); }}>{favorite ? "★" : "☆"}</button>
+        <JobMenuButton job={job} handlers={handlers} />
+      </span>
+    </div>
+    <p className="job-card-meta">
+      <span className="job-card-status"><span className={`status-dot${dot ? ` tone-${dot}` : ""}`} aria-hidden="true" />{statusLabel(job)}{blocker ? ", has a blocker" : ""}</span>
+      {FEATURES.interviews && <span>{job.interviewRoundLabel ?? "Not prepared"}</span>}
+      <span>Added {formatJobDate(job.createdAt)}</span>
+    </p>
+    {menu && <JobMenu job={job} at={menu} handlers={handlers} onClose={() => setMenu(null)} />}
+  </article>;
 }

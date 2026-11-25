@@ -45,9 +45,9 @@ const companyKey = (value: string | null | undefined) => norm(value).replace(/\b
 
 export const companyOf = (job: Pick<JobFolderSummary, "company" | "name">) => job.company?.trim() || job.name;
 export const workModeOf = (job: Pick<JobFolderSummary, "role">): WorkMode => job.role?.workMode ?? "unknown";
-/** The colored left edge of a job card (U78): interviewing or offer leaf, applied pine, a blocker must-have risk while
- * the job is still saved, otherwise none. Brass stays on the "due" badge (one brass element per screen, U2). */
-export function jobEdgeOf(job: Pick<JobFolderSummary, "tracker" | "hasApplicationMaterials" | "mustHaves">): "leaf" | "accent" | "risk" | null {
+/** The status dot on a job card (U79; was a coloured edge in U78): interviewing or offer leaf, applied pine, a blocker
+ * must-have risk while the job is still saved, otherwise none. The card also says it in words; colour is never alone. */
+export function jobDotOf(job: Pick<JobFolderSummary, "tracker" | "hasApplicationMaterials" | "mustHaves">): "leaf" | "accent" | "risk" | null {
   const status = effectiveStatus(job as JobFolderSummary);
   if (status === "interviewing" || status === "offer") return "leaf";
   if (status === "applied") return "accent";

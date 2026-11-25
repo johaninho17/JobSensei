@@ -50,16 +50,31 @@ describe("Today layout (#126)", () => {
     expect(await readFile("src/renderer/SetupAndContext.tsx", "utf8")).toContain('if ((startView === "tune" && tune) || (startView === "setup" && setup)) setView(startView);');
   });
 
-  it("job cards use the shared fit ring and status edge (U78)", async () => {
+  it("job cards are compact: fit ring, one meta line, a status dot instead of an edge, no footer (U79)", async () => {
     const jobs = await readFile("src/renderer/JobsHome.tsx", "utf8");
-    expect(jobs).toContain("<FitRing rating={job.rating} size={46} />");
-    expect(jobs).toContain("has-stripe stripe-${edge}");
+    const card = jobs.slice(jobs.indexOf("function JobCard("), jobs.indexOf("</article>;", jobs.indexOf("function JobCard(")));
+    expect(card).toContain("<FitRing rating={job.rating} size={40} />");
+    expect(card).toContain('className="job-card-meta"');
+    expect(card).toContain("status-dot");
+    expect(card).not.toContain("stripe");
+    expect(card).not.toContain(">Open job<");
+    expect(card).toContain("tabIndex={0}");
+  });
+
+  it("only the hero has a coloured edge, and cards take padding from the density tokens (U79)", async () => {
+    const [layout, tokens, bento, today] = await Promise.all(["src/renderer/layout.css", "src/renderer/tokens.css", "src/renderer/BentoPrimitives.tsx", "src/renderer/TodayView.tsx"].map((path) => readFile(path, "utf8")));
+    expect(layout).not.toMatch(/stripe-(leaf|accent|risk|brass)/);
+    expect(layout).toContain(".bento-card.is-hero { border-left: 4px solid var(--brass);");
+    expect(bento).not.toContain("stripe");
+    expect(today).not.toContain("stripe");
+    for (const token of ["--card-pad:", "--card-pad-x:", "--card-gap:"]) expect(tokens).toContain(token);
+    expect(layout).toContain(".bento-card { display: grid; gap: var(--space-2); min-width: 0; padding: var(--card-pad) var(--card-pad-x); }");
   });
 });
 
-describe("job card edge (U78)", () => {
+describe("job card status dot (U79)", () => {
   it("interviewing leaf, applied pine, a blocker while saved risk, otherwise none", async () => {
-    const { jobEdgeOf } = await import("../src/shared/job-organize");
+    const { jobDotOf: jobEdgeOf } = await import("../src/shared/job-organize");
     const job = (status: string | null, mustHaves: Array<{ requirement: string; status: "met" | "learnable" | "blocker" }> = []) => ({ tracker: status ? { status } : null, hasApplicationMaterials: false, mustHaves }) as unknown as Parameters<typeof jobEdgeOf>[0];
     expect(jobEdgeOf(job("interviewing"))).toBe("leaf");
     expect(jobEdgeOf(job("offer"))).toBe("leaf");

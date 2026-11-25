@@ -61,6 +61,10 @@
   --space-5: 24px;
   --space-6: 32px;
   --space-7: 48px;
+  /* Density (U79): every card and page gap reads these, so the whole app tightens in one place. */
+  --card-pad: var(--space-4);
+  --card-pad-x: 20px;
+  --card-gap: var(--space-3);
 
   --radius-s: 6px;
   --radius-m: 10px;
@@ -84,7 +88,7 @@
   --shadow: 0 1px 2px rgba(21, 39, 30, .08), 0 8px 24px rgba(21, 39, 30, .08);
   --shadow-s: 0 1px 2px rgba(21, 39, 30, .1);
   --raised-nested: #f2f4f1;
-  --shadow-card: 0 1px 2px rgba(21, 39, 30, .06), 0 4px 14px rgba(21, 39, 30, .07);
+  --shadow-card: 0 1px 2px rgba(21, 39, 30, .05), 0 2px 8px rgba(21, 39, 30, .04);
   --shadow-card-hover: 0 2px 4px rgba(21, 39, 30, .08), 0 10px 24px rgba(21, 39, 30, .11);
   --specular-edge: inset 0 1px 0 rgba(255, 255, 255, .9);
 }

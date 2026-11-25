@@ -67,7 +67,6 @@ export function TodayView({ onOpenJob, onOpenMatch, onQueueFound, onGo, onOpenTu
   }
 
   const next = pickNextStep(today);
-  const dueStripe = due.followUps.length || due.closedPostings.length ? "risk" : due.interviewsThisWeek.length ? "leaf" : undefined;
   const showQuestions = () => document.getElementById("today-questions-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return <section className="today bento-page">
@@ -83,7 +82,7 @@ export function TodayView({ onOpenJob, onOpenMatch, onQueueFound, onGo, onOpenTu
       {FEATURES.tune && tuneFiles !== null && <Kpi value={tuneFiles} label={tuneFiles === 1 ? "New file to tune" : "New files to tune"} actionLabel="Open Tune" onAction={onOpenTune} />}
       </div>
 
-      <BentoCard span={2} stripe={dueStripe} className="today-due">
+      <BentoCard span={2} className="today-due">
         <Section id="today-due" title="Due" count={dueCount} note={dueCount ? null : "Nothing due."}>
           {due.interviewsThisWeek.length > 0 && <><h3>Interviews this week</h3><ul className="today-list">{due.interviewsThisWeek.map((entry) => <li key={`${entry.id}${entry.date}`}><span className="today-when">{dayLabel(entry.date)}</span> {jobLink(entry.id, entry.label)} <span className="muted">· {entry.round}</span></li>)}</ul></>}
           {due.followUps.length > 0 && <><h3>Follow-ups</h3><ul className="today-list">{due.followUps.map((entry) => <li key={entry.id}>{jobLink(entry.id, entry.label)} <span className="muted">· {entry.days ? `${entry.days} day${entry.days === 1 ? "" : "s"} overdue` : "today"}</span></li>)}</ul></>}
