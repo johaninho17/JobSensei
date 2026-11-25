@@ -169,6 +169,8 @@ const api: SenseiApi = {
     ask: (jobId, text) => ipcRenderer.invoke("questions:ask", jobId, text),
     retry: (jobId) => ipcRenderer.invoke("questions:retry", jobId),
     answerAnyway: (jobId, questionId) => ipcRenderer.invoke("questions:answer-anyway", jobId, questionId),
+    setAnswer: (jobId, questionId, text) => ipcRenderer.invoke("questions:set-answer", jobId, questionId, text),
+    saveFact: (jobId, key, value) => ipcRenderer.invoke("questions:save-fact", jobId, key, value),
     onUpdated: (callback) => { const listener = (_event: Electron.IpcRendererEvent, jobId: string, state: Parameters<Parameters<SenseiApi["questions"]["onUpdated"]>[0]>[1]) => callback(jobId, state); ipcRenderer.on("questions:updated", listener); return () => ipcRenderer.removeListener("questions:updated", listener); },
   },
   runs: {

@@ -10,7 +10,8 @@ import { agyModelArgs, effectiveBehavior } from "../src/shared/agy-behavior";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ApplicationQuestion, EvidenceSnapshot, QuestionAnswer, QuestionDecision, QuestionKind, QuestionsState } from "../src/shared/schemas";
+import type { ApplicationQuestion, CandidateProfile, EvidenceSnapshot, QuestionAnswer, QuestionDecision, QuestionKind, QuestionsState } from "../src/shared/schemas";
+import { skipAnswer, withProfileAnswers, yourAnswer } from "../src/shared/profile-answers";
 import { WORDS_PER_SENTENCE, fetchApplicationForm, parsePastedQuestions, writtenQuestions, type FormField } from "./application-questions";
 import { APPLICATION_FORM_FILE, formQuestionLines } from "./posting-clean";
 
@@ -151,9 +152,9 @@ export function parseAnswerReply(response: string): ReplyAnswer[] {
   });
 }
 
-/** A logistics question, skipped without asking Agy. */
+/** A logistics question with nothing to answer it from: skipped without asking Agy (profile answers: src/shared/profile-answers.ts). */
 export function logisticsSkip(question: ApplicationQuestion): QuestionAnswer {
-  return { id: question.id, decision: "skip", kind: "other", reason: "Logistics: answer this one yourself in a line.", text: null, notes: [], evidenceIds: [], storyIds: [], words: 0, issues: [] };
+  return skipAnswer(question.id, "Logistics: answer this one yourself in a line.");
 }
 
 export function sentences(text: string): string[] {
@@ -286,7 +287,7 @@ export class QuestionAgent {
   private chain: Promise<void> = Promise.resolve();
   private active = new Set<string>();
 
-  constructor(private readonly options: { workspace: () => string; runner: () => Promise<AgyRunner>; fetcher?: typeof fetch; onUpdate?: (jobId: string, state: QuestionsState) => void; now?: () => number }) {}
+  constructor(private readonly options: { workspace: () => string; runner: () => Promise<AgyRunner>; profile?: () => Promise<CandidateProfile | null>; fetcher?: typeof fetch; onUpdate?: (jobId: string, state: QuestionsState) => void; now?: () => number }) {}
 
   private paths(jobId: string) {
     const workspace = this.options.workspace();
@@ -294,9 +295,38 @@ export class QuestionAgent {
     return { workspace, job, state: join(job, QUESTIONS_STATE_FILE), answers: join(job, ANSWERS_FILE) };
   }
 
-  async get(jobId: string): Promise<QuestionsState | null> {
+  private async stored(jobId: string): Promise<QuestionsState | null> {
     const raw = await read(this.paths(jobId).state);
     return raw ? JSON.parse(raw) as QuestionsState : null;
+  }
+
+  /** The job's questions, with logistics and choice answers following the profile as it is now (saved when they changed). */
+  async get(jobId: string): Promise<QuestionsState | null> {
+    const state = await this.stored(jobId);
+    if (!state || this.active.has(jobId) || !state.questions.some((question) => question.logistics)) return state;
+    const answers = this.withProfile(state, await this.profile());
+    if (JSON.stringify(answers) === JSON.stringify(state.answers)) return state;
+    return this.save(jobId, { ...state, answers });
+  }
+
+  /** Profile answers for the form-fact questions; Agy's answers for the rest are kept as they are. */
+  private withProfile(state: Pick<QuestionsState, "questions" | "answers">, profile: CandidateProfile | null): QuestionAnswer[] {
+    const facts = withProfileAnswers(state.questions, state.answers, profile);
+    return state.questions.flatMap((question) => {
+      const answer = question.logistics ? facts.find((candidate) => candidate.id === question.id) : state.answers.find((candidate) => candidate.id === question.id);
+      return answer ? [answer] : [];
+    });
+  }
+
+  /** The user's own answer to one question on this job (a line typed, or an option picked); an empty one clears it. */
+  setAnswer(jobId: string, questionId: string, text: string): Promise<void> {
+    return this.enqueue(jobId, async () => {
+      const current = await this.stored(jobId);
+      if (!current?.questions.some((question) => question.id === questionId)) return;
+      const others = current.answers.filter((answer) => answer.id !== questionId);
+      const answers = text.trim() ? [...others, yourAnswer(questionId, text)] : others;
+      await this.save(jobId, { ...current, answers: this.withProfile({ questions: current.questions, answers }, await this.profile()) });
+    });
   }
 
   isRunning(jobId: string): boolean { return this.active.has(jobId); }
@@ -308,6 +338,9 @@ export class QuestionAgent {
     this.options.onUpdate?.(jobId, state);
     return state;
   }
+
+  /** The candidate profile the form-fact answers come from (the workspace's own unless a test passes one). */
+  private profile(): Promise<CandidateProfile | null> { return this.options.profile?.() ?? readCandidateProfile(this.options.workspace()); }
 
   private now(): number { return this.options.now?.() ?? Date.now(); }
 
@@ -321,7 +354,7 @@ export class QuestionAgent {
   /** During or after an application run: answer the posting's written questions once (skipped when already done). */
   auto(jobId: string, force = false): Promise<void> {
     return this.enqueue(jobId, async () => {
-      if (!force && await this.get(jobId)) return;
+      if (!force && await this.stored(jobId)) return;
       const posting = await read(join(this.paths(jobId).job, "original_jd.md"));
       const sourceUrl = /\*\*Source(?: URL)?:?\*\*:?\s*(https?:\/\/\S+)/i.exec(posting)?.[1] ?? null;
       const base: QuestionsState = { source: "posting", sourceUrl, status: "reading", questions: [], answers: [], message: null, startedAt: new Date(this.now()).toISOString(), finishedAt: null, durationSeconds: null, conversationId: null };
@@ -341,7 +374,7 @@ export class QuestionAgent {
         return;
       }
       if (!questions.length) { await this.save(jobId, { ...base, status: "none", message: "No written questions on this form." }); return; }
-      await this.answer(jobId, { ...base, questions, answers: questions.filter((question) => question.logistics).map(logisticsSkip) });
+      await this.answer(jobId, { ...base, questions, answers: withProfileAnswers(questions, [], await this.profile()) });
     });
   }
 
@@ -350,7 +383,7 @@ export class QuestionAgent {
     const pasted = parsePastedQuestions(text);
     if (!pasted.length) return Promise.reject(new Error("Paste at least one question."));
     return this.enqueue(jobId, async () => {
-      const current = await this.get(jobId);
+      const current = await this.stored(jobId);
       const kept = (current?.questions ?? []).filter((question) => !pasted.some((candidate) => candidate.label.toLowerCase() === question.label.toLowerCase()));
       const questions = [...kept, ...pasted].map((question, index) => ({ ...question, id: `q:${index + 1}` }));
       // Keep earlier answers for questions that weren't pasted again, under their new IDs.
@@ -359,11 +392,11 @@ export class QuestionAgent {
         const old = current?.questions.find((question) => question.label.toLowerCase() === label.toLowerCase());
         return old ? current!.answers.find((answer) => answer.id === old.id) : undefined;
       };
-      const answers = questions.flatMap((question) => {
-        if (isPasted(question.label)) return question.logistics ? [logisticsSkip(question)] : [];
-        const answer = earlier(question.label);
+      const carried = questions.flatMap((question) => {
+        const answer = isPasted(question.label) ? undefined : earlier(question.label);
         return answer ? [{ ...answer, id: question.id }] : [];
       });
+      const answers = this.withProfile({ questions, answers: carried }, await this.profile());
       await this.answer(jobId, {
         source: current?.source === "posting" ? "posting" : "pasted", sourceUrl: current?.sourceUrl ?? null, status: "answering", questions, answers, message: null,
         startedAt: new Date(this.now()).toISOString(), finishedAt: null, durationSeconds: null, conversationId: current?.conversationId ?? null,
@@ -374,8 +407,9 @@ export class QuestionAgent {
   /** "Answer anyway" on a skipped question: Agy must answer it. */
   answerAnyway(jobId: string, questionId: string): Promise<void> {
     return this.enqueue(jobId, async () => {
-      const current = await this.get(jobId);
+      const current = await this.stored(jobId);
       const target = current?.questions.find((question) => question.id === questionId);
+      if (target?.options?.length) return;
       if (!current || !target) return;
       const questions = current.questions.map((question) => question.id === questionId ? { ...question, force: true } : question);
       await this.answer(jobId, { ...current, questions, answers: current.answers.filter((answer) => answer.id !== questionId) }, new Set([target.label.toLowerCase()]));
@@ -387,7 +421,7 @@ export class QuestionAgent {
     const started = this.now();
     const pending = state.questions.filter((question) => only ? only.has(question.label.toLowerCase()) : !state.answers.some((answer) => answer.id === question.id));
     if (!pending.length) {
-      await this.save(jobId, { ...state, status: "done", message: state.questions.length ? "Only logistics questions; nothing for Agy to answer." : null, finishedAt: new Date(this.now()).toISOString(), durationSeconds: 0 });
+      await this.save(jobId, { ...state, status: "done", message: state.questions.length ? "Only form questions, answered from your profile; nothing for Agy to answer." : null, finishedAt: new Date(this.now()).toISOString(), durationSeconds: 0 });
       return;
     }
     await this.save(jobId, { ...state, status: "answering", message: null });

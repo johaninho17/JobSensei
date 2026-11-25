@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { FitRing } from "./BentoPrimitives";
 import { jobSettingsScore, settingsScoreLabel } from "../shared/agy-behavior";
-import { DEFAULT_PDF_TEXT_SIZE, INTERVIEW_ROUNDS, OUTCOME_RESULTS, TRACKER_STATUSES, type InterviewEvent, type InterviewRoundKind, type JobOutcome, type JobTrackerUpdate, type TrackerStatus, type ApplicationStatus, type ApplicationValidationReport, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type PdfTextSize, type QuestionsState, type FramingLine } from "../shared/schemas";
+import { DEFAULT_PDF_TEXT_SIZE, INTERVIEW_ROUNDS, OUTCOME_RESULTS, TRACKER_STATUSES, type InterviewEvent, type InterviewRoundKind, type JobOutcome, type JobTrackerUpdate, type TrackerStatus, type ApplicationStatus, type ApplicationValidationReport, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type PdfTextSize, type QuestionsState, type FramingLine, type ApplicationQuestion, type QuestionAnswer } from "../shared/schemas";
+import { factExample, factLabel, isBlankFact } from "../shared/profile-answers";
 import { overrideLabel } from "../shared/job-overrides";
 import { locationLine } from "../shared/posting-fields";
 import { PAY_SYMBOLS, normalPayText } from "../shared/pay";
@@ -175,6 +176,54 @@ function answerSections(markdown: string): Map<string, string> {
 }
 
 /**
+ * A form question answered from the profile (pay, authorization, a dropdown) or by you for this job. Blank profile facts
+ * are typed once here and saved to the profile, so every job uses them (issue #161); a fact that fits none of the
+ * options, or a question with no profile fact, is answered for this job only.
+ */
+function FormFactEditor({ jobId, question, answer, disabled, onAnswerAnyway }: { jobId: string; question: ApplicationQuestion; answer: QuestionAnswer; disabled: boolean; onAnswerAnyway?: () => void }) {
+  const options = question.options ?? [];
+  // Saved to the profile: a blank fact, or changing a typed profile answer. Changing a picked option is for this job only.
+  const toProfile = isBlankFact(answer) || (answer.source === "profile" && !options.length);
+  const [editing, setEditing] = useState(answer.decision === "skip");
+  const [value, setValue] = useState("");
+  const [problem, setProblem] = useState("");
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { setEditing(answer.decision === "skip"); setValue(""); setProblem(""); }, [answer.decision, answer.text, answer.reason]);
+  async function save(next: string) {
+    if (!next.trim()) return;
+    setProblem("");
+    try {
+      if (toProfile) await window.sensei.questions.saveFact(jobId, answer.factKey!, next);
+      else await window.sensei.questions.setAnswer(jobId, question.id, next);
+      setEditing(false);
+    } catch (caught) { setProblem(messageOf(caught, "That answer couldn't be saved.")); }
+  }
+  if (!editing && answer.text) return <div className="question-fact">
+    <p className="question-answer">{answer.text}</p>
+    <div className="question-meta">
+      <button className="btn-quiet" onClick={() => void navigator.clipboard.writeText(answer.text!).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); })}>{copied ? "Copied" : "Copy"}</button>
+      <button className="btn-link" disabled={disabled} onClick={() => { setValue(options.length ? "" : answer.text ?? ""); setEditing(true); }}>Change{toProfile ? " in profile" : ""}</button>
+    </div>
+  </div>;
+  const label = answer.factKey ? factLabel(answer.factKey) : "Your answer";
+  return <div className="question-fact">
+    {answer.decision === "skip" && <p className="question-skip">{answer.reason}</p>}
+    <form className="question-fact-row" onSubmit={(event) => { event.preventDefault(); void save(value); }}>
+      {options.length
+        ? <select aria-label={label} value={value} disabled={disabled} onChange={(event) => { setValue(event.target.value); void save(event.target.value); }}>
+            <option value="">Pick one…</option>
+            {options.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        : <input aria-label={label} value={value} disabled={disabled} maxLength={300} placeholder={answer.factKey ? `e.g. ${factExample(answer.factKey)}` : "Your answer, in a line"} onChange={(event) => setValue(event.target.value)} />}
+      {!options.length && <button className="btn-primary" disabled={disabled || !value.trim()}>{toProfile ? "Save to profile" : "Save for this job"}</button>}
+      {answer.text && <button type="button" className="btn-link" onClick={() => setEditing(false)}>Cancel</button>}
+      {onAnswerAnyway && !options.length && !answer.factKey && <button type="button" className="btn-link" disabled={disabled} onClick={onAnswerAnyway}>Ask Agy</button>}
+    </form>
+    {problem && <p className="question-issue">⚠ {problem}</p>}
+  </div>;
+}
+
+/**
  * Written questions from the posting's application form (or pasted here), answered by a background Agy that never
  * touches the terminal. Agy skips logistics and questions nothing real can answer (shown greyed, with "Answer
  * anyway"); write-yourself questions get notes only.
@@ -253,15 +302,21 @@ function QuestionsPanel({ jobId }: { jobId: string }) {
       const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
       const ids = [...(answer?.storyIds ?? []), ...(answer?.evidenceIds ?? [])];
       const limit = question.sentenceLimit ? `${question.sentenceLimit} sentences` : question.wordLimit ? `${question.wordLimit} words` : null;
+      const formFact = Boolean(question.logistics) && !question.force;
+      const needsYou = skipped && formFact;
       return <li key={question.id} className={`question-card ${question.writeYourself ? "is-yourself" : ""} ${skipped ? "is-skipped" : ""}`}>
         <div className="question-head">
           <h3>{question.label}</h3>
           {question.writeYourself && <span className="fit-chip is-learnable">Write yourself</span>}
-          {skipped && <span className="fit-chip">Skipped</span>}
+          {needsYou ? <span className="fit-chip is-learnable">Needs you</span> : skipped && <span className="fit-chip">Skipped</span>}
+          {answer?.source === "profile" && <span className="fit-chip is-met">From your profile</span>}
+          {answer?.source === "you" && <span className="fit-chip">Your answer</span>}
         </div>
         {question.writeYourself
           ? <div className="question-notes"><p>The employer asks you to write this one. Notes to draw from:</p><ul>{(answer?.notes ?? []).map((note) => <li key={note}>{note}</li>)}</ul></div>
+          : needsYou ? <FormFactEditor jobId={jobId} question={question} answer={answer!} disabled={running} onAnswerAnyway={() => void window.sensei.questions.answerAnyway(jobId, question.id).then(() => setRunning(true))} />
           : skipped ? <p className="question-skip">{answer?.reason ?? "Not a question to answer here."} <button className="btn-link" disabled={running} onClick={() => void window.sensei.questions.answerAnyway(jobId, question.id).then(() => setRunning(true))}>Answer anyway</button></p>
+          : formFact && answer?.source ? <FormFactEditor jobId={jobId} question={question} answer={answer} disabled={running} />
           : text ? <div className="question-answer iv-markdown" dangerouslySetInnerHTML={{ __html: markdownHtml(text, [], { readable: true }) }} />
           : <p className="doc-inline-empty">{running ? "Answering…" : "No answer yet."}</p>}
         {!skipped && <div className="question-meta">
@@ -276,7 +331,7 @@ function QuestionsPanel({ jobId }: { jobId: string }) {
     <form className="question-paste" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <label htmlFor={`questions-${jobId}`}>Paste questions</label>
       <textarea id={`questions-${jobId}`} rows={3} value={draft} disabled={running} placeholder="One question per line (or separated by blank lines). Enter to answer, Shift+Enter for a new line." onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }} />
-      <div className="question-paste-row"><span>{problem || "Answered in the background from your evidence, stories, and the posting; logistics questions are skipped. The terminal is not used."}</span><button className="btn-primary" disabled={running || !draft.trim()}>Answer</button></div>
+      <div className="question-paste-row"><span>{problem || "Answered in the background from your evidence, stories, and the posting; form questions (pay, authorization, dropdowns) come from your profile. The terminal is not used."}</span><button className="btn-primary" disabled={running || !draft.trim()}>Answer</button></div>
     </form>
   </div>;
 }

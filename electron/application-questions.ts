@@ -1,7 +1,8 @@
 // Reads an application form's questions from the posting link (Greenhouse, Ashby, Lever). Code only, no AI, and only
-// the mechanical part: it drops fields that are never written answers (uploads, choices, contact details) and
-// questions that are plainly logistics ("how did you hear about us", salary, start date). Everything else goes to the
-// background answerer (question-agent.ts), where Agy decides per question whether to answer, skip, or give notes.
+// the mechanical part: it drops fields that are never questions (uploads, contact details) and marks logistics and
+// choice questions ("how did you hear about us", salary, a Yes/No dropdown), which are answered from the profile
+// (src/shared/profile-answers.ts) and never reach Agy. Everything else goes to the background answerer
+// (question-agent.ts), where Agy decides per question whether to answer, skip, or give notes.
 // Any other job board returns null and nothing happens.
 import { postingRef } from "../src/shared/boards";
 import type { ApplicationQuestion } from "../src/shared/schemas";
@@ -9,7 +10,7 @@ import { decodeEntities, fetchText } from "./jd-fetch";
 
 export type { ApplicationQuestion };
 
-export type FormField = { label: string; type: "long" | "short" | "choice" | "file" | "other"; required: boolean; description: string };
+export type FormField = { label: string; type: "long" | "short" | "choice" | "file" | "other"; required: boolean; description: string; options?: string[] };
 
 /** Contact and profile fields: never a question to answer. Matched against the whole (short) label. */
 const CONTACT_FIELD = /^\W*(?:(?:(?:preferred|legal|full|first|last|middle|given|family)\s+)*name|e-?mail(?: address)?|phone(?: number)?|mobile|(?:current )?(?:address|city|state|country|zip|postal code|location)|linkedin(?: profile| url)?|website|portfolio|github(?: url)?|twitter|x handle|personal (?:site|website)|pronouns?|gender|race|ethnicity|veteran status|disability(?: status)?|current (?:company|employer|title)|resume\/?cv|cover letter)\b[^?]{0,30}\??\W*$/i;
@@ -41,9 +42,15 @@ export function sentenceLimit(text: string): number | null {
   return /\d/.test(top) ? Number(top) : NUMBER_WORDS[top] ?? 3;
 }
 
-function question(label: string, description: string, required: boolean, index: number): ApplicationQuestion {
+function question(label: string, description: string, required: boolean, index: number, options: string[] = []): ApplicationQuestion {
   const full = `${label} ${description}`;
+  if (options.length) return { id: `q:${index + 1}`, label: label.trim(), wordLimit: null, sentenceLimit: null, writeYourself: false, required, logistics: true, options };
   return { id: `q:${index + 1}`, label: label.trim(), wordLimit: wordLimit(full), sentenceLimit: sentenceLimit(full), writeYourself: WRITE_YOURSELF.test(full), required, logistics: isLogistics(label) };
+}
+
+/** A choice field's option labels, trimmed and de-duplicated (at most 40). */
+function optionLabels(values: unknown[]): string[] {
+  return [...new Set(values.map((value) => plain(String(value ?? ""))).filter(Boolean))].slice(0, 40);
 }
 
 /** A question that is plainly logistics or a one-line form answer (never sent to Agy unless the user asks). */
@@ -52,13 +59,13 @@ export function isLogistics(text: string): boolean {
 }
 
 /**
- * The form's written questions: text fields that aren't contact details. Logistics questions are kept but marked
- * (`logistics: true`), so they show as skipped; Agy sees only the rest and decides on each.
+ * The form's questions: text fields and choice fields (with their options) that aren't contact details. Logistics and
+ * choice questions are marked (`logistics: true`) and answered from the profile; Agy sees only the rest.
  */
 export function writtenQuestions(fields: FormField[]): ApplicationQuestion[] {
   return fields
-    .filter((field) => (field.type === "long" || field.type === "short") && !CONTACT_FIELD.test(field.label))
-    .map((field, index) => question(field.label, field.description, field.required, index));
+    .filter((field) => (field.type === "long" || field.type === "short" || (field.type === "choice" && (field.options?.length ?? 0) > 0)) && !CONTACT_FIELD.test(field.label))
+    .map((field, index) => question(field.label, field.description, field.required, index, field.type === "choice" ? field.options : []));
 }
 
 /** Questions pasted in the Questions subtab: one per line, or one per blank-line-separated block. */
@@ -76,21 +83,23 @@ const plain = (value: string) => decodeEntities(value.replace(/<[^>]+>/g, " ")).
 
 /** Greenhouse Job Board API questions → fields. */
 export function greenhouseFields(payload: unknown): FormField[] {
-  const questions = (payload as { questions?: Array<{ label?: string; description?: string | null; required?: boolean; fields?: Array<{ type?: string }> }> })?.questions ?? [];
+  const questions = (payload as { questions?: Array<{ label?: string; description?: string | null; required?: boolean; fields?: Array<{ type?: string; values?: Array<{ label?: string }> }> }> })?.questions ?? [];
   return questions.map((entry) => {
     const kind = entry.fields?.[0]?.type ?? "";
     const type: FormField["type"] = kind === "textarea" ? "long" : kind === "input_text" ? "short" : /select|checkbox|radio/.test(kind) ? "choice" : kind === "input_file" ? "file" : "other";
-    return { label: plain(entry.label ?? ""), type, required: Boolean(entry.required), description: plain(entry.description ?? "") };
+    const options = type === "choice" ? optionLabels((entry.fields?.[0]?.values ?? []).map((value) => value.label)) : [];
+    return { label: plain(entry.label ?? ""), type, required: Boolean(entry.required), description: plain(entry.description ?? ""), ...(options.length ? { options } : {}) };
   }).filter((field) => field.label);
 }
 
 /** Ashby `ApiJobPosting` application form → fields. */
 export function ashbyFields(payload: unknown): FormField[] {
-  const sections = (payload as { data?: { jobPosting?: { applicationForm?: { sections?: Array<{ fieldEntries?: Array<{ field?: { type?: string; title?: string; description?: string | null }; isRequired?: boolean }> }> } } | null } })?.data?.jobPosting?.applicationForm?.sections ?? [];
+  const sections = (payload as { data?: { jobPosting?: { applicationForm?: { sections?: Array<{ fieldEntries?: Array<{ field?: { type?: string; title?: string; description?: string | null; selectableValues?: Array<{ label?: string }> }; isRequired?: boolean }> }> } } | null } })?.data?.jobPosting?.applicationForm?.sections ?? [];
   return sections.flatMap((section) => section.fieldEntries ?? []).map((entry) => {
     const kind = entry.field?.type ?? "";
     const type: FormField["type"] = kind === "LongText" ? "long" : kind === "String" || kind === "Email" || kind === "Phone" ? "short" : /Select|Boolean|Location/.test(kind) ? "choice" : kind === "File" ? "file" : "other";
-    return { label: plain(entry.field?.title ?? ""), type, required: Boolean(entry.isRequired), description: plain(entry.field?.description ?? "") };
+    const options = kind === "Boolean" ? ["Yes", "No"] : type === "choice" ? optionLabels((entry.field?.selectableValues ?? []).map((value) => value.label)) : [];
+    return { label: plain(entry.field?.title ?? ""), type, required: Boolean(entry.isRequired), description: plain(entry.field?.description ?? ""), ...(options.length ? { options } : {}) };
   }).filter((field) => field.label);
 }
 
@@ -99,11 +108,12 @@ export function leverFields(html: string): FormField[] {
   const fields: FormField[] = [];
   for (const match of html.matchAll(/<input[^>]*type="hidden"[^>]*value="(\{[^"]*?&quot;fields&quot;[^"]*?)"/g)) {
     try {
-      const card = JSON.parse(decodeEntities(match[1]!)) as { fields?: Array<{ type?: string; text?: string; description?: string; required?: boolean }> };
+      const card = JSON.parse(decodeEntities(match[1]!)) as { fields?: Array<{ type?: string; text?: string; description?: string; required?: boolean; options?: Array<{ text?: string }> }> };
       for (const field of card.fields ?? []) {
         const kind = field.type ?? "";
         const type: FormField["type"] = kind === "textarea" ? "long" : kind === "text" ? "short" : /select|dropdown|multiple|checkbox/.test(kind) ? "choice" : kind === "file-upload" ? "file" : "other";
-        if (field.text) fields.push({ label: plain(field.text), type, required: Boolean(field.required), description: plain(field.description ?? "") });
+        const options = type === "choice" ? optionLabels((field.options ?? []).map((option) => option.text)) : [];
+        if (field.text) fields.push({ label: plain(field.text), type, required: Boolean(field.required), description: plain(field.description ?? ""), ...(options.length ? { options } : {}) });
       }
     } catch {
       // A card that isn't JSON is not a question card.

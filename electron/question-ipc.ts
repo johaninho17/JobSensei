@@ -1,6 +1,8 @@
 // Application questions IPC. Loaded only when the edition has `features.applicationQuestions` (src/shared/edition.ts).
 import { ipcMain } from "electron";
 import { parsePastedQuestions } from "./application-questions";
+import { saveProfileFact } from "./candidate-facts";
+import { PROFILE_FACT_KEYS, type ProfileFactKey } from "../src/shared/profile-answers";
 import type { FeatureContext } from "./feature-context";
 import { QuestionAgent, headlessAgy } from "./question-agent";
 import { resolveAgyExecutable } from "./terminal";
@@ -30,6 +32,18 @@ export function registerQuestionIpc(ctx: FeatureContext): void {
   ipcMain.handle("questions:answer-anyway", async (_event, jobId: unknown, questionId: unknown) => {
     if (typeof questionId !== "string" || !/^q:\d+$/.test(questionId)) throw new Error("Invalid question.");
     void questionAgent.answerAnyway(questionJobId(jobId), questionId);
+  });
+  ipcMain.handle("questions:set-answer", async (_event, jobId: unknown, questionId: unknown, text: unknown) => {
+    if (typeof questionId !== "string" || !/^q:\d+$/.test(questionId)) throw new Error("Invalid question.");
+    if (typeof text !== "string" || text.length > 2_000) throw new Error("Type the answer as text.");
+    await questionAgent.setAnswer(questionJobId(jobId), questionId, text);
+  });
+  // A blank profile fact filled in from a question: saved to the profile, then this job's form answers follow it.
+  ipcMain.handle("questions:save-fact", async (_event, jobId: unknown, key: unknown, value: unknown) => {
+    if (typeof key !== "string" || !(PROFILE_FACT_KEYS as readonly string[]).includes(key)) throw new Error("Unknown profile fact.");
+    if (typeof value !== "string" || !value.trim() || value.length > 300) throw new Error("Type the answer in a line.");
+    await saveProfileFact(ctx.requireWorkspace(), key as ProfileFactKey, value);
+    return (await questionAgent.get(questionJobId(jobId)));
   });
   ipcMain.handle("questions:retry", async (_event, jobId: unknown) => {
     const id = questionJobId(jobId);
