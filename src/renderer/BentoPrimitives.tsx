@@ -1,16 +1,12 @@
-// Bento pieces for the Today pilot (ledger U77, #125). Styles live in layout.css under .bento; values in tokens.css.
-// Other pages keep the flat sections rule (U54) until the pilot is judged (#128).
+// Bento pieces (ledger U77, U78, U79). Styles live in layout.css under .bento; values in tokens.css.
 import type { ReactNode } from "react";
 
-export type BentoStripe = "brass" | "leaf" | "accent" | "risk";
-
-/** A raised card. tone "hero" is the one "Do this next" card per screen: brass edge and label (U2). */
-export function BentoCard({ id, title, tone = "raised", stripe, span, action, className, children }: {
+/** A raised card. tone "hero" is the one "Do this next" card per screen and the only card with a coloured edge: brass
+ * edge and label (U2, U79). */
+export function BentoCard({ id, title, tone = "raised", span, action, className, children }: {
   id?: string;
   title?: string;
   tone?: "raised" | "hero";
-  /** A colored left edge; the hero always has the brass one. */
-  stripe?: BentoStripe;
   /** Columns to span in the 4-column grid; the grid narrows it on smaller widths. */
   span?: 1 | 2 | 3 | 4;
   /** Shown at the right of the title row. */
@@ -18,8 +14,7 @@ export function BentoCard({ id, title, tone = "raised", stripe, span, action, cl
   className?: string;
   children: ReactNode;
 }) {
-  const edge = tone === "hero" ? "brass" : stripe;
-  const classes = ["bento-card", tone === "hero" ? "is-hero" : "", edge ? `has-stripe stripe-${edge}` : "", span && span > 1 ? `span-${span}` : "", className ?? ""].filter(Boolean).join(" ");
+  const classes = ["bento-card", tone === "hero" ? "is-hero" : "", span && span > 1 ? `span-${span}` : "", className ?? ""].filter(Boolean).join(" ");
   return <section id={id} className={classes} aria-label={title}>
     {(title || action) && <header className="bento-card-head">
       {title && (tone === "hero" ? <p className="bento-eyebrow">{title}</p> : <h2>{title}</h2>)}
