@@ -523,8 +523,8 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
         board = { ref, job: (live ?? swap)! };
       }
     }
-    const postedDate = board?.job.postedAt ?? link.postedDate;
-    const age = postingAgeDays(postedDate, now());
+    let postedDate = board?.job.postedAt ?? link.postedDate;
+    let age = postingAgeDays(postedDate, now());
     if (age !== null && age > settings.postedWithinDays) { skip("too old"); continue; }
     if (board) {
       const place = locationFits(board.job, settings);
@@ -537,7 +537,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
     try {
       const html = board ? await boardPostingHtml(board.ref, board.job, fetcher) : null;
       const { extracted } = html && board
-        ? postingFromBoard({ url, title: board.job.title, company: company(link, board), location: board.job.locations.join("; ") || board.job.location, html, pay: board.job.pay ?? null })
+        ? postingFromBoard({ url, title: board.job.title, company: company(link, board), location: board.job.locations.join("; ") || board.job.location, html, pay: board.job.pay ?? null, posted: board.job.postedAt ?? null })
         : await fetchAndClean(url, fetcher, { render: false });
       markdown = extracted.markdown;
       meta = extracted;
@@ -550,6 +550,12 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
     if (closedPosting(markdown)) { seen.add(url); skip("posting closed"); continue; }
     if (markdown.replace(/^[\s\S]*?\*\*Source:\*\*[^\n]*\n/, "").trim().length < MIN_POSTING_CHARS) { skip("couldn't read"); continue; }
     const record = buildPostingRecord(markdown);
+    // The posting's own date (structured data or Ashby's embedded data, #116) when the board and the link gave none.
+    if (!postedDate && record.postedAt) {
+      postedDate = record.postedAt;
+      age = postingAgeDays(postedDate, now());
+      if (age !== null && age > settings.postedWithinDays) { skip("too old"); continue; }
+    }
     // The posting's own words decide when they state the setup ("On-site in New York City"): boards' labels can be
     // wrong (a recruiting marketplace marks client jobs "Remote"). Board places are kept alongside the posting's.
     if (!board || record.workSetup?.mode) {

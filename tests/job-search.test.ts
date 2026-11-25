@@ -425,3 +425,15 @@ describe("Filtered out breakdown (#121)", () => {
     expect(html).toContain("No examples were kept for this run.");
   });
 });
+
+describe("posted date from the page (#116)", () => {
+  it("leaves out a posting as too old when only its page says when it went up", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "sensei-search-"));
+    await saveSearchSettings(workspace, settings);
+    const page = `<html><head><title>Northstar Labs - Solutions Engineer</title><script type="application/ld+json">{"@type":"JobPosting","title":"Solutions Engineer","datePosted":"2026-07-01"}</script></head><body><main>${POSTING.replace(/\n/g, "<br>")}</main></body></html>`;
+    const fetcher = (async (url: string | URL) => new Response(String(url) === "https://jobs.lever.co/northstar/dated" ? page : "", { status: String(url) === "https://jobs.lever.co/northstar/dated" ? 200 : 404, headers: { "content-type": "text/html" } })) as typeof fetch;
+    const reply = JSON.stringify({ jobs: [{ url: "https://jobs.lever.co/northstar/dated", title: "Solutions Engineer", company: "Northstar Labs" }] });
+    const { run } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), now: () => new Date("2026-11-05T12:00:00Z"), runner: async () => ({ response: reply, conversationId: null }) });
+    expect(run).toMatchObject({ added: 0, leftOut: { "too old": 1 } });
+  });
+});

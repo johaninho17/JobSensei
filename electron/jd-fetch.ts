@@ -80,6 +80,7 @@ interface JobPostingLd {
   description?: string;
   hiringOrganization?: { name?: string } | string;
   jobLocation?: unknown;
+  datePosted?: string;
   baseSalary?: { currency?: string; value?: { minValue?: number; maxValue?: number; value?: number; unitText?: string } | number };
 }
 
@@ -95,6 +96,13 @@ export function pagePay(posting: JobPostingLd | null, html: string): string | nu
   }
   const embedded = html.match(/"(?:scrapeableCompensationSalarySummary|compensationTierSummary)"\s*:\s*"([^"]*\d[^"]*)"/);
   return embedded ? embedded[1]!.replace(/\\u([0-9a-f]{4})/gi, (_match, code: string) => String.fromCharCode(parseInt(code, 16))).trim() : null;
+}
+
+/** When the posting went up (YYYY-MM-DD): the structured data's datePosted, else Ashby's embedded app data, which carries
+ * the date when the board API and the page text leave it out (#116). */
+export function pagePosted(posting: JobPostingLd | null, html: string): string | null {
+  const day = (value: string | undefined | null) => value?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? null;
+  return day(posting?.datePosted) ?? day(html.match(/"(?:publishedDate|publishedAt|datePublished)"\s*:\s*"(\d{4}-\d{2}-\d{2}[^"]*)"/)?.[1]);
 }
 
 function findJobPosting(value: unknown): JobPostingLd | null {
@@ -162,6 +170,7 @@ export function extractJobDescription(html: string, url: string): Omit<FetchedJo
   const company = (organization ? decodeEntities(organization).trim() : "") || pageTitle?.company || null;
   const location = locationText(posting?.jobLocation);
   const pay = pagePay(posting, html);
+  const posted = pagePosted(posting, html);
   const body = posting?.description ? htmlToText(decodeEntities(posting.description)) : htmlToText(mainContent(html));
   const header = [
     `# ${title ?? "Job Description"}`,
@@ -169,6 +178,7 @@ export function extractJobDescription(html: string, url: string): Omit<FetchedJo
     ...(company ? [`**Company:** ${company}  `] : []),
     ...(location ? [`**Location:** ${location}  `] : []),
     ...(pay ? [`**Compensation:** ${pay}  `] : []),
+    ...(posted ? [`**Posted:** ${posted}  `] : []),
     `**Source:** ${url}`,
     "",
   ];
@@ -181,13 +191,14 @@ type Extracted = Omit<FetchedJobDescription, "fetchedAt">;
  * A posting built from a job board's own data (Ashby/Lever lists, Greenhouse's per-job API) instead of loading its
  * page: the same header, text conversion, and cleanup as a fetched page, so everything downstream reads it the same.
  */
-export function postingFromBoard(input: { url: string; title: string; company: string | null; location: string | null; html: string; pay?: string | null }): { extracted: Extracted; form: string | null } {
+export function postingFromBoard(input: { url: string; title: string; company: string | null; location: string | null; html: string; pay?: string | null; posted?: string | null }): { extracted: Extracted; form: string | null } {
   const header = [
     `# ${input.title}`,
     "",
     ...(input.company ? [`**Company:** ${input.company}  `] : []),
     ...(input.location ? [`**Location:** ${input.location}  `] : []),
     ...(input.pay ? [`**Compensation:** ${input.pay}  `] : []),
+    ...(input.posted?.match(/^\d{4}-\d{2}-\d{2}/) ? [`**Posted:** ${input.posted.slice(0, 10)}  `] : []),
     `**Source:** ${input.url}`,
     "",
   ];
