@@ -81,6 +81,18 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
           {!editingDetails && <button className="btn-link" onClick={() => setEditingDetails(true)}>Edit details</button>}
         </div>
       </div>
+      {/* The next step and the last check's result live in the header card (U79), not as bands of their own. */}
+      {next && trackerStatus !== "rejected" && trackerStatus !== "withdrawn" && <section className="next-bar" aria-label="Next step">
+        <span className="next-bar-label">Next</span>
+        <strong className="next-bar-title" title={`Sends this request to Agy for ${job.company ?? displayJobName(job.name)}, ${job.title ?? "this job"}.`}>{next.label}</strong>
+        <button className="btn-primary" onClick={() => onInsertPrompt(next)}>Send to Agy</button>
+        {more.length > 0 && <details className="jobs-more next-bar-more"><summary aria-label="Other next steps">More</summary><div className="jobs-more-menu">{more.slice(0, 6).map((action) => <button key={action.id} className="menu-item" onClick={() => onInsertPrompt(action)}>{action.label}</button>)}</div></details>}
+      </section>}
+      {reviewIssues.length > 0 && <p className="review-line" role="status">
+        <span className={`review-kind ${allIssues.some((issue) => issue.severity === "error") ? "is-error" : ""}`}>{allIssues.some((issue) => issue.severity === "error") ? "Fix" : "Check"}</span>
+        <span>{plural(allIssues.length, "thing")} to look at before you send, from the last check.</span>
+        <button className="btn-link" onClick={openChecks}>Review</button>
+      </p>}
     </header>
     {editingDetails && <EditJobDetails job={job} onClose={() => setEditingDetails(false)} onSaved={(next) => { onJobChanged(next); setEditingDetails(false); }} />}
     <div className="workspace-tabs-row">
@@ -92,18 +104,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
     </div>
     {(activeTab === "overview" || activeTab === "application") && <JobPdfFiles jobId={job.id} />}
     {activeTab === "overview" && <div className="job-overview">
-      {next && trackerStatus !== "rejected" && trackerStatus !== "withdrawn" && <section className="next-bar" aria-label="Next step">
-        <span className="next-bar-label">Next</span>
-        <strong className="next-bar-title" title={`Sends this request to Agy for ${job.company ?? displayJobName(job.name)}, ${job.title ?? "this job"}.`}>{next.label}</strong>
-        <button className="btn-primary" onClick={() => onInsertPrompt(next)}>Send to Agy</button>
-        {more.length > 0 && <details className="jobs-more next-bar-more"><summary aria-label="Other next steps">More</summary><div className="jobs-more-menu">{more.slice(0, 6).map((action) => <button key={action.id} className="menu-item" onClick={() => onInsertPrompt(action)}>{action.label}</button>)}</div></details>}
-      </section>}
       {FEATURES.interviews && (trackerStatus === "rejected" || trackerStatus === "withdrawn" || trackerStatus === "interviewing" || trackerStatus === "offer") && <DebriefPanel job={job} closed={trackerStatus === "rejected" || trackerStatus === "withdrawn"} onUpdateTracker={onUpdateTracker} onInsertPrompt={onInsertPrompt} />}
-      {reviewIssues.length > 0 && <p className="review-line" role="status">
-        <span className={`review-kind ${allIssues.some((issue) => issue.severity === "error") ? "is-error" : ""}`}>{allIssues.some((issue) => issue.severity === "error") ? "Fix" : "Check"}</span>
-        <span>{plural(allIssues.length, "thing")} to look at before you send, from the last check.</span>
-        <button className="btn-link" onClick={openChecks}>Review</button>
-      </p>}
       <div className="overview-cols">
         <div className="overview-col">
           <RolePanel job={job} />
@@ -112,8 +113,8 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
           <section className="overview-panel">
             <h2>Fit</h2>
             {job.rating === null ? <p className="muted">Not rated yet. Ask Agy to evaluate this job.</p> : <>
-              <p className="fit-score"><strong className="tabular">{job.rating.toFixed(1)}</strong> of 5{job.ratingConfidence ? `, ${job.ratingConfidence} confidence` : ""}{evaluation && <> · <button className="btn-link" onClick={() => openAppView("evaluation")}>evaluation</button></>}</p>
-              <div className="fit-bar" aria-hidden="true"><span style={{ width: `${(job.rating / 5) * 100}%` }} /></div>
+              {/* The score itself is the header's fit ring (U79); this card explains it. */}
+              <p className="fit-score">{job.ratingConfidence ? `${job.ratingConfidence[0]!.toUpperCase()}${job.ratingConfidence.slice(1)} confidence` : "Rated"}{evaluation && <> · <button className="btn-link" onClick={() => openAppView("evaluation")}>evaluation</button></>}</p>
               {job.stretch && <StretchSummary stretch={job.stretch} />}
               <MustHaveGroups mustHaves={job.mustHaves} gaps={job.requirementGaps.length ? job.requirementGaps : job.ratingGaps.filter((item) => !/^none\b/i.test(item)).map((item) => item.replace(/^(?:must|req):\d+\s*/i, ""))} />
               {job.mustHaves.length === 0 && job.ratingHighlights.length > 0 && <details className="must-group is-met"><summary>Strengths ({job.ratingHighlights.length})</summary><ul>{job.ratingHighlights.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul></details>}

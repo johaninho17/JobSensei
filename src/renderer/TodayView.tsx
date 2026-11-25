@@ -5,6 +5,7 @@ import type { Insight, TodayData, TodayQuestion } from "../shared/today";
 import { pickNextStep, type NextStep } from "../shared/today-next";
 import { BentoCard, FitRing, Kpi } from "./BentoPrimitives";
 import { Section } from "./Section";
+import { SubTabPanel, SubTabs } from "./SubTabs";
 import { draftFound, foundError, saveFound } from "./found-actions";
 
 type Target = NonNullable<Insight["action"]>["target"];
@@ -26,6 +27,8 @@ export function TodayView({ onOpenJob, onOpenMatch, onQueueFound, onGo, onOpenTu
   const [busyMatch, setBusyMatch] = useState<string | null>(null);
   const [problem, setProblem] = useState("");
   const [tuneFiles, setTuneFiles] = useState<number | null>(null);
+  const [pickedList, setListTab] = useState<TodayList | null>(null);
+  const [activityKind, setActivityKind] = useState<ActivityKind>("all");
   const load = () => {
     void window.sensei.today.get().then(setToday).catch((reason) => setProblem(reason instanceof Error ? reason.message : String(reason)));
     if (FEATURES.tune) void window.sensei.tune.status().then((areas) => setTuneFiles(areas.reduce((sum, area) => sum + area.changed, 0))).catch(() => setTuneFiles(null));
@@ -45,6 +48,8 @@ export function TodayView({ onOpenJob, onOpenMatch, onQueueFound, onGo, onOpenTu
   const activity = today.activity;
   const activityCount = activity.added.length + activity.applied.length + activity.drafted.length + activity.interviews.length;
   const run = today.search.lastRun;
+  // The lists card opens on the first tab with something in it, until the user picks one.
+  const listTab: TodayList = pickedList ?? (dueCount ? "due" : FEATURES.jobSearch && today.search.newCount ? "matches" : "coming");
   const jobLink = (id: string, text: string) => <button className="btn-link" onClick={() => onOpenJob(id)}>{text}</button>;
 
   async function closePosting(jobId: string, label: string) {
@@ -70,20 +75,28 @@ export function TodayView({ onOpenJob, onOpenMatch, onQueueFound, onGo, onOpenTu
   const showQuestions = () => document.getElementById("today-questions-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return <section className="today bento-page">
-    <header className="page-head"><div><h1>Today</h1><p>{date}{run ? ` · last search ${new Date(run.startedAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}` : ""}</p></div></header>
+    <header className="page-head page-head-compact"><div className="page-head-title"><h1>Today</h1><span className="muted">{date}{run ? ` · last search ${new Date(run.startedAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}` : ""}</span></div></header>
 
     <div className="bento">
       <div className="bento-row">
       {next && <BentoCard tone="hero" title="Do this next" className="today-hero">
         <NextStepBody step={next} busy={busyMatch !== null} onOpenJob={onOpenJob} onOpenMatch={onOpenMatch} onClose={closePosting} onKeep={keepPosting} onDraft={(id) => void matchAction(id, "draft")} onShowQuestions={showQuestions} />
       </BentoCard>}
+      <div className={`kpi-stack${next ? "" : " is-row"}`}>
       {FEATURES.interviews && <Kpi value={due.interviewsThisWeek.length} label={due.interviewsThisWeek.length === 1 ? "Interview in the next 7 days" : "Interviews in the next 7 days"} actionLabel="Open Interviews" onAction={() => onGo("interviews")} />}
       {FEATURES.jobSearch && <Kpi value={today.search.newCount} label={today.search.newCount === 1 ? "New match" : "New matches"} actionLabel="Open Job Search" onAction={() => onGo("job-search")} />}
       {FEATURES.tune && tuneFiles !== null && <Kpi value={tuneFiles} label={tuneFiles === 1 ? "New file to tune" : "New files to tune"} actionLabel="Open Tune" onAction={onOpenTune} />}
       </div>
+      </div>
 
-      <BentoCard span={2} className="today-due">
-        <Section id="today-due" title="Due" count={dueCount} note={dueCount ? null : "Nothing due."}>
+      {/* Due, New matches, and For the coming days share one card with tabs in its header (U79). */}
+      <BentoCard span={4} className="today-lists">
+        <SubTabs<TodayList> idPrefix="today-lists" label="Today's lists" value={listTab} onChange={setListTab}
+          tabs={[{ id: "due", label: "Due", count: dueCount }, ...(FEATURES.jobSearch ? [{ id: "matches" as const, label: "New matches", count: today.search.newCount }] : []), { id: "coming", label: "For the coming days", count: today.insights.length }]}
+          actions={listTab === "matches" ? <button className="btn-link" onClick={() => onGo("job-search")}>Open Job Search</button> : undefined} />
+        <SubTabPanel idPrefix="today-lists" value={listTab}>
+          {listTab === "due" && <div id="today-due">
+            {dueCount === 0 && <p className="muted">Nothing due.</p>}
           {due.interviewsThisWeek.length > 0 && <><h3>Interviews this week</h3><ul className="today-list">{due.interviewsThisWeek.map((entry) => <li key={`${entry.id}${entry.date}`}><span className="today-when">{dayLabel(entry.date)}</span> {jobLink(entry.id, entry.label)} <span className="muted">· {entry.round}</span></li>)}</ul></>}
           {due.followUps.length > 0 && <><h3>Follow-ups</h3><ul className="today-list">{due.followUps.map((entry) => <li key={entry.id}>{jobLink(entry.id, entry.label)} <span className="muted">· {entry.days ? `${entry.days} day${entry.days === 1 ? "" : "s"} overdue` : "today"}</span></li>)}</ul></>}
           {due.closedPostings.length > 0 && <><h3>Postings that closed</h3><ul className="today-list today-actionable">{due.closedPostings.map((entry) => { const label = [entry.company, entry.title].filter(Boolean).join(", ") || entry.jobId; return <li key={entry.jobId}>
@@ -91,11 +104,8 @@ export function TodayView({ onOpenJob, onOpenMatch, onQueueFound, onGo, onOpenTu
             <span className="today-actions"><button className="btn-link" onClick={() => void closePosting(entry.jobId, label)}>Mark closed</button><button className="btn-link" onClick={() => void keepPosting(entry.jobId)}>Keep</button></span>
           </li>; })}</ul></>}
           {due.stale.length > 0 && <><h3>No reply for a while</h3><ul className="today-list">{due.stale.map((entry) => <li key={entry.id}>{jobLink(entry.id, entry.label)} <span className="muted">· applied {entry.days} days ago</span></li>)}</ul></>}
-        </Section>
-      </BentoCard>
-
-      <BentoCard span={2} className="today-matches">
-        <Section id="today-search" title="New matches" count={today.search.newCount} actions={<button className="btn-link" onClick={() => onGo("job-search")}>Open Job Search</button>}>
+          </div>}
+          {listTab === "matches" && <div id="today-search">
           {today.search.top.length ? <ul className="today-list today-scored">{today.search.top.map((item) => { const score = item.agyFit?.score ?? item.fit.score; return <li key={item.id}>
             <FitRing rating={score} size={34} />
             <span><button className="find-title" title="Show this match in Job Search" onClick={() => onOpenMatch(item.id)}>{item.title ?? "Untitled role"}</button> <span className="muted">· {item.company ?? ""}{item.location ? ` · ${item.location}` : ""}</span></span>
@@ -105,8 +115,18 @@ export function TodayView({ onOpenJob, onOpenMatch, onQueueFound, onGo, onOpenTu
             </span>
           </li>; })}</ul> : <p className="muted">No new matches waiting.{run ? ` Last search found ${run.added}.` : ""}</p>}
           {today.search.newCount > today.search.top.length && <button className="btn-link" onClick={() => onGo("job-search")}>See all {today.search.newCount}</button>}
-        </Section>
+          </div>}
+          {listTab === "coming" && <div id="today-insights">
+            {today.insights.length === 0 && <p className="muted">Nothing to improve right now.</p>}
+          <ul className="today-insights">{today.insights.map((insight, index) => <li key={index} className={`is-${insight.area}`}>
+            <span className="today-area">{({ data: "Your data", interviews: "Interviews", resume: "Resume", search: "Search" } as const)[insight.area]}</span>
+            <span className="today-insight-text">{insight.text}</span>
+            {insight.action && <button className="btn-link" onClick={() => onGo(insight.action!.target)}>{insight.action.label}</button>}
+          </li>)}</ul>
+          </div>}
+        </SubTabPanel>
       </BentoCard>
+
 
       {today.questions.length > 0 && <BentoCard span={2} id="today-questions-card" className="today-questions-card">
         <Section id="today-questions" title="Questions for you" count={today.questions.length} note="Each answer makes drafts, interview prep, or the search better. They stay until you answer or remove them.">
@@ -120,25 +140,20 @@ export function TodayView({ onOpenJob, onOpenMatch, onQueueFound, onGo, onOpenTu
         </Section>
       </BentoCard>}
 
-      <BentoCard span={2}>
-        <Section id="today-insights" title="For the coming days" count={today.insights.length} note={today.insights.length ? null : "Nothing to improve right now."}>
-          <ul className="today-insights">{today.insights.map((insight, index) => <li key={index} className={`is-${insight.area}`}>
-            <span className="today-area">{({ data: "Your data", interviews: "Interviews", resume: "Resume", search: "Search" } as const)[insight.area]}</span>
-            <span className="today-insight-text">{insight.text}</span>
-            {insight.action && <button className="btn-link" onClick={() => onGo(insight.action!.target)}>{insight.action.label}</button>}
-          </li>)}</ul>
-        </Section>
-      </BentoCard>
 
       <BentoCard span={2}>
         <Section id="today-activity" title="Today's activity" count={activityCount} defaultOpen={false} note={activityCount ? null : "Nothing yet today."}>
-          {([["Added", activity.added], ["Applied", activity.applied], ["Drafted", activity.drafted]] as const).map(([title, list]) => list.length > 0 && <div key={title}><h3>{title} <span className="muted">{list.length}</span></h3><ul className="today-list">{list.slice(0, 8).map((entry) => <li key={entry.id}>{jobLink(entry.id, entry.label)}</li>)}{list.length > 8 && <li><button className="btn-link" onClick={() => onGo("jobs")}>+{list.length - 8} more in Jobs</button></li>}</ul></div>)}
-          {activity.interviews.length > 0 && <><h3>Interviews</h3><ul className="today-list">{activity.interviews.map((entry) => <li key={`${entry.id}${entry.round}`}>{jobLink(entry.id, entry.label)} <span className="muted">· {entry.round.replace("_", " ")}</span></li>)}</ul></>}
+          {activityCount > 0 && <div className="activity-chips" role="group" aria-label="Show activity">{([["all", activityCount], ["Added", activity.added.length], ["Applied", activity.applied.length], ["Drafted", activity.drafted.length], ["Interviews", activity.interviews.length]] as const).filter(([, count]) => count > 0).map(([kind, count]) => <button key={kind} className="filter-toggle" aria-pressed={activityKind === kind} onClick={() => setActivityKind(kind)}>{kind === "all" ? "All" : kind}<span>{count}</span></button>)}</div>}
+          {([["Added", activity.added], ["Applied", activity.applied], ["Drafted", activity.drafted]] as const).filter(([title]) => activityKind === "all" || activityKind === title).map(([title, list]) => list.length > 0 && <div key={title}><h3>{title} <span className="muted">{list.length}</span></h3><ul className="today-list">{list.slice(0, 8).map((entry) => <li key={entry.id}>{jobLink(entry.id, entry.label)}</li>)}{list.length > 8 && <li><button className="btn-link" onClick={() => onGo("jobs")}>+{list.length - 8} more in Jobs</button></li>}</ul></div>)}
+          {(activityKind === "all" || activityKind === "Interviews") && activity.interviews.length > 0 && <><h3>Interviews</h3><ul className="today-list">{activity.interviews.map((entry) => <li key={`${entry.id}${entry.round}`}>{jobLink(entry.id, entry.label)} <span className="muted">· {entry.round.replace("_", " ")}</span></li>)}</ul></>}
         </Section>
       </BentoCard>
     </div>
   </section>;
 }
+
+type TodayList = "due" | "matches" | "coming";
+type ActivityKind = "all" | "Added" | "Applied" | "Drafted" | "Interviews";
 
 const dayLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 

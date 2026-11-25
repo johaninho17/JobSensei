@@ -37,7 +37,8 @@ describe("Today layout (#126)", () => {
     expect(view.match(/tone="hero"/g)).toHaveLength(1);
     expect(view).toContain("pickNextStep(today)");
     for (const kpi of ["FEATURES.interviews && <Kpi", "FEATURES.jobSearch && <Kpi", "FEATURES.tune && tuneFiles !== null && <Kpi"]) expect(view).toContain(kpi);
-    for (const id of ["today-due", "today-search", "today-questions", "today-answers", "today-insights", "today-activity"]) expect(view).toContain(`<Section id="${id}"`);
+    for (const id of ["today-questions", "today-answers", "today-activity"]) expect(view).toContain(`<Section id="${id}"`);
+    for (const id of ["today-due", "today-search", "today-insights"]) expect(view).toContain(`<div id="${id}">`);
     for (const action of ["closePosting(", "keepPosting(", 'matchAction(item.id, "draft")', 'matchAction(item.id, "save")', "<QuestionCard"]) expect(view).toContain(action);
     expect(view).toContain("<FitRing rating={score}");
     expect(view).not.toContain("Ask 3 more");
@@ -113,5 +114,25 @@ describe("Jobs header and sidebar views (U79, #156)", () => {
     const jobs = await readFile("src/renderer/JobsHome.tsx", "utf8");
     expect(jobs).toContain("if (readiness.ready && dismissed === signature) return null;");
     expect(jobs).toContain("{readiness.ready && <button className=\"setup-banner-close\"");
+  });
+});
+
+describe("Today and the job page, compact (U79, #157)", () => {
+  it("Due, New matches, and For the coming days are one tabbed card; KPIs stack beside the hero", async () => {
+    const view = await readFile("src/renderer/TodayView.tsx", "utf8");
+    expect(view.match(/className="today-lists"/g)).toHaveLength(1);
+    expect(view).toContain('<SubTabs<TodayList> idPrefix="today-lists"');
+    expect(view).toContain('className={`kpi-stack${next ? "" : " is-row"}`}');
+    expect(view).toContain('className="activity-chips"');
+  });
+
+  it("the job page's next step and check line sit in the header card, and the Fit card doesn't repeat the score", async () => {
+    const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
+    const head = page.slice(page.indexOf('<header className="job-head">'), page.indexOf("</header>", page.indexOf('<header className="job-head">')));
+    expect(head).toContain('className="next-bar"');
+    expect(head).toContain('className="review-line"');
+    expect(page.match(/className="next-bar"/g)).toHaveLength(1);
+    expect(page).not.toContain("job.rating.toFixed(1)}</strong> of 5");
+    expect(page).not.toContain('className="fit-bar"');
   });
 });
