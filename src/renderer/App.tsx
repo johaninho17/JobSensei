@@ -148,7 +148,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   async function queueJob(input: { kind: "link"; url: string; batch?: { index: number; size: number } } | { kind: "paste"; text: string; note?: string } | { kind: "found"; id: string; auto?: boolean } | { kind: "saved"; jobId: string }, manual: boolean): Promise<number> {
     // The app says what setup is missing before a job reaches Agy (electron/setup-readiness.ts owns the rules).
     const ready = await loadReadiness();
-    if (ready && !ready.ready) throw new Error(`${ready.blocker} Open Setup in the sidebar.`);
+    if (ready && !ready.ready) throw new Error(`${ready.blocker} Open Profile in the sidebar.`);
     // Links are fetched here, by the app: Agy's sandbox has no network. The saved posting is queued like a paste,
     // and a page that can't be read is reported now instead of stalling the queue.
     const item = newQueueItem({ kind: "paste", label: null, note: input.kind === "paste" ? input.note : null }, new Date(), manual);
@@ -909,7 +909,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     { id: "go-docs", title: "Go to Docs", subtitle: "How to get the best results, your data, how Agy uses it, Agy commands", keywords: "help guide documentation commands model theme", shortcut: "g d", run: () => showPage("docs-home") },
     { id: "go-jobs", title: "Go to Jobs", subtitle: "All jobs, the queue, and the status strip", keywords: "home list cards", shortcut: "g j", run: () => showPage("jobs-home") },
     ...(FEATURES.interviews ? [{ id: "go-interviews", title: "Go to Interviews", subtitle: "Every job with interview prep", keywords: "rounds prep", shortcut: "g i", run: () => showPage("interviews-home") }] : []),
-    { id: "go-context", title: FEATURES.candidates ? "Go to the candidate's files" : "Go to Career context", subtitle: FEATURES.candidates ? "Their resume, files, and your notes" : "Resumes and sources Agy reads", keywords: "files sources resume", shortcut: "g c", run: () => showPage("context-home") },
+    { id: "go-context", title: FEATURES.candidates ? "Go to the candidate's files" : "Go to Profile: career sources", subtitle: FEATURES.candidates ? "Their resume, files, and your notes" : "Resumes and sources Agy reads", keywords: "files sources resume", shortcut: "g c", run: () => showPage("context-home") },
     ...[["interviewing", "Interviewing"], ["applied", "Applied"], ["offer", "Offer"], ["closed", "Closed"], ["saved", "Saved"]].map(([group, label]) => ({ id: `filter:${group}`, title: `Show ${label.toLowerCase()} jobs`, subtitle: "Filter the Jobs page by status", keywords: `status:${group} filter`, run: () => { setJobsStatusGroup(group!); showPage("jobs-home"); } })),
     ...recentForStatus.flatMap((job) => TRACKER_STATUSES.filter((status) => status !== effectiveStatus(job)).map((status) => ({ id: `tracker:${job.id}:${status}`, title: `Mark ${job.company ?? displayJobName(job.name)} as ${TRACKER_LABELS[status].toLowerCase()}`, subtitle: job.title ?? "Recent job", keywords: `status ${status}`, run: () => void updateTracker(job.id, { status }) }))),
     { id: "export-csv", title: "Export all jobs to CSV", subtitle: "Save a spreadsheet of every job", keywords: "csv excel spreadsheet download", run: () => void window.sensei.jobs.exportCsv(jobsToCsv(jobs, CSV_COLUMNS)).then((path) => { if (path) showToast(`Saved ${jobs.length} jobs to ${path.split(/[\\/]/).pop()}`); }) },
@@ -981,6 +981,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const contextSourcesBlock = <section className="context-block"><h2>{FEATURES.candidates ? "Candidate files" : "Career sources"}</h2><p>{FEATURES.candidates ? "Checked files are what Agy may use for this candidate." : "Checked files are what Agy reads as facts about you. Structured files are the strongest evidence."}</p><ContextAdder onAdd={(kind, paths) => void addContextFiles(kind, paths)} onReveal={() => void window.sensei.files.reveal("context").catch(() => undefined)} /><div className="context-tree">{tree.length ? tree.map((node) => <TreeNode key={node.relativePath} node={node} selectedPath={selectedPath} baseResume={baseResume} onSelect={selectFile} selectedPaths={selectedCareerPaths} onTogglePath={togglePath} onDelete={deletePath} revealPath={treeRevealPath} />) : <p className="empty-small">No career context folders found.</p>}</div></section>;
   const contextResumesBlock = <section className="context-block"><h2>Resumes</h2><ResumeSources settings={resumeSettings} selectedPath={selectedPath} onSelect={selectFile} onChoose={chooseResume} onRemoveSecondary={removeSecondary} /></section>;
   const recruiterNotesBlock = FEATURES.candidates ? <RecruiterNotes name={candidateProfile?.identity.fullName ?? null} onSaved={(path) => void checkContextPath(path)} /> : null;
+  // Setup is the Profile page's first tab (U78); the Recruiter Edition shows it in its own candidate profile.
+  const setupHomeBlock = <SetupHome embedded onToast={showToast} readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />;
   return <main className={`shell ${leftPanelOpen ? "" : "is-sidebar-closed"}`} style={shellStyle}>
     {leftPanelOpen && <div className="panel-resizer sidebar-resizer" role="separator" aria-label="Resize sidebar" aria-orientation="vertical" aria-valuemin={LEFT_PANEL_MIN} aria-valuemax={panelMaximum("left")} aria-valuenow={leftPanelWidth} tabIndex={0} onPointerDown={(event) => beginPanelResize("left", event)} onKeyDown={(event) => resizePanelWithKeyboard("left", event)} onDoubleClick={() => setLeftPanelWidth(236)} title="Drag to resize; double-click to reset" />}
     <nav className="app-sidebar" aria-label="Main" aria-hidden={!leftPanelOpen}>
@@ -1001,8 +1003,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" /><span className="side-label">Jobs</span>{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
         {FEATURES.jobSearch && <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" /><span className="side-label">Job Search</span>{searchStatus.running ? <span className="side-due" title={searchProgressText(searchStatus)}>Searching…</span> : searchNew > 0 && <span className="side-count" title={`${searchNew} new match${searchNew === 1 ? "" : "es"}`}>{searchNew}</span>}</button></li>}
         {FEATURES.interviews && <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" /><span className="side-label">Interviews</span>{activeInterviewCount > 0 && <span className="side-count" title={`${activeInterviewCount} active interview process${activeInterviewCount === 1 ? "" : "es"}`}>{activeInterviewCount}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>}
-        <li><button aria-current={activePage === "setup-home" ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />{FEATURES.candidates ? "Profile" : "Setup"}{readiness && (FEATURES.candidates ? <span className={readiness.ready ? "side-count" : "side-due"}>{readiness.ready ? "Ready" : "Needs a resume"}</span> : <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>)}</button></li>
-        {!FEATURES.candidates && <li><button aria-current={activePage === "context-home" ? "page" : undefined} onClick={() => showPage("context-home")}><NavIcon name="context" /><span className="side-label">Career context</span>{FEATURES.nudges && newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}<span className="side-count">{sourceCount}</span></button></li>}
+        {/* One Profile item: Setup and Career context are one page with tabs (U78). */}
+        <li><button aria-current={activePage === "setup-home" || (!FEATURES.candidates && activePage === "context-home") ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />{FEATURES.candidates ? "Profile" : <span className="side-label">Profile</span>}{!FEATURES.candidates && FEATURES.nudges && newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new career file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}{readiness && (FEATURES.candidates ? <span className={readiness.ready ? "side-count" : "side-due"}>{readiness.ready ? "Ready" : "Needs a resume"}</span> : <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>)}</button></li>
       </ul>
       {!FEATURES.candidates && <section className="side-recent" aria-labelledby="side-recent-title">
         <h2 id="side-recent-title">Favorites</h2>
@@ -1096,9 +1098,9 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
             notes={recruiterNotesBlock}
             settings={<CandidateSettingsTab profile={candidateProfile} onSaved={(next) => { setCandidateProfile(next); void loadReadiness(); }} />}
           />
-          : currentLocation.kind === "setup-home" ? <SetupHome onToast={showToast} readiness={readiness} profile={candidateProfile} onProfileSaved={(next) => { if (next) setCandidateProfile(next); }} onRefresh={() => void loadReadiness()} onAction={runSetupAction} onReveal={(path) => void window.sensei.files.reveal(path).catch(() => undefined)} onAddLinkedin={() => void chooseResume("linkedin").then(() => loadReadiness())} />
-          : currentLocation.kind === "context-home" ? <ContextHome
-            startView={contextStart}
+          : currentLocation.kind === "context-home" || currentLocation.kind === "setup-home" ? <ContextHome key={currentLocation.kind}
+            setup={setupHomeBlock}
+            startView={currentLocation.kind === "setup-home" ? "setup" : contextStart}
             onOpen={(path) => void selectFile(path)}
             notes={recruiterNotesBlock}
             notice={FEATURES.nudges && newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">
@@ -1163,7 +1165,7 @@ function ToastRegion({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: n
 
 const SHORTCUTS: Array<[string, string]> = [
   ["⌘K or Ctrl K", "Search jobs, files, and actions"],
-  ["g then t / j / s / i / c / a / d", "Go to Today, Jobs, Job Search, Interviews, Career context, Agy, or Docs"],
+  ["g then t / j / s / i / c / a / d", "Go to Today, Jobs, Job Search, Interviews, Profile (career sources), Agy, or Docs"],
   ["[ and ]", "Previous or next job in the Jobs list you came from (on a job page)"],
   ["1 – 4", "Set the open job to Saved, Applied, Interviewing, or Offer"],
   ["5 5 / 6 6", "Mark the open job Rejected or Withdrawn (press twice; Undo in the toast)"],

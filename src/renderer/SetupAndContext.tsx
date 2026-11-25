@@ -261,7 +261,7 @@ const READINESS_STATE: Record<ReadinessItem["state"], string> = { done: "Done", 
 const ACTION_LABEL: Partial<Record<ReadinessItem["action"], string>> = { profile: "Open Settings", resume: "Choose resume", agy: "Open Agy", context: "Open Career context", story: "Open Settings", logistics: "Open Settings", "private-names": "Open Settings", "other-resumes": "Add a resume", voice: "Open Settings" };
 
 /** Setup: what JobSensei needs (required) and what makes it better (recommended), each with how to do it in the app. */
-export function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAction, onReveal, onAddLinkedin, onToast }: { onToast: (message: string) => void; readiness: Readiness | null; profile: CandidateProfile | null; onProfileSaved: (profile: CandidateProfile | null) => void; onRefresh: () => void; onAction: (action: ReadinessItem["action"]) => void; onReveal: (path: string) => void; onAddLinkedin: () => void }) {
+export function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAction, onReveal, onAddLinkedin, onToast, embedded = false }: { onToast: (message: string) => void; /** Shown as a tab of the Profile page (U78): no page title of its own. */ embedded?: boolean; readiness: Readiness | null; profile: CandidateProfile | null; onProfileSaved: (profile: CandidateProfile | null) => void; onRefresh: () => void; onAction: (action: ReadinessItem["action"]) => void; onReveal: (path: string) => void; onAddLinkedin: () => void }) {
   useEffect(() => { onRefresh(); }, []);
   const [editing, setEditing] = useState<ReadinessItem["action"] | null>(null);
   if (!readiness) return <section className="setup-home"><p className="muted">Checking your setup…</p></section>;
@@ -277,7 +277,7 @@ export function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAct
     {editing === item.action && <div className="setup-row-editor"><SetupEditor action={item.action} profile={profile} onSaved={(next) => { onProfileSaved(next); onRefresh(); }} onClose={() => setEditing(null)} /></div>}
   </li>;
   return <section className="setup-home">
-    <header className="page-head"><div>{!FEATURES.candidates && <h1>Setup</h1>}<p>{FEATURES.candidates ? (readiness.ready ? "Ready for jobs. The optional items below help Agy tailor more closely." : "Add the base resume to start tailoring.") : readiness.ready ? "JobSensei has what it needs. The recommended steps make drafts and interview prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button> · <button className="btn-link" onClick={() => onReveal("")}>Open your workspace folder</button></p></div></header>
+    <header className="page-head"><div>{!FEATURES.candidates && !embedded && <h1>Setup</h1>}<p>{FEATURES.candidates ? (readiness.ready ? "Ready for jobs. The optional items below help Agy tailor more closely." : "Add the base resume to start tailoring.") : readiness.ready ? "JobSensei has what it needs. The recommended steps make drafts and interview prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button> · <button className="btn-link" onClick={() => onReveal("")}>Open your workspace folder</button></p></div></header>
     {(["required", "recommended"] as const).map((level) => { const items = readiness.items.filter((item) => item.level === level); const done = items.filter((item) => item.state === "done").length; return <Section key={level} id={`setup-${level}`} title={level === "required" ? "Required" : "Recommended"} count={`${done} of ${items.length}`} defaultOpen={level === "recommended" || done < items.length}>
       <ol className="setup-list">{items.map(row)}</ol>
     </Section>; })}
@@ -285,7 +285,7 @@ export function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAct
   </section>;
 }
 
-type ContextView = "sources" | "notes" | "resumes" | "jobs" | "stories" | "voice" | "tune";
+type ContextView = "setup" | "sources" | "notes" | "resumes" | "jobs" | "stories" | "voice" | "tune";
 
 /** Career context: subtabs for sources, resumes, job files, and the profile's story bank and interview voice. */
 /**
@@ -319,20 +319,21 @@ export function ContextAdder({ onAdd, onReveal }: { onAdd: (kind: "structured" |
   </div>;
 }
 
-export function ContextHome({ notice, sources, notes, resumes, jobFiles, tune, startView, onOpen }: { notice: React.ReactNode; tune?: React.ReactNode; /** A tab to switch to when another page asks (Today's Tune tile). */ startView?: "tune" | null; sources: React.ReactNode; notes: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
-  const [view, setView] = useState<ContextView>("sources");
-  useEffect(() => { if (startView && tune) setView(startView); }, [startView, tune !== undefined]);
+export function ContextHome({ notice, setup, sources, notes, resumes, jobFiles, tune, startView, onOpen }: { notice: React.ReactNode; /** Setup as the Profile page's first tab (U78: Setup and Career context are one page). */ setup?: React.ReactNode; tune?: React.ReactNode; /** A tab to switch to when another page asks (Setup in the sidebar, Today's Tune tile). */ startView?: "setup" | "tune" | null; sources: React.ReactNode; notes: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
+  const [view, setView] = useState<ContextView>(startView === "setup" && setup ? "setup" : "sources");
+  useEffect(() => { if ((startView === "tune" && tune) || (startView === "setup" && setup)) setView(startView); }, [startView, tune !== undefined, setup !== undefined]);
   return <section className="jobs-home context-home">
-    <header className="page-head"><div><h1>Career context</h1><p>{FEATURES.candidates ? "The candidate's resume, files, and your notes: what Agy may use when tailoring. Files are only read, never changed." : "The sources Agy treats as facts about you. Source files are only read, never changed."}</p></div></header>
+    <header className="page-head"><div><h1>{setup ? "Profile" : "Career context"}</h1><p>{FEATURES.candidates ? "The candidate's resume, files, and your notes: what Agy may use when tailoring. Files are only read, never changed." : setup ? "Your setup and the sources Agy treats as facts about you. Source files are only read, never changed." : "The sources Agy treats as facts about you. Source files are only read, never changed."}</p></div></header>
     {notice}
     <SubTabs<ContextView>
       idPrefix="ctx"
       label="Career context sections"
       value={view}
       onChange={setView}
-      tabs={[{ id: "sources", label: "Sources" }, ...(notes ? [{ id: "notes" as const, label: "Recruiter notes" }] : []), { id: "resumes", label: "Resumes" }, { id: "jobs", label: "Job files" }, ...(tune ? [{ id: "tune" as const, label: "Tune" }] : []), ...(FEATURES.interviewProfile ? [{ id: "stories" as const, label: "Story bank" }, { id: "voice" as const, label: "Interview voice" }] : [])]}
+      tabs={[...(setup ? [{ id: "setup" as const, label: "Setup" }] : []), { id: "sources", label: "Sources" }, ...(notes ? [{ id: "notes" as const, label: "Recruiter notes" }] : []), { id: "resumes", label: "Resumes" }, { id: "jobs", label: "Job files" }, ...(tune ? [{ id: "tune" as const, label: "Tune" }] : []), ...(FEATURES.interviewProfile ? [{ id: "stories" as const, label: "Story bank" }, { id: "voice" as const, label: "Interview voice" }] : [])]}
     />
     <SubTabPanel idPrefix="ctx" value={view}>
+      {view === "setup" && setup}
       {view === "sources" && sources}
       {view === "notes" && notes}
       {view === "resumes" && resumes}

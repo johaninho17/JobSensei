@@ -27,7 +27,7 @@ A calm, credible desktop workspace that makes dense career evidence, drafts, and
 Semantic HTML and native controls, visible focus, logical tab order, WCAG AA contrast, reduced-motion support, and no status encoded by color alone.
 
 ## Verify visually
-1. `npm run build`, then screenshot every main screen in light and dark with Playwright `_electron` (navigation clicks only; never select rounds or send prompts on real jobs). Restore the theme to light afterwards; the driver shares the app's localStorage. For Today, `npm run screenshot:today -- <out-dir>` does this on a scratch copy of the demo workspace (light and dark, wide and narrow, Agy panel open and closed) and reports side scroll.
+1. `npm run build`, then screenshot every main screen in light and dark with Playwright `_electron` (navigation clicks only; never select rounds or send prompts on real jobs). Restore the theme to light afterwards; the driver shares the app's localStorage. `npm run screenshot -- <out-dir> Today,Jobs` does this for the named sidebar pages on a scratch copy of the demo workspace (light and dark, wide and narrow, Agy panel open and closed) and reports side scroll.
 2. Exercise the main path plus the failure and retry paths.
 3. Check a normal desktop width and a narrow window, plus long titles and long content, for overflow, clipping, and wrapping.
 4. Fix visible defects before reporting. Never approve UI from source or tests alone.

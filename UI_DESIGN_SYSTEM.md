@@ -32,18 +32,19 @@ Light is the default theme. Dark is neutral graphite with green accents, not dar
 │ Sensei           ├──────────────────────────────────────────────────┤ (toggle)  │
 │ Jobs         159 │ Page title (serif)                               │           │
 │ Interviews    12 │ one line of help text                            │           │
-│ Career context   │ toolbar: search · segmented filters · sort       │           │
+│ Profile     5/10 │ toolbar: search · segmented filters · sort       │           │
 │                  │ content                                          │           │
 │ Recent jobs      │                                                  │           │
 │ Settings         │                                                  │           │
 └──────────────────┴──────────────────────────────────────────────────┴───────────┘
 ```
+- Profile (U78): Setup and Career context are one page and one sidebar item, with tabs Setup · Sources · Resumes · Job files · Tune · Story bank · Interview voice (the Recruiter Edition's candidate page already worked this way).
 - Pages: Jobs (add-jobs box with the waiting/running queue under it, a one-line setup banner, status subtabs Active · Interviewing · Applied · Saved · Closed · All with Active as the default; Closed splits "Reached interviews" from a collapsed "No interview"; one toolbar row: search, filter toggles, sort, Select, Cards/List, ⋯ menu; Select (or Cmd/Ctrl-click a job) adds checkboxes and a sticky bar to change the status of many jobs at once, with Shift-click for a range and one Undo toast), Interviews (subtabs Active · Past · Learnings), Career context (subtabs Sources · Resumes · Job files · Story bank · Interview voice).
 - First run (new workspace, or name/resume missing): a compact stepper (Your name · Base resume · Agy · Make it better) over one card per step; one primary button per step, Back below the card. Setup page in the sidebar lists the same items afterwards.
 - Job page: company, title (serif h1), stage, fit, location, then tabs Overview, Application, Interview, Files. The header carries Job posting · Export PDFs · Check. Overview has a one-line next step (hidden for closed jobs), "What happened?" for closed jobs that reached interviews, one line for checks to review, then flat Role, Fit, Tracking, and Interviews sections. Files has subtabs Application · Interview · Other. The Application tab has subtabs Resume · Cover letter · Questions · Evaluation · Checks (documents shown in place, Export PDF in the subtab row); Checks states the result in words, with pipeline diagnostics under "Pipeline details".
 - Interview tab: round stepper, round title, then subtabs Prep · Questions · Research · Files with the round actions (live mode) at the right. Questions has a sticky rail to jump to any question (grouped Questions, Gaps, Ask them) beside the cards (search, keyboard). Prep is flat sections: 3 things to get across, before you start, the stage's sections, readiness. Live mode shows one card at a time with a timer, in the main window or a pop-out window.
 - Content is left-aligned with a max width of about 1180px; reading columns (prep, research, documents) stay near 760–820px.
-- **Flat sections, few boxes.** A section is a heading plus a 1px rule (`iv-section`, `overview-panel`). Bordered boxes only for things you click (job cards, question cards), the next-step callout, and warnings.
+- **Bento cards.** Content sits in raised cards (see Bento below), not flat sections divided by rules. One brass element per screen.
 - **Readable generated text:** prep and research render with `markdownHtml(…, { readable: true })`: tables, a small "source" link instead of URLs, IDs in a hover marker (ⓘ), and met/learnable/gap badges.
 - **Subtabs** (`SubTabs.tsx`) split a long page into views instead of stacking boxes: one component everywhere, underlined, arrow keys move between tabs, actions sit at the right of the row.
 
@@ -53,12 +54,13 @@ Light is the default theme. Dark is neutral graphite with green accents, not dar
 - `tracker-pill` / `tracker-select` (Saved muted, Applied accent, Interviewing leaf, Offer solid accent, Rejected risk, Withdrawn dashed), `status-pill` for pipeline state, `fit-badge`, `next-badge` (brass only when a follow-up is due): never color alone; the text carries the meaning.
 - Interview card (`icard`): question in the UI font (15px, semibold), kind badge for non-questions, Say points as a short list, Proof in plain words (story and evidence IDs only in the tooltip), "Land on" with a leaf rule, "They may ask next" muted, "Careful" in risk color.
 
-## Bento (Today pilot)
-Today only (ledger U77, #125, #126); every other page keeps flat sections until the pilot is judged (#128).
+## Bento
+Every page (ledger U77 pilot on Today, U78 everywhere). One shared surfaces block in `layout.css` gives every card template the same raised card; it is the only place the card shadows are used.
 - `.bento-page` is a size container; `.bento` is a 4-column grid that steps to 2 and then 1 column by the page's own width (`@container`), so the Agy panel never causes side scroll.
 - `BentoCard` (`BentoPrimitives.tsx`): a raised card with `--shadow-card` and `--specular-edge`, lifting to `--shadow-card-hover` when a control in it is hovered. `--raised-nested` is a well inside a card. Optional left stripe: leaf, accent, risk.
 - The hero (`tone="hero"`) is the screen's one brass element: brass left edge and a brass "Do this next" label, with a pine `btn-primary`. Never a filled brass or green card.
 - Today: a top row (`.bento-row`, wraps to fill its width) with the hero, picked by `pickNextStep` in `src/shared/today-next.ts`, and up to three KPIs (interviews in the next 7 days, new matches, new files to tune), then Due, New matches, Questions, Your answers, For the coming days, and Today's activity, each a card holding its collapsible `Section`.
+- Templates: `BentoCard`, `Kpi`, `FitRing` (`BentoPrimitives.tsx`); job cards (`JobCard` in `JobsHome.tsx`) carry a `FitRing` and a status edge from `jobEdgeOf` (interviewing/offer leaf, applied pine, a blocker must-have while saved risk); brass stays on the "due" badge. `.bento-surface` makes any panel a card.
 - `Kpi`: one big tabular number, a muted label, at most one link. `FitRing`: the 1–5 fit rating as a ring (leaf strong, muted fair, risk weak) with the number inside and a text label for screen readers.
 
 ## Accessibility

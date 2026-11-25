@@ -114,7 +114,7 @@ The detailed rules live in `.agents/skills/jobsensei-interview-pipeline/SKILL.md
 
 ### Tune
 
-Tune (Interviews → Your content for recordings; Career context → Tune for career records, story bank, and writing voice) updates your career content from what is new: interview recordings, career files and base resumes, your evidence (for the story bank), and the cover letters of jobs you applied to (for your writing voice). The app finds the files that changed since the last Tune and briefs Agy on only those. Agy writes suggestions and never edits your files. You see the strongest five, check the ones to apply, and decline the ones you never want suggested again. The rest wait for the next Tune, and drop once the file they came from changes. Applying backs up first and can be undone; anything replaced or archived keeps its old text in history.
+Tune (Interviews → Your content for recordings; Profile → Tune for career records, story bank, and writing voice) updates your career content from what is new: interview recordings, career files and base resumes, your evidence (for the story bank), and the cover letters of jobs you applied to (for your writing voice). The app finds the files that changed since the last Tune and briefs Agy on only those. Agy writes suggestions and never edits your files. You see the strongest five, check the ones to apply, and decline the ones you never want suggested again. The rest wait for the next Tune, and drop once the file they came from changes. Applying backs up first and can be undone; anything replaced or archived keeps its old text in history.
 
 ## Context Selection
 
