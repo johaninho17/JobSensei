@@ -1149,3 +1149,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
   .bento-card.span-2 { grid-column: auto; }
 }
 @media (prefers-reduced-motion: reduce) { .bento-card { transition: none; } }
+/* Setup rows stack on a narrow page (the Agy panel open), instead of pushing the page sideways. */
+.setup-home { container: setup / inline-size; }
+@container setup (max-width: 560px) { .setup-row { grid-template-columns: minmax(0, 1fr); } }
+.setup-text { min-width: 0; overflow-wrap: anywhere; }

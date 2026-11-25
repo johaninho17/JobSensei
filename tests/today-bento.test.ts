@@ -46,8 +46,8 @@ describe("Today layout (#126)", () => {
   it("the Tune tile opens Career context on its Tune tab", async () => {
     const app = await readFile("src/renderer/App.tsx", "utf8");
     expect(app).toContain('onOpenTune={() => void showPage("context-home").then(() => setContextStart("tune"))}');
-    expect(app).toContain("startView={contextStart}");
-    expect(await readFile("src/renderer/SetupAndContext.tsx", "utf8")).toContain("if (startView && tune) setView(startView);");
+    expect(app).toContain('startView={currentLocation.kind === "setup-home" ? "setup" : contextStart}');
+    expect(await readFile("src/renderer/SetupAndContext.tsx", "utf8")).toContain('if ((startView === "tune" && tune) || (startView === "setup" && setup)) setView(startView);');
   });
 
   it("job cards use the shared fit ring and status edge (U78)", async () => {
@@ -67,5 +67,16 @@ describe("job card edge (U78)", () => {
     expect(jobEdgeOf(job(null, [{ requirement: "License", status: "blocker" }]))).toBe("risk");
     expect(jobEdgeOf(job(null))).toBeNull();
     expect(jobEdgeOf(job("rejected", [{ requirement: "License", status: "blocker" }]))).toBeNull();
+  });
+});
+
+describe("Profile page (U78)", () => {
+  it("Setup and Career context are one page: Setup is its first tab, one sidebar item", async () => {
+    const [app, context] = await Promise.all(["src/renderer/App.tsx", "src/renderer/SetupAndContext.tsx"].map((path) => readFile(path, "utf8")));
+    expect(app).toContain('currentLocation.kind === "context-home" || currentLocation.kind === "setup-home" ? <ContextHome key={currentLocation.kind}');
+    expect(app).toContain("setup={setupHomeBlock}");
+    expect(app).toContain("const setupHomeBlock = <SetupHome embedded ");
+    expect(context).toContain('...(setup ? [{ id: "setup" as const, label: "Setup" }] : [])');
+    expect(context).toContain('<h1>{setup ? "Profile" : "Career context"}</h1>');
   });
 });

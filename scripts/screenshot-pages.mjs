@@ -51,6 +51,7 @@ try {
       const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
       await size(width, 940);
       await open(name);
+      if (name === "Settings") { await page.screenshot({ path: join(out, `${slug}-${theme}-${label}.png`) }); await page.keyboard.press("Escape"); await page.waitForTimeout(400); continue; }
       if (await panelOpen()) await togglePanel();
       await page.screenshot({ path: join(out, `${slug}-${theme}-${label}.png`), fullPage: false });
       await togglePanel();

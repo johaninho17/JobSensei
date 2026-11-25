@@ -204,7 +204,9 @@ describe("design system (Phase 3)", () => {
   it("keeps one navigation model and one interview view", async () => {
     const app = await rendererPagesSource(process.cwd());
     const sidebar = app.slice(app.indexOf('className="app-sidebar"'), app.indexOf("</nav>", app.indexOf('className="app-sidebar"')));
-    for (const page of ["jobs-home", "interviews-home", "context-home"]) expect(sidebar).toContain(`showPage("${page}")`);
+    // Setup and Career context are one Profile item (U78): it opens setup-home, the Profile page's first tab.
+    for (const page of ["jobs-home", "interviews-home", "setup-home"]) expect(sidebar).toContain(`showPage("${page}")`);
+    expect(sidebar).not.toContain('showPage("context-home")');
     expect(app.match(/<InterviewView /g)?.length).toBe(2); // job tab and pop-out window
     expect(app).not.toMatch(/function InterviewDashboard|function InterviewGuide/);
     expect(app).toContain('window.localStorage.getItem("sensei-theme-v2") === "dark" ? "dark" : "light"');
