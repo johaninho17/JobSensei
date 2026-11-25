@@ -169,8 +169,6 @@
 .overview-panel h3 { margin: var(--space-2) 0 0; color: var(--muted); font: 600 var(--fs-13) var(--font-ui); }
 .fit-score { margin: 0; color: var(--muted); }
 .fit-score strong { color: var(--ink); font: 560 var(--fs-28)/1 var(--font-display); }
-.fit-bar { height: 6px; border-radius: var(--radius-pill); background: var(--sunken); overflow: hidden; }
-.fit-bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .tick-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: var(--fs-13); }
 .tick-list li { position: relative; padding-left: 18px; }
 .tick-list li::before { position: absolute; left: 0; font-weight: 700; }
@@ -1186,3 +1184,22 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .jobs-view-menu .jobs-more-menu { gap: var(--space-2); padding: var(--space-2); }
 .jobs-view-menu .jobs-sort { justify-content: space-between; }
 .page-head-compact > .btn-primary { flex: none; white-space: nowrap; }
+/* Job page header card holds the next step and the check line (U79, #157). */
+.job-head > .next-bar, .job-head > .review-line { flex: 1 1 100%; }
+.job-head > .next-bar { margin: 0; }
+.job-head h1 { font-size: var(--fs-22); }
+/* Today (U79, #157): short KPI tiles stacked beside the hero, one tabbed card for the lists, one-line insights. */
+.kpi-stack { display: grid; flex: 1 1 260px; gap: var(--card-gap); align-content: start; }
+.kpi-stack.is-row { display: flex; flex-wrap: wrap; }
+.kpi-stack.is-row > .bento-kpi { flex: 1 1 200px; }
+.bento-kpi { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-3); padding-block: var(--space-2); }
+.bento-kpi .bento-kpi-value { font-size: var(--fs-28); }
+.bento-kpi .btn-link { justify-self: end; font-size: var(--fs-13); white-space: nowrap; }
+.today-lists .subtabs { margin-bottom: var(--space-2); }
+.today-lists .subtabs-panel { min-height: 0; }
+.today-lists h3 { margin: var(--space-2) 0 var(--space-1); color: var(--muted); font: 600 var(--fs-12) var(--font-ui); }
+.today-insights { gap: var(--space-2); }
+.today-insights li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--space-2); }
+.today-insights li .today-area { flex: none; min-width: 72px; }
+.today-insights li .today-insight-text { flex: 1 1 280px; min-width: 0; }
+.activity-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-2); }
