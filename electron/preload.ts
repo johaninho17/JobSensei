@@ -178,6 +178,12 @@ const api: SenseiApi = {
   queue: {
     get: () => ipcRenderer.invoke("queue:get"),
     save: (queue) => ipcRenderer.invoke("queue:save", queue),
+    setAddJobShortcut: (enabled) => ipcRenderer.invoke("shortcut:set-add-job", enabled),
+    onAddJobShortcut: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, press: { url: string | null }) => callback(press);
+      ipcRenderer.on("shortcut:add-job", listener);
+      return () => ipcRenderer.removeListener("shortcut:add-job", listener);
+    },
   },
   search: {
     query: (input) => ipcRenderer.invoke("search:query", input),

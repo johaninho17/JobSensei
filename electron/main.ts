@@ -1,4 +1,5 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, powerMonitor, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerMonitor, session, shell } from "electron";
+import { setAddJobShortcut } from "./add-job-shortcut";
 import { execFile } from "node:child_process";
 import { deleteMemory, listMemory } from "./agy-memory";
 import { conversationExists, deleteConversations, listConversations } from "./agy-conversations";
@@ -414,6 +415,10 @@ ipcMain.handle("jobs:preview-artifact", async (_event, jobId: string, relativePa
 ipcMain.handle("jobs:get-application-status", async (_event, jobId: string) => getJobApplicationStatus(requireWorkspace(), jobId));
 ipcMain.handle("queue:get", async () => readJobQueue(requireWorkspace()));
 ipcMain.handle("queue:save", async (_event, queue: unknown) => saveJobQueue(requireWorkspace(), queue));
+// The system-wide "add the copied job link" shortcut (issue #168): the window turns it on with its per-computer choice,
+// and each press sends the clipboard's link back to it, where the Add jobs path queues it.
+ipcMain.handle("shortcut:set-add-job", async (_event, enabled: unknown) =>
+  setAddJobShortcut(globalShortcut, enabled === true, () => clipboard.readText(), (press) => mainWindow?.webContents.send("shortcut:add-job", press)));
 ipcMain.handle("jobs:stage-pasted-jd", async (_event, text: unknown, id: unknown) => stagePastedJobDescription(requireWorkspace(), text, String(id)));
 ipcMain.handle("jobs:set-staged-company", async (_event, id: unknown, company: unknown) => setStagedCompany(requireWorkspace(), String(id), String(company ?? "")));
 ipcMain.handle("jobs:stage-link", async (_event, url: unknown, id: unknown) => stageLinkJobDescription(requireWorkspace(), String(url), String(id)));
@@ -850,5 +855,6 @@ app.on("web-contents-created", (_event, contents) => {
   });
 });
 
+app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("before-quit", () => { workspaceWatcher?.close(); if (workspaceWatchTimer) clearTimeout(workspaceWatchTimer); terminal.stop(); });
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });

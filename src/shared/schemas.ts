@@ -1567,6 +1567,10 @@ export interface SenseiApi {
   queue: {
     get(): Promise<JobQueue>;
     save(queue: JobQueue): Promise<JobQueue>;
+    /** Turns the system-wide "add the copied job link" shortcut on or off (issue #168); `registered` is false when another app holds it. */
+    setAddJobShortcut(enabled: boolean): Promise<{ enabled: boolean; registered: boolean; accelerator: string }>;
+    /** Each press of that shortcut: the clipboard's link, or null when it held none. */
+    onAddJobShortcut(callback: (press: { url: string | null }) => void): () => void;
   };
   search: {
     query(input: SearchQuery): Promise<SearchResponse>;
