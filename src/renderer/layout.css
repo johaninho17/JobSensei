@@ -1168,3 +1168,21 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .left-out > summary, .left-out li > details > summary { cursor: pointer; color: var(--muted); }
 .left-out ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); list-style: none; }
 .left-out-items { display: grid; gap: 2px; overflow-wrap: anywhere; }
+/* Short page header and Jobs views in the sidebar (U79, #156). */
+.page-head-compact { align-items: center; gap: var(--space-3); margin-bottom: var(--card-gap); }
+.page-head-compact h1 { font-size: var(--fs-28); }
+.page-head-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); min-width: 0; }
+.jobs-status-pick select { min-height: 32px; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-s); color: var(--ink); background: var(--raised); font: 600 var(--fs-15) var(--font-ui); cursor: pointer; }
+.side-nav li.side-has-sub { position: relative; }
+.side-nav li.side-has-sub > button:first-child { padding-right: 36px; }
+.side-sub-toggle { position: absolute; top: 4px; right: 4px; width: 30px !important; min-height: 30px !important; padding: 0 !important; justify-content: center; color: var(--muted) !important; }
+.side-sub { display: grid; gap: 1px; margin: 2px 0 var(--space-1) 0; padding: 0 0 0 30px; list-style: none; }
+.side-sub button { min-height: 30px; font-size: var(--fs-13); font-weight: 500; color: var(--muted); }
+.side-sub button[aria-current="page"] { color: var(--ink); background: var(--hover); box-shadow: none; font-weight: 650; }
+.setup-banner:not(.is-blocking) { border-left: 0; border-radius: var(--radius-s); background: var(--hover); }
+.setup-banner-close { margin-left: auto; padding: 0 var(--space-2); border: 0; color: var(--muted); background: none; font-size: var(--fs-18); line-height: 1; cursor: pointer; }
+.setup-banner-close:hover { color: var(--ink); }
+.jobs-view-menu summary { width: auto; padding: 0 var(--space-3); border: 1px solid var(--line); font-size: var(--fs-13); font-weight: 600; }
+.jobs-view-menu .jobs-more-menu { gap: var(--space-2); padding: var(--space-2); }
+.jobs-view-menu .jobs-sort { justify-content: space-between; }
+.page-head-compact > .btn-primary { flex: none; white-space: nowrap; }

@@ -7,7 +7,6 @@ import { TRACKER_STATUSES, type JobQueue, type JobTrackerUpdate, type TrackerSta
 import { jobsToCsv } from "../shared/jobs-csv";
 import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, readyToSend, statusLabel, followUpDays, reachedInterview, staleApplications } from "../shared/tracker";
 import { type Readiness } from "../shared/readiness";
-import { SubTabPanel, SubTabs } from "./SubTabs";
 import { CompanyStrip, JobFilters, SavedViews, storeJobViews, storedJobViews } from "./JobOrganize";
 import { FitRing } from "./BentoPrimitives";
 import { GROUPINGS, NO_FACETS, countWithin, jobDotOf, settingsSortKey, groupJobs, matchesFacets, type Grouping, type JobFacets, type JobView } from "../shared/job-organize";
@@ -48,9 +47,9 @@ function DataHealthPanel({ jobs, onOpenJob, onClose }: { jobs: JobFolderSummary[
 
 type JobsFilter = "all" | "active" | "interviewing" | "follow-up" | "review" | "favorites";
 type JobsView = "list" | "cards";
-type JobsTab = "active" | "ready" | "interviewing" | "offer" | "reached" | "applied" | "saved" | "closed" | "all";
-/** Status subtabs on the Jobs page; Active is the default. */
-const JOB_TABS: Array<{ id: JobsTab; label: string; statuses: TrackerStatus[] | null }> = [
+export type JobsTab = "active" | "ready" | "interviewing" | "offer" | "reached" | "applied" | "saved" | "closed" | "all";
+/** Jobs by status (U79: sidebar sub-items under Jobs and the status menu in the page header); Active is the default. */
+export const JOB_TABS: Array<{ id: JobsTab; label: string; statuses: TrackerStatus[] | null }> = [
   { id: "active", label: "Active", statuses: ["saved", "applied", "interviewing", "offer"] },
   // Drafts done, not applied yet (`src/shared/tracker.ts` owns the rule and the label).
   { id: "ready", label: FEATURES.pdfsMarkApplied ? "Drafted" : "Ready to send", statuses: null },
@@ -64,9 +63,22 @@ const JOB_TABS: Array<{ id: JobsTab; label: string; statuses: TrackerStatus[] | 
   { id: "all", label: "All", statuses: null },
 ];
 const ACTIVE_STATUSES: TrackerStatus[] = ["saved", "applied", "interviewing", "offer"];
+/** Whether a job belongs to a status view; the page and the sidebar both count with this. */
+export function inJobsTab(job: JobFolderSummary, value: JobsTab): boolean {
+  if (value === "reached") return reachedInterview(job);
+  if (value === "ready") return readyToSend(job);
+  const statuses = JOB_TABS.find((candidate) => candidate.id === value)?.statuses ?? null;
+  if (value === "saved" && readyToSend(job)) return false;
+  return !statuses || statuses.includes(effectiveStatus(job));
+}
+/** The status views worth listing: Offer only when there is one. */
+export function jobsTabsWithCounts(jobs: JobFolderSummary[]): Array<{ id: JobsTab; label: string; count: number }> {
+  return JOB_TABS.filter((candidate) => candidate.id !== "offer" || jobs.some((job) => inJobsTab(job, "offer"))).map((candidate) => ({ id: candidate.id, label: candidate.label, count: jobs.filter((job) => inJobsTab(job, candidate.id)).length }));
+}
 
 export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpenEvaluation, onMoveToTrash, onUpdateTracker, onToast, statusGroup, onStatusGroup: setStatusGroup, queue, agyReady, onOpenAgy, onSaveQueue, onQueueJob, setup }: { onOrderChange?: (ids: string[]) => void; agyReady: boolean; onOpenAgy: () => void; onToast: (message: string, undo?: () => void) => void; statusGroup: string | null; onStatusGroup: (group: string | null) => void; queue: JobQueue; onSaveQueue: (queue: JobQueue) => void; onQueueJob: QueueJob; setup: React.ReactNode; jobs: JobFolderSummary[]; onOpenJob: (jobId: string) => void; onOpenJobView: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onOpenEvaluation: (jobId: string) => void; onMoveToTrash: (jobId: string) => void; onUpdateTracker: (jobId: string, update: JobTrackerUpdate, options?: { quiet?: boolean }) => Promise<void> }) {
   const [query, setQuery] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
   const [filter, setFilter] = useState<JobsFilter>("all");
   const [exported, setExported] = useState("");
   const [closing, setClosing] = useState(false);
@@ -110,7 +122,8 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
       || (value === "favorites" && favorites.has(job.id));
   };
   const tab: JobsTab = JOB_TABS.some((candidate) => candidate.id === statusGroup) ? statusGroup as JobsTab : "active";
-  const inTab = (job: JobFolderSummary, value: JobsTab) => { if (value === "reached") return reachedInterview(job); if (value === "ready") return readyToSend(job); const statuses = JOB_TABS.find((candidate) => candidate.id === value)!.statuses; if (value === "saved" && readyToSend(job)) return false; return !statuses || statuses.includes(effectiveStatus(job)); };
+  const inTab = inJobsTab;
+  const tabCounts = useMemo(() => jobsTabsWithCounts(jobs), [jobs]);
   // The jobs the open tab, filters, and search show; a quick filter's count is how many of these it keeps (#15).
   const normalizedQuery = query.trim().toLowerCase();
   const inView = (job: JobFolderSummary) => inTab(job, tab) && matchesFacets(job, facets) && (!normalizedQuery || `${job.company ?? ""} ${job.title ?? ""} ${job.name} ${job.location ?? ""} ${effectiveStatus(job)} ${job.interviewRoundLabel ?? ""} ${job.tracker?.notes ?? ""}`.toLowerCase().includes(normalizedQuery));
@@ -175,25 +188,31 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
   const renderJobs = (list: JobFolderSummary[]) => view === "cards" ? <div className="job-card-grid">{list.map((job) => <JobCard key={job.id} job={job} favorite={favorites.has(job.id)} onToggleFavorite={() => toggleFavorite(job.id)} handlers={menuHandlers(job)} selecting={selecting} selected={selected.has(job.id)} onSelect={(event) => toggleSelected(job.id, event as { shiftKey?: boolean })} />)}</div>
       : <div className="jobs-table-wrap"><table className="jobs-table"><thead><tr>{selecting && <th scope="col"><span className="sr-only">Selected</span></th>}<th scope="col">Role</th><th scope="col">Fit</th><th scope="col">Status</th><th scope="col">Interview</th><th scope="col">Next</th><th scope="col" className="col-added">Added</th><th scope="col"><span className="sr-only">Favorite and actions</span></th></tr></thead><tbody>{list.map((job) => <tr key={job.id} tabIndex={0} className={selected.has(job.id) ? "is-selected" : undefined} aria-selected={selecting ? selected.has(job.id) : undefined} onClick={(event) => { if (selecting || event.metaKey || event.ctrlKey) toggleSelected(job.id, event); else onOpenJob(job.id); }} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); if (selecting) toggleSelected(job.id, event); else onOpenJob(job.id); } }}>{selecting && <td><input type="checkbox" className="job-select" checked={selected.has(job.id)} aria-label={`Select ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => toggleSelected(job.id, { shiftKey: (event.nativeEvent as globalThis.MouseEvent).shiftKey })} /></td>}<td className="jobs-role"><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></td><td><FitBadge rating={job.rating} gate={jobSettingsScore(job.settingsScore).behavior.fit.gate} /></td><td><TrackerPill status={effectiveStatus(job)} job={job} /></td><td>{job.interviewRoundLabel ? <button className="btn-link" onClick={(event) => { event.stopPropagation(); onOpenJobView(job.id, "interview"); }}>{job.interviewRoundLabel}</button> : <span className="muted">None</span>}</td><td><NextBadge job={job} /></td><td className="tabular muted col-added">{formatJobDate(job.createdAt)}</td><td><button className={`job-favorite ${favorites.has(job.id) ? "is-favorite" : ""}`} aria-pressed={favorites.has(job.id)} aria-label={`Favorite ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => { event.stopPropagation(); toggleFavorite(job.id); }}>{favorites.has(job.id) ? "★" : "☆"}</button><JobMenuButton job={job} handlers={menuHandlers(job)} /></td></tr>)}</tbody></table></div>;
   return <section className="jobs-home">
-    <header className="page-head"><div><h1>Jobs</h1><p>{visibleJobs.length === jobs.length ? `${jobs.length} job${jobs.length === 1 ? "" : "s"}` : `${visibleJobs.length} of ${jobs.length} jobs shown`}. {FEATURES.candidates ? "Open one to review the tailored resume and mark it applied." : "Open one to see its application and interview prep."}</p></div></header>
-    <JobQueueBox queue={queue} jobs={jobs} agyReady={agyReady} onOpenAgy={onOpenAgy} onSave={onSaveQueue} onQueueJob={onQueueJob} onOpenJob={onOpenJob} />
+    {/* Short page header (U79): title, the status view as a menu (also in the sidebar), one main action. */}
+    <header className="page-head page-head-compact">
+      <div className="page-head-title">
+        <h1>Jobs</h1>
+        <label className="jobs-status-pick"><span className="sr-only">Jobs by status</span><select value={tab} onChange={(event) => setStatusGroup(event.target.value)} aria-label="Jobs by status">{tabCounts.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label} ({candidate.count})</option>)}</select></label>
+        {visibleJobs.length !== jobs.length && <span className="muted">{visibleJobs.length} shown</span>}
+      </div>
+      <button className="btn-primary" aria-expanded={addOpen} aria-controls="job-queue" onClick={() => setAddOpen((open) => !open)}>{addOpen ? "Close" : "Add jobs"}</button>
+    </header>
+    <JobQueueBox open={addOpen} queue={queue} jobs={jobs} agyReady={agyReady} onOpenAgy={onOpenAgy} onSave={onSaveQueue} onQueueJob={onQueueJob} onOpenJob={onOpenJob} />
     {setup}
-    <SubTabs<JobsTab>
-      idPrefix="jobs"
-      label="Jobs by status"
-      value={tab}
-      onChange={(next) => setStatusGroup(next)}
-      tabs={JOB_TABS.filter((candidate) => candidate.id !== "offer" || jobs.some((job) => inTab(job, "offer"))).map((candidate) => ({ id: candidate.id, label: candidate.label, count: jobs.filter((job) => inTab(job, candidate.id)).length }))}
-    />
-    <SubTabPanel idPrefix="jobs" value={tab}>
+    <div className="jobs-view">
     <SavedViews views={views} current={{ tab, query, facets, group, sort }} onChange={(next) => { setViews(next); storeJobViews(next); }}
       onApply={(saved) => { setStatusGroup(saved.tab); setQuery(saved.query); setFacets(saved.facets); setGroup(saved.group); if (["added", "company", "role", "follow-up", "fit", "settings"].includes(saved.sort)) setSort(saved.sort as typeof sort); setFilter("all"); }} />
     <div className="jobs-toolbar">
       <label className="workspace-search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search jobs…" aria-label="Search jobs" /></label>
       {(["follow-up", "review", "favorites"] as JobsFilter[]).filter((value) => FEATURES.nudges || value !== "follow-up").filter((value) => filterCounts[value] > 0 || filter === value).map((value) => <button key={value} className="filter-toggle" aria-pressed={filter === value} onClick={() => setFilter(filter === value ? "all" : value)}>{filterLabels[value]}<span>{filterCounts[value]}</span></button>)}
-      <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option>{FEATURES.nudges && <option value="follow-up">Follow-up date</option>}<option value="fit">Best fit</option><option value="settings">Agy settings (boldest first)</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
+      <details className="jobs-more jobs-view-menu">
+        <summary>View</summary>
+        <div className="jobs-more-menu">
+  <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option>{FEATURES.nudges && <option value="follow-up">Follow-up date</option>}<option value="fit">Best fit</option><option value="settings">Agy settings (boldest first)</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
+  <label className="jobs-sort"><span>Group</span><select value={group} onChange={(event) => setGroup(event.target.value as Grouping)} aria-label="Group jobs"><option value="none">No groups</option><option value="company">Company</option><option value="role">Kind of role</option><option value="status">Status</option><option value="work">Work setup</option></select></label>
+        </div>
+      </details>
       <JobFilters jobs={jobs.filter((job) => inTab(job, tab))} facets={facets} onChange={setFacets} />
-      <label className="jobs-sort"><span>Group</span><select value={group} onChange={(event) => setGroup(event.target.value as Grouping)} aria-label="Group jobs"><option value="none">No groups</option><option value="company">Company</option><option value="role">Kind of role</option><option value="status">Status</option><option value="work">Work setup</option></select></label>
       <button className="filter-toggle" aria-pressed={selecting} title="Select several jobs to change their status at once (or Cmd/Ctrl-click a job)" onClick={() => selecting ? exitSelect() : setSelecting(true)}>{selecting ? "Done" : "Select"}</button>
       <div className="segmented" role="group" aria-label="Layout">{(["cards", "list"] as JobsView[]).map((value) => <button key={value} aria-pressed={view === value} onClick={() => setView(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div>
       <details className="jobs-more">
@@ -227,25 +246,34 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
           <h2>{entry.label} <span>{entry.jobs.length}</span>{group === "company" && entry.jobs.length > 1 && <button className="btn-link" onClick={() => setFacets({ ...facets, company: entry.label })}>View company</button>}</h2>
           {renderJobs(entry.jobs)}
         </section>)}
-    </SubTabPanel>
+    </div>
   </section>;
 }
 
+const SETUP_LINE_KEY = "sensei-setup-line-dismissed";
 /** One line on the Jobs page while setup isn't complete: what is missing, and a link to Setup. */
 export function SetupLine({ readiness, onOpen }: { readiness: Readiness | null; onOpen: () => void }) {
+  // The "make your drafts better" line can be dismissed; it comes back when the missing steps change (U79). The
+  // blocking line ("Finish setup") can't be dismissed.
+  const [dismissed, setDismissed] = useState(() => { try { return window.localStorage.getItem(SETUP_LINE_KEY) ?? ""; } catch { return ""; } });
   if (!readiness) return null;
-  const recommended = readiness.items.filter((item) => item.level === "recommended" && item.state === "missing").length;
+  const missing = readiness.items.filter((item) => item.level === "recommended" && item.state === "missing");
+  const recommended = missing.length;
   if (readiness.ready && !recommended) return null;
+  const signature = missing.map((item) => item.id).join(",");
+  if (readiness.ready && dismissed === signature) return null;
+  const dismiss = () => { setDismissed(signature); try { window.localStorage.setItem(SETUP_LINE_KEY, signature); } catch { /* the line just comes back next time */ } };
   return <section className={`setup-banner${readiness.ready ? "" : " is-blocking"}`} aria-labelledby="setup-banner-title">
     <strong id="setup-banner-title">{readiness.ready ? "Make your drafts better" : "Finish setup before adding jobs"}</strong>
     <span>{readiness.ready ? `${plural(recommended, "recommended step")} left: ${readiness.items.filter((item) => item.level === "recommended" && item.state === "missing").map((item) => item.title.charAt(0).toLowerCase() + item.title.slice(1)).slice(0, 3).join("; ")}${recommended > 3 ? ", …" : ""}.` : readiness.blocker}</span>
     <button className="btn-link" onClick={onOpen}>Open Setup</button>
+    {readiness.ready && <button className="setup-banner-close" aria-label="Hide this until the missing steps change" title="Hide" onClick={dismiss}>×</button>}
   </section>;
 }
 
 const QUEUE_LABEL: Record<JobQueue["items"][number]["status"], string> = { queued: "Waiting", running: "Running in Agy", done: "Done", needs_attention: "Needs attention" };
 
-function JobQueueBox({ queue, jobs, agyReady, onOpenAgy, onSave, onQueueJob, onOpenJob }: { queue: JobQueue; jobs: JobFolderSummary[]; agyReady: boolean; onOpenAgy: () => void; onSave: (queue: JobQueue) => void; onQueueJob: QueueJob; onOpenJob: (jobId: string) => void }) {
+function JobQueueBox({ open, queue, jobs, agyReady, onOpenAgy, onSave, onQueueJob, onOpenJob }: { open: boolean; queue: JobQueue; jobs: JobFolderSummary[]; agyReady: boolean; onOpenAgy: () => void; onSave: (queue: JobQueue) => void; onQueueJob: QueueJob; onOpenJob: (jobId: string) => void }) {
   const [input, setInput] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -300,14 +328,16 @@ function JobQueueBox({ queue, jobs, agyReady, onOpenAgy, onSave, onQueueJob, onO
       </li>;
     })}</ol>}
   </>;
-  return <section className="job-queue" aria-labelledby="job-queue-title">
-    <form className="add-job" onSubmit={add}>
-      <label htmlFor="add-job-url" id="job-queue-title">Add jobs</label>
-      <textarea id="add-job-url" rows={!manyLinks && (isLink || !value) ? 1 : 4} value={input} onChange={(event) => { setInput(event.target.value); setProblem(null); }} placeholder="Paste a job link or description" aria-describedby="add-job-help" />
+  // The form opens from the header's Add jobs button (U79); the queue itself stays visible while it has items.
+  if (!open && !visible.length) return null;
+  return <section id="job-queue" className="job-queue" aria-label="Add jobs">
+    {open && <form className="add-job" onSubmit={add}>
+      <label htmlFor="add-job-url">Add jobs</label>
+      <textarea id="add-job-url" autoFocus rows={!manyLinks && (isLink || !value) ? 1 : 4} value={input} onChange={(event) => { setInput(event.target.value); setProblem(null); }} placeholder="Paste a job link or description" aria-describedby="add-job-help" />
       <button className="btn-primary" disabled={!valid}>Add to queue</button>
       <p id="add-job-help">{problem ?? (duplicate ? "That link is already in the queue." : manyLinks ? `${links.length} links: each is added in turn.` : value && !isLink && !looksLikePastedPosting(value) ? "Paste the whole job description, or just its link." : FEATURES.candidates ? <>Agy tailors one job at a time for the candidate it's for: it reads the posting, rates the fit, and drafts the resume (and a cover letter when turned on).</> : <>Agy runs one job at a time: it reads the posting, scores your fit, and drafts the resume and cover letter.</>)}</p>
       <label className="queue-auto"><input type="checkbox" checked={queue.autoRun} onChange={(event) => onSave({ ...queue, autoRun: event.target.checked })} /> Run automatically when Agy is free</label>
-    </form>
+    </form>}
     {QUEUE_LIST}
     {queue.autoRun && waiting > 0 && !agyReady && !queue.items.some((item) => item.status === "running") && <p className="queue-wait">{waiting} waiting for Agy. The queue starts by itself once Agy is open and signed in. <button className="btn-link" onClick={onOpenAgy}>Open Agy</button></p>}
     {!queue.autoRun && waiting > 0 && <button className="btn-quiet" onClick={() => onSave({ ...queue, autoRun: true })}>Start the queue ({waiting})</button>}

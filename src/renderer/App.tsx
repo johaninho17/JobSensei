@@ -30,7 +30,7 @@ import { findDuplicateJob } from "../shared/job-organize";
 import { autoDraftPicks, searchProgressText, type SearchRun, type SearchStatus } from "../shared/job-search";
 import { IS_MAC, type JobWorkspaceTab, type PromptRequest, displayJobName, filePaths, findNode, messageOf, onFavoritesChanged, plural, storedFavoriteJobIds, workspaceLabel } from "./app-shared";
 import { RUN_KIND_LABEL, RUN_STATE_LABEL, TerminalPanel } from "./TerminalPanel";
-import { CSV_COLUMNS, JobsHome, SetupLine } from "./JobsHome";
+import { CSV_COLUMNS, JobsHome, SetupLine, jobsTabsWithCounts } from "./JobsHome";
 import { ContextAdder, ContextHome, Onboarding, SetupHome } from "./SetupAndContext";
 import { TunePanel } from "./TunePanel";
 import { DocumentView } from "./Documents";
@@ -108,6 +108,9 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [jobsStatusGroup, setJobsStatusGroup] = useState<string | null>(null);
+  // Jobs status views as sidebar sub-items (U79), open by default; remembered per computer.
+  const [sideJobsOpen, setSideJobsOpen] = useState(() => { try { return window.localStorage.getItem("sensei-side-jobs") !== "closed"; } catch { return true; } });
+  const toggleSideJobs = () => setSideJobsOpen((open) => { try { window.localStorage.setItem("sensei-side-jobs", open ? "closed" : "open"); } catch { /* stays for this session */ } return !open; });
   const [update, setUpdate] = useState<{ version: string; url: string } | null>(null);
   const [notificationsOn, setNotificationsOn] = useState(() => { try { return window.localStorage.getItem("sensei-notifications") !== "off"; } catch { return true; } });
   useEffect(() => { try { window.localStorage.setItem("sensei-notifications", notificationsOn ? "on" : "off"); } catch { /* storage unavailable */ } }, [notificationsOn]);
@@ -963,6 +966,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     },
   ];
   // Sidebar: the jobs the user starred in Jobs (#13), newest first; recent jobs still feed the status bar and search.
+  // Sidebar job views (U79): Active and All always; the others when they have jobs or are open.
+  const sideJobViews = jobsTabsWithCounts(jobs).filter((view) => view.id === "active" || view.id === "all" || view.count > 0 || view.id === jobsStatusGroup);
   const favoriteJobs = jobs.filter((job) => favoriteIds.has(job.id)).sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt)).slice(0, 8);
   const recentJobs = recentJobIds.map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job)).slice(0, 6);
   // The Agy page lists actions for the open job, or the job opened last.
@@ -1000,7 +1005,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       </>}
       <ul className="side-nav">
         {FEATURES.today && <li><button aria-current={activePage === "today-home" ? "page" : undefined} onClick={() => showPage("today-home")}><NavIcon name="today" /><span className="side-label">Today</span></button></li>}
-        <li><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" /><span className="side-label">Jobs</span>{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button></li>
+        <li className="side-has-sub"><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" /><span className="side-label">Jobs</span>{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button><button className="side-sub-toggle" aria-label={sideJobsOpen ? "Hide job views" : "Show job views"} aria-expanded={sideJobsOpen} aria-controls="side-jobs-views" onClick={toggleSideJobs}><span aria-hidden="true">{sideJobsOpen ? "▾" : "▸"}</span></button>
+          {sideJobsOpen && <ul id="side-jobs-views" className="side-sub">{sideJobViews.map((view) => <li key={view.id}><button aria-current={activePage === "jobs-home" && (jobsStatusGroup ?? "active") === view.id ? "page" : undefined} onClick={() => { setJobsStatusGroup(view.id); void showPage("jobs-home"); }}><span className="side-label">{view.label}</span><span className="side-count">{view.count}</span></button></li>)}</ul>}</li>
         {FEATURES.jobSearch && <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" /><span className="side-label">Job Search</span>{searchStatus.running ? <span className="side-due" title={searchProgressText(searchStatus)}>Searching…</span> : searchNew > 0 && <span className="side-count" title={`${searchNew} new match${searchNew === 1 ? "" : "es"}`}>{searchNew}</span>}</button></li>}
         {FEATURES.interviews && <li><button aria-current={activePage === "interviews-home" ? "page" : undefined} onClick={() => showPage("interviews-home")}><NavIcon name="interviews" /><span className="side-label">Interviews</span>{activeInterviewCount > 0 && <span className="side-count" title={`${activeInterviewCount} active interview process${activeInterviewCount === 1 ? "" : "es"}`}>{activeInterviewCount}</span>}{newRecordings > 0 && <span className="side-due" title={`${newRecordings} new recording${newRecordings === 1 ? "" : "s"} to import`}>{newRecordings} new</span>}</button></li>}
         {/* One Profile item: Setup and Career context are one page with tabs (U78). */}

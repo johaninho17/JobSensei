@@ -95,3 +95,23 @@ describe("Profile page (U78)", () => {
     expect(context).toContain('<h1>{setup ? "Profile" : "Career context"}</h1>');
   });
 });
+
+describe("Jobs header and sidebar views (U79, #156)", () => {
+  it("statuses move to the sidebar and a header menu; Add jobs is a header button; Sort and Group sit in View", async () => {
+    const [jobs, app] = await Promise.all(["src/renderer/JobsHome.tsx", "src/renderer/App.tsx"].map((path) => readFile(path, "utf8")));
+    expect(jobs).not.toContain("<SubTabs");
+    expect(jobs).toContain('className="page-head page-head-compact"');
+    expect(jobs).toContain('{addOpen ? "Close" : "Add jobs"}');
+    expect(jobs).toContain("if (!open && !visible.length) return null;");
+    expect(jobs).toMatch(/<summary>View<\/summary>[\s\S]*Sort jobs[\s\S]*Group jobs/);
+    expect(app).toContain('className="side-sub"');
+    expect(app).toContain("jobsTabsWithCounts(jobs)");
+    expect(app).toContain("setJobsStatusGroup(view.id); void showPage(\"jobs-home\");");
+  });
+
+  it("the setup line can be hidden until its missing steps change, but not while setup blocks adding jobs", async () => {
+    const jobs = await readFile("src/renderer/JobsHome.tsx", "utf8");
+    expect(jobs).toContain("if (readiness.ready && dismissed === signature) return null;");
+    expect(jobs).toContain("{readiness.ready && <button className=\"setup-banner-close\"");
+  });
+});
