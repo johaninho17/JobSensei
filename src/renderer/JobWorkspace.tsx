@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { FitRing } from "./BentoPrimitives";
 import { jobSettingsScore, settingsScoreLabel } from "../shared/agy-behavior";
 import { DEFAULT_PDF_TEXT_SIZE, INTERVIEW_ROUNDS, OUTCOME_RESULTS, TRACKER_STATUSES, type InterviewEvent, type InterviewRoundKind, type JobOutcome, type JobTrackerUpdate, type TrackerStatus, type ApplicationStatus, type ApplicationValidationReport, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type PdfTextSize, type QuestionsState, type FramingLine } from "../shared/schemas";
 import { overrideLabel } from "../shared/job-overrides";
@@ -72,7 +73,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
         <div className="job-head-meta">
           <label className={`tracker-select is-${trackerStatus}`}><span className="sr-only">Application status</span><select value={trackerStatus} onChange={(event) => void onUpdateTracker({ status: event.target.value as TrackerStatus })}>{TRACKER_STATUSES.map((value) => <option key={value} value={value}>{value === "saved" && job.hasApplicationMaterials ? draftedLabel() : TRACKER_LABELS[value]}</option>)}</select></label>
           {job.applicationStage && <StatusPill value={job.applicationStage} />}
-          {job.rating !== null && <span><strong className="tabular">{job.rating.toFixed(1)}</strong> of 5 fit</span>}
+          {job.rating !== null && <span className="job-head-fit"><FitRing rating={job.rating} size={36} /> fit</span>}
           {job.hasApplicationMaterials && (() => { const score = jobSettingsScore(job.settingsScore); return <span className={`settings-score is-${score.band}`} title={`Agy's settings when these drafts were made: ${score.score} of 100 (${settingsScoreLabel(score).split(" ")[1]}). Higher means more lenient. See Agy → Behavior.`}>Settings <strong className="tabular">{score.score}</strong> {settingsScoreLabel(score).split(" ")[1]}</span>; })()}
           {job.location && <span>{job.location}</span>}
           <span>Added {formatJobDate(job.createdAt)}</span>

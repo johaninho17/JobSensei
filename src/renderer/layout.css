@@ -548,7 +548,6 @@
 /* Flat sections (C1): a heading and a hairline instead of a bordered box. Boxes stay for job cards,
    the next-step callout, and warnings. */
 .overview-grid { gap: var(--space-5); }
-.overview-panel { padding: var(--space-3) 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; }
 .overview-panel h2 { font: 650 var(--fs-15) var(--font-ui); }
 .review-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); margin: 0; font-size: var(--fs-13); }
 .review-kind.is-error { color: var(--risk); background: var(--risk-tint); }
@@ -661,7 +660,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 /* Overview on one screen: two columns (Role + Tracking | Fit + Interviews), compact sections, details folded. */
 .overview-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: var(--space-5); }
 .overview-col { display: grid; align-content: start; gap: var(--space-3); min-width: 0; }
-.overview-col .overview-panel { gap: 6px; padding-top: var(--space-2); }
+.overview-col .overview-panel { gap: 6px; }
 .overview-col .fit-score strong { font-size: var(--fs-22); }
 .must-line { margin: 0; font-size: var(--fs-13); }
 .must-group.is-gap summary { color: var(--brass); }
@@ -1093,13 +1092,21 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .bento-page { container: bento / inline-size; }
 .bento { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
 .bento-card { display: grid; gap: var(--space-2); min-width: 0; padding: var(--space-4) var(--space-5); }
-.bento-card, .job-card, .jobs-table-wrap, .add-job, .overview-panel, .icard, .bento-surface { border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); box-shadow: var(--specular-edge), var(--shadow-card); transition: box-shadow .15s ease, border-color .15s ease; }
+.bento-card, .job-card, .jobs-table-wrap, .add-job, .overview-panel, .icard, .job-head, .document:not(.challenge-practice), .docs-page, .bento-surface { border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); box-shadow: var(--specular-edge), var(--shadow-card); transition: box-shadow .15s ease, border-color .15s ease; }
 .bento-card:has(button:hover, a:hover), .job-card:hover, .job-card:focus-within, .icard.is-open { box-shadow: var(--specular-edge), var(--shadow-card-hover); }
 .job-card:hover, .job-card:focus-within { transform: none; }
 .job-card.has-stripe, .overview-panel.has-stripe, .bento-surface.has-stripe { border-left-width: 4px; border-radius: 0 var(--radius-m) var(--radius-m) 0; }
 .job-card.stripe-leaf { border-left-color: var(--leaf); }
 .job-card.stripe-accent { border-left-color: var(--accent); }
 .job-card.stripe-risk { border-left-color: var(--risk); }
+/* Job page header card (title, status, fit ring) and documents as paper cards (U78). */
+.job-head { padding: var(--space-4) var(--space-5); }
+.job-head-fit { display: inline-flex; align-items: center; gap: var(--space-2); }
+.document:not(.challenge-practice), .docs-page { padding: var(--space-5) clamp(16px, 4vw, 48px); }
+.overview-panel { padding: var(--space-4) var(--space-5); }
+.document, .docs-page { min-width: 0; overflow-wrap: anywhere; }
+.subtabs, .workspace-tabs-row { min-width: 0; }
+.subtabs-list, .workspace-tabs { min-width: 0; overflow-x: auto; scrollbar-width: none; }
 /* The top row fills its width with however many cards it has (hero and KPIs depend on the edition and the day). */
 .bento-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--space-4); }
 .bento-row > .bento-card { flex: 1 1 200px; }

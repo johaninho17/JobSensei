@@ -32,7 +32,13 @@ try {
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
   const size = (width, height) => app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setSize(w, h), [width, height]);
-  const open = async (name) => { await page.locator(".app-sidebar button", { hasText: name }).first().click(); await page.waitForTimeout(900); };
+  // Sidebar pages by name; "Job" opens the first job, "Job posting" its posting (a document).
+  const open = async (name) => {
+    await page.locator(".app-sidebar button", { hasText: name.startsWith("Job") && name !== "Job Search" ? "Jobs" : name }).first().click();
+    await page.waitForTimeout(700);
+    if (name === "Job" || name === "Job posting") { await page.locator(".job-card").first().click(); await page.waitForTimeout(800); }
+    if (name === "Job posting") { await page.getByRole("button", { name: "Job posting" }).first().click(); await page.waitForTimeout(800); }
+  };
   const toggle = page.locator(".topbar-toggle");
   const panelOpen = async () => (await toggle.getAttribute("aria-pressed")) === "true";
   const togglePanel = () => toggle.click().then(() => page.waitForTimeout(500));
