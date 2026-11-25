@@ -162,6 +162,10 @@ describe("search run", () => {
     expect(run.found).toBe(6);
     expect(run.added).toBe(1);
     expect(run.leftOut).toMatchObject({ "already seen": 1, "posting closed": 2, "skipped board": 1, "too old": 1 });
+    // #121: each reason keeps the postings behind it, so the Runs tab can open the group.
+    expect(run.leftOutItems["skipped board"]).toEqual([{ title: null, company: null, url: "https://www.linkedin.com/jobs/view/1" }]);
+    expect(run.leftOutItems["posting closed"]!.map((item) => item.url)).toEqual(["https://jobs.lever.co/northstar/closed", "https://jobs.lever.co/northstar/gone"]);
+    expect(run.leftOutItems["too old"]).toHaveLength(1);
     const [found] = state.items;
     expect(found.url).toBe("https://jobs.lever.co/northstar/abc");
     expect(found.postedAt).toBe("2026-11-03");
@@ -340,6 +344,7 @@ describe("job search: places, companies, and board postings", () => {
     const reply = JSON.stringify({ companies: [{ name: "Northstar Labs", jobsUrl: "https://jobs.ashbyhq.com/northstar" }, { name: "Elsewhere", jobsUrl: "https://elsewhere.example.com/careers" }] });
     const { run, state } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner: async () => ({ response: reply, conversationId: null }), now: () => new Date("2026-11-10T12:00:00Z") });
     expect(run).toMatchObject({ status: "done", added: 1, companies: 1, leftOut: { "not in your places or setups": 1, "company not on a readable board": 1 } });
+    expect(run.leftOutItems["company not on a readable board"]).toEqual([{ title: null, company: "Elsewhere", url: "https://elsewhere.example.com/careers" }]);
     expect(state.items[0]).toMatchObject({ url: "https://jobs.ashbyhq.com/northstar/se-1", company: "Northstar Labs", postedAt: "2026-11-05" });
     expect(pageLoads.filter((url) => url.includes("jobs.ashbyhq.com/northstar/se-1"))).toEqual([]);
     expect((await readSearchSettings(workspace, null)).watched).toEqual([{ board: "ashby", slug: "northstar", name: "Northstar Labs", source: "search" }]);
@@ -404,5 +409,19 @@ describe("job search: words to leave out of titles", () => {
     const { run, state } = await runSearch({ workspace, profile: null, fetcher, existingKeys: new Set(), runner: null, now: () => new Date("2026-11-10T12:00:00Z") });
     expect(run).toMatchObject({ added: 1, leftOut: { "title has a word you left out": 1 } });
     expect(state.items[0].title).toBe("Solutions Engineer");
+  });
+});
+
+describe("Filtered out breakdown (#121)", () => {
+  it("shows one group per reason, largest first, with its examples and how many more", async () => {
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { createElement } = await import("react");
+    const { LeftOutBreakdown } = await import("../src/renderer/JobSearchView");
+    const html = renderToStaticMarkup(createElement(LeftOutBreakdown, { run: { leftOut: { "too old": 3, "skipped company": 1 }, leftOutItems: { "too old": [{ title: "Analyst", company: "Northstar Labs", url: "https://jobs.lever.co/northstar/old" }] } } }));
+    expect(html).toContain("Filtered out: 4");
+    expect(html.indexOf("too old")).toBeLessThan(html.indexOf("skipped company"));
+    expect(html).toContain('<a href="https://jobs.lever.co/northstar/old" target="_blank" rel="noreferrer">Northstar Labs, Analyst</a>');
+    expect(html).toContain("and 2 more");
+    expect(html).toContain("No examples were kept for this run.");
   });
 });

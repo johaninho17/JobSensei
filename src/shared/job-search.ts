@@ -161,6 +161,11 @@ export const inboxItemSchema = z.object({
 });
 export type InboxItem = z.infer<typeof inboxItemSchema>;
 
+/** How many examples a run keeps per left-out reason (#121); the count stays exact. */
+export const LEFT_OUT_EXAMPLES = 25;
+export const leftOutItemSchema = z.object({ title: z.string().nullable(), company: z.string().nullable(), url: z.string().nullable() });
+export type LeftOutItem = z.infer<typeof leftOutItemSchema>;
+
 export const searchRunSchema = z.object({
   id: z.string(),
   startedAt: z.string(),
@@ -170,6 +175,8 @@ export const searchRunSchema = z.object({
   added: z.number().int(),
   /** Why links were left out, counted: dead, stale, duplicate, unreadable, skipped board or company. */
   leftOut: z.record(z.string(), z.number().int()),
+  /** A few of the postings or companies behind each left-out reason, so the user can open the group (#121). */
+  leftOutItems: z.record(z.string(), z.array(leftOutItemSchema).max(LEFT_OUT_EXAMPLES)).default({}),
   autoQueued: z.number().int().default(0),
   /** Dead links swapped for the company's live posting with the same title. */
   replaced: z.number().int().default(0),

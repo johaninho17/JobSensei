@@ -5,9 +5,9 @@ import { extname, join, resolve } from "node:path";
 import type { CandidateProfile, JobFolderSummary } from "../src/shared/schemas";
 import type { PostingRecord } from "../src/shared/posting";
 import {
-  DEFAULT_JOB_SEARCH_SETTINGS, EMPTY_JOB_SEARCH_STATE, SEARCH_BOARDS, SKIPPED_BOARDS,
+  DEFAULT_JOB_SEARCH_SETTINGS, EMPTY_JOB_SEARCH_STATE, LEFT_OUT_EXAMPLES, SEARCH_BOARDS, SKIPPED_BOARDS,
   canonicalUrl, jobKey, jobSearchSettingsSchema, lightRatingPicks, locationFits, titleExcluded, jobSearchStateSchema, skippedSite,
-  type InboxItem, type JobSearchSettings, type JobSearchState, type QuickFit, type SearchProgress, type SearchRun, type WatchedSuggestion,
+  type InboxItem, type LeftOutItem, type JobSearchSettings, type JobSearchState, type QuickFit, type SearchProgress, type SearchRun, type WatchedSuggestion,
 } from "../src/shared/job-search";
 import { readActiveContextManifest } from "./context";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
@@ -388,7 +388,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   const fetcher = deps.fetcher ?? fetch;
   let settings = await readSearchSettings(deps.workspace, deps.profile);
   let state = await readSearchState(deps.workspace);
-  const run: SearchRun = { id: newId("run"), startedAt: now().toISOString(), finishedAt: null, status: "running", found: 0, added: 0, leftOut: {}, autoQueued: 0, replaced: 0, rated: 0, companies: 0, error: null, source: deps.runner ? "search" : "watched", scheduled: deps.scheduled === true, agyFailed: false, agyOnly: deps.agyOnly === true };
+  const run: SearchRun = { id: newId("run"), startedAt: now().toISOString(), finishedAt: null, status: "running", found: 0, added: 0, leftOut: {}, leftOutItems: {}, autoQueued: 0, replaced: 0, rated: 0, companies: 0, error: null, source: deps.runner ? "search" : "watched", scheduled: deps.scheduled === true, agyFailed: false, agyOnly: deps.agyOnly === true };
   state = await saveSearchState(deps.workspace, { ...state, runs: [...state.runs, run] });
   deps.onUpdate?.(state);
   const finish = async (patch: Partial<SearchRun>) => {
@@ -398,7 +398,14 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
     return { state, run: done };
   };
   const leftOut: Record<string, number> = {};
-  const skip = (reason: string) => { leftOut[reason] = (leftOut[reason] ?? 0) + 1; };
+  const leftOutItems: Record<string, LeftOutItem[]> = {};
+  // The posting being checked, so a reason left out keeps an example to show (#121).
+  let current: LeftOutItem | null = null;
+  const skip = (reason: string, item: LeftOutItem | null = current) => {
+    leftOut[reason] = (leftOut[reason] ?? 0) + 1;
+    const list = (leftOutItems[reason] ??= []);
+    if (item && list.length < LEFT_OUT_EXAMPLES) list.push(item);
+  };
 
   // Board lists, read once per run: live postings with their places, setup, dates, and text.
   const boards = new Map<string, Promise<BoardJob[] | null>>();
@@ -421,10 +428,11 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   const candidates: Candidate[] = [];
   const fromBoard = (ref: BoardRef, job: BoardJob, name: string | undefined, source: Candidate["source"]) => {
     if (!fitsSearchTitles(job.title, settings.titles)) return;
-    if (titleExcluded(job.title, settings.excludeTitleWords)) { skip("title has a word you left out"); return; }
+    const example: LeftOutItem = { title: job.title, company: name || job.company || null, url: job.url };
+    if (titleExcluded(job.title, settings.excludeTitleWords)) { skip("title has a word you left out", example); return; }
     // Old postings are left out here, before they become candidates (never marked seen, so a wider age setting brings them back).
     const age = postingAgeDays(job.postedAt, now());
-    if (age !== null && age > settings.postedWithinDays) { skip("too old"); return; }
+    if (age !== null && age > settings.postedWithinDays) { skip("too old", example); return; }
     candidates.push({ link: { url: job.url, title: job.title, company: name || job.company || undefined, location: job.location ?? undefined, postedDate: job.postedAt ?? undefined }, source, board: { ref, job } });
   };
 
@@ -439,7 +447,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   });
   for (const [index, company] of watched.entries()) {
     const jobs = lists[index];
-    if (!jobs) { skip("watched board unreadable"); continue; }
+    if (!jobs) { skip("watched board unreadable", { title: null, company: company.name || company.slug, url: null }); continue; }
     for (const job of jobs) fromBoard(company, job, company.name, "watched");
   }
 
@@ -456,11 +464,12 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
       for (const company of reply.companies) {
         // Agy's link (search redirects resolved), else the company's board found by its name on Ashby, Greenhouse, Lever.
         const ref = (company.jobsUrl ? boardRef(await resolveLink(company.jobsUrl, fetcher)) : null) ?? await findBoardByName(company.name, boardJobs);
-        if (!ref) { skip("company not on a readable board"); continue; }
+        const companyExample: LeftOutItem = { title: null, company: company.name, url: company.jobsUrl ?? null };
+        if (!ref) { skip("company not on a readable board", companyExample); continue; }
         // Watched companies were read in step 1; reading them again only repeats their postings.
-        if (watchedKeys().has(boardKey(ref))) { skip("already watched"); continue; }
+        if (watchedKeys().has(boardKey(ref))) { skip("already watched", companyExample); continue; }
         const jobs = await boardJobs(ref);
-        if (!jobs) { skip("company board not found"); continue; }
+        if (!jobs) { skip("company board not found", companyExample); continue; }
         companiesFound += 1;
         if (!watchedKeys().has(boardKey(ref))) found.push({ ...ref, name: company.name, source: "search" });
         for (const job of jobs) fromBoard(ref, job, company.name, "search");
@@ -471,7 +480,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
     } catch (error) {
       agyFailure = agyError(error instanceof Error ? error.message : String(error));
       searchFailed = true;
-      if (!candidates.length) return finish({ status: "failed", error: agyFailure, leftOut, agyFailed: true });
+      if (!candidates.length) return finish({ status: "failed", error: agyFailure, leftOut, leftOutItems, agyFailed: true });
     }
   }
 
@@ -489,6 +498,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
   for (const [index, candidate] of candidates.entries()) {
     deps.onProgress?.({ phase: "checking", checked: index, total: candidates.length });
     const link = candidate.link;
+    current = { title: link.title ?? null, company: link.company ?? null, url: link.url };
     let board = candidate.board;
     let url = canonicalUrl(board ? link.url : await resolveLink(link.url, fetcher));
     if (seen.has(url) || checked.has(url)) { skip("already seen"); continue; }
@@ -600,7 +610,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
       }
     }
   }
-  return finish({ status: "done", found: candidates.length, added, replaced, rated, companies: companiesFound, leftOut, error: agyFailure, agyFailed: searchFailed });
+  return finish({ status: "done", found: candidates.length, added, replaced, rated, companies: companiesFound, leftOut, leftOutItems, error: agyFailure, agyFailed: searchFailed });
 }
 
 const company = (link: FoundLink, board: Candidate["board"]) => link.company ?? board?.job.company ?? null;

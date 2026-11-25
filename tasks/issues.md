@@ -26,7 +26,6 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 
 | # | Issue | Features | Blocked |
 |---|---|---|---|
-| #128 | Bento for more screens, after the Today pilot | FEAT-005, FEAT-008, FEAT-009, FEAT-010, FEAT-012 | yes |
 | #147 | Remove the old in-place interview content update once Tune is proven | FEAT-005 |  |
 
 ## Later (future)
@@ -42,4 +41,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #124 | Phase 4.4: Global Connectors tab, per-job Activity & Emails timeline, Email Prep PDF action, and Undo toasts | FEAT-002, FEAT-014 | yes |
 | #133 | Multi-AI groundwork: agent brief, activity log, headless streaming, prompt caching, quota backoff | FEAT-006 |  |
 
-20 open, 8 of them for later.
+19 open, 8 of them for later.

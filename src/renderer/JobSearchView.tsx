@@ -18,6 +18,24 @@ const plural = (count: number, word: string) => `${count} ${word}${count === 1 ?
 const capital = (text: string | null) => text ? text[0].toUpperCase() + text.slice(1) : null;
 const SETUP_LABEL: Record<(typeof WORK_SETUPS)[number], string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
 
+/** Why postings were left out of a run, one group per reason, largest first; each group opens to its examples (#121). */
+export function LeftOutBreakdown({ run }: { run: Pick<SearchRun, "leftOut" | "leftOutItems"> }) {
+  const reasons = Object.entries(run.leftOut).filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1]);
+  if (!reasons.length) return null;
+  const total = reasons.reduce((sum, [, count]) => sum + count, 0);
+  return <details className="left-out">
+    <summary>Filtered out: {total}</summary>
+    <ul>{reasons.map(([reason, count]) => { const items = run.leftOutItems?.[reason] ?? []; return <li key={reason}>
+      <details>
+        <summary><span className="tabular">{count}</span> {reason}</summary>
+        {items.length ? <ul className="left-out-items">{items.map((item, index) => { const label = [item.company, item.title].filter(Boolean).join(", ") || item.url || "Unnamed posting"; return <li key={index}>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">{label}</a> : label}</li>; })}
+          {count > items.length && <li className="muted">and {count - items.length} more</li>}</ul>
+          : <p className="muted">No examples were kept for this run.</p>}
+      </details>
+    </li>; })}</ul>
+  </details>;
+}
+
 /** Why a finished run added nothing (or what it left out), in plain words. */
 export function runSummary(run: SearchRun): string {
   const left = Object.entries(run.leftOut).sort((a, b) => b[1] - a[1]).map(([reason, count]) => `${count} ${reason}`).join(", ");
@@ -282,6 +300,7 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
         {[...state.runs].reverse().map((run) => <li key={run.id}>
           <strong>{new Date(run.startedAt).toLocaleString()}</strong>{run.scheduled && " · scheduled"}{run.status === "running" && " · running"}
           <span className="muted"> · {run.source === "watched" ? "watched companies" : "Agy search + watched companies"}: {runSummary(run)}</span>
+          <LeftOutBreakdown run={run} />
         </li>)}
       </ul>}
     </div>}
