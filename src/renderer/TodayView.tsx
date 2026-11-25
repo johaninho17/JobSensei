@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Insight, TodayData, TodayQuestion } from "../shared/today";
 import { pickNextStep, type NextStep } from "../shared/today-next";
-import { BentoCard, FitRing, Kpi } from "./BentoPrimitives";
+import { BentoCard, FitRing, Kpi, PageHead } from "./BentoPrimitives";
 import { Section } from "./Section";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { draftFound, foundError, saveFound } from "./found-actions";
@@ -75,7 +75,7 @@ export function TodayView({ onOpenJob, onOpenMatch, onQueueFound, onGo, onOpenTu
   const showQuestions = () => document.getElementById("today-questions-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return <section className="today bento-page">
-    <header className="page-head page-head-compact"><div className="page-head-title"><h1>Today</h1><span className="muted">{date}{run ? ` · last search ${new Date(run.startedAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}` : ""}</span></div></header>
+    <PageHead title="Today" status={`${date}${run ? ` · last search ${new Date(run.startedAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}` : ""}`} />
 
     <div className="bento">
       <div className="bento-row">

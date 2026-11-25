@@ -65,5 +65,10 @@ Every page (ledger U77 pilot on Today, U78 everywhere). One shared surfaces bloc
 - Templates: `BentoCard`, `Kpi`, `FitRing` (`BentoPrimitives.tsx`); job cards (`JobCard` in `JobsHome.tsx`) are compact (U79): fit ring, company and role, star and ⋯ on one row, then one meta line (status with a dot from `jobDotOf`: interviewing/offer leaf, applied pine, a blocker must-have while saved risk; interview round; added date). The whole card opens the job (click, Enter). Links underline on hover only. `.bento-surface` makes any panel a card.
 - `Kpi`: one big tabular number, a muted label, at most one link. `FitRing`: the 1–5 fit rating as a ring (leaf strong, muted fair, risk weak) with the number inside and a text label for screen readers.
 
+## Say it once (U82)
+- Every page starts with `PageHead` (`BentoPrimitives.tsx`): title, one short status line, at most one main action, and an optional "?" `InfoTip` holding what the page used to explain in a paragraph. No help paragraphs under titles.
+- Explanations live in a tip, a tooltip, or Docs; the page shows state and actions. Boxes only around things you act on.
+- Empty sidebar groups don't render (Favorites appears once a job is starred; Jobs views with no jobs are hidden, Active and All stay).
+
 ## Accessibility
 Native buttons and inputs; visible focus (`--focus`); `aria-current` for navigation, `aria-pressed` for toggles, `aria-expanded` for cards; menus and dialogs close on Escape and return focus; keyboard paths for the interview view (↑ ↓, Enter, /, L; live mode ← → R Esc); `prefers-reduced-motion` honored.

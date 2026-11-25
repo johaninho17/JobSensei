@@ -6,6 +6,7 @@ import type { RecruiterDefaults } from "../shared/candidates";
 import { instructionLines, type CandidateProfile } from "../shared/schemas";
 import { instructionProblem } from "./RecruiterSettings";
 import { SubTabPanel, SubTabs } from "./SubTabs";
+import { PageHead } from "./BentoPrimitives";
 
 export type ProfileTab = "overview" | "resume" | "files" | "resumes" | "notes" | "settings";
 
@@ -21,7 +22,7 @@ export function ProfilePage({ name, initial, overview, resume, files, resumes, n
 }) {
   const [tab, setTab] = useState<ProfileTab>(initial);
   return <section className="jobs-home candidate-profile">
-    <header className="page-head"><div><h1>{name}</h1><p>Their resume, files, and your notes: what Agy may use when tailoring for them. Files are only read, never changed.</p></div></header>
+    <PageHead title={name} tip="Their resume, files, and your notes: what Agy may use when tailoring for them. Files are only read, never changed." />
     <SubTabs<ProfileTab>
       idPrefix="profile"
       label="Candidate profile sections"

@@ -10,6 +10,7 @@ import { AgyConversations } from "./AgyConversations";
 import { markdownHtml } from "./markdown";
 import { Section } from "./Section";
 import { SubTabs, SubTabPanel } from "./SubTabs";
+import { PageHead } from "./BentoPrimitives";
 
 type AgyTab = "actions" | "activity" | "behavior" | "conversations" | "memory" | "how";
 const TABS: Array<{ id: AgyTab; label: string }> = [{ id: "actions", label: "Actions" }, { id: "activity", label: "Activity" }, { id: "behavior", label: "Behavior" }, { id: "conversations", label: "Conversations" }, { id: "memory", label: "Memory" }, { id: "how", label: "How it works" }];
@@ -121,7 +122,7 @@ export function AgyView({ context, saved, onSaveBehavior, busyLabel, onRun, onSh
   const [tab, setTab] = useState<AgyTab>(remembered);
   const actions = buildAgyActions(context);
   return <section className="agy-home">
-    <header className="page-head"><div><h1>Agy</h1><p>Everything Agy can do for you, in one place.</p></div></header>
+    <PageHead title="Agy" tip="Everything Agy can do for you, in one place: actions you can send, what it did, how it behaves, your conversations, and what it remembers." />
     <SubTabs<AgyTab> idPrefix="agy" label="Agy sections" value={tab} tabs={TABS}
       onChange={(next) => { setTab(next); try { window.localStorage.setItem("sensei-agy-tab", next); } catch { /* not remembered */ } }} />
     <SubTabPanel idPrefix="agy" value={tab}>

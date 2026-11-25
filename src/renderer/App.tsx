@@ -1012,9 +1012,9 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         {/* One Profile item: Setup and Career context are one page with tabs (U78). */}
         <li><button aria-current={activePage === "setup-home" || (!FEATURES.candidates && activePage === "context-home") ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />{FEATURES.candidates ? "Profile" : <span className="side-label">Profile</span>}{!FEATURES.candidates && FEATURES.nudges && newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new career file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}{readiness && (FEATURES.candidates ? <span className={readiness.ready ? "side-count" : "side-due"}>{readiness.ready ? "Ready" : "Needs a resume"}</span> : <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>)}</button></li>
       </ul>
-      {!FEATURES.candidates && <section className="side-recent" aria-labelledby="side-recent-title">
+      {/* Favorites shows once something is starred (U82); the star itself says what it does. */}
+      {!FEATURES.candidates && favoriteJobs.length > 0 && <section className="side-recent" aria-labelledby="side-recent-title">
         <h2 id="side-recent-title">Favorites</h2>
-        {favoriteJobs.length === 0 && <p className="side-empty">Star a job (☆) in Jobs to keep it here.</p>}
         <ul>{favoriteJobs.map((job) => <li key={job.id}><button aria-current={activePage === "job" && viewedJobId === job.id ? "page" : undefined} onClick={() => openJob(job.id)}><strong>{job.company ?? displayJobName(job.name)}</strong><small>{job.title ?? "Role not recorded"}</small></button></li>)}</ul>
       </section>}
       <div className="side-foot">

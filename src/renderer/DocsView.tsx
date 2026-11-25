@@ -8,6 +8,7 @@ import agyCommands from "../../docs/app/agy-commands.md?raw";
 import troubleshooting from "../../docs/app/troubleshooting.md?raw";
 import { markdownHtml } from "./markdown";
 import { SubTabs, SubTabPanel } from "./SubTabs";
+import { PageHead } from "./BentoPrimitives";
 
 const PAGES = [
   { id: "start", label: "Start here", text: startHere },
@@ -26,7 +27,7 @@ export function DocsView() {
   const [tab, setTab] = useState<DocsPage>(remembered);
   const page = PAGES.find((candidate) => candidate.id === tab)!;
   return <section className="docs-home">
-    <header className="page-head"><div><h1>Docs</h1><p>How to get the best from JobSensei, and how Agy uses what you give it.</p></div></header>
+    <PageHead title="Docs" tip="How to get the best from JobSensei, and how Agy uses what you give it." />
     <SubTabs<DocsPage> idPrefix="docs" label="Docs sections" value={tab}
       onChange={(next) => { setTab(next); try { window.localStorage.setItem("sensei-docs-tab", next); } catch { /* storage unavailable */ } }}
       tabs={PAGES.map(({ id, label }) => ({ id, label }))} />

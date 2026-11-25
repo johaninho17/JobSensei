@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import type { CandidateEntry, CandidatesState } from "../shared/candidates";
 import { ApprovalDialog, ReportDialog } from "./Candidates";
+import { PageHead } from "./BentoPrimitives";
 
 const message = (caught: unknown) => (caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "Something went wrong.");
 
@@ -16,7 +17,7 @@ export function ReportsView({ initial }: { initial?: CandidatesState | null }) {
   useEffect(load, []);
   const listed = (state?.candidates ?? []).filter((candidate) => candidate.status !== "archived");
   return <section className="jobs-home reports-page">
-    <header className="page-head"><div><h1>Reports</h1><p>What you've sent for each candidate, the replies, and jobs waiting for their approval. Reports are copied or saved by you; nothing is sent from the app.</p></div></header>
+    <PageHead title="Reports" tip="What you've sent for each candidate, the replies, and jobs waiting for their approval. Reports are copied or saved by you; nothing is sent from the app." />
     {error && <p className="inline-error" role="alert">{error}</p>}
     {!state && !error && <p className="muted">Reading candidates…</p>}
     {state && <table className="pipeline-table reports-table">

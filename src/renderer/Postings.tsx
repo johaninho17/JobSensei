@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { LibraryEntry, LibraryPosting } from "../shared/candidate-match";
 import { newQueueItem } from "../shared/job-queue";
 import { WhoIsThisFor } from "./Candidates";
+import { PageHead } from "./BentoPrimitives";
 
 const message = (caught: unknown) => (caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "Something went wrong.");
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -77,7 +78,7 @@ export function PostingsView({ activeId, onActive, onToast }: { activeId: string
   }
 
   return <section className="jobs-home postings-page">
-    <header className="page-head"><div><h1>Postings</h1><p>Add a posting once, then choose who it is for. Each candidate gets their own copy, tailored in their own folder.</p></div></header>
+    <PageHead title="Postings" tip="Add a posting once, then choose who it is for. Each candidate gets their own copy, tailored in their own folder." />
     <form className="postings-add" onSubmit={(event) => void add(event)}>
       <label htmlFor="postings-input">Job links (one per line) or a whole job description</label>
       <textarea id="postings-input" rows={3} value={input} onChange={(event) => setInput(event.target.value)} placeholder="https://jobs.example.com/…" />

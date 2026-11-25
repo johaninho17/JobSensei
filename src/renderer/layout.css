@@ -123,7 +123,6 @@
 /* ---------- Pages ---------- */
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-5); margin-bottom: var(--space-5); }
 .page-head h1 { margin: 0; font-size: var(--fs-35); }
-.page-head p { max-width: 70ch; margin: var(--space-2) 0 0; color: var(--muted); }
 .jobs-home { max-width: 1180px; }
 .jobs-toolbar { position: sticky; top: calc(var(--space-6) * -1); z-index: 12; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); padding: var(--space-3) 0; background: var(--canvas); }
 .jobs-table-wrap { border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); }
@@ -795,7 +794,8 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .find-main .find-tag { margin-left: var(--space-2); }
 .fit-badge-source { display: block; font-size: 10px; font-weight: 500; line-height: 1; opacity: 0.8; }
 .find-callout { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; margin-bottom: var(--space-3); padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-m); background: var(--raised); border-left: 3px solid var(--accent); font-size: var(--fs-13); }
-.find-schedule { margin: var(--space-2) 0 0; font-size: var(--fs-13); }
+.find-schedule { font-size: var(--fs-13); }
+.setup-status { margin: 0 0 var(--card-gap); color: var(--muted); font-size: var(--fs-13); }
 .find-schedule.is-off { color: var(--ink); }
 .watched-details > summary { cursor: pointer; font-size: var(--fs-13); }
 .watched-details[open] > summary { margin-bottom: var(--space-2); }
@@ -995,7 +995,6 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .candidates-top { display: flex; justify-content: space-between; align-items: center; padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--line); }
 .candidates-brand { font-family: var(--font-display); font-size: var(--fs-15); font-weight: 600; }
 .candidates-page { max-width: 1080px; margin: 0 auto; padding: var(--space-5); }
-.candidates-head { display: flex; justify-content: space-between; align-items: end; gap: var(--space-3); margin-bottom: var(--space-3); }
 .candidates-table td:first-child .btn-link { font-weight: 600; }
 
 /* Review before sending (recruiter plan R8 P2) */
@@ -1203,3 +1202,14 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .today-insights li .today-area { flex: none; min-width: 72px; }
 .today-insights li .today-insight-text { flex: 1 1 280px; min-width: 0; }
 .activity-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-2); }
+/* One page header (U82, #165): status line and a "?" tip instead of a help paragraph. */
+.page-head-status { color: var(--muted); font-size: var(--fs-13); }
+.page-head-action { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: none; }
+.info-tip { position: relative; align-self: center; }
+.info-tip > summary { display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--muted); font: 650 var(--fs-12) var(--font-ui); list-style: none; cursor: pointer; }
+.info-tip > summary::-webkit-details-marker { display: none; }
+.info-tip > summary:hover, .info-tip[open] > summary { color: var(--ink); background: var(--hover); }
+.info-tip-body { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: min(360px, 80vw); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-m); color: var(--ink); background: var(--raised); box-shadow: var(--shadow-s); font-size: var(--fs-13); line-height: 1.5; }
+.info-tip-body p { margin: 0 0 var(--space-2); }
+.info-tip-body p:last-child { margin-bottom: 0; }
+.page-head-status > * + *::before { content: "·"; margin: 0 var(--space-2); color: var(--line-strong); }
