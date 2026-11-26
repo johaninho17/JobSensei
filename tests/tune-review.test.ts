@@ -19,7 +19,7 @@ describe("Tune review (#118)", () => {
 
   it("reads new recordings in Your content, and Profile has no Tune tab (#199)", async () => {
     const interviews = await read("src/renderer/InterviewsHome.tsx");
-    expect(interviews).toContain('<TunePanel area="interviews"');
+    expect(interviews).toMatch(/<TunePanel[\s\S]{0,200}area="interviews"/);
     expect(interviews).not.toContain("content.startUpdate");
     expect(interviews).not.toMatch(/Update from \$\{plural/);
     const app = await read("src/renderer/App.tsx");
