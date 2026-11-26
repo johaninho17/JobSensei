@@ -36,3 +36,10 @@ export function normalPayText(text: string | null | undefined): string | null {
   const period = /\b(?:hour|hr|hourly)\b/i.test(value) ? "hour" : /\b(?:month|mo)\b/i.test(value) ? "month" : /\b(?:year|yr|annum|annual)\b/i.test(value) || min >= 10000 ? "year" : min < 200 ? "hour" : null;
   return formatPay(min, max, code, period) ?? value;
 }
+
+/** Lever's salary range ({ min, max, currency, interval }) as one line. */
+export function leverPay(value: unknown): string | null {
+  const range = (value ?? {}) as { min?: unknown; max?: unknown; currency?: unknown; interval?: unknown };
+  if (typeof range.min !== "number" && typeof range.max !== "number") return null;
+  return formatPay(typeof range.min === "number" ? range.min : null, typeof range.max === "number" ? range.max : null, typeof range.currency === "string" ? range.currency : "USD", typeof range.interval === "string" ? range.interval : null);
+}

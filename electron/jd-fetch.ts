@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { MIN_PASTED_POSTING_CHARS } from "../src/shared/paste-limits";
 import { normalCompany } from "../src/shared/posting-fields";
 import { postingTemplate } from "./posting-template";
-import { formatPay } from "../src/shared/pay";
+import { formatPay, leverPay } from "../src/shared/pay";
 import { basename, join, resolve } from "node:path";
 import { writeJsonAtomic, writeTextAtomic } from "./persistence";
 import { parseJobDescriptionMetadata } from "./job-description";
@@ -39,6 +39,8 @@ export function decodeEntities(text: string): string {
 export function htmlToText(html: string): string {
   return decodeEntities(html
     .replace(/<(script|style|noscript|svg|head|template|iframe)[\s\S]*?<\/\1>/gi, " ")
+    // A page cut off mid-script (a truncated response) leaves its code unclosed: drop it to the end (issue #174).
+    .replace(/<(script|style)\b[\s\S]*$/i, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<h[1-3][^>]*>/gi, "\n\n## ")
     .replace(/<h[4-6][^>]*>/gi, "\n\n### ")
@@ -55,6 +57,8 @@ export function htmlToText(html: string): string {
     .replace(/ *\n */g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/\n\n- /g, "\n- ")
+    // "•Report to…" (no space after the dot) is still a bullet (issue #174).
+    .replace(/^[•▪◦]\s*/gm, "- ")
     .trim();
 }
 
@@ -186,17 +190,21 @@ export function extractJobDescription(html: string, url: string): Omit<FetchedJo
 }
 
 type Extracted = Omit<FetchedJobDescription, "fetchedAt">;
+type WorkMode = "remote" | "hybrid" | "onsite";
+const WORK_MODE_LABEL: Record<WorkMode, string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
 
 /**
  * A posting built from a job board's own data (Ashby/Lever lists, Greenhouse's per-job API) instead of loading its
  * page: the same header, text conversion, and cleanup as a fetched page, so everything downstream reads it the same.
  */
-export function postingFromBoard(input: { url: string; title: string; company: string | null; location: string | null; html: string; pay?: string | null; posted?: string | null }): { extracted: Extracted; form: string | null } {
+export function postingFromBoard(input: { url: string; title: string; company: string | null; location: string | null; html: string; pay?: string | null; posted?: string | null; workSetup?: WorkMode | null }): { extracted: Extracted; form: string | null } {
   const header = [
     `# ${input.title}`,
     "",
     ...(input.company ? [`**Company:** ${input.company}  `] : []),
     ...(input.location ? [`**Location:** ${input.location}  `] : []),
+    // The board's own field (Lever and Ashby workplaceType) beats any sentence the parser would guess from (#172).
+    ...(input.workSetup ? [`**Work setup:** ${WORK_MODE_LABEL[input.workSetup]}  `] : []),
     ...(input.pay ? [`**Compensation:** ${input.pay}  `] : []),
     ...(input.posted?.match(/^\d{4}-\d{2}-\d{2}/) ? [`**Posted:** ${input.posted.slice(0, 10)}  `] : []),
     `**Source:** ${input.url}`,
@@ -293,12 +301,12 @@ export async function fetchAndClean(url: string, fetcher: typeof fetch, options:
 
 /** Postings a job board serves as JSON (Greenhouse, Workday, Oracle Cloud), shown with `source` as their link. */
 async function postingFromApi(url: string, fetcher: typeof fetch, source = url): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
-  return await fetchGreenhouseJob(url, fetcher, source) ?? await fetchWorkdayPosting(url, fetcher) ?? await fetchOracleCloudPosting(url, fetcher)
+  return await fetchGreenhouseJob(url, fetcher, source) ?? await fetchLeverPosting(url, fetcher, source) ?? await fetchAmazonJob(url, fetcher, source) ?? await fetchWorkdayPosting(url, fetcher) ?? await fetchOracleCloudPosting(url, fetcher)
     ?? await fetchSmartRecruitersPosting(url, fetcher) ?? await fetchWorkablePosting(url, fetcher) ?? await fetchRecruiteePosting(url, fetcher);
 }
 
 async function getJson<T>(url: string, fetcher: typeof fetch): Promise<T | null> {
-  const response = await fetcher(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
+  const response = await fetcher(url, { headers: { Accept: "application/json", "Accept-Encoding": PAGE_HEADERS["Accept-Encoding"] }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
   if (!response?.ok) return null;
   return await response.json().catch(() => null) as T | null;
 }
@@ -367,6 +375,73 @@ async function fetchGreenhouseJob(url: string, fetcher: typeof fetch, source: st
   const data = await response.json().catch(() => null) as { title?: string; content?: string; company_name?: string; location?: { name?: string } } | null;
   if (!data?.title || !data.content) return null;
   return postingFromBoard({ url: source, title: decodeEntities(data.title), company: data.company_name?.trim() || null, location: data.location?.name?.trim() || null, html: data.content }).extracted;
+}
+
+const LEVER_JOB = /^https:\/\/jobs\.(eu\.)?lever\.co\/([A-Za-z0-9_.-]+)\/([0-9a-f-]{36})/i;
+
+/** Lever's workplaceType ("hybrid", "remote", "onsite", "unspecified") as a work setup. */
+export function leverWorkplace(value: unknown): WorkMode | null {
+  const text = typeof value === "string" ? value.toLowerCase().replace(/[^a-z]/g, "") : "";
+  return text === "remote" ? "remote" : text === "hybrid" ? "hybrid" : text === "onsite" || text === "inoffice" ? "onsite" : null;
+}
+
+/** The company on a Lever page: its title reads "Company - Job title"; else the site name. */
+export function leverCompany(pageTitle: string | null, jobTitle: string, site: string): string {
+  const title = decodeEntities(pageTitle ?? "").trim();
+  if (title.endsWith(` - ${jobTitle}`) || title.includes(` - ${jobTitle.slice(0, 20)}`)) {
+    const company = title.slice(0, title.indexOf(" - ")).trim();
+    if (company) return company;
+  }
+  return workdayCompany(site, null);
+}
+
+/**
+ * Lever postings from Lever's public posting API, so the board's own fields are used: work setup (workplaceType),
+ * pay (salaryRange), commitment, and the posted date. The page's title gives the company name, which the API lacks.
+ */
+async function fetchLeverPosting(url: string, fetcher: typeof fetch, source: string): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
+  const match = LEVER_JOB.exec(url);
+  if (!match) return null;
+  type Data = { text?: string; categories?: { location?: string; commitment?: string; allLocations?: string[] }; workplaceType?: string; description?: string; lists?: Array<{ text?: string; content?: string }>; additional?: string; salaryDescription?: string; salaryRange?: unknown; createdAt?: number; hostedUrl?: string };
+  const data = await getJson<Data>(`https://api.${match[1] ?? ""}lever.co/v0/postings/${match[2]}/${match[3]}`, fetcher);
+  if (!data?.text || !(data.description || data.lists?.length)) return null;
+  const page = await fetchText(data.hostedUrl ?? `https://jobs.${match[1] ?? ""}lever.co/${match[2]}/${match[3]}`, fetcher).catch(() => "");
+  const pageTitle = /<title[^>]*>([^<]*)<\/title>/i.exec(page)?.[1] ?? null;
+  const lists = (data.lists ?? []).map((list) => `<h2>${list.text ?? ""}</h2><ul>${list.content ?? ""}</ul>`).join("");
+  const html = factLines([["Employment type", data.categories?.commitment]]) + (data.description ?? "") + lists + (data.additional ?? "") + (data.salaryDescription ?? "");
+  const locations = [...new Set([data.categories?.location, ...(data.categories?.allLocations ?? [])].filter((value): value is string => Boolean(value?.trim())))];
+  return postingFromBoard({
+    url: source, title: decodeEntities(data.text).trim(), company: leverCompany(pageTitle, decodeEntities(data.text).trim(), match[2]!), location: locations.join("; ") || null, html,
+    pay: leverPay(data.salaryRange), posted: typeof data.createdAt === "number" ? new Date(data.createdAt).toISOString() : null, workSetup: leverWorkplace(data.workplaceType),
+  }).extracted;
+}
+
+const AMAZON_JOB = /^https:\/\/(?:www\.)?amazon\.jobs\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?jobs\/(\d+)/i;
+
+/**
+ * amazon.jobs postings from the site's own search JSON (issue #174): the page carries the site's full menu and
+ * "Job ID" in its title, while the JSON has the title, the hiring entity, the place, the posted date, and the
+ * description and both qualification lists as separate fields.
+ */
+/** The hiring entity as a company name: Amazon's own retail entities ("Amazon.com Services LLC") are "Amazon". */
+export function amazonCompany(entity: string | null | undefined): string {
+  const name = (entity ?? "").trim();
+  return !name || /^amazon\.com\b/i.test(name) ? "Amazon" : name;
+}
+
+async function fetchAmazonJob(url: string, fetcher: typeof fetch, source: string): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
+  const match = AMAZON_JOB.exec(url);
+  if (!match) return null;
+  type Job = { id_icims?: string; title?: string; company_name?: string; normalized_location?: string; location?: string; posted_date?: string; job_schedule_type?: string; description?: string; basic_qualifications?: string; preferred_qualifications?: string };
+  const data = await getJson<{ jobs?: Job[] }>(`https://www.amazon.jobs/en/search.json?job_id_icims%5B%5D=${match[1]}&result_limit=1`, fetcher);
+  const job = data?.jobs?.find((entry) => String(entry.id_icims) === match[1]);
+  if (!job?.title || !job.description) return null;
+  const posted = job.posted_date && !Number.isNaN(Date.parse(job.posted_date)) ? new Date(`${job.posted_date} 12:00 UTC`).toISOString() : null;
+  const html = factLines([["Employment type", job.job_schedule_type?.replace(/-/g, " ")], ["Job ID", job.id_icims]])
+    + `<h2>Description</h2>${job.description}`
+    + (job.basic_qualifications ? `<h2>Basic Qualifications</h2>${job.basic_qualifications}` : "")
+    + (job.preferred_qualifications ? `<h2>Preferred Qualifications</h2>${job.preferred_qualifications}` : "");
+  return postingFromBoard({ url: source, title: decodeEntities(job.title).trim(), company: amazonCompany(job.company_name), location: job.normalized_location?.trim() || job.location?.trim() || null, html, posted }).extracted;
 }
 
 const WORKDAY = /^https:\/\/([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com\/(?:[a-z]{2}-[A-Z]{2}\/)?([^/?#]+)\/job\/([^?#]+?)(?:\/apply(?:\/[^?#]*)?)?\/?(?:[?#].*)?$/i;
@@ -466,11 +541,17 @@ export async function fetchJobDescription(workspacePath: string, url: string, fe
   return stageFetched(workspacePath, extracted, form);
 }
 
+/**
+ * Headers for reading a page. Compression is limited to gzip, deflate and br: some servers answer Node 26's default
+ * zstd offer with a reply its fetch cuts off at 1 KB (amazon.jobs, issue #174).
+ */
+const PAGE_HEADERS = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", "Accept-Encoding": "gzip, deflate, br" } as const;
+
 /** One page or API response as text, with the same browser headers and timeout as posting fetches. */
 export async function fetchText(url: string, fetcher: typeof fetch = fetch, init: RequestInit = {}): Promise<string> {
   const response = await fetcher(url, {
     ...init,
-    headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", Accept: "text/html,application/xhtml+xml,application/json", ...(init.headers as Record<string, string> | undefined) },
+    headers: { ...PAGE_HEADERS, Accept: "text/html,application/xhtml+xml,application/json", ...(init.headers as Record<string, string> | undefined) },
     redirect: "follow",
     signal: AbortSignal.timeout(15_000),
   });
@@ -480,7 +561,7 @@ export async function fetchText(url: string, fetcher: typeof fetch = fetch, init
 
 async function fetchPage(url: string, fetcher: typeof fetch): Promise<string> {
   const response = await fetcher(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", Accept: "text/html,application/xhtml+xml" },
+    headers: { ...PAGE_HEADERS, Accept: "text/html,application/xhtml+xml" },
     redirect: "follow",
     signal: AbortSignal.timeout(15_000),
   });

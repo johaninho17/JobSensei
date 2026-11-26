@@ -5,7 +5,8 @@
  */
 
 import { boardKey, boardRef, type BoardId, type BoardRef } from "../src/shared/boards";
-import { formatPay } from "../src/shared/pay";
+import { leverPay } from "../src/shared/pay";
+export { leverPay };
 
 export { boardKey, boardRef, type BoardId, type BoardRef };
 export type BoardJob = {
@@ -41,13 +42,6 @@ export function ashbyPay(value: unknown): string | null {
   const record = (value ?? {}) as { scrapeableCompensationSalarySummary?: unknown; compensationTierSummary?: unknown };
   const text = [record.scrapeableCompensationSalarySummary, record.compensationTierSummary].find((entry): entry is string => typeof entry === "string" && /\d/.test(entry));
   return text ? text.replace(/\s+/g, " ").trim() : null;
-}
-
-/** Lever's salary range ({ min, max, currency, interval }) as one line. */
-export function leverPay(value: unknown): string | null {
-  const range = (value ?? {}) as { min?: unknown; max?: unknown; currency?: unknown; interval?: unknown };
-  if (typeof range.min !== "number" && typeof range.max !== "number") return null;
-  return formatPay(typeof range.min === "number" ? range.min : null, typeof range.max === "number" ? range.max : null, typeof range.currency === "string" ? range.currency : "USD", typeof range.interval === "string" ? range.interval : null);
 }
 
 /** Every live posting on one company's board. Throws when the board can't be read. */
