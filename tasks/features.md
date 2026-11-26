@@ -8,7 +8,7 @@ When an issue changes a feature's files or data contracts, update its entry here
 
 | ID | Feature | Main files | Shared contracts |
 |---|---|---|---|
-| FEAT-001 | Jobs list and tracker (no follow-ups since #194) | `src/renderer/JobsHome.tsx`, `src/shared/tracker.ts`, `electron/tracker.ts`, `src/shared/job-organize.ts` | `tracker.json`, `TrackedJob`, `effectiveStatus` |
+| FEAT-001 | Jobs list and tracker (toolbar: Search, View with sort/group/layout, Filters, more, #224) (no follow-ups since #194) | `src/renderer/JobsHome.tsx`, `src/shared/tracker.ts`, `electron/tracker.ts`, `src/shared/job-organize.ts` | `tracker.json`, `TrackedJob`, `effectiveStatus` |
 | FEAT-002 | Job workspace and documents | `src/renderer/JobWorkspace.tsx` (two-line header with the next step as a split button, #221; four tabs with the documents in an Application menu, #222), `src/renderer/Documents.tsx`, `electron/role-facts.ts`, `electron/pdf-export.ts`, `electron/pdf-file-actions.ts` | job record, validation report |
 | FEAT-003 | Application pipeline | `electron/evidence-snapshot.ts`, `electron/application-artifacts.ts`, `electron/application-validation.ts`, `electron/application-finalize.ts` (Fix/Stop failure labels), `electron/fit-scoring.ts`, `.agents/skills/`, `src/shared/prompt-fence.ts` (posting text fenced as data in background prompts) | application context, evidence rows, bundle |
 | FEAT-004 | Job Search | `src/renderer/JobSearchView.tsx`, `electron/job-search.ts`, `electron/job-boards.ts`, `src/shared/job-search.ts` | search settings, found-job items |

@@ -210,14 +210,15 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
         <div className="jobs-more-menu">
   <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option><option value="fit">Best fit</option><option value="settings">Agy settings (boldest first)</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
   <label className="jobs-sort"><span>Group</span><select value={group} onChange={(event) => setGroup(event.target.value as Grouping)} aria-label="Group jobs"><option value="none">No groups</option><option value="company">Company</option><option value="role">Kind of role</option><option value="status">Status</option><option value="work">Work setup</option></select></label>
+          {/* Cards or list lives in View with sort and group (#224). */}
+          <div className="jobs-sort"><span>Layout</span><div className="segmented jobs-view-layout" role="group" aria-label="Layout">{(["cards", "list"] as JobsView[]).map((value) => <button key={value} aria-pressed={view === value} onClick={() => setView(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div></div>
         </div>
       </details>
       <JobFilters jobs={jobs.filter((job) => inTab(job, tab))} facets={facets} onChange={setFacets} />
-      <button className="filter-toggle" aria-pressed={selecting} title="Select several jobs to change their status at once (or Cmd/Ctrl-click a job)" onClick={() => selecting ? exitSelect() : setSelecting(true)}>{selecting ? "Done" : "Select"}</button>
-      <div className="segmented" role="group" aria-label="Layout">{(["cards", "list"] as JobsView[]).map((value) => <button key={value} aria-pressed={view === value} onClick={() => setView(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div>
       <details className="jobs-more">
         <summary aria-label="More job actions">⋯</summary>
         <div className="jobs-more-menu">
+          <button className="menu-item" title="Select several jobs to change their status at once (or Cmd/Ctrl-click a job)" onClick={(event) => { (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); if (selecting) exitSelect(); else setSelecting(true); }}>{selecting ? "Done selecting" : "Select jobs"}</button>
           <button className="menu-item" disabled={!visibleJobs.length} title="Export the jobs shown to a spreadsheet" onClick={() => void window.sensei.jobs.exportCsv(jobsToCsv(visibleJobs, CSV_COLUMNS)).then((path) => setExported(path ? `Saved ${visibleJobs.length} job${visibleJobs.length === 1 ? "" : "s"} to ${path.split(/[\\/]/).pop()}` : "")).catch(() => setExported("Export failed."))}>Export these jobs to CSV</button>
           <button className="menu-item" onClick={(event) => { (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); setHealthOpen(true); }}>Data health</button>
           {stale.length > 0 && <button className="menu-item" disabled={closing} onClick={() => void closeStale()}>{closing ? "Closing…" : `Mark ${stale.length} with no reply for ${STALE_DAYS}+ days as rejected`}</button>}
@@ -230,6 +231,7 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
       <strong aria-live="polite">{selected.size ? `${plural(selected.size, "job")} selected` : "Click jobs to select them"}</strong>
       <button className="btn-link" onClick={() => setSelected(new Set(visibleIds))}>Select all {visibleIds.length} shown</button>
       {selected.size > 0 && <button className="btn-link" onClick={() => setSelected(new Set())}>Clear</button>}
+      <button className="btn-link" onClick={exitSelect}>Done</button>
       <span className="select-bar-actions">
         <span className="muted">Mark as</span>
         {TRACKER_STATUSES.map((status) => <button key={status} className="btn-quiet" disabled={!selected.size || bulkBusy} onClick={() => void setSelectedStatus(status)}>{TRACKER_LABELS[status]}</button>)}

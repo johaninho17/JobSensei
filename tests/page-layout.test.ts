@@ -240,3 +240,17 @@ describe("Overview and Checks say it once (#223)", () => {
     expect(interview).not.toContain("It writes a question bank, prep notes, and company research for this job.");
   });
 });
+
+describe("Jobs page: one View menu, and sidebar counts that agree (#224)", () => {
+  it("layout sits in View, Select in the more menu, and the sidebar hides a zero Jobs count", async () => {
+    const jobs = await readFile("src/renderer/JobsHome.tsx", "utf8");
+    const toolbar = jobs.slice(jobs.indexOf('<div className="jobs-toolbar">'), jobs.indexOf("{facets.company && <CompanyStrip"));
+    const view = toolbar.slice(toolbar.indexOf('jobs-view-menu'), toolbar.indexOf("</details>"));
+    expect(view).toContain('aria-label="Layout"');
+    expect(toolbar).not.toMatch(/className="filter-toggle" aria-pressed=\{selecting\}/);
+    expect(toolbar).toContain('"Select jobs"');
+    expect(jobs).toMatch(/<button className="btn-link" onClick=\{exitSelect\}>Done<\/button>/);
+    const app = await readFile("src/renderer/App.tsx", "utf8");
+    expect(app).toContain("liveApplicationCount(jobs) > 0 && <span");
+  });
+});
