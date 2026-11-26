@@ -10,7 +10,7 @@ import { InterviewView } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { ReviewPanel } from "./Review";
 import { TagEditor } from "./JobOrganize";
-import { type JobWorkspaceTab, StatusPill, TrackerPill, displayJobName, fileNodes, findNode, formatJobDate, formatRelativeDate, messageOf, plural } from "./app-shared";
+import { type JobWorkspaceTab, StatusPill, TrackerPill, displayJobName, fileNodes, findNode, formatJobDate, formatRelativeDate, messageOf, plural, toast } from "./app-shared";
 import { DocumentView, PdfTextSizeSelect, documentsChanged, pdfsCreated, usePdfFreshness } from "./Documents";
 import { askConfirm } from "./confirm";
 
@@ -548,7 +548,6 @@ function MustHaveGroups({ mustHaves, gaps = [] }: { mustHaves: JobFolderSummary[
  * `electron/pdf-freshness.ts` owns the rule), the text size, and Create/Update.
  */
 function JobPdfExportButton({ jobId, resumePath, coverLetterPath }: { jobId: string; resumePath: string | null; coverLetterPath: string | null }) {
-  const toast = (message: string) => window.dispatchEvent(new CustomEvent("sensei-announce", { detail: message }));
   const freshness = usePdfFreshness(jobId);
   const pdfs = freshness.filter((item): item is typeof item & { pdf: string } => Boolean(item.pdf));
   const stale = freshness.filter((item) => item.state === "stale");

@@ -10,7 +10,7 @@ import { filterChallengeExercises, parseChallengePractice, type ChallengeFilter 
 import { evaluationCategoryLabels, evaluationCredits, evaluationLabel, evaluationSection, parseEvaluationRequirements } from "./evaluation-model";
 import { parseQuestionBank, type QuestionEntry } from "./question-navigation";
 import { inferCodeLanguage, markdownHtml, sanitizeHtml } from "./markdown";
-import { formatBytes, messageOf, useAnnounce } from "./app-shared";
+import { formatBytes, messageOf, toast, useAnnounce } from "./app-shared";
 import { InfoTip } from "./BentoPrimitives";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -224,7 +224,7 @@ function MarkdownDocument({ preview, focusAnchor, exportHere, onExported, onDirt
       setExpectedModifiedAt(saved.modifiedAt);
       setState("saved");
       setMessage("");
-      window.dispatchEvent(new CustomEvent("sensei-announce", { detail: "Saved." }));
+      toast("Saved.");
       documentsChanged();
     } catch (caught) {
       setState("error");
@@ -493,8 +493,9 @@ function MarkdownExportButton({ relativePath, onExported }: { relativePath: stri
       const result = await window.sensei.files.exportMarkdownPdf(relativePath, textSize);
       const pageUse = result.pageFillRatio === null ? "" : `, ${Math.round(result.pageFillRatio * 100)}% page use`;
       setState(result.validationStatus === "warning" ? "warning" : "done");
-      setMessage(`Saved ${result.relativePath} (${result.pageCount} page${result.pageCount === 1 ? "" : "s"}${pageUse})`);
-      announce(`PDF saved: ${result.relativePath}${result.validationStatus === "warning" ? " (review: 2 pages)" : ""}.`);
+      // Done is a toast; only a PDF that needs a look (two pages) keeps a note beside the button (U89).
+      setMessage(result.validationStatus === "warning" ? `${result.pageCount} pages${pageUse}: review the PDF` : "");
+      toast(`PDF saved (${result.pageCount} page${result.pageCount === 1 ? "" : "s"}).`);
       pdfsCreated(relativePath);
       documentsChanged();
       onExported();

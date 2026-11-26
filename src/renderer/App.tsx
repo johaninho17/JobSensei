@@ -109,6 +109,8 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [jobsStatusGroup, setJobsStatusGroup] = useState<string | null>(null);
   // Jobs status views as sidebar sub-items (U79), open by default; remembered per computer.
+  // Favorites fold like the Jobs views; a remembered choice wins, otherwise more than 3 starts folded (U89).
+  const [favoritesOpenPick, setFavoritesOpenPick] = useState<boolean | null>(() => { try { const value = window.localStorage.getItem("sensei-side-favorites"); return value === null ? null : value === "open"; } catch { return null; } });
   const [sideJobsOpen, setSideJobsOpen] = useState(() => { try { return window.localStorage.getItem("sensei-side-jobs") !== "closed"; } catch { return true; } });
   const toggleSideJobs = () => setSideJobsOpen((open) => { try { window.localStorage.setItem("sensei-side-jobs", open ? "closed" : "open"); } catch { /* stays for this session */ } return !open; });
   const [update, setUpdate] = useState<{ version: string; url: string } | null>(null);
@@ -1013,10 +1015,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         <li><button aria-current={activePage === "setup-home" || (!FEATURES.candidates && activePage === "context-home") ? "page" : undefined} onClick={() => showPage("setup-home")}><NavIcon name="setup" />{FEATURES.candidates ? "Profile" : <span className="side-label">Profile</span>}{!FEATURES.candidates && FEATURES.nudges && newContextFiles.length > 0 && <span className="side-due" title={`${newContextFiles.length} new career file${newContextFiles.length === 1 ? "" : "s"} to review`}>{newContextFiles.length} new</span>}{readiness && (FEATURES.candidates ? <span className={readiness.ready ? "side-count" : "side-due"}>{readiness.ready ? "Ready" : "Needs a resume"}</span> : <span className={readiness.ready ? "side-count" : "side-due"} title={readiness.ready ? "Everything required is done" : "A required step is missing"}>{readiness.done} of {readiness.total}</span>)}</button></li>
       </ul>
       {/* Favorites shows once something is starred (U82); the star itself says what it does. */}
-      {!FEATURES.candidates && favoriteJobs.length > 0 && <section className="side-recent" aria-labelledby="side-recent-title">
-        <h2 id="side-recent-title">Favorites</h2>
-        <ul>{favoriteJobs.map((job) => <li key={job.id}><button aria-current={activePage === "job" && viewedJobId === job.id ? "page" : undefined} onClick={() => openJob(job.id)}><strong>{job.company ?? displayJobName(job.name)}</strong><small>{job.title ?? "Role not recorded"}</small></button></li>)}</ul>
-      </section>}
+      {!FEATURES.candidates && favoriteJobs.length > 0 && (() => { const favoritesOpen = favoritesOpenPick ?? favoriteJobs.length <= 3; return <section className="side-recent" aria-labelledby="side-recent-title">
+        <h2 id="side-recent-title"><button className="side-recent-toggle" aria-expanded={favoritesOpen} aria-controls="side-favorites" onClick={() => { const next = !favoritesOpen; setFavoritesOpenPick(next); try { window.localStorage.setItem("sensei-side-favorites", next ? "open" : "closed"); } catch { /* not remembered */ } }}>Favorites <span className="side-count">{favoriteJobs.length}</span><span aria-hidden="true">{favoritesOpen ? "▾" : "▸"}</span></button></h2>
+        {favoritesOpen && <ul id="side-favorites">{favoriteJobs.map((job) => <li key={job.id}><button aria-current={activePage === "job" && viewedJobId === job.id ? "page" : undefined} title={`${job.company ?? displayJobName(job.name)}, ${job.title ?? "Role not recorded"}`} onClick={() => openJob(job.id)}><strong>{job.company ?? displayJobName(job.name)}</strong> <small>{job.title ?? "Role not recorded"}</small></button></li>)}</ul>}
+      </section>; })()}
       <div className="side-foot">
         {FEATURES.agyPage && <button aria-current={activePage === "agy-home" ? "page" : undefined} onClick={() => showPage("agy-home")}><NavIcon name="agy" /><span className="side-label">Agy</span></button>}
         <button aria-current={activePage === "docs-home" ? "page" : undefined} onClick={() => showPage("docs-home")}><NavIcon name="docs" /><span className="side-label">Docs</span></button>

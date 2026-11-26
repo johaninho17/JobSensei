@@ -2,6 +2,7 @@
 // helps), their base resume as written, the files Agy may use, other resumes, and the recruiter's notes. Replaces the
 // separate Candidate and Career context pages of the regular app. Only rendered when FEATURES.candidates is on.
 import { useEffect, useState, type ReactNode } from "react";
+import { toast } from "./app-shared";
 import type { RecruiterDefaults } from "../shared/candidates";
 import { instructionLines, type CandidateProfile } from "../shared/schemas";
 import { instructionProblem } from "./RecruiterSettings";
@@ -89,6 +90,7 @@ export function CandidateSettingsTab({ profile, onSaved }: { profile: CandidateP
       onSaved(next);
       setPreview(await window.sensei.profile.preview().catch(() => null));
       setState("saved");
+      toast("Saved.");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Couldn't save."); setState("ready"); }
   }
   return <section className="context-block candidate-settings">
@@ -103,7 +105,7 @@ export function CandidateSettingsTab({ profile, onSaved }: { profile: CandidateP
     <label><span>Instructions for Agy <small>one per line; for this candidate only. They win over your instructions for every candidate, and can't override the truth rules.</small></span><textarea rows={4} value={instructions} placeholder={"Lead with their B2B SaaS work.\nKeep the 2019–2020 career break out of bullets."} onChange={(event) => { setInstructions(event.target.value); setState("ready"); }} /></label>
     <div className="onboarding-actions">
       <button className="btn-primary" disabled={state === "saving"} onClick={() => void save()}>{state === "saving" ? "Saving…" : "Save"}</button>
-      {state === "saved" && <span className="muted" role="status">Saved</span>}
+      
     </div>
     {error && <p className="inline-error" role="alert">{error}</p>}
     <h2>What Agy sees for them</h2>
