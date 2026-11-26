@@ -667,7 +667,11 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .job-overview { gap: var(--space-3); }
 @container (max-width: 620px) { .overview-cols { grid-template-columns: 1fr; } }
 .workspace-tabs-row { position: sticky; top: calc(-1 * var(--space-5)); z-index: 14; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-4); border-bottom: 1px solid var(--line); background: var(--canvas); }
-.workspace-tabs-row .workspace-tabs { position: static; margin-bottom: 0; border-bottom: 0; }
+.tab-menu { position: relative; display: inline-flex; }
+.tab-menu-caret { margin-left: 6px; color: var(--muted); font-size: var(--fs-12); }
+.tab-menu-list { position: absolute; top: calc(100% + 4px); left: 0; right: auto; z-index: 30; min-width: 200px; }
+.tab-menu-list .menu-item[aria-current="page"] { font-weight: 700; color: var(--ink); }
+.workspace-tabs-row .workspace-tabs { overflow: visible; position: static; margin-bottom: 0; border-bottom: 0; }
 .workspace-tabs-row .job-head-actions { padding-bottom: 6px; }
 .debrief-panel { grid-template-columns: minmax(0, 1fr); padding: var(--space-2) 0; }
 .debrief-panel h2 { grid-column: 1 / -1; }

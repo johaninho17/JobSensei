@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FitRing } from "./BentoPrimitives";
 import { jobSettingsScore, settingsScoreLabel } from "../shared/agy-behavior";
 import { DEFAULT_PDF_TEXT_SIZE, INTERVIEW_ROUNDS, OUTCOME_RESULTS, TRACKER_STATUSES, type InterviewEvent, type InterviewRoundKind, type JobOutcome, type JobTrackerUpdate, type TrackerStatus, type ApplicationStatus, type ApplicationValidationReport, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type PdfTextSize, type QuestionsState, type FramingLine } from "../shared/schemas";
@@ -113,7 +113,17 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
     </header>
     {editingDetails && <EditJobDetails job={job} onClose={() => setEditingDetails(false)} onSaved={(next) => { onJobChanged(next); setEditingDetails(false); }} />}
     <div className="workspace-tabs-row">
-      <nav className="workspace-tabs" role="tablist" aria-label="Job sections">{tabItems.map((item) => { const active = isActive(item) || (!anyActive && item.id === "overview"); return <button key={item.id} role="tab" id={`job-tab-${item.id}`} aria-selected={active} className={active ? "is-active" : ""} onClick={() => { if (item.view) setAppView(item.view); onNavigate(job.id, item.tab, item.tab === "interview" ? activeRoundId : undefined); }}>{item.label}{item.count ? <span>{item.count}</span> : null}</button>; })}</nav>
+      {/* Four tabs (#222): the application's documents sit in one dropdown tab that names the open document. */}
+      <nav className="workspace-tabs" role="tablist" aria-label="Job sections">{(() => {
+        const docs = tabItems.filter((item) => item.tab === "application");
+        const tabButton = (item: JobTabItem) => { const active = isActive(item) || (!anyActive && item.id === "overview"); return <button key={item.id} role="tab" id={`job-tab-${item.id}`} aria-selected={active} className={active ? "is-active" : ""} onClick={() => onNavigate(job.id, item.tab, item.tab === "interview" ? activeRoundId : undefined)}>{item.label}{item.count ? <span>{item.count}</span> : null}</button>; };
+        const openDoc = docs.find(isActive) ?? null;
+        return [
+          ...tabItems.filter((item) => item.id === "overview").map(tabButton),
+          docs.length > 0 && <ApplicationTabMenu key="application" items={docs} open={openDoc} onPick={(item) => { if (item.view) setAppView(item.view); onNavigate(job.id, "application"); }} />,
+          ...tabItems.filter((item) => item.tab !== "application" && item.id !== "overview").map(tabButton),
+        ];
+      })()}</nav>
     </div>
     {activeTab === "overview" && <div className="job-overview">
       {FEATURES.interviews && (trackerStatus === "rejected" || trackerStatus === "withdrawn" || trackerStatus === "interviewing" || trackerStatus === "offer") && <DebriefPanel job={job} closed={trackerStatus === "rejected" || trackerStatus === "withdrawn"} onUpdateTracker={onUpdateTracker} onInsertPrompt={onInsertPrompt} />}
@@ -389,6 +399,37 @@ function DebriefPanel({ job, closed, onUpdateTracker, onInsertPrompt }: { job: J
     </div>}
     {interviews.length > 0 && <button className="btn-link" onClick={() => onInsertPrompt({ prompt: `${company} debrief (job: ${job.id})`, label: "Debrief this interview" })}>Ask Agy to debrief</button>}
   </section>;
+}
+
+type AppTabItem = { id: string; label: string; count?: number | null };
+
+/**
+ * The Application tab (#222): one tab whose menu lists the job's documents (Resume, Cover letter, Questions, Posting,
+ * Checks). Its label names the open document. Escape or a click outside closes it; arrow keys move through the list.
+ */
+function ApplicationTabMenu<T extends AppTabItem>({ items, open, onPick }: { items: T[]; open: T | null; onPick: (item: T) => void }) {
+  const [shown, setShown] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!shown) return;
+    ref.current?.querySelector<HTMLButtonElement>('[role="menuitem"][aria-current="page"], [role="menuitem"]')?.focus();
+    const outside = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) setShown(false); };
+    const keys = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setShown(false); ref.current?.querySelector<HTMLButtonElement>('[role="tab"]')?.focus(); return; }
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const list = [...(ref.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+      const at = list.indexOf(document.activeElement as HTMLButtonElement);
+      list[(at + (event.key === "ArrowDown" ? 1 : list.length - 1)) % list.length]?.focus();
+      event.preventDefault();
+    };
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", keys);
+    return () => { document.removeEventListener("mousedown", outside); document.removeEventListener("keydown", keys); };
+  }, [shown]);
+  return <div className="tab-menu" ref={ref}>
+    <button role="tab" id="job-tab-application" aria-selected={open !== null} aria-haspopup="menu" aria-expanded={shown} className={open ? "is-active" : ""} onClick={() => setShown((value) => !value)}>{open ? open.label : "Application"}<span className="tab-menu-caret" aria-hidden="true">▾</span></button>
+    {shown && <div className="tab-menu-list jobs-more-menu" role="menu" aria-label="Application documents">{items.map((item) => <button key={item.id} role="menuitem" id={`job-tab-${item.id}`} className="menu-item" aria-current={open?.id === item.id ? "page" : undefined} onClick={() => { setShown(false); onPick(item); }}>{item.label}{item.count ? <span className="subtabs-count"> {item.count}</span> : null}</button>)}</div>}
+  </div>;
 }
 
 /**

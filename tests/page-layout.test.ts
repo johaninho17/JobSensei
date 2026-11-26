@@ -218,3 +218,14 @@ describe("Show less, reveal on demand: sidebar and saved messages (U89, #187)", 
     expect(agy).not.toContain('state === "saved" ? "Saved. Jobs drafted');
   });
 });
+
+describe("Application documents in one dropdown tab (#222)", () => {
+  it("the job page has Overview, Application, Interview and Files; the documents are menu items", async () => {
+    const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
+    expect(page).toContain("<ApplicationTabMenu");
+    expect(page).toMatch(/role="tab" id="job-tab-application"[^>]*aria-haspopup="menu"/);
+    expect(page).toMatch(/role="menuitem" id=\{`job-tab-\$\{item\.id\}`\}/);
+    // Document tabs are never drawn as tabs of their own.
+    expect(page).toMatch(/tabItems\.filter\(\(item\) => item\.tab !== "application" && item\.id !== "overview"\)/);
+  });
+});
