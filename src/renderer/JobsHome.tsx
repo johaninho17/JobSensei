@@ -67,8 +67,9 @@ const ACTIVE_STATUSES: TrackerStatus[] = ["saved", "applied", "interviewing", "o
 /** Whether a job belongs to a status view; the page and the sidebar both count with this. */
 export function inJobsTab(job: JobFolderSummary, value: JobsTab): boolean {
   if (value === "archived") return isArchived(job);
-  if (isArchived(job)) return false;
+  // Went to interview is history: a job that had interviews stays here after it is rejected or archived (#234).
   if (value === "reached") return reachedInterview(job);
+  if (isArchived(job)) return false;
   if (value === "ready") return readyToSend(job);
   const statuses = JOB_TABS.find((candidate) => candidate.id === value)?.statuses ?? null;
   if (value === "saved" && readyToSend(job)) return false;
