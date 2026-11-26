@@ -10,6 +10,7 @@ import { RecruiterSettingsDialog } from "./RecruiterSettings";
 import { PostingsView } from "./Postings";
 import { ReportsView } from "./Reports";
 import { daysAgo, reportText, shortlistText, type Proposal, type ReportRow } from "../shared/recruiter-insight";
+import { PageHead } from "./BentoPrimitives";
 
 const message = (caught: unknown) => (caught instanceof Error ? caught.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "Something went wrong.");
 
@@ -118,10 +119,7 @@ function CandidatesHome({ state }: { state: CandidatesState }) {
     {view === "reports" && <section className="candidates-page"><ReportsView initial={state} /></section>}
     {view === "pipeline" && <section className="candidates-page"><PipelineView activeId={null} onOpenJob={openJob} onOpenCandidate={open} onToast={(text) => setToast(text)} />{toast && <p className="muted" role="status">{toast}</p>}</section>}
     {view === "candidates" && <section className="candidates-page">
-      <div className="page-head candidates-head">
-        <div><h1 id="candidates-title">Candidates</h1><p>{listed.length ? `${listed.length} candidate${listed.length === 1 ? "" : "s"}. Open one to add jobs and review tailored resumes.` : "No candidates yet."}</p></div>
-        <button className="btn-primary" onClick={() => setAdding(true)}>Add candidate</button>
-      </div>
+      <PageHead title="Candidates" titleId="candidates-title" status={listed.length ? `${listed.length} candidate${listed.length === 1 ? "" : "s"}` : "No candidates yet"} tip="Open a candidate to add jobs and review tailored resumes." action={<button className="btn-primary" onClick={() => setAdding(true)}>Add candidate</button>} />
       {error && <p className="inline-error" role="alert">{error}</p>}
       <table className="pipeline-table candidates-table">
         <thead><tr><th scope="col">Candidate</th><th scope="col">Status</th><th scope="col">Resume</th><th scope="col">Jobs</th><th scope="col">To approve</th><th scope="col">Ready to send</th><th scope="col">This week</th><th scope="col">Responses</th><th scope="col">Waiting</th><th scope="col">Last opened</th></tr></thead>

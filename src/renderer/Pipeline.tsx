@@ -6,6 +6,7 @@ import type { PipelineRow } from "../shared/candidate-match";
 import { pipelineToCsv } from "../shared/jobs-csv";
 import { TRACKER_STATUSES, type TrackerStatus } from "../shared/schemas";
 import { TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, statusLabel } from "../shared/tracker";
+import { PageHead } from "./BentoPrimitives";
 
 const keyOf = (row: Pick<PipelineRow, "candidateId" | "id">) => `${row.candidateId}/${row.id}`;
 const postingKey = (row: PipelineRow) => `${(row.company ?? row.name).toLowerCase()}|${(row.title ?? "").toLowerCase()}`;
@@ -66,7 +67,7 @@ export function PipelineView({ activeId, onOpenJob, onOpenCandidate, onToast }: 
 
   let lastPosting = "";
   return <section className="jobs-home pipeline-home">
-    <header className="page-head"><div><h1>Pipeline</h1><p>Every candidate's jobs in one list. Each job stays in its candidate's own folder.</p></div></header>
+    <PageHead title="Pipeline" tip="Every candidate's jobs in one list. Each job stays in its candidate's own folder." />
     <div className="pipeline-toolbar">
       <label><span>Candidate</span><select value={candidate} onChange={(event) => setCandidate(event.target.value)}><option value="all">All candidates</option>{candidates.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
       <label><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="all">Any status</option>{TRACKER_STATUSES.map((value) => <option key={value} value={value}>{TRACKER_LABELS[value]}</option>)}</select></label>

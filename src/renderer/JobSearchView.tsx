@@ -1,6 +1,6 @@
 // Job Search page: search settings, Run now, and the inbox of found postings ranked by quick fit.
 // Agy only finds links; the app opened, saved, and rated every posting shown here (electron/job-search.ts).
-import { FitRing } from "./BentoPrimitives";
+import { FitRing, PageHead } from "./BentoPrimitives";
 import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_JOB_SEARCH_SETTINGS, SEARCH_BOARDS, SEARCH_LEVELS, SKIPPED_BOARDS, WORK_SETUPS, DEFAULT_RANKING, effectiveFit, rankInbox, rankReason, searchProgressText, type RankingWeights,
@@ -235,19 +235,15 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
 
   const visibleNew = live.filter((item) => item.status === "new").map((item) => item.id);
   return <section className="jobs-home job-search">
-    <header className="page-head"><div><h1>Job Search</h1><p>
-      {running ? <strong role="status">{searchProgressText(status)} You can leave this page; the search keeps going.</strong>
-        : lastRun && lastRun.status !== "running" ? `Last ${lastRun.source === "watched" ? "check" : "search"} ${new Date(lastRun.startedAt).toLocaleString()}: ${runSummary(lastRun)}`
-          : "Agy searches the job boards with your settings; the app opens every link, drops closed and old postings, and rates each one against your files."}
-      {!running && " A search uses one Agy run; checking watched companies and rating postings use none."}
-    </p>
-    {settings && <ScheduleStatus settings={settings} onTurnOn={() => void turnOnSchedule()} />}
-    </div>
-    <div className="find-run-buttons">
-      {(settings?.watched.length ?? 0) > 0 && <button className="btn-quiet" disabled={running || !settings?.titles.length} onClick={() => void runNow("watched")}>Check watched companies</button>}
-      <button className="btn-primary" disabled={running || !settings?.titles.length} title={settings?.titles.length ? undefined : "Add at least one job title in Search settings"} onClick={() => void runNow("search")}>{running ? "Searching…" : "Run now"}</button>
-    </div>
-    </header>
+    <PageHead title="Job Search"
+      status={<>{running ? <strong role="status">{searchProgressText(status)} You can leave this page.</strong>
+        : lastRun && lastRun.status !== "running" ? <span>{`Last ${lastRun.source === "watched" ? "check" : "search"} ${new Date(lastRun.startedAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}: ${runSummary(lastRun)}`}</span> : null}
+        {settings && <ScheduleStatus settings={settings} onTurnOn={() => void turnOnSchedule()} />}</>}
+      tip={<><p>Agy searches the job boards with your settings; the app opens every link, drops closed and old postings, and rates each one against your files.</p><p>A search uses one Agy run; checking watched companies and rating postings use none.</p></>}
+      action={<>
+        {(settings?.watched.length ?? 0) > 0 && <button className="btn-quiet" disabled={running || !settings?.titles.length} onClick={() => void runNow("watched")}>Check watched companies</button>}
+        <button className="btn-primary" disabled={running || !settings?.titles.length} title={settings?.titles.length ? undefined : "Add at least one job title in Search settings"} onClick={() => void runNow("search")}>{running ? "Searching…" : "Run now"}</button>
+      </>} />
     {error && <p className="inline-error" role="alert">{error}</p>}
     <SubTabs idPrefix="job-search" label="Job Search" value={tab} onChange={setTab} tabs={[
       { id: "matches", label: "Matches", count: newCount || null },
@@ -427,9 +423,10 @@ function ScheduleStatus({ settings, onTurnOn }: { settings: JobSearchSettings; o
   if (!info?.supported) return null;
   const days = settings.schedule.days.length === 7 || !settings.schedule.days.length ? "every day" : settings.schedule.days.map((day) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ");
   const when = settings.schedule.mode === "daily" ? `once a day, the first time your computer is on after ${settings.schedule.after} (${days})` : `at ${settings.schedule.times.join(", ")} (${days})`;
-  if (!settings.schedule.enabled) return <p className="find-schedule is-off">Scheduled search is off. <button className="btn-link" disabled={!settings.titles.length} onClick={onTurnOn}>Turn on</button> <span className="muted">({when}; change it in Search settings)</span></p>;
-  if (!info.installed) return <p className="find-schedule is-off">Scheduled search is on in your settings but not installed on this computer. <button className="btn-link" onClick={onTurnOn}>Install it</button></p>;
-  return <p className="find-schedule">Scheduled search is on: {when}.{info.repaired === "installed" ? " It was reinstalled when the app started, to match your settings." : ""}</p>;
+  // One short line in the page header (U82); the schedule's details are its tooltip.
+  if (!settings.schedule.enabled) return <span className="find-schedule is-off" title={`When on: ${when}. Change it in Search settings.`}>Scheduled search off <button className="btn-link" disabled={!settings.titles.length} onClick={onTurnOn}>Turn on</button></span>;
+  if (!info.installed) return <span className="find-schedule is-off">Scheduled search not installed on this computer <button className="btn-link" onClick={onTurnOn}>Install it</button></span>;
+  return <span className="find-schedule" title={`${when}${info.repaired === "installed" ? ". Reinstalled when the app started, to match your settings." : ""}`}>Scheduled search on</span>;
 }
 
 

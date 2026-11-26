@@ -8,7 +8,7 @@ import { jobsToCsv } from "../shared/jobs-csv";
 import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, readyToSend, statusLabel, followUpDays, reachedInterview, staleApplications } from "../shared/tracker";
 import { type Readiness } from "../shared/readiness";
 import { CompanyStrip, JobFilters, SavedViews, storeJobViews, storedJobViews } from "./JobOrganize";
-import { FitRing } from "./BentoPrimitives";
+import { FitRing, PageHead } from "./BentoPrimitives";
 import { GROUPINGS, NO_FACETS, countWithin, jobDotOf, settingsSortKey, groupJobs, matchesFacets, type Grouping, type JobFacets, type JobView } from "../shared/job-organize";
 import { FitBadge, type JobWorkspaceTab, type QueueJob, TrackerPill, displayJobName, formatJobDate, formatTrackerDate, messageOf, plural, saveFavoriteJobIds, storedFavoriteJobIds } from "./app-shared";
 
@@ -189,14 +189,9 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
       : <div className="jobs-table-wrap"><table className="jobs-table"><thead><tr>{selecting && <th scope="col"><span className="sr-only">Selected</span></th>}<th scope="col">Role</th><th scope="col">Fit</th><th scope="col">Status</th><th scope="col">Interview</th><th scope="col">Next</th><th scope="col" className="col-added">Added</th><th scope="col"><span className="sr-only">Favorite and actions</span></th></tr></thead><tbody>{list.map((job) => <tr key={job.id} tabIndex={0} className={selected.has(job.id) ? "is-selected" : undefined} aria-selected={selecting ? selected.has(job.id) : undefined} onClick={(event) => { if (selecting || event.metaKey || event.ctrlKey) toggleSelected(job.id, event); else onOpenJob(job.id); }} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); if (selecting) toggleSelected(job.id, event); else onOpenJob(job.id); } }}>{selecting && <td><input type="checkbox" className="job-select" checked={selected.has(job.id)} aria-label={`Select ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => toggleSelected(job.id, { shiftKey: (event.nativeEvent as globalThis.MouseEvent).shiftKey })} /></td>}<td className="jobs-role"><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></td><td><FitBadge rating={job.rating} gate={jobSettingsScore(job.settingsScore).behavior.fit.gate} /></td><td><TrackerPill status={effectiveStatus(job)} job={job} /></td><td>{job.interviewRoundLabel ? <button className="btn-link" onClick={(event) => { event.stopPropagation(); onOpenJobView(job.id, "interview"); }}>{job.interviewRoundLabel}</button> : <span className="muted">None</span>}</td><td><NextBadge job={job} /></td><td className="tabular muted col-added">{formatJobDate(job.createdAt)}</td><td><button className={`job-favorite ${favorites.has(job.id) ? "is-favorite" : ""}`} aria-pressed={favorites.has(job.id)} aria-label={`Favorite ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => { event.stopPropagation(); toggleFavorite(job.id); }}>{favorites.has(job.id) ? "★" : "☆"}</button><JobMenuButton job={job} handlers={menuHandlers(job)} /></td></tr>)}</tbody></table></div>;
   return <section className="jobs-home">
     {/* Short page header (U79): title, the status view as a menu (also in the sidebar), one main action. */}
-    <header className="page-head page-head-compact">
-      <div className="page-head-title">
-        <h1>Jobs</h1>
-        <label className="jobs-status-pick"><span className="sr-only">Jobs by status</span><select value={tab} onChange={(event) => setStatusGroup(event.target.value)} aria-label="Jobs by status">{tabCounts.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label} ({candidate.count})</option>)}</select></label>
-        {visibleJobs.length !== jobs.length && <span className="muted">{visibleJobs.length} shown</span>}
-      </div>
-      <button className="btn-primary" aria-expanded={addOpen} aria-controls="job-queue" onClick={() => setAddOpen((open) => !open)}>{addOpen ? "Close" : "Add jobs"}</button>
-    </header>
+    <PageHead title="Jobs" status={visibleJobs.length !== jobs.length ? `${visibleJobs.length} shown` : null} action={<button className="btn-primary" aria-expanded={addOpen} aria-controls="job-queue" onClick={() => setAddOpen((open) => !open)}>{addOpen ? "Close" : "Add jobs"}</button>}>
+      <label className="jobs-status-pick"><span className="sr-only">Jobs by status</span><select value={tab} onChange={(event) => setStatusGroup(event.target.value)} aria-label="Jobs by status">{tabCounts.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label} ({candidate.count})</option>)}</select></label>
+    </PageHead>
     <JobQueueBox open={addOpen} queue={queue} jobs={jobs} agyReady={agyReady} onOpenAgy={onOpenAgy} onSave={onSaveQueue} onQueueJob={onQueueJob} onOpenJob={onOpenJob} />
     {setup}
     <div className="jobs-view">

@@ -11,6 +11,7 @@ import { TunePanel } from "./TunePanel";
 import { interviewIsPast, nextInterviewStep } from "../shared/interview-progress";
 import { storyTitles } from "./interview-cards";
 import { TrackerPill, displayJobName, messageOf, plural } from "./app-shared";
+import { PageHead } from "./BentoPrimitives";
 
 export function InterviewsHome({ jobs, allJobs, newRecordings, onRecordingsChanged, onSendPrompt, onOpen, onOpenFile }: { jobs: JobFolderSummary[]; allJobs: JobFolderSummary[]; newRecordings: number; onRecordingsChanged: () => void; onSendPrompt: (action: Pick<JobAction, "prompt" | "label">) => void; onOpen: (jobId: string, roundId?: string) => void; onOpenFile: (path: string) => void }) {
   // Another page can ask for a subtab once (the Agy page opens Your content).
@@ -45,7 +46,7 @@ export function InterviewsHome({ jobs, allJobs, newRecordings, onRecordingsChang
     {!list.length && <p className="doc-inline-empty">Nothing here.</p>}
   </>;
   return <section className="jobs-home">
-    <header className="page-head"><div><h1>Interviews</h1><p>{jobs.length ? `${jobs.length} job${jobs.length === 1 ? "" : "s"} with interview prep. Open one to practice its current round.` : "No interview prep yet. Open a job and prepare its first round when you get the call."}</p></div></header>
+    <PageHead title="Interviews" status={jobs.length ? `${jobs.length} job${jobs.length === 1 ? "" : "s"} with prep` : null} tip="Open a job with prep to practice its current round. No prep yet? Open a job and prepare its first round when you get the call." />
     <SubTabs<"active" | "past" | "learnings" | "content">
       idPrefix="ivhome"
       label="Interviews"

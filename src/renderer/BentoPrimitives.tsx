@@ -61,3 +61,32 @@ export function FitRing({ rating, size = 44 }: { rating: number | null | undefin
     <span className="fit-ring-number tabular" aria-hidden="true">{band === "unrated" ? "–" : rating!.toFixed(1)}</span>
   </span>;
 }
+
+/** The one page header (U82): title, a short status line, one main action, and an optional "?" tip that holds what
+ * the page used to explain in a paragraph. `children` sit beside the title (e.g. the Jobs status menu). */
+export function PageHead({ title, titleId, status, action, tip, children }: {
+  title: string;
+  titleId?: string;
+  status?: ReactNode;
+  action?: ReactNode;
+  tip?: ReactNode;
+  children?: ReactNode;
+}) {
+  return <header className="page-head page-head-compact">
+    <div className="page-head-title">
+      <h1 id={titleId}>{title}</h1>
+      {children}
+      {status && <span className="page-head-status">{status}</span>}
+      {tip && <InfoTip label={`About ${title}`}>{tip}</InfoTip>}
+    </div>
+    {action && <div className="page-head-action">{action}</div>}
+  </header>;
+}
+
+/** A small "?" that opens a short explanation in place (native details, so it works by keyboard). */
+export function InfoTip({ label, children }: { label: string; children: ReactNode }) {
+  return <details className="info-tip">
+    <summary aria-label={label} title={label}>?</summary>
+    <div className="info-tip-body" role="note">{children}</div>
+  </details>;
+}

@@ -93,7 +93,7 @@ describe("Profile page (U78)", () => {
     expect(app).toContain("setup={setupHomeBlock}");
     expect(app).toContain("const setupHomeBlock = <SetupHome embedded ");
     expect(context).toContain('...(setup ? [{ id: "setup" as const, label: "Setup" }] : [])');
-    expect(context).toContain('<h1>{setup ? "Profile" : "Career context"}</h1>');
+    expect(context).toContain('<PageHead title={setup ? "Profile" : "Career context"}');
   });
 });
 
@@ -101,7 +101,7 @@ describe("Jobs header and sidebar views (U79, #156)", () => {
   it("statuses move to the sidebar and a header menu; Add jobs is a header button; Sort and Group sit in View", async () => {
     const [jobs, app] = await Promise.all(["src/renderer/JobsHome.tsx", "src/renderer/App.tsx"].map((path) => readFile(path, "utf8")));
     expect(jobs).not.toContain("<SubTabs");
-    expect(jobs).toContain('className="page-head page-head-compact"');
+    expect(jobs).toContain('<PageHead title="Jobs"');
     expect(jobs).toContain('{addOpen ? "Close" : "Add jobs"}');
     expect(jobs).toContain("if (!open && !visible.length) return null;");
     expect(jobs).toMatch(/<summary>View<\/summary>[\s\S]*Sort jobs[\s\S]*Group jobs/);
@@ -136,3 +136,20 @@ describe("Today and the job page, compact (U79, #157)", () => {
     expect(page).not.toContain('className="fit-bar"');
   });
 });
+
+describe("One page header (U82, #165)", () => {
+  it("every page uses PageHead, and no page keeps a help paragraph under its title", async () => {
+    const { readdir } = await import("node:fs/promises");
+    const files = (await readdir("src/renderer")).filter((file) => file.endsWith(".tsx") && file !== "BentoPrimitives.tsx");
+    for (const file of files) expect(await readFile(`src/renderer/${file}`, "utf8"), file).not.toContain('className="page-head');
+    for (const file of ["TodayView", "JobsHome", "JobSearchView", "InterviewsHome", "SetupAndContext", "AgyView", "DocsView", "Pipeline", "Postings", "Reports", "Candidates", "CandidateProfile"]) expect(await readFile(`src/renderer/${file}.tsx`, "utf8"), file).toContain("<PageHead");
+    expect(await readFile("src/renderer/layout.css", "utf8")).not.toContain(".page-head p {");
+  });
+
+  it("Favorites appears only when a job is starred", async () => {
+    const app = await readFile("src/renderer/App.tsx", "utf8");
+    expect(app).toContain("{!FEATURES.candidates && favoriteJobs.length > 0 && <section className=\"side-recent\"");
+    expect(app).not.toContain("Star a job (☆) in Jobs to keep it here.");
+  });
+});
+

@@ -9,6 +9,7 @@ import { WorkspaceFolders } from "./WorkspaceFolders";
 import { logisticsUpdate, parseNames, readLogistics, readStoryFields, storyUpdate, type StoryFields } from "../shared/profile-fields";
 import { messageOf } from "./app-shared";
 import { DocInline } from "./JobWorkspace";
+import { PageHead } from "./BentoPrimitives";
 
 type OnboardingStep = "profile" | "resume" | "agy" | "better";
 const ONBOARDING_STEPS: Array<{ id: OnboardingStep; label: string }> = [
@@ -277,7 +278,9 @@ export function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAct
     {editing === item.action && <div className="setup-row-editor"><SetupEditor action={item.action} profile={profile} onSaved={(next) => { onProfileSaved(next); onRefresh(); }} onClose={() => setEditing(null)} /></div>}
   </li>;
   return <section className="setup-home">
-    <header className="page-head"><div>{!FEATURES.candidates && !embedded && <h1>Setup</h1>}<p>{FEATURES.candidates ? (readiness.ready ? "Ready for jobs. The optional items below help Agy tailor more closely." : "Add the base resume to start tailoring.") : readiness.ready ? "JobSensei has what it needs. The recommended steps make drafts and interview prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button> · <button className="btn-link" onClick={() => onReveal("")}>Open your workspace folder</button></p></div></header>
+    {/* Embedded in Profile this is a one-line status, not a second page header (U82). */}
+    {(() => { const status = <>{FEATURES.candidates ? (readiness.ready ? "Ready for jobs." : "Add the base resume to start tailoring.") : readiness.ready ? "Ready. The recommended steps make drafts and prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button> · <button className="btn-link" onClick={() => onReveal("")}>Open folder</button></>;
+      return embedded || FEATURES.candidates ? <p className="setup-status">{status}</p> : <PageHead title="Setup" status={status} />; })()}
     {(["required", "recommended"] as const).map((level) => { const items = readiness.items.filter((item) => item.level === level); const done = items.filter((item) => item.state === "done").length; return <Section key={level} id={`setup-${level}`} title={level === "required" ? "Required" : "Recommended"} count={`${done} of ${items.length}`} defaultOpen={level === "recommended" || done < items.length}>
       <ol className="setup-list">{items.map(row)}</ol>
     </Section>; })}
@@ -323,7 +326,7 @@ export function ContextHome({ notice, setup, sources, notes, resumes, jobFiles, 
   const [view, setView] = useState<ContextView>(startView === "setup" && setup ? "setup" : "sources");
   useEffect(() => { if ((startView === "tune" && tune) || (startView === "setup" && setup)) setView(startView); }, [startView, tune !== undefined, setup !== undefined]);
   return <section className="jobs-home context-home">
-    <header className="page-head"><div><h1>{setup ? "Profile" : "Career context"}</h1><p>{FEATURES.candidates ? "The candidate's resume, files, and your notes: what Agy may use when tailoring. Files are only read, never changed." : setup ? "Your setup and the sources Agy treats as facts about you. Source files are only read, never changed." : "The sources Agy treats as facts about you. Source files are only read, never changed."}</p></div></header>
+    <PageHead title={setup ? "Profile" : "Career context"} tip={FEATURES.candidates ? "The candidate's resume, files, and your notes: what Agy may use when tailoring. Files are only read, never changed." : setup ? "Your setup and the sources Agy treats as facts about you. Source files are only read, never changed." : "The sources Agy treats as facts about you. Source files are only read, never changed."} />
     {notice}
     <SubTabs<ContextView>
       idPrefix="ctx"
