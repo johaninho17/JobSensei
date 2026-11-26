@@ -1,6 +1,9 @@
 // Job Search page: search settings, Run now, and the inbox of found postings ranked by quick fit.
 // Agy only finds links; the app opened, saved, and rated every posting shown here (electron/job-search.ts).
 import { FitRing, InfoTip, PageHead } from "./BentoPrimitives";
+import { askConfirm } from "./confirm";
+import { locationLine, normalLocation, workModeOf } from "../shared/posting-fields";
+import { normalPayText } from "../shared/pay";
 import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_JOB_SEARCH_SETTINGS, SEARCH_BOARDS, SEARCH_LEVELS, SKIPPED_BOARDS, WORK_SETUPS, DEFAULT_RANKING, effectiveFit, rankInbox, searchProgressText, type RankingWeights,
@@ -121,6 +124,12 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
     }
   }
 
+  async function removeAllDismissed() {
+    if (!(await askConfirm({ title: `Remove ${dismissedItems.length} dismissed ${dismissedItems.length === 1 ? "match" : "matches"}?`, body: "They won't come back in a search.", confirmLabel: "Remove" }))) return;
+    setState(await window.sensei.jobSearch.remove(dismissedItems.map((item) => item.id)));
+    onToast("Dismissed matches removed.");
+  }
+
   function toggle(id: string) {
     setSelected((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   }
@@ -184,7 +193,8 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
 
   function renderItem(item: InboxItem) {
     const isSelected = selected.has(item.id);
-    const facts = [item.location, item.workSetup, item.pay, capital(item.level), item.postedAt ? `Posted ${item.postedAt}` : null, boardName(item.board)].filter(Boolean);
+    // Every fact in one style (#210): place and setup on one line, pay through formatPay, no raw board text.
+    const facts = [locationLine(normalLocation(item.location), workModeOf(item.workSetup) ?? workModeOf(item.location)), normalPayText(item.pay), capital(item.level), item.postedAt ? `Posted ${item.postedAt}` : null, boardName(item.board)].filter(Boolean);
     return <li key={item.id} id={foundRowId(item.id)} className={`find-row${isSelected ? " is-selected" : ""}${item.id === focusId ? " is-focused" : ""}`} onClick={selecting ? () => toggle(item.id) : undefined}>
       {selecting && <input type="checkbox" checked={isSelected} onChange={() => toggle(item.id)} onClick={(event) => event.stopPropagation()} aria-label={`Select ${item.company ?? ""} ${item.title ?? ""}`} />}
       <span className="find-fit" title={item.agyFit ? `Agy's light rating (quick fit ${item.fit.score.toFixed(1)}); the full rating runs when you draft` : "Quick fit: the app's own check of your files against the posting, not a full rating"}><FitRing rating={effectiveFit(item)} size={40} />{item.agyFit && <small className="fit-badge-source">Agy</small>}</span>
@@ -204,7 +214,10 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
           <button className="btn-link" onClick={() => onOpenJob(item.jobId!)}>Open in Jobs</button>
         </>}
         {item.status === "queued" && <span className="muted">{item.autoQueued ? "Sent for drafts automatically" : "Sent for drafts"}{item.queuedAt ? ` · ${new Date(item.queuedAt).toLocaleDateString()}` : ""}</span>}
-        {item.status === "dismissed" && <button className="btn-quiet btn-small" disabled={busy} onClick={() => void window.sensei.jobSearch.setStatus([item.id], "new").then(setState)}>Restore</button>}
+        {item.status === "dismissed" && <>
+          <button className="btn-quiet btn-small" disabled={busy} onClick={() => void window.sensei.jobSearch.setStatus([item.id], "new").then(setState)}>Restore</button>
+          <button className="btn-link" disabled={busy} onClick={() => void window.sensei.jobSearch.remove([item.id]).then(setState)}>Remove</button>
+        </>}
       </div>}
     </li>;
   }
@@ -228,7 +241,7 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
       { id: "dismissed", label: "Dismissed", count: dismissedItems.length || null },
       { id: "settings", label: "Search settings" },
       { id: "runs", label: "Runs", count: state?.runs.length || null },
-    ]} actions={tab === "matches" && live.length > 0 ? <>
+    ]} actions={tab === "dismissed" && dismissedItems.length > 0 ? <button className="btn-quiet" disabled={busy} onClick={() => void removeAllDismissed()}>Remove all</button> : tab === "matches" && live.length > 0 ? <>
       <label className="muted find-sort">Sort <select value={sort} onChange={(event) => setSort(event.target.value as Sort)}><option value="fit">Fit</option><option value="newest">Newest</option><option value="company">Company</option></select></label>
       <button className="btn-quiet" onClick={() => { setSelecting(!selecting); setSelected(new Set()); }}>{selecting ? "Done" : "Select"}</button>
     </> : null} />

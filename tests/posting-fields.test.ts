@@ -36,6 +36,8 @@ describe("posting fields", () => {
     ["San Francisco, CA (Remote / Telecommute - United States)", "San Francisco, CA"],
     ["Austin, TX (Hybrid)", "Austin, TX"],
     ["New York, NY (Midtown)", "New York, NY (Midtown)"],
+    ["San Francisco, California, US", "San Francisco, CA"],
+    ["San Francisco Office", "San Francisco"],
   ])("location %s", (value, expected) => expect(normalLocation(value)).toBe(expected));
 
   it.each([

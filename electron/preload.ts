@@ -90,6 +90,7 @@ const api: SenseiApi = {
     onStatus: (callback) => { const listener = (_event: Electron.IpcRendererEvent, status: SearchStatus) => callback(status); ipcRenderer.on("search:status", listener); return () => ipcRenderer.removeListener("search:status", listener); },
     onFinished: (callback) => { const listener = (_event: Electron.IpcRendererEvent, run: SearchRun | null) => callback(run); ipcRenderer.on("search:finished", listener); return () => ipcRenderer.removeListener("search:finished", listener); },
     setStatus: (ids, status) => ipcRenderer.invoke("search:set-status", ids, status),
+    remove: (ids) => ipcRenderer.invoke("search:remove", ids),
     saveJob: (id) => ipcRenderer.invoke("search:save-job", id),
     openPosting: (id) => ipcRenderer.invoke("search:open-posting", id),
     stage: (id, pasteId, auto) => ipcRenderer.invoke("search:stage", id, pasteId, auto),

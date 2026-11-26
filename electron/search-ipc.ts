@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { readCandidateProfile } from "./candidate-profile";
 import type { FeatureContext } from "./feature-context";
 import { invalidateJobCache, listJobFolders } from "./job-folders";
-import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, jobsForSearch, searchLearning, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, stageFoundJob, SEARCH_TIMEOUT_SECONDS } from "./job-search";
+import { RATING_SCHEMA, SEARCH_SCHEMA, clearPendingDrafts, jobsForSearch, searchLearning, rateItems, releaseSearchLock, searchLockHolder, takeSearchLock, readSearchSettings, readSearchState, runSearch, saveFoundJob, saveSearchSettings, setItemStatus, removeDismissed, stageFoundJob, SEARCH_TIMEOUT_SECONDS } from "./job-search";
 import { headlessAgy } from "./question-agent";
 import { runScheduledSearch } from "./scheduled-search";
 import { ensureSchedule, scheduleInfo } from "./search-schedule";
@@ -149,6 +149,7 @@ export function registerSearchIpc(ctx: FeatureContext): void {
     if (status !== "new" && status !== "dismissed") throw new Error("Use Save or Add to queue for those.");
     return setItemStatus(ctx.requireWorkspace(), foundIds(ids), status);
   });
+  ipcMain.handle("search:remove", async (_event, ids: unknown) => removeDismissed(ctx.requireWorkspace(), foundIds(ids)));
   ipcMain.handle("search:save-job", async (_event, id: unknown) => {
     const [itemId] = foundIds(id);
     if (!itemId) throw new Error("That isn't a found job.");

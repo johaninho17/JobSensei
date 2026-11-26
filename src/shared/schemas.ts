@@ -1440,6 +1440,8 @@ export interface SenseiApi {
     onStatus(callback: (status: SearchStatus) => void): () => void;
     onFinished(callback: (run: SearchRun | null) => void): () => void;
     setStatus(ids: string[], status: "new" | "dismissed"): Promise<JobSearchState>;
+    /** Removes dismissed matches for good; they stay out of later searches (#210). */
+    remove(ids: string[]): Promise<JobSearchState>;
     saveJob(id: string): Promise<string>;
     openPosting(id: string): Promise<void>;
     stage(id: string, pasteId: string, auto?: boolean): Promise<string>;

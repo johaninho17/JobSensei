@@ -812,6 +812,18 @@ export async function setItemStatus(workspace: string, ids: string[], status: In
   return saveSearchState(workspace, { ...state, items: state.items.map((item) => wanted.has(item.id) ? { ...item, ...patch, status } : item) });
 }
 
+/**
+ * Removes dismissed matches for good (#210). Only dismissed ones; their link and company+title stay in `seen`, so a
+ * later search never brings them back.
+ */
+export async function removeDismissed(workspace: string, ids: string[]): Promise<JobSearchState> {
+  const state = await readSearchState(workspace);
+  const wanted = new Set(ids);
+  const gone = state.items.filter((item) => wanted.has(item.id) && item.status === "dismissed");
+  const keys = gone.flatMap((item) => [canonicalUrl(item.url), jobKey(item.company, item.title)].filter((key): key is string => Boolean(key)));
+  return saveSearchState(workspace, { ...state, items: state.items.filter((item) => !gone.includes(item)), seen: [...state.seen, ...keys] });
+}
+
 /** A saved match whose job was sent for drafts from Jobs or the Saved tab moves to "Sent for drafts". */
 export async function markSavedJobQueued(workspace: string, jobId: string, now = new Date()): Promise<void> {
   const ids = (await readSearchState(workspace)).items.filter((item) => item.jobId === jobId && item.status === "saved").map((item) => item.id);

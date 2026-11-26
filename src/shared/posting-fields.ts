@@ -48,12 +48,24 @@ export function workSetupInLocation(value: string | null | undefined): "remote" 
 
 const WORK_LABEL = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" } as const;
 
+/** A work-setup phrase as a mode ("Work setup: On-site", "Our team works fully in-person…" → onsite), or null. */
+export function workModeOf(text: string | null | undefined): "remote" | "hybrid" | "onsite" | null {
+  const value = text ?? "";
+  if (/hybrid/i.test(value)) return "hybrid";
+  if (/remote|telecommute|work from home|wfh/i.test(value)) return "remote";
+  if (/on[- ]?site|in[- ]office|in[- ]person|office/i.test(value)) return "onsite";
+  return null;
+}
+
 /** One line for a job's place: "San Francisco, CA · Remote" (the setup left out when the place already says it). */
 export function locationLine(location: string | null, workMode: "remote" | "hybrid" | "onsite" | null): string | null {
   const setup = workMode ? WORK_LABEL[workMode] : null;
   if (!location) return setup;
   return setup && !new RegExp(setup.replace("-", "[- ]?"), "i").test(location) ? `${location} · ${setup}` : location;
 }
+
+/** US state names as their two-letter codes, so "San Francisco, California" reads "San Francisco, CA". */
+const US_STATES: Record<string, string> = { "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR", "California": "CA", "Colorado": "CO", "Connecticut": "CT", "Delaware": "DE", "Florida": "FL", "Georgia": "GA", "Hawaii": "HI", "Idaho": "ID", "Illinois": "IL", "Indiana": "IN", "Iowa": "IA", "Kansas": "KS", "Kentucky": "KY", "Louisiana": "LA", "Maine": "ME", "Maryland": "MD", "Massachusetts": "MA", "Michigan": "MI", "Minnesota": "MN", "Mississippi": "MS", "Missouri": "MO", "Montana": "MT", "Nebraska": "NE", "Nevada": "NV", "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY", "North Carolina": "NC", "North Dakota": "ND", "Ohio": "OH", "Oklahoma": "OK", "Oregon": "OR", "Pennsylvania": "PA", "Rhode Island": "RI", "South Carolina": "SC", "South Dakota": "SD", "Tennessee": "TN", "Texas": "TX", "Utah": "UT", "Vermont": "VT", "Virginia": "VA", "Washington": "WA", "West Virginia": "WV", "Wisconsin": "WI", "Wyoming": "WY", "District of Columbia": "DC" };
 
 const COUNTRY = /^(?:united states(?: of america)?|usa|us|u\.s\.a?\.?)$/i;
 
@@ -74,8 +86,9 @@ export function normalLocation(value: string | null | undefined): string | null 
   // "Country - City" (Workday) becomes "City, Country".
   const dashed = text.match(/^([A-Za-z .]+?)\s+-\s+([A-Za-z .]+)$/);
   if (dashed && !/,/.test(text)) return `${dashed[2]!.trim()}, ${dashed[1]!.trim()}`;
-  const parts = text.split(/\s*,\s*/).filter(Boolean);
+  const parts = text.split(/\s*,\s*/).filter(Boolean).map((part) => part.replace(/\s+office$/i, ""));
   if (parts.length >= 2 && COUNTRY.test(parts.at(-1)!)) parts.pop();
+  if (parts.length >= 2) parts[parts.length - 1] = US_STATES[parts.at(-1)!.replace(/\b\w/g, (c) => c.toUpperCase())] ?? parts.at(-1)!;
   return parts.join(", ");
 }
 
