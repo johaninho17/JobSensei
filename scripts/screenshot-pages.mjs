@@ -32,12 +32,13 @@ try {
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
   const size = (width, height) => app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setSize(w, h), [width, height]);
-  // Sidebar pages by name; "Job" opens the first job, "Job posting" its posting (a document).
+  // Sidebar pages by name; "Job" opens the first job, "Job posting" its posting, "Job resume" its resume.
   const open = async (name) => {
     await page.locator(".app-sidebar button", { hasText: name.startsWith("Job") && name !== "Job Search" ? "Jobs" : name }).first().click();
     await page.waitForTimeout(700);
-    if (name === "Job" || name === "Job posting") { await page.locator(".job-card").first().click(); await page.waitForTimeout(800); }
+    if (name === "Job" || name === "Job posting" || name === "Job resume") { await page.locator(".job-card").first().click(); await page.waitForTimeout(800); }
     if (name === "Job posting") { await page.getByRole("tab", { name: "Posting" }).first().click(); await page.waitForTimeout(800); }
+    if (name === "Job resume") { await page.getByRole("tab", { name: "Resume", exact: true }).first().click(); await page.waitForTimeout(800); }
   };
   const toggle = page.locator(".topbar-toggle");
   const panelOpen = async () => (await toggle.getAttribute("aria-pressed")) === "true";
