@@ -39,6 +39,8 @@ export function decodeEntities(text: string): string {
 export function htmlToText(html: string): string {
   return decodeEntities(html
     .replace(/<(script|style|noscript|svg|head|template|iframe)[\s\S]*?<\/\1>/gi, " ")
+    // A page cut off mid-script (a truncated response) leaves its code unclosed: drop it to the end (issue #174).
+    .replace(/<(script|style)\b[\s\S]*$/i, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<h[1-3][^>]*>/gi, "\n\n## ")
     .replace(/<h[4-6][^>]*>/gi, "\n\n### ")
@@ -55,6 +57,8 @@ export function htmlToText(html: string): string {
     .replace(/ *\n */g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/\n\n- /g, "\n- ")
+    // "•Report to…" (no space after the dot) is still a bullet (issue #174).
+    .replace(/^[•▪◦]\s*/gm, "- ")
     .trim();
 }
 
@@ -297,12 +301,12 @@ export async function fetchAndClean(url: string, fetcher: typeof fetch, options:
 
 /** Postings a job board serves as JSON (Greenhouse, Workday, Oracle Cloud), shown with `source` as their link. */
 async function postingFromApi(url: string, fetcher: typeof fetch, source = url): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
-  return await fetchGreenhouseJob(url, fetcher, source) ?? await fetchLeverPosting(url, fetcher, source) ?? await fetchWorkdayPosting(url, fetcher) ?? await fetchOracleCloudPosting(url, fetcher)
+  return await fetchGreenhouseJob(url, fetcher, source) ?? await fetchLeverPosting(url, fetcher, source) ?? await fetchAmazonJob(url, fetcher, source) ?? await fetchWorkdayPosting(url, fetcher) ?? await fetchOracleCloudPosting(url, fetcher)
     ?? await fetchSmartRecruitersPosting(url, fetcher) ?? await fetchWorkablePosting(url, fetcher) ?? await fetchRecruiteePosting(url, fetcher);
 }
 
 async function getJson<T>(url: string, fetcher: typeof fetch): Promise<T | null> {
-  const response = await fetcher(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
+  const response = await fetcher(url, { headers: { Accept: "application/json", "Accept-Encoding": PAGE_HEADERS["Accept-Encoding"] }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
   if (!response?.ok) return null;
   return await response.json().catch(() => null) as T | null;
 }
@@ -412,6 +416,34 @@ async function fetchLeverPosting(url: string, fetcher: typeof fetch, source: str
   }).extracted;
 }
 
+const AMAZON_JOB = /^https:\/\/(?:www\.)?amazon\.jobs\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?jobs\/(\d+)/i;
+
+/**
+ * amazon.jobs postings from the site's own search JSON (issue #174): the page carries the site's full menu and
+ * "Job ID" in its title, while the JSON has the title, the hiring entity, the place, the posted date, and the
+ * description and both qualification lists as separate fields.
+ */
+/** The hiring entity as a company name: Amazon's own retail entities ("Amazon.com Services LLC") are "Amazon". */
+export function amazonCompany(entity: string | null | undefined): string {
+  const name = (entity ?? "").trim();
+  return !name || /^amazon\.com\b/i.test(name) ? "Amazon" : name;
+}
+
+async function fetchAmazonJob(url: string, fetcher: typeof fetch, source: string): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
+  const match = AMAZON_JOB.exec(url);
+  if (!match) return null;
+  type Job = { id_icims?: string; title?: string; company_name?: string; normalized_location?: string; location?: string; posted_date?: string; job_schedule_type?: string; description?: string; basic_qualifications?: string; preferred_qualifications?: string };
+  const data = await getJson<{ jobs?: Job[] }>(`https://www.amazon.jobs/en/search.json?job_id_icims%5B%5D=${match[1]}&result_limit=1`, fetcher);
+  const job = data?.jobs?.find((entry) => String(entry.id_icims) === match[1]);
+  if (!job?.title || !job.description) return null;
+  const posted = job.posted_date && !Number.isNaN(Date.parse(job.posted_date)) ? new Date(`${job.posted_date} 12:00 UTC`).toISOString() : null;
+  const html = factLines([["Employment type", job.job_schedule_type?.replace(/-/g, " ")], ["Job ID", job.id_icims]])
+    + `<h2>Description</h2>${job.description}`
+    + (job.basic_qualifications ? `<h2>Basic Qualifications</h2>${job.basic_qualifications}` : "")
+    + (job.preferred_qualifications ? `<h2>Preferred Qualifications</h2>${job.preferred_qualifications}` : "");
+  return postingFromBoard({ url: source, title: decodeEntities(job.title).trim(), company: amazonCompany(job.company_name), location: job.normalized_location?.trim() || job.location?.trim() || null, html, posted }).extracted;
+}
+
 const WORKDAY = /^https:\/\/([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com\/(?:[a-z]{2}-[A-Z]{2}\/)?([^/?#]+)\/job\/([^?#]+?)(?:\/apply(?:\/[^?#]*)?)?\/?(?:[?#].*)?$/i;
 
 /** The company a Workday site belongs to: its legal entity when that names the tenant, else the tenant's name. */
@@ -510,10 +542,16 @@ export async function fetchJobDescription(workspacePath: string, url: string, fe
 }
 
 /** One page or API response as text, with the same browser headers and timeout as posting fetches. */
+/**
+ * Headers for reading a page. Compression is limited to gzip, deflate and br: some servers answer Node 26's default
+ * zstd offer with a reply its fetch cuts off at 1 KB (amazon.jobs, issue #174).
+ */
+const PAGE_HEADERS = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", "Accept-Encoding": "gzip, deflate, br" } as const;
+
 export async function fetchText(url: string, fetcher: typeof fetch = fetch, init: RequestInit = {}): Promise<string> {
   const response = await fetcher(url, {
     ...init,
-    headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", Accept: "text/html,application/xhtml+xml,application/json", ...(init.headers as Record<string, string> | undefined) },
+    headers: { ...PAGE_HEADERS, Accept: "text/html,application/xhtml+xml,application/json", ...(init.headers as Record<string, string> | undefined) },
     redirect: "follow",
     signal: AbortSignal.timeout(15_000),
   });
@@ -523,7 +561,7 @@ export async function fetchText(url: string, fetcher: typeof fetch = fetch, init
 
 async function fetchPage(url: string, fetcher: typeof fetch): Promise<string> {
   const response = await fetcher(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", Accept: "text/html,application/xhtml+xml" },
+    headers: { ...PAGE_HEADERS, Accept: "text/html,application/xhtml+xml" },
     redirect: "follow",
     signal: AbortSignal.timeout(15_000),
   });

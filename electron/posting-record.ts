@@ -23,7 +23,7 @@ const PREFERRED = /\b(?:preferred|nice[- ]to[- ]haves?|stand out|set you apart|b
 const BENEFITS = /\b(?:benefits|perks|what we offer|we offer|you can expect|why (?:join|work)|what(?:'|’)?s in it for you|the role offers)\b/i;
 const PAY_HEADING = /\b(?:compensation|salary|pay(?: range)?|total rewards)\b/i;
 const COMPANY = /^(?:about (?!the (?:role|job|position)|this (?:role|job|position)|you\b)|who we are|our (?:mission|company|story|team)|company (?:overview|description))/i;
-const ROLE = /\b(?:about the (?:role|job|position|team)|about this (?:role|job|position)|the opportunity|role overview|position (?:overview|summary)|job (?:summary|description|overview)|overview|summary|the role)\b/i;
+const ROLE = /\b(?:about the (?:role|job|position|team)|about this (?:role|job|position)|the opportunity|role overview|position (?:overview|summary)|job (?:summary|description|overview)|overview|summary|the role)\b|^description$/i;
 
 function kindOf(heading: string): SectionKind {
   if (LEGAL.test(heading)) return "legal";
@@ -53,7 +53,9 @@ function sections(body: string): Section[] {
     if (!line || isTag(line) || META_LINE.test(line) || FACT_LINE.test(line)) continue;
     const item = BULLET.exec(raw)?.[1];
     if (item) { out.at(-1)!.items.push(clean(item)); continue; }
-    if (isHeadingLike(raw) && !/^#\s/.test(line)) {
+    // "Shift: Nights" / "Department: Operations" carry a value: facts in the section, not new headings (issue #174).
+    const labelValue = !/^#/.test(line) && /^(?:\*\*)?[^:*]{2,40}(?:\*\*)?:(?:\*\*)?\s+\S/.test(line);
+    if (isHeadingLike(raw) && !labelValue && !/^#\s/.test(line)) {
       const heading = sectionHeadingText(raw);
       out.push({ heading, kind: kindOf(heading), items: [], prose: [] });
       continue;
