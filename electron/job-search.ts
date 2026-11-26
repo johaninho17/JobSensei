@@ -537,7 +537,7 @@ export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchSta
     try {
       const html = board ? await boardPostingHtml(board.ref, board.job, fetcher) : null;
       const { extracted } = html && board
-        ? postingFromBoard({ url, title: board.job.title, company: company(link, board), location: board.job.locations.join("; ") || board.job.location, html, pay: board.job.pay ?? null, posted: board.job.postedAt ?? null })
+        ? postingFromBoard({ url, title: board.job.title, company: company(link, board), location: board.job.locations.join("; ") || board.job.location, html, pay: board.job.pay ?? null, posted: board.job.postedAt ?? null, workSetup: board.job.workplace ?? null })
         : await fetchAndClean(url, fetcher, { render: false });
       markdown = extracted.markdown;
       meta = extracted;

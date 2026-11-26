@@ -11,7 +11,7 @@ import { parseJobDescriptionMetadata } from "./job-description";
 import { POSTING_BOARDS, POSTING_EXPECTED_FIELDS, POSTING_SCHEMA_VERSION, postingRecordSchema, type PostingPay, type PostingRecord, type PostingWorkSetup } from "../src/shared/posting";
 
 /** Bump when any parsing rule changes: saved records with an older version are rebuilt. */
-export const POSTING_PARSER_VERSION = 6;
+export const POSTING_PARSER_VERSION = 7;
 export const POSTING_RECORD_FILE = ".sensei/posting.json";
 
 type SectionKind = "requirements" | "responsibilities" | "preferred" | "benefits" | "pay" | "company" | "role" | "legal" | "other";
@@ -119,14 +119,25 @@ export function parsePay(posting: string): PostingPay | null {
   const match = RANGE.exec(line);
   if (!match) {
     const single = new RegExp(AMOUNT).exec(line)?.[0];
-    return single ? { text: single.trim().replace(/[,.]+$/, ""), min: amount(single), max: amount(single), currency: currencyOf(single), period: periodOf(line, amount(single)), line: short(line) } : null;
+    const at = new RegExp(AMOUNT).exec(line);
+    return single && at ? { text: single.trim().replace(/[,.]+$/, ""), min: amount(single), max: amount(single), currency: currencyOf(single), period: periodOf(sentenceAt(line, at.index, at[0].length), amount(single)), line: short(line) } : null;
   }
   const min = amount(match[1]!);
   const max = amount(match[2]!.match(/^[$£€]/) ? match[2]! : `${match[1]!.trim()[0]}${match[2]}`);
-  const period = periodOf(match[4] ?? line, min);
+  const period = periodOf(match[4] ?? sentenceAt(line, match.index, match[0].length), min);
   const written = (value: string) => value.trim().replace(/[,.]+$/, "");
   const text = `${written(match[1]!)}–${written(match[2]!).replace(/^(?![$£€])/, match[1]!.trim()[0]!)}${period ? `/${period}` : ""}`;
   return { text, min, max, currency: currencyOf(match[1]!) ?? (match[3]?.trim().toUpperCase() || null), period, line: short(line) };
+}
+/**
+ * The sentence holding the amount (issue #172): a pay paragraph often goes on to benefits, and their period words
+ * ("six month paid parental leave", "monthly meal allowance") are not the pay's period.
+ */
+function sentenceAt(line: string, start: number, length: number): string {
+  const before = line.slice(0, start);
+  const from = Math.max(before.lastIndexOf(". "), before.lastIndexOf("; "), before.lastIndexOf("! "), before.lastIndexOf("? ")) + 1;
+  const stop = line.slice(start + length).search(/[.;!?](?:\s|$)/);
+  return line.slice(from, stop < 0 ? line.length : start + length + stop);
 }
 const currencyOf = (value: string) => value.includes("$") ? "USD" : value.includes("£") ? "GBP" : value.includes("€") ? "EUR" : null;
 function periodOf(text: string, min: number | null): PostingPay["period"] {
@@ -140,6 +151,10 @@ function periodOf(text: string, min: number | null): PostingPay["period"] {
 const WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 };
 export function parseWorkSetup(text: string): PostingWorkSetup | null {
   const tag = /#LI-(Remote|Hybrid|Onsite|On-?site|Office)\b/i.exec(text)?.[1]?.toLowerCase();
+  // A stated work setup ("Work setup: Hybrid", from the board's own field or the posting's facts) is the employer's
+  // setting, like the tag; sentences are only read when the posting states none (issue #172).
+  const stated = /^\s*(?:[-*•]\s*)?\*{0,2}(?:work setup|workplace(?: type)?|remote type|work arrangement)\*{0,2}\s*:\*{0,2}\s*(.+)$/im.exec(text)?.[1]?.toLowerCase() ?? "";
+  const statedMode: PostingWorkSetup["mode"] = /\bhybrid\b/.test(stated) ? "hybrid" : /\bremote\b/.test(stated) ? "remote" : /\b(?:on[- ]?site|in[- ]office|in[- ]person)\b/.test(stated) ? "onsite" : null;
   const tagMode: PostingWorkSetup["mode"] = tag === "remote" ? "remote" : tag === "hybrid" ? "hybrid" : tag ? "onsite" : null;
   // Plain sentences, plus bullets that label the location or work type ("- Location: Remote (US)") or are a short
   // location line ("- Remote in U.S."); perks bullets ("in-office lunches") are left out.
@@ -151,13 +166,16 @@ export function parseWorkSetup(text: string): PostingWorkSetup | null {
   });
   const line = candidates.find((value) => !isTag(value) && value.length <= 200 && /\b(remote|hybrid|on[- ]site|onsite|in[- ]office|in[- ]person|days? (?:in|a week|per week))\b/i.test(value) && !/\b(?:benefit|stipend|reimburse)/i.test(value)) ?? null;
   const days = /\b(\d|one|two|three|four|five)\+?\s+days?\s*(?:a|per|each|\/)\s*week\b/i.exec(line ?? "") ?? /\b(\d|one|two|three|four|five)\s+days?\s+(?:in|at)\s+(?:the|our)\s+office\b/i.exec(line ?? "");
-  const lineMode: PostingWorkSetup["mode"] = !line ? null : /\bhybrid\b/i.test(line) || (days && /\bremote\b/i.test(line)) ? "hybrid" : /\b(?:fully |100% )?remote\b/i.test(line) && !/\bnot remote\b/i.test(line) ? "remote" : /\b(?:on[- ]?site|in[- ]office|in[- ]person)\b/i.test(line) ? days && Number(WORDS[days[1]!.toLowerCase()] ?? days[1]) < 5 ? "hybrid" : "onsite" : null;
+  // Some in-person time plus working from home is hybrid ("some in person meetings, but flexibility to work from home").
+  const mixed = !!line && /\b(?:work(?:ing)? from home|wfh|work remotely)\b/i.test(line) && /\b(?:in[- ]person|in[- ]office|on[- ]?site)\b/i.test(line) && !/\b(?:fully|100%) remote\b/i.test(line);
+  const lineMode: PostingWorkSetup["mode"] = !line ? null : /\bhybrid\b/i.test(line) || mixed || (days && /\bremote\b/i.test(line)) ? "hybrid" : /\b(?:fully |100% )?remote\b/i.test(line) && !/\bnot remote\b/i.test(line) ? "remote" : /\b(?:on[- ]?site|in[- ]office|in[- ]person)\b/i.test(line) ? days && Number(WORDS[days[1]!.toLowerCase()] ?? days[1]) < 5 ? "hybrid" : "onsite" : null;
   // The board's own tag (#LI-Hybrid) is the employer's setting; a line that disagrees is about something else.
-  const mode = tagMode ?? lineMode;
+  const mode = tagMode ?? statedMode ?? lineMode;
   if (!mode && !line) return null;
   const daysInOffice = days ? Number(WORDS[days[1]!.toLowerCase()] ?? days[1]) : null;
   const label = mode ? mode === "onsite" ? "On-site" : mode[0]!.toUpperCase() + mode.slice(1) : "";
-  const detail = line && (!tagMode || lineMode === tagMode) ? line.replace(/^(?:location|work(?:place)?(?: type| arrangement| model)?|remote policy)\s*:\s*/i, "") : "";
+  const setting = tagMode ?? statedMode;
+  const detail = line && (!setting || lineMode === setting) ? line.replace(/^(?:location|work setup|work(?:place)?(?: type| arrangement| model)?|remote (?:policy|type))\s*:\s*/i, "") : "";
   return { mode, daysInOffice: daysInOffice !== null && daysInOffice <= 7 ? daysInOffice : null, text: short(detail || label) };
 }
 

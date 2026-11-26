@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { MIN_PASTED_POSTING_CHARS } from "../src/shared/paste-limits";
 import { normalCompany } from "../src/shared/posting-fields";
 import { postingTemplate } from "./posting-template";
-import { formatPay } from "../src/shared/pay";
+import { formatPay, leverPay } from "../src/shared/pay";
 import { basename, join, resolve } from "node:path";
 import { writeJsonAtomic, writeTextAtomic } from "./persistence";
 import { parseJobDescriptionMetadata } from "./job-description";
@@ -186,17 +186,21 @@ export function extractJobDescription(html: string, url: string): Omit<FetchedJo
 }
 
 type Extracted = Omit<FetchedJobDescription, "fetchedAt">;
+type WorkMode = "remote" | "hybrid" | "onsite";
+const WORK_MODE_LABEL: Record<WorkMode, string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
 
 /**
  * A posting built from a job board's own data (Ashby/Lever lists, Greenhouse's per-job API) instead of loading its
  * page: the same header, text conversion, and cleanup as a fetched page, so everything downstream reads it the same.
  */
-export function postingFromBoard(input: { url: string; title: string; company: string | null; location: string | null; html: string; pay?: string | null; posted?: string | null }): { extracted: Extracted; form: string | null } {
+export function postingFromBoard(input: { url: string; title: string; company: string | null; location: string | null; html: string; pay?: string | null; posted?: string | null; workSetup?: WorkMode | null }): { extracted: Extracted; form: string | null } {
   const header = [
     `# ${input.title}`,
     "",
     ...(input.company ? [`**Company:** ${input.company}  `] : []),
     ...(input.location ? [`**Location:** ${input.location}  `] : []),
+    // The board's own field (Lever and Ashby workplaceType) beats any sentence the parser would guess from (#172).
+    ...(input.workSetup ? [`**Work setup:** ${WORK_MODE_LABEL[input.workSetup]}  `] : []),
     ...(input.pay ? [`**Compensation:** ${input.pay}  `] : []),
     ...(input.posted?.match(/^\d{4}-\d{2}-\d{2}/) ? [`**Posted:** ${input.posted.slice(0, 10)}  `] : []),
     `**Source:** ${input.url}`,
@@ -293,7 +297,7 @@ export async function fetchAndClean(url: string, fetcher: typeof fetch, options:
 
 /** Postings a job board serves as JSON (Greenhouse, Workday, Oracle Cloud), shown with `source` as their link. */
 async function postingFromApi(url: string, fetcher: typeof fetch, source = url): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
-  return await fetchGreenhouseJob(url, fetcher, source) ?? await fetchWorkdayPosting(url, fetcher) ?? await fetchOracleCloudPosting(url, fetcher)
+  return await fetchGreenhouseJob(url, fetcher, source) ?? await fetchLeverPosting(url, fetcher, source) ?? await fetchWorkdayPosting(url, fetcher) ?? await fetchOracleCloudPosting(url, fetcher)
     ?? await fetchSmartRecruitersPosting(url, fetcher) ?? await fetchWorkablePosting(url, fetcher) ?? await fetchRecruiteePosting(url, fetcher);
 }
 
@@ -367,6 +371,45 @@ async function fetchGreenhouseJob(url: string, fetcher: typeof fetch, source: st
   const data = await response.json().catch(() => null) as { title?: string; content?: string; company_name?: string; location?: { name?: string } } | null;
   if (!data?.title || !data.content) return null;
   return postingFromBoard({ url: source, title: decodeEntities(data.title), company: data.company_name?.trim() || null, location: data.location?.name?.trim() || null, html: data.content }).extracted;
+}
+
+const LEVER_JOB = /^https:\/\/jobs\.(eu\.)?lever\.co\/([A-Za-z0-9_.-]+)\/([0-9a-f-]{36})/i;
+
+/** Lever's workplaceType ("hybrid", "remote", "onsite", "unspecified") as a work setup. */
+export function leverWorkplace(value: unknown): WorkMode | null {
+  const text = typeof value === "string" ? value.toLowerCase().replace(/[^a-z]/g, "") : "";
+  return text === "remote" ? "remote" : text === "hybrid" ? "hybrid" : text === "onsite" || text === "inoffice" ? "onsite" : null;
+}
+
+/** The company on a Lever page: its title reads "Company - Job title"; else the site name. */
+export function leverCompany(pageTitle: string | null, jobTitle: string, site: string): string {
+  const title = decodeEntities(pageTitle ?? "").trim();
+  if (title.endsWith(` - ${jobTitle}`) || title.includes(` - ${jobTitle.slice(0, 20)}`)) {
+    const company = title.slice(0, title.indexOf(" - ")).trim();
+    if (company) return company;
+  }
+  return workdayCompany(site, null);
+}
+
+/**
+ * Lever postings from Lever's public posting API, so the board's own fields are used: work setup (workplaceType),
+ * pay (salaryRange), commitment, and the posted date. The page's title gives the company name, which the API lacks.
+ */
+async function fetchLeverPosting(url: string, fetcher: typeof fetch, source: string): Promise<Omit<FetchedJobDescription, "fetchedAt"> | null> {
+  const match = LEVER_JOB.exec(url);
+  if (!match) return null;
+  type Data = { text?: string; categories?: { location?: string; commitment?: string; allLocations?: string[] }; workplaceType?: string; description?: string; lists?: Array<{ text?: string; content?: string }>; additional?: string; salaryDescription?: string; salaryRange?: unknown; createdAt?: number; hostedUrl?: string };
+  const data = await getJson<Data>(`https://api.${match[1] ?? ""}lever.co/v0/postings/${match[2]}/${match[3]}`, fetcher);
+  if (!data?.text || !(data.description || data.lists?.length)) return null;
+  const page = await fetchText(data.hostedUrl ?? `https://jobs.${match[1] ?? ""}lever.co/${match[2]}/${match[3]}`, fetcher).catch(() => "");
+  const pageTitle = /<title[^>]*>([^<]*)<\/title>/i.exec(page)?.[1] ?? null;
+  const lists = (data.lists ?? []).map((list) => `<h2>${list.text ?? ""}</h2><ul>${list.content ?? ""}</ul>`).join("");
+  const html = factLines([["Employment type", data.categories?.commitment]]) + (data.description ?? "") + lists + (data.additional ?? "") + (data.salaryDescription ?? "");
+  const locations = [...new Set([data.categories?.location, ...(data.categories?.allLocations ?? [])].filter((value): value is string => Boolean(value?.trim())))];
+  return postingFromBoard({
+    url: source, title: decodeEntities(data.text).trim(), company: leverCompany(pageTitle, decodeEntities(data.text).trim(), match[2]!), location: locations.join("; ") || null, html,
+    pay: leverPay(data.salaryRange), posted: typeof data.createdAt === "number" ? new Date(data.createdAt).toISOString() : null, workSetup: leverWorkplace(data.workplaceType),
+  }).extracted;
 }
 
 const WORKDAY = /^https:\/\/([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com\/(?:[a-z]{2}-[A-Z]{2}\/)?([^/?#]+)\/job\/([^?#]+?)(?:\/apply(?:\/[^?#]*)?)?\/?(?:[?#].*)?$/i;
