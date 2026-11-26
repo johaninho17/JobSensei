@@ -33,6 +33,11 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #213 | Paste a debrief in the app; a job is optional | FEAT-005 |  |
 | #221 | Job header in two lines: Next becomes a split button | FEAT-002 |  |
 | #222 | Application documents in one dropdown tab | FEAT-002 |  |
+| #234 | Went to interview leaves out archived jobs that had interviews | FEAT-001 |  |
+| #235 | Job page alignment: centered with Agy closed, PDFs button and review chip in line | FEAT-009 |  |
+| #236 | Download a PDF of the resume or the cover letter on its own | FEAT-002 |  |
+| #238 | Tidy files: recordings into job folders, one naming pattern, leftovers to a backup | FEAT-008 |  |
+| #239 | Page tabs: related tabs grouped into dropdowns (Profile, Job Search, Agy) | FEAT-009 |  |
 
 ## P2
 
@@ -48,6 +53,13 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #214 | Open files in the app instead of Finder | FEAT-008 |  |
 | #223 | Overview and Checks say it once | FEAT-002 |  |
 | #224 | Jobs page: one View menu, and sidebar counts that agree | FEAT-001 |  |
+| #225 | Job header like the Attune reference: breadcrumb, title and the next step on one line | FEAT-002 |  |
+| #226 | Fit card: Gaps and Strengths as tabs inside the card | FEAT-002 |  |
+| #237 | Agy chat polish and theme match | FEAT-006 |  |
+| #240 | Profile setup: done steps fold into one line, to-dos one line each | FEAT-008 |  |
+| #241 | Agy actions as a compact list without a button per row | FEAT-006 |  |
+| #242 | Navigation: quick settings menu without repeats | FEAT-009 |  |
+| #243 | Settings: presets as a dropdown, help text in tips, one close control | FEAT-008 |  |
 
 ## P3
 
@@ -55,6 +67,7 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 |---|---|---|---|
 | #147 | Remove the old in-place interview content update once Tune is proven | FEAT-005 |  |
 | #200 | Data analysis: show where Agy thinks the user's data can improve | FEAT-008 |  |
+| #227 | Sidebar: job views without counts on every item | FEAT-009 |  |
 
 ## Later (future)
 
@@ -69,4 +82,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #124 | Phase 4.4: Global Connectors tab, per-job Activity & Emails timeline, Email Prep PDF action, and Undo toasts | FEAT-002, FEAT-014 | yes |
 | #133 | Multi-AI groundwork: agent brief, activity log, headless streaming, prompt caching, quota backoff | FEAT-006 |  |
 
-42 open, 8 of them for later.
+55 open, 8 of them for later.
