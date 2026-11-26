@@ -12,7 +12,6 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 
 | # | Issue | Features | Blocked |
 |---|---|---|---|
-| #104 | Phase 0.1: Default new workspaces to Tidy Layout v2 (Solo and Recruiter) | FEAT-008, FEAT-010 |  |
 | #113 | Phase 2.1: JSON-first interview_bundle.json, interview-finalize.ts, deterministic markdown, and lazy legacy fallback | FEAT-005 |  |
 | #117 | Phase 3.1: Extend content-refresh.ts into non-destructive Tune engine (Solo only) | FEAT-005, FEAT-008 |  |
 | #118 | Phase 3.2: Tune Suggestion UI with top-5 ranked selection, suggestion bank.json, and rejected-ID tracking | FEAT-008, FEAT-012 |  |
@@ -23,6 +22,8 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #172 | Pay period and work setup read from the wrong sentence | FEAT-013 |  |
 | #173 | Posting sections: run-together bold paragraphs, bold-lead requirements, Job Description heading | FEAT-013 |  |
 | #174 | Pages whose text comes out as script: read the real sections (amazon.jobs) | FEAT-013 |  |
+| #183 | Show less, reveal on demand: done is a check, one tab row, runs collapse | FEAT-009 |  |
+| #184 | Job page: one tab row, a check instead of status text, PDF actions in one menu | FEAT-002, FEAT-009 |  |
 
 ## P2
 
@@ -32,12 +33,15 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #112 | Phase 1.5: Add scoped --continue settings (Solo terminal, auto-reset after Tune, per-job interview continuity) | FEAT-006 | yes |
 | #168 | Global shortcut adds the copied job link to the queue | FEAT-006 |  |
 | #175 | Application questions from more places: embedded Greenhouse, SmartRecruiters, Oracle | FEAT-003 |  |
+| #185 | Documents: review chip with inline lines, one document menu | FEAT-002, FEAT-012 |  |
+| #186 | Agy panel: finished runs collapse to one line | FEAT-006 |  |
 
 ## P3
 
 | # | Issue | Features | Blocked |
 |---|---|---|---|
 | #147 | Remove the old in-place interview content update once Tune is proven | FEAT-005 |  |
+| #187 | Sidebar Favorites fold, and a sweep for static status text | FEAT-009 |  |
 
 ## Later (future)
 
@@ -52,4 +56,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #124 | Phase 4.4: Global Connectors tab, per-job Activity & Emails timeline, Email Prep PDF action, and Undo toasts | FEAT-002, FEAT-014 | yes |
 | #133 | Multi-AI groundwork: agent brief, activity log, headless streaming, prompt caching, quota backoff | FEAT-006 |  |
 
-25 open, 8 of them for later.
+29 open, 8 of them for later.

@@ -126,11 +126,12 @@ describe("Today and the job page, compact (U79, #157)", () => {
     expect(view).toContain('className="activity-chips"');
   });
 
-  it("the job page's next step and check line sit in the header card, and the Fit card doesn't repeat the score", async () => {
+  it("the job page's next step and check count sit in the header card, and the Fit card doesn't repeat the score", async () => {
     const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
     const head = page.slice(page.indexOf('<header className="job-head">'), page.indexOf("</header>", page.indexOf('<header className="job-head">')));
     expect(head).toContain('className="next-bar"');
-    expect(head).toContain('className="review-line"');
+    expect(head).toContain("check-chip");
+    expect(page).not.toContain('className="review-line"');
     expect(page.match(/className="next-bar"/g)).toHaveLength(1);
     expect(page).not.toContain("job.rating.toFixed(1)}</strong> of 5");
     expect(page).not.toContain('className="fit-bar"');
@@ -208,5 +209,29 @@ describe("Lists that repeat themselves (U82, #167)", () => {
     const css = await readFile("src/renderer/layout.css", "utf8");
     expect(modal).toContain('role="tablist" aria-label="Settings sections" aria-orientation="vertical"');
     expect(css).toMatch(/\.settings-nav \{ grid-area: nav; flex-direction: column;/);
+  });
+});
+
+describe("Show less, reveal on demand: job page (U89, #184)", () => {
+  it("has one tab row: no second tablist for the application's documents", async () => {
+    const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
+    const dashboard = page.slice(page.indexOf("export function JobWorkspaceDashboard"), page.indexOf("type ApplicationView"));
+    expect(dashboard.match(/role="tablist"/g)).toHaveLength(1);
+    expect(dashboard).not.toContain("<SubTabs<ApplicationView>");
+    for (const label of ['"Overview"', '"Resume"', '"Cover letter"', '"Posting"', '"Checks"', '"Files"']) expect(dashboard).toContain(`label: ${label}`);
+  });
+
+  it("finished PDFs are a check on the button and a toast, not a sentence; PDF file actions live in its menu", async () => {
+    const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
+    expect(page).not.toContain("PDFs saved\"");
+    expect(page).not.toContain("Resume and cover letter PDFs saved");
+    expect(page).not.toContain("function JobPdfFiles");
+    expect(page).not.toContain('className="job-pdf-files"');
+    const button = page.slice(page.indexOf("function JobPdfExportButton"), page.indexOf("export function shortLocation"));
+    expect(button).toContain('className="pdf-state"');
+    expect(button).toContain('new CustomEvent("sensei-announce"');
+    expect(button).toContain("startPdfDrag");
+    expect(button).toContain("copyPdfPath");
+    expect(button).not.toContain("export-message");
   });
 });

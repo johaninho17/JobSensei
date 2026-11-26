@@ -10,7 +10,7 @@ import { InterviewView } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { ReviewPanel } from "./Review";
 import { TagEditor } from "./JobOrganize";
-import { type JobWorkspaceTab, StatusPill, TrackerPill, displayJobName, fileNodes, findNode, formatJobDate, formatRelativeDate, messageOf, plural, useAnnounce } from "./app-shared";
+import { type JobWorkspaceTab, StatusPill, TrackerPill, displayJobName, fileNodes, findNode, formatJobDate, formatRelativeDate, messageOf, plural } from "./app-shared";
 import { DocumentView, PdfTextSizeSelect, documentsChanged, pdfsCreated, usePdfFreshness } from "./Documents";
 import { askConfirm } from "./confirm";
 
@@ -49,12 +49,10 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
   const [next, ...more] = jobActions;
   // After a run: the most important warnings from the last check, errors first.
   const allIssues = status?.validation?.issues ?? [];
-  const reviewIssues = [...allIssues].sort((a, b) => Number(b.severity === "error") - Number(a.severity === "error")).slice(0, 4);
   function navigateRound(roundId: string) {
     void window.sensei.interviews.setCurrentRound(job.id, roundId).catch(() => undefined);
     onNavigate(job.id, "interview", roundId);
   }
-  const tabs: Array<[JobWorkspaceTab, string, number | null]> = [["overview", "Overview", null], ["application", "Application", null], ...(FEATURES.interviews ? [["interview", "Interview", rounds.length || null] as [JobWorkspaceTab, string, number | null]] : []), ["files", "Files", files.length]];
   // The Recruiter Edition opens drafts on Review: the posting beside the resume, then Mark applied (recruiter plan R8).
   const firstAppView: ApplicationView = FEATURES.candidates ? "review" : "resume";
   /** Bumped after a Revert so the resume rereads its file. */
@@ -64,6 +62,22 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
   function openChecks() { setAppView("checks"); onNavigate(job.id, "application"); }
   // The posting and the evaluation open inside the job page (Application tab), keeping the header and tabs (#21).
   function openAppView(view: ApplicationView) { setAppView(view); onNavigate(job.id, "application"); }
+  // One tab row (U89, #184): the application's documents are tabs of the job page, not a second row under it. A tab
+  // shows only when there is something in it; Evaluation opens from Overview's Fit card.
+  type JobTabItem = { id: string; label: string; count?: number | null; tab: JobWorkspaceTab; view?: ApplicationView };
+  const tabItems: JobTabItem[] = [
+    { id: "overview", label: "Overview", tab: "overview" },
+    ...(FEATURES.candidates && resumeMarkdown ? [{ id: "review", label: "Review", tab: "application" as const, view: "review" as const }] : []),
+    ...(resumeMarkdown ? [{ id: "resume", label: "Resume", tab: "application" as const, view: "resume" as const }] : []),
+    ...(coverLetterMarkdown || letterSkipped ? [{ id: "letter", label: "Cover letter", tab: "application" as const, view: "letter" as const }] : []),
+    ...(FEATURES.applicationQuestions && job.hasApplicationMaterials ? [{ id: "questions", label: "Questions", tab: "application" as const, view: "questions" as const }] : []),
+    ...(jobDescription ? [{ id: "posting", label: "Posting", tab: "application" as const, view: "posting" as const }] : []),
+    ...(job.hasApplicationMaterials || allIssues.length ? [{ id: "checks", label: "Checks", count: allIssues.length || null, tab: "application" as const, view: "checks" as const }] : []),
+    ...(FEATURES.interviews ? [{ id: "interview", label: "Interview", count: rounds.length || null, tab: "interview" as const }] : []),
+    { id: "files", label: "Files", count: files.length, tab: "files" },
+  ];
+  const isActive = (item: JobTabItem) => item.tab === activeTab && (item.tab !== "application" || item.view === appView);
+  const anyActive = tabItems.some(isActive);
   const documents: Array<[string, FileTreeNode | undefined]> = [["Job description", jobDescription], ["Evaluation", evaluation], ["Resume", resumeMarkdown], ["Cover letter", coverLetterMarkdown]];
   return <section className="job-page">
     <header className="job-head">
@@ -77,6 +91,10 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
           {job.rating !== null && <span className="job-head-fit" title={`Fit ${job.rating.toFixed(1)} of 5`}><FitRing rating={job.rating} size={36} /></span>}
           {job.hasApplicationMaterials && (() => { const score = jobSettingsScore(job.settingsScore); return <span className={`settings-score is-${score.band}`} title={`Agy's settings when these drafts were made: ${score.score} of 100 (${settingsScoreLabel(score).split(" ")[1]}). Higher means more lenient. See Agy → Behavior.`}>Settings <strong className="tabular">{score.score}</strong> {settingsScoreLabel(score).split(" ")[1]}</span>; })()}
           {job.location && <span title={job.location}>{shortLocation(job.location)}</span>}
+          {/* The last check's result is a count you can open, not a sentence (U89). */}
+          {allIssues.length > 0 && <button className={`check-chip ${allIssues.some((issue) => issue.severity === "error") ? "is-error" : ""}`} title="From the last check of this application" onClick={openChecks}>{allIssues.length} to {allIssues.some((issue) => issue.severity === "error") ? "fix" : "check"}</button>}
+          {/* One PDFs control in the header line, so the tab row stays one line (U89). */}
+          {resumeMarkdown && <JobPdfExportButton jobId={job.id} resumePath={resumeMarkdown.relativePath} coverLetterPath={coverLetterMarkdown?.relativePath ?? null} />}
           {/* Added date, corrected fields, and Edit details live in the header's menu (U82). */}
           <details className="jobs-more job-head-more">
             <summary aria-label="Job details">⋯</summary>
@@ -95,20 +113,11 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
         <button className="btn-primary" onClick={() => onInsertPrompt(next)}>Send to Agy</button>
         {more.length > 0 && <details className="jobs-more next-bar-more"><summary aria-label="Other next steps">More</summary><div className="jobs-more-menu">{more.slice(0, 6).map((action) => <button key={action.id} className="menu-item" onClick={() => onInsertPrompt(action)}>{action.label}</button>)}</div></details>}
       </section>}
-      {reviewIssues.length > 0 && <p className="review-line" role="status">
-        <span className={`review-kind ${allIssues.some((issue) => issue.severity === "error") ? "is-error" : ""}`}>{allIssues.some((issue) => issue.severity === "error") ? "Fix" : "Check"}</span>
-        <span>{plural(allIssues.length, "thing")} to look at before you send, from the last check.</span>
-        <button className="btn-link" onClick={openChecks}>Review</button>
-      </p>}
     </header>
     {editingDetails && <EditJobDetails job={job} onClose={() => setEditingDetails(false)} onSaved={(next) => { onJobChanged(next); setEditingDetails(false); }} />}
     <div className="workspace-tabs-row">
-      <nav className="workspace-tabs" role="tablist" aria-label="Job sections">{tabs.map(([value, label, count]) => <button key={value} role="tab" aria-selected={activeTab === value} className={activeTab === value ? "is-active" : ""} onClick={() => onNavigate(job.id, value, value === "interview" ? activeRoundId : undefined)}>{label}{count !== null && <span>{count}</span>}</button>)}</nav>
-      <div className="job-head-actions">
-        <JobPdfExportButton resumePath={resumeMarkdown?.relativePath ?? null} coverLetterPath={coverLetterMarkdown?.relativePath ?? null} />
-      </div>
+      <nav className="workspace-tabs" role="tablist" aria-label="Job sections">{tabItems.map((item) => { const active = isActive(item) || (!anyActive && item.id === "overview"); return <button key={item.id} role="tab" id={`job-tab-${item.id}`} aria-selected={active} className={active ? "is-active" : ""} onClick={() => { if (item.view) setAppView(item.view); onNavigate(job.id, item.tab, item.tab === "interview" ? activeRoundId : undefined); }}>{item.label}{item.count ? <span>{item.count}</span> : null}</button>; })}</nav>
     </div>
-    {(activeTab === "overview" || activeTab === "application") && <JobPdfFiles jobId={job.id} />}
     {activeTab === "overview" && <div className="job-overview">
       {FEATURES.interviews && (trackerStatus === "rejected" || trackerStatus === "withdrawn" || trackerStatus === "interviewing" || trackerStatus === "offer") && <DebriefPanel job={job} closed={trackerStatus === "rejected" || trackerStatus === "withdrawn"} onUpdateTracker={onUpdateTracker} onInsertPrompt={onInsertPrompt} />}
       <div className="overview-cols">
@@ -135,22 +144,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
       </div>
     </div>}
     {activeTab === "application" && <>
-      <SubTabs<ApplicationView>
-        idPrefix="app"
-        label="Application documents"
-        value={appView}
-        onChange={setAppView}
-        tabs={[
-          ...(FEATURES.candidates ? [{ id: "review" as const, label: "Review", disabled: !resumeMarkdown }] : []),
-          { id: "resume", label: "Resume", disabled: !resumeMarkdown },
-          { id: "letter", label: "Cover letter", disabled: !coverLetterMarkdown && !letterSkipped },
-          ...(FEATURES.applicationQuestions ? [{ id: "questions" as const, label: "Questions" }] : []),
-          { id: "evaluation", label: "Evaluation", disabled: !evaluation },
-          { id: "posting", label: "Posting", disabled: !jobDescription },
-          { id: "checks", label: "Checks" },
-        ]}
-      />
-      <SubTabPanel idPrefix="app" value={appView}>
+      <div role="tabpanel" aria-label="Application document" className="app-doc-panel">
         {FEATURES.candidates && appView === "review" && <ReviewPanel job={job} onUpdateTracker={onUpdateTracker} onOpenResume={() => setAppView("resume")} />}
         {appView === "resume" && <><FramingLines jobId={job.id} artifact="resume" onReverted={() => setDocVersion((value) => value + 1)} /><DocInline key={docVersion} path={resumeMarkdown?.relativePath ?? null} label="resume" /></>}
         {appView === "letter" && (letterSkipped ? <p className="muted doc-skipped">No cover letter: {letterSkipped}</p> : <><FramingLines jobId={job.id} artifact="cover-letter" onReverted={() => undefined} /><DocInline path={coverLetterMarkdown?.relativePath ?? null} label="cover letter" /></>)}
@@ -158,7 +152,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
         {appView === "evaluation" && <DocInline path={evaluation?.relativePath ?? null} label="evaluation" />}
         {appView === "posting" && <DocInline path={jobDescription?.relativePath ?? null} label="job posting" />}
         {appView === "checks" && <div className="dashboard-stack"><ApplicationHealth job={job} files={applicationFiles} status={status} loading={applicationLoading} onStatus={onStatus} /><section className="context-block"><h2>Application files</h2><ArtifactTable files={applicationFiles} onSelect={onSelect} empty="No application documents found." /></section></div>}
-      </SubTabPanel>
+      </div>
     </>}
     {FEATURES.interviews && activeTab === "interview" && <InterviewView job={job} overview={overview} loading={interviewLoading} initialRoundId={activeRoundId} onRoundChange={navigateRound} onOpenFile={(path) => onSelect(path)} onInsertPrompt={(text, label) => onInsertPrompt({ prompt: text, label })} />}
     {activeTab === "files" && <FilesTab files={files} onSelect={onSelect} />}
@@ -544,78 +538,59 @@ function MustHaveGroups({ mustHaves, gaps = [] }: { mustHaves: JobFolderSummary[
 }
 
 /**
- * The job's PDFs, ready to send (#127): drag one onto an application's file field, show it in Finder/Explorer, or copy
- * its path. A PDF older than its document is marked, and copying it asks first (`electron/pdf-freshness.ts` owns the rule).
+ * One PDFs control for the job (U82, U89): a check on the button when the PDFs are current, a dot when one is older
+ * than its document, and a toast when they are made. Its menu holds the PDFs themselves (#127: drag onto an
+ * application's file field, show in Finder/Explorer, copy the path; copying an out-of-date one asks first,
+ * `electron/pdf-freshness.ts` owns the rule), the text size, and Create/Update.
  */
-function JobPdfFiles({ jobId }: { jobId: string }) {
-  const announce = useAnnounce();
-  const pdfs = usePdfFreshness(jobId).filter((item): item is typeof item & { pdf: string } => Boolean(item.pdf));
-  if (!pdfs.length) return null;
-  const folderApp = navigator.userAgent.includes("Mac") ? "Finder" : "Explorer";
-  const label = (kind: string) => kind === "resume" ? "Resume PDF" : "Cover letter PDF";
-  async function copyPath(pdf: string, kind: string, stale: boolean) {
-    if (stale && !await askConfirm({ title: `Copy the out-of-date ${kind === "resume" ? "resume" : "cover letter"} PDF?`, body: "It was made before your last edit, so it has the old text. Update PDFs first to send the new one.", confirmLabel: "Copy anyway" })) return;
-    try { await window.sensei.files.copyPdfPath(pdf); announce(`${label(kind)} path copied.`); }
-    catch (caught) { announce(messageOf(caught, "Couldn't copy the path.")); }
-  }
-  return <div className="job-pdf-files" aria-label="This job's PDFs">
-    <span className="job-pdf-files-hint">Drag a PDF onto an application</span>
-    {pdfs.map((item) => {
-      const stale = item.state === "stale";
-      return <span key={item.pdf} className={`pdf-pill ${stale ? "is-stale" : ""}`}>
-        <span className="pdf-pill-file" draggable title={stale ? "Out of date: made before your last edit. Drag it onto a file field, or Update PDFs first." : "Drag onto an application's file field"} onDragStart={(event) => { event.preventDefault(); window.sensei.files.startPdfDrag(item.pdf); }}>
-          {label(item.kind)}{stale && <em>out of date</em>}
-        </span>
-        <button className="btn-link" onClick={() => void window.sensei.files.revealPdf(item.pdf).catch((caught: unknown) => announce(messageOf(caught, "Couldn't show the PDF.")))}>Show in {folderApp}</button>
-        <button className="btn-link" onClick={() => void copyPath(item.pdf, item.kind, stale)}>Copy path</button>
-      </span>;
-    })}
-  </div>;
-}
-
-function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: string | null; coverLetterPath: string | null }) {
-  const announce = useAnnounce();
-  // PDFs made before the resume or cover letter was last edited would send the old text.
-  const stale = usePdfFreshness(resumePath?.split("/")[1] ?? null).filter((item) => item.state === "stale");
-  const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
-  const [message, setMessage] = useState("");
+function JobPdfExportButton({ jobId, resumePath, coverLetterPath }: { jobId: string; resumePath: string | null; coverLetterPath: string | null }) {
+  const toast = (message: string) => window.dispatchEvent(new CustomEvent("sensei-announce", { detail: message }));
+  const freshness = usePdfFreshness(jobId);
+  const pdfs = freshness.filter((item): item is typeof item & { pdf: string } => Boolean(item.pdf));
+  const stale = freshness.filter((item) => item.state === "stale");
+  const current = pdfs.length > 0 && pdfs.every((item) => item.state === "current");
+  const [working, setWorking] = useState(false);
   const [textSize, setTextSize] = useState<PdfTextSize>(DEFAULT_PDF_TEXT_SIZE);
   // Recruiter Edition: start from the recruiter's default PDF text size (Settings → Defaults for every candidate).
   useEffect(() => { if (FEATURES.candidates) void window.sensei.candidates.recruiterSettings().then((settings) => setTextSize(settings.defaults.pdfTextSize), () => undefined); }, []);
   // A job may have no cover letter (recruiter plan R7); the resume alone is then exported.
   const missing = !resumePath;
+  const folderApp = navigator.userAgent.includes("Mac") ? "Finder" : "Explorer";
+  const label = (kind: string) => kind === "resume" ? "Resume PDF" : "Cover letter PDF";
   async function exportApplicationPdfs() {
     if (!resumePath) return;
-    setState("working");
-    setMessage("");
+    setWorking(true);
     try {
       await window.sensei.files.exportMarkdownPdf(resumePath, textSize);
       if (coverLetterPath) await window.sensei.files.exportMarkdownPdf(coverLetterPath, textSize);
-      const saved = coverLetterPath ? "Resume and cover letter PDFs saved" : "Resume PDF saved";
-      setState("done");
-      setMessage(saved);
-      announce(`${saved} (${resumePath.split("/")[1] ?? "job"}).`);
+      toast(coverLetterPath ? "PDFs saved." : "Resume PDF saved.");
       pdfsCreated(resumePath);
       documentsChanged();
     } catch (caught) {
-      setState("error");
-      setMessage(messageOf(caught, "PDF creation failed."));
-      announce(`PDF creation failed: ${messageOf(caught, "unknown error")}`);
-    }
+      toast(`PDF creation failed: ${messageOf(caught, "unknown error")}`);
+    } finally { setWorking(false); }
   }
-  // One PDFs control (U82): the text size sits inside its menu, next to Create.
-  return <span className="job-pdf-export">
-    <details className="jobs-more pdf-menu">
-      <summary className={stale.length ? "is-stale" : undefined} title={stale.length ? "The PDFs are older than your last edits" : "Create PDFs"}>{state === "working" ? "Creating PDFs…" : stale.length ? "Update PDFs" : "PDFs"}</summary>
-      <div className="jobs-more-menu">
-        <PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} />
-        <button className="btn-primary" disabled={missing || state === "working"} title={missing ? "A tailored resume is required" : coverLetterPath ? "Create PDFs for this job's resume and cover letter" : "Create a PDF of this job's resume"} onClick={(event) => { (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); void exportApplicationPdfs(); }}>{stale.length ? "Update PDFs" : "Create PDFs"}</button>
-      </div>
-    </details>
-    {stale.length > 0 && state !== "working"
-      ? <small className="export-message is-stale" role="status">{stale.length === 1 ? `The ${stale[0]!.kind === "resume" ? "resume" : "cover letter"} PDF is older than your last edit` : "The PDFs are older than your last edits"}</small>
-      : message && <small className={`export-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</small>}
-  </span>;
+  async function copyPath(pdf: string, kind: string, isStale: boolean) {
+    if (isStale && !await askConfirm({ title: `Copy the out-of-date ${kind === "resume" ? "resume" : "cover letter"} PDF?`, body: "It was made before your last edit, so it has the old text. Update PDFs first to send the new one.", confirmLabel: "Copy anyway" })) return;
+    try { await window.sensei.files.copyPdfPath(pdf); toast(`${label(kind)} path copied.`); }
+    catch (caught) { toast(messageOf(caught, "Couldn't copy the path.")); }
+  }
+  const title = working ? "Creating PDFs" : stale.length ? (stale.length === 1 ? `The ${stale[0]!.kind === "resume" ? "resume" : "cover letter"} PDF is older than your last edit` : "The PDFs are older than your last edits") : current ? "PDFs are up to date" : "Create PDFs";
+  return <details className="jobs-more pdf-menu">
+    <summary className={stale.length ? "is-stale" : current ? "is-current" : undefined} title={title} aria-label={`PDFs: ${title}`}>
+      {working ? "Creating…" : "PDFs"}{!working && current && <span className="pdf-state" aria-hidden="true">✓</span>}{!working && stale.length > 0 && <span className="pdf-state is-stale" aria-hidden="true">●</span>}
+    </summary>
+    <div className="jobs-more-menu">
+      {pdfs.map((item) => { const isStale = item.state === "stale"; return <div key={item.pdf} className={`pdf-row ${isStale ? "is-stale" : ""}`}>
+        <span className="pdf-pill-file" draggable title={isStale ? "Out of date: made before your last edit. Drag it onto a file field, or Update PDFs first." : "Drag onto an application's file field"} onDragStart={(event) => { event.preventDefault(); window.sensei.files.startPdfDrag(item.pdf); }}>{label(item.kind)}{isStale && <em>out of date</em>}</span>
+        <button className="icon-button" title={`Show in ${folderApp}`} aria-label={`Show ${label(item.kind)} in ${folderApp}`} onClick={() => void window.sensei.files.revealPdf(item.pdf).catch((caught: unknown) => toast(messageOf(caught, "Couldn't show the PDF.")))}>↗</button>
+        <button className="icon-button" title="Copy path" aria-label={`Copy ${label(item.kind)} path`} onClick={() => void copyPath(item.pdf, item.kind, isStale)}>⧉</button>
+      </div>; })}
+      {pdfs.length > 0 && <p className="menu-note">Drag a PDF onto an application's file field.</p>}
+      <PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={working} />
+      <button className="btn-primary" disabled={missing || working} title={missing ? "A tailored resume is required" : coverLetterPath ? "Create PDFs for this job's resume and cover letter" : "Create a PDF of this job's resume"} onClick={(event) => { (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); void exportApplicationPdfs(); }}>{stale.length || current ? "Update PDFs" : "Create PDFs"}</button>
+    </div>
+  </details>;
 }
 
 /** "San Francisco, CA (Remote / Telecommute - United States)" → "San Francisco, CA · Remote"; the full text is the
