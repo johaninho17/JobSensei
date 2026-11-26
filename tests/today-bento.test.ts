@@ -235,3 +235,21 @@ describe("Show less, reveal on demand: job page (U89, #184)", () => {
     expect(button).not.toContain("export-message");
   });
 });
+
+describe("Show less, reveal on demand: Agy panel (U89, #186)", () => {
+  it("a finished run is one line that opens; a failed run opens by itself", async () => {
+    const panel = await readFile("src/renderer/TerminalPanel.tsx", "utf8");
+    const bar = panel.slice(panel.indexOf("function RunStatusBar"), panel.indexOf("export function TerminalPanel"));
+    expect(bar).toContain('<details className={`run-status is-${run.state}`} aria-label="Latest run" open={run.state === "failed"}>');
+    expect(bar).toContain('<summary className="run-status-line">');
+    expect(bar).not.toContain("Top ${run.issues.length} issues");
+  });
+
+  it("finished steps fold into one line, Clear and Restart sit in a menu, and one suggestion chip shows", async () => {
+    const panel = await readFile("src/renderer/TerminalPanel.tsx", "utf8");
+    expect(panel).toContain('<details className="chat-steps-fold" open={entry.status === "error"}>');
+    expect(panel).toContain('<details className="jobs-more terminal-more">');
+    expect(panel).not.toContain('aria-label="Hide terminal panel" onClick={onClose}>Hide</button>');
+    expect(panel).toContain("jobActions.slice(0, 1)");
+  });
+});
