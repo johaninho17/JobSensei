@@ -55,3 +55,9 @@ describe("adding recordings from the app (#16)", () => {
     expect(isRecordingPath("jobs/northstar/original_jd.md")).toBe(false);
   });
 });
+
+describe("recordings waiting to import (#9)", () => {
+  it("duplicates and skipped files never count as waiting", () => {
+    expect(waitingToImport([{ state: "new" }, { state: "changed" }, { state: "duplicate" }, { state: "skipped" }, { state: "imported" }] as const)).toHaveLength(2);
+  });
+});
