@@ -38,7 +38,7 @@ function TrackerPanel({ job, onUpdate }: { job: JobFolderSummary; onUpdate: (upd
   </section>;
 }
 
-export function JobWorkspaceDashboard({ job, status, applicationLoading, overview, interviewLoading, jobTree, jobActions, onStatus, onSelect, activeTab, activeRoundId, onNavigate, onInsertPrompt, onUpdateTracker, onJobChanged }: { job: JobFolderSummary; status: ApplicationStatus | null; applicationLoading: boolean; overview: InterviewOverview | null; interviewLoading: boolean; jobTree: FileTreeNode[]; jobActions: JobAction[]; onStatus: (status: ApplicationStatus) => void; onSelect: (path: string, anchor?: string) => void; activeTab: JobWorkspaceTab; activeRoundId?: string; onNavigate: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onInsertPrompt: (action: Pick<JobAction, "prompt" | "label">) => void; onUpdateTracker: (update: JobTrackerUpdate) => Promise<void>; onJobChanged: (job: JobFolderSummary) => void }) {
+export function JobWorkspaceDashboard({ onOpenJobs, job, status, applicationLoading, overview, interviewLoading, jobTree, jobActions, onStatus, onSelect, activeTab, activeRoundId, onNavigate, onInsertPrompt, onUpdateTracker, onJobChanged }: { onOpenJobs?: () => void; job: JobFolderSummary; status: ApplicationStatus | null; applicationLoading: boolean; overview: InterviewOverview | null; interviewLoading: boolean; jobTree: FileTreeNode[]; jobActions: JobAction[]; onStatus: (status: ApplicationStatus) => void; onSelect: (path: string, anchor?: string) => void; activeTab: JobWorkspaceTab; activeRoundId?: string; onNavigate: (jobId: string, tab: JobWorkspaceTab, roundId?: string) => void; onInsertPrompt: (action: Pick<JobAction, "prompt" | "label">) => void; onUpdateTracker: (update: JobTrackerUpdate) => Promise<void>; onJobChanged: (job: JobFolderSummary) => void }) {
   const [editingDetails, setEditingDetails] = useState(false);
   const trackerStatus = effectiveStatus(job);
   const files = useMemo(() => {
@@ -89,8 +89,16 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
   return <section className="job-page">
     <header className="job-head">
       <div className="job-head-text">
-        <p className="job-head-company">{job.company ?? displayJobName(job.name)}</p>
-        <h1>{job.title ?? "Role not recorded"}</h1>
+        {/* Breadcrumb, title, and the one primary action on the title's line (#225; Attune reference). */}
+        <nav className="job-head-crumbs" aria-label="Breadcrumb">{onOpenJobs ? <button className="btn-link" onClick={onOpenJobs}>Jobs</button> : <span>Jobs</span>}<span aria-hidden="true">/</span><span className="job-head-company">{job.company ?? displayJobName(job.name)}</span></nav>
+        <div className="job-head-title">
+          <h1>{job.title ?? "Role not recorded"}</h1>
+            {/* The next step is a split button at the right of the title line: the page's one primary action (#221, #225). */}
+            {next && trackerStatus !== "rejected" && trackerStatus !== "withdrawn" && <span className="next-split job-head-action" role="group" aria-label="Next step">
+              <button className="btn-primary" title={`Sends this request to Agy for ${job.company ?? displayJobName(job.name)}, ${job.title ?? "this job"}.`} onClick={() => onInsertPrompt(next)}><span className="next-split-label">Next</span> {next.label}</button>
+              {more.length > 0 && <details className="jobs-more next-split-more"><summary aria-label="Other next steps">▾</summary><div className="jobs-more-menu">{more.slice(0, 6).map((action) => <button key={action.id} className="menu-item" onClick={() => onInsertPrompt(action)}>{action.label}</button>)}</div></details>}
+            </span>}
+        </div>
         <div className="job-head-meta">
           <label className={`tracker-select is-${trackerStatus}`}><span className="sr-only">Application status</span><select value={trackerStatus} onChange={(event) => void onUpdateTracker({ status: event.target.value as TrackerStatus })}>{TRACKER_STATUSES.map((value) => <option key={value} value={value}>{value === "saved" && job.hasApplicationMaterials ? draftedLabel() : TRACKER_LABELS[value]}</option>)}</select></label>
           {job.rating !== null && <span className="job-head-fit" title={`Fit ${job.rating.toFixed(1)} of 5`}><FitRing rating={job.rating} size={36} /></span>}
@@ -99,11 +107,6 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
           {allIssues.length > 0 && <button className={`check-chip ${allIssues.some((issue) => issue.severity === "error") ? "is-error" : ""}`} title="From the last check of this application" onClick={openChecks}>{allIssues.length} to {allIssues.some((issue) => issue.severity === "error") ? "fix" : "check"}</button>}
           {/* One PDFs control in the header line, so the tab row stays one line (U89). */}
           {resumeMarkdown && <JobPdfExportButton jobId={job.id} resumePath={resumeMarkdown.relativePath} coverLetterPath={coverLetterMarkdown?.relativePath ?? null} />}
-          {/* The next step is a split button at the end of this line, not a band of its own (#221). */}
-          {next && trackerStatus !== "rejected" && trackerStatus !== "withdrawn" && <span className="next-split" role="group" aria-label="Next step">
-            <button className="btn-primary" title={`Sends this request to Agy for ${job.company ?? displayJobName(job.name)}, ${job.title ?? "this job"}.`} onClick={() => onInsertPrompt(next)}><span className="next-split-label">Next</span> {next.label}</button>
-            {more.length > 0 && <details className="jobs-more next-split-more"><summary aria-label="Other next steps">▾</summary><div className="jobs-more-menu">{more.slice(0, 6).map((action) => <button key={action.id} className="menu-item" onClick={() => onInsertPrompt(action)}>{action.label}</button>)}</div></details>}
-          </span>}
           {/* Added date, corrected fields, and Edit details live in the header's menu (U82). */}
           <details className="jobs-more job-head-more">
             <summary aria-label="Job details">⋯</summary>

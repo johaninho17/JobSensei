@@ -52,11 +52,14 @@ describe("The job page, compact (U79, #157)", () => {
     const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
     const head = page.slice(page.indexOf('<header className="job-head">'), page.indexOf("</header>", page.indexOf('<header className="job-head">')));
     // #221: the next step is a split button in the header's line, not a band.
-    expect(head).toContain('className="next-split"');
+    expect(head).toContain('className="next-split job-head-action"');
+    // #225: the next step is the one primary action, on the title's line, under a breadcrumb.
+    expect(head).toMatch(/<div className="job-head-title">\s*<h1>[\s\S]*next-split job-head-action/);
+    expect(head).toContain('className="job-head-crumbs"');
     expect(head).toContain("check-chip");
     expect(page).not.toContain('className="review-line"');
     expect(page).not.toContain('className="next-bar"');
-    expect(page.match(/className="next-split"/g)).toHaveLength(1);
+    expect(page.match(/className="next-split[ "]/g)).toHaveLength(1);
     expect(page).not.toContain("job.rating.toFixed(1)}</strong> of 5");
     expect(page).not.toContain('className="fit-bar"');
   });

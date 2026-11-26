@@ -142,7 +142,13 @@
 /* Job page */
 .job-page { max-width: 1180px; }
 .job-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); }
-.job-head-company { margin: 0; color: var(--muted); font-weight: 650; }
+.job-head-crumbs { display: flex; align-items: baseline; gap: var(--space-2); color: var(--muted); font: 650 var(--fs-13) var(--font-ui); }
+.job-head-crumbs .btn-link { padding: 0; color: var(--ink); font: inherit; }
+.job-head-company { margin: 0; color: var(--muted); }
+.job-head-text { flex: 1 1 100%; min-width: 0; }
+.job-head-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+.job-head-title h1 { margin: 0; }
+.job-head-action { margin-left: auto; }
 .job-head h1 { margin: 2px 0 var(--space-2); font-size: var(--fs-28); }
 .job-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); color: var(--muted); font-size: var(--fs-13); }
 .job-head-meta strong { color: var(--ink); font-size: var(--fs-15); }
