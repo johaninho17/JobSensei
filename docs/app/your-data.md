@@ -34,7 +34,7 @@ Each candidate's Agy history (its conversations and memory) is kept in the app's
 | `jobs/<job>/interviews/` | Interview prep for that job, one folder per round | Agy, when you ask for prep |
 | `profile/story_bank.md` | Your stories for interviews | Agy drafts it once; you edit |
 | `profile/interview_voice.md` | How you speak, and the delivery fixes you're working on | Updated from your recordings |
-| `debrief/` | Interview recordings and transcripts, by company, plus practice interviews | You add files |
+| `debrief/` | Interview recordings and transcripts, one folder per job, plus practice interviews | You add files |
 <!-- /feature -->
 <!-- feature:!candidates -->
 | `.sensei/` | The app's own state (queues, records, backups). Safe to ignore | The app |

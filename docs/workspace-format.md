@@ -34,7 +34,7 @@ The application tracker lives in `jobs/<job-id>/.sensei/tracker.json` and is wri
 
 Interview rounds live under `jobs/<job-id>/interviews/<round-id>/`. Agy writes the round's questions as `question_bank.json` (`src/shared/question-bank.ts`), its prep notes as `prep.json`, and the job's research as `interviews/company_research.json` (`src/shared/interview-docs.ts`); `interview:check` writes `question_bank.md`, `prep.md`, and `company_research.md` from them and records what it wrote in `interviews/.sensei/rendered.json`. If one of those Markdown files was changed by hand since, the new version waits in `interviews/.sensei/pending/` (same path as the file, e.g. `pending/<round-id>/prep.md`) until the user chooses Replace or Keep mine on the round page. Rounds without JSON keep their Markdown as written.
 
-Interview recordings live under `debrief/<company>/`. `.sensei/content-sources.json` records each one the app has seen (content hash; new, imported, duplicate, or skipped), so Interviews → Your content can show only new recordings and send Agy only those. An update backs up the interview content (`.sensei/content-backups/`), Agy writes its change list to `.sensei/content-changes.json`, and the app puts back anything removed without a better replacement.
+Interview recordings live under `debrief/<job-id>/`, named `<company>-<stage>[-<date>].<ext>`; practice runs under `debrief/mock-interviews/`, recordings with no job under `debrief/other/`, and notes under `debrief/notes/`. Setup → Your folders → Tidy files puts older recordings into this shape. `.sensei/content-sources.json` records each one the app has seen (content hash; new, imported, duplicate, or skipped), so Interviews → Your content can show only new recordings and send Agy only those. An update backs up the interview content (`.sensei/content-backups/`), Agy writes its change list to `.sensei/content-changes.json`, and the app puts back anything removed without a better replacement.
 
 Learn from new recordings (ledger U76; the only area left after #199) keeps its state in `.sensei/tune/`: `sources.json` (the hash of each recording last read), `<area>-brief.md` and `run-<area>.json` while Agy works, `<area>.json` (Agy's suggestions, `src/shared/tune-schemas.ts`), `bank.json` (checked suggestions not applied yet), `declined.json`, `history.json` (old text of anything replaced or archived), `last-apply.json` for Undo, and `backups/` (newest 10).
 
@@ -62,7 +62,7 @@ A workspace uses one of two folder layouts. The app, its saved data, and every c
 | `profile/story_bank.md` | same | `profile/story-bank.md` |
 | `profile/interview_voice.md` | same | `profile/interview-voice.md` |
 | `debrief/interview-memory/` | same | `interviews/memory/` |
-| `debrief/<company>/` | same | `interviews/recordings/<company>/` |
+| `debrief/<job-id>/` | same | `interviews/recordings/<job-id>/` |
 | `jobs/<job-id>/`, `resumes/`, `profile/candidate.json` | same | same |
 
 Setup → Your folders previews the move, applies it, and can undo it (`electron/layout-migration.ts`). Nothing is deleted: exact copies, old `screened-jobs/`, and leftover run files go to `archive/`. Agy's copy of the instructions in the workspace is rewritten with the disk names, and a file an Agy run writes to an old path is moved to its real home.

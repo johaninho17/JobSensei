@@ -37,7 +37,7 @@ export const LAYOUT_V2_FOLDERS: ReadonlyArray<readonly [folder: string, purpose:
   ["career/records", "Work records: the facts drafts are built from"],
   ["career/notes", "Notes and documents that add background"],
   ["jobs", "One folder per job"],
-  ["interviews/recordings", "Interview recordings and transcripts, by company"],
+  ["interviews/recordings", "Interview recordings and transcripts, one folder per job"],
   ["interviews/memory", "What interviewers asked, by kind of role"],
   ["archive", "Older and duplicate files the app no longer uses; nothing is deleted"],
 ];
