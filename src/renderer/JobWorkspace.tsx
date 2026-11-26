@@ -4,7 +4,7 @@ import { jobSettingsScore, settingsScoreLabel } from "../shared/agy-behavior";
 import { DEFAULT_PDF_TEXT_SIZE, INTERVIEW_ROUNDS, OUTCOME_RESULTS, TRACKER_STATUSES, type InterviewEvent, type InterviewRoundKind, type JobOutcome, type JobTrackerUpdate, type TrackerStatus, type ApplicationStatus, type ApplicationValidationReport, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type PdfTextSize, type QuestionsState, type FramingLine } from "../shared/schemas";
 import { overrideLabel } from "../shared/job-overrides";
 import { locationLine } from "../shared/posting-fields";
-import { PAY_SYMBOLS } from "../shared/pay";
+import { PAY_SYMBOLS, normalPayText } from "../shared/pay";
 import { TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, draftedLabel } from "../shared/tracker";
 import { type JobAction } from "./job-actions";
 import { markdownHtml } from "./markdown";
@@ -315,8 +315,10 @@ function RolePanel({ job }: { job: JobFolderSummary }) {
   // Pay, work setup, and experience always show: a value, or "Not in the posting" (never a silent gap).
   const notStated = <span className="role-missing">Not in the posting</span>;
   const facts = ([
-    ["Pay", role.pay ?? notStated],
-    ["Work", role.workArrangement ?? job.location ?? notStated],
+    // Formatted like everywhere else (#209): pay through formatPay, the place and setup as one line, plus a schedule
+    // detail ("3 days in office") only when the posting gives one.
+    ["Pay", normalPayText(role.pay) ?? notStated],
+    ["Work", [locationLine(job.location, role.workMode), role.workArrangement && /\b(?:day|week|%|travel|hours?)\b/i.test(role.workArrangement) ? role.workArrangement : null].filter(Boolean).join(" · ") || notStated],
     ["Experience", role.experience ?? notStated],
     ["Level", role.seniority ? role.seniority[0]!.toUpperCase() + role.seniority.slice(1) : null],
     ["Travel", role.travel],
