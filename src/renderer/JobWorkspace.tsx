@@ -9,7 +9,7 @@ import { TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, draftedLabel } fro
 import { type JobAction } from "./job-actions";
 import { markdownHtml } from "./markdown";
 import { InterviewView } from "./InterviewView";
-import { SubTabPanel, SubTabs } from "./SubTabs";
+import { SubTabPanel, SubTabs, TabMenu } from "./SubTabs";
 import { ReviewPanel } from "./Review";
 import { TagEditor } from "./JobOrganize";
 import { type JobWorkspaceTab, TrackerPill, displayJobName, fileNodes, findNode, formatJobDate, formatRelativeDate, messageOf, plural, toast } from "./app-shared";
@@ -129,7 +129,7 @@ export function JobWorkspaceDashboard({ onOpenJobs, job, status, applicationLoad
         const openDoc = docs.find(isActive) ?? null;
         return [
           ...tabItems.filter((item) => item.id === "overview").map(tabButton),
-          docs.length > 0 && <ApplicationTabMenu key="application" items={docs} open={openDoc} onPick={(item) => { if (item.view) setAppView(item.view); onNavigate(job.id, "application"); }} />,
+          docs.length > 0 && <TabMenu key="application" id="job-tab-application" label="Application" itemIdPrefix="job-tab-" items={docs} open={openDoc} onPick={(item) => { if (item.view) setAppView(item.view); onNavigate(job.id, "application"); }} />,
           ...tabItems.filter((item) => item.tab !== "application" && item.id !== "overview").map(tabButton),
         ];
       })()}</nav>
@@ -408,37 +408,6 @@ function DebriefPanel({ job, closed, onUpdateTracker, onInsertPrompt }: { job: J
     </div>}
     {interviews.length > 0 && <button className="btn-link" onClick={() => onInsertPrompt({ prompt: `${company} debrief (job: ${job.id})`, label: "Debrief this interview" })}>Ask Agy to debrief</button>}
   </section>;
-}
-
-type AppTabItem = { id: string; label: string; count?: number | null };
-
-/**
- * The Application tab (#222): one tab whose menu lists the job's documents (Resume, Cover letter, Questions, Posting,
- * Checks). Its label names the open document. Escape or a click outside closes it; arrow keys move through the list.
- */
-function ApplicationTabMenu<T extends AppTabItem>({ items, open, onPick }: { items: T[]; open: T | null; onPick: (item: T) => void }) {
-  const [shown, setShown] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!shown) return;
-    ref.current?.querySelector<HTMLButtonElement>('[role="menuitem"][aria-current="page"], [role="menuitem"]')?.focus();
-    const outside = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) setShown(false); };
-    const keys = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { setShown(false); ref.current?.querySelector<HTMLButtonElement>('[role="tab"]')?.focus(); return; }
-      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-      const list = [...(ref.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
-      const at = list.indexOf(document.activeElement as HTMLButtonElement);
-      list[(at + (event.key === "ArrowDown" ? 1 : list.length - 1)) % list.length]?.focus();
-      event.preventDefault();
-    };
-    document.addEventListener("mousedown", outside);
-    document.addEventListener("keydown", keys);
-    return () => { document.removeEventListener("mousedown", outside); document.removeEventListener("keydown", keys); };
-  }, [shown]);
-  return <div className="tab-menu" ref={ref}>
-    <button role="tab" id="job-tab-application" aria-selected={open !== null} aria-haspopup="menu" aria-expanded={shown} className={open ? "is-active" : ""} onClick={() => setShown((value) => !value)}>{open ? open.label : "Application"}<span className="tab-menu-caret" aria-hidden="true">▾</span></button>
-    {shown && <div className="tab-menu-list jobs-more-menu" role="menu" aria-label="Application documents">{items.map((item) => <button key={item.id} role="menuitem" id={`job-tab-${item.id}`} className="menu-item" aria-current={open?.id === item.id ? "page" : undefined} onClick={() => { setShown(false); onPick(item); }}>{item.label}{item.count ? <span className="subtabs-count"> {item.count}</span> : null}</button>)}</div>}
-  </div>;
 }
 
 /**

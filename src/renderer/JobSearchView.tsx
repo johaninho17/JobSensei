@@ -235,12 +235,13 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
       </>} />
     {error && <p className="inline-error" role="alert">{error}</p>}
     <SubTabs idPrefix="job-search" label="Job Search" value={tab} onChange={setTab} tabs={[
-      { id: "matches", label: "Matches", count: newCount || null },
-      { id: "drafting", label: "Sent for drafts", count: drafting.length || null },
-      { id: "saved", label: "Saved", count: savedItems.length || null },
-      { id: "dismissed", label: "Dismissed", count: dismissedItems.length || null },
-      { id: "settings", label: "Search settings" },
-      { id: "runs", label: "Runs", count: state?.runs.length || null },
+      // Two dropdown tabs (#239): the found jobs, and the search itself.
+      { id: "matches", label: "Matches", count: newCount || null, group: "Matches" },
+      { id: "drafting", label: "Sent for drafts", count: drafting.length || null, group: "Matches" },
+      { id: "saved", label: "Saved", count: savedItems.length || null, group: "Matches" },
+      { id: "dismissed", label: "Dismissed", count: dismissedItems.length || null, group: "Matches" },
+      { id: "settings", label: "Search settings", group: "Search" },
+      { id: "runs", label: "Runs", count: state?.runs.length || null, group: "Search" },
     ]} actions={tab === "dismissed" && dismissedItems.length > 0 ? <button className="btn-quiet" disabled={busy} onClick={() => void removeAllDismissed()}>Remove all</button> : tab === "matches" && live.length > 0 ? <>
       <label className="muted find-sort">Sort <select value={sort} onChange={(event) => setSort(event.target.value as Sort)}><option value="fit">Fit</option><option value="newest">Newest</option><option value="company">Company</option></select></label>
       <button className="btn-quiet" onClick={() => { setSelecting(!selecting); setSelected(new Set()); }}>{selecting ? "Done" : "Select"}</button>

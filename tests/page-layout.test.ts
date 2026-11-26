@@ -225,9 +225,11 @@ describe("Show less, reveal on demand: sidebar and saved messages (U89, #187)", 
 describe("Application documents in one dropdown tab (#222)", () => {
   it("the job page has Overview, Application, Interview and Files; the documents are menu items", async () => {
     const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
-    expect(page).toContain("<ApplicationTabMenu");
-    expect(page).toMatch(/role="tab" id="job-tab-application"[^>]*aria-haspopup="menu"/);
-    expect(page).toMatch(/role="menuitem" id=\{`job-tab-\$\{item\.id\}`\}/);
+    // The dropdown tab lives in SubTabs.tsx (one owner, #239); the job page uses it for Application.
+    expect(page).toMatch(/<TabMenu key="application" id="job-tab-application" label="Application" itemIdPrefix="job-tab-"/);
+    const tabs = await readFile("src/renderer/SubTabs.tsx", "utf8");
+    expect(tabs).toMatch(/role="tab" id=\{id\}[^>]*aria-haspopup="menu"/);
+    expect(tabs).toMatch(/role="menuitem" id=\{`\$\{itemIdPrefix\}\$\{item\.id\}`\}/);
     // Document tabs are never drawn as tabs of their own.
     expect(page).toMatch(/tabItems\.filter\(\(item\) => item\.tab !== "application" && item\.id !== "overview"\)/);
   });
@@ -276,5 +278,19 @@ describe("Job page alignment (#235)", () => {
     expect(css).toMatch(/\.doc-inline \{ max-width: 820px; margin-inline: auto;/);
     expect(css).toMatch(/\.framing-review \{ max-width: 820px; margin: 0 auto/);
     expect(css).toMatch(/\.job-head-meta \.check-chip, \.job-head-meta \.tracker-select select, \.job-head-meta \.pdf-menu > summary \{[^}]*height: 32px/);
+  });
+});
+
+describe("Page tabs grouped into dropdowns (#239)", () => {
+  it("Job Search, Profile and Agy group related tabs, so each row has at most four", async () => {
+    const search = await readFile("src/renderer/JobSearchView.tsx", "utf8");
+    expect(search.match(/group: "Matches"/g)).toHaveLength(4);
+    expect(search.match(/group: "Search"/g)).toHaveLength(2);
+    const profile = await readFile("src/renderer/SetupAndContext.tsx", "utf8");
+    expect(profile).toContain('group: "Career files"');
+    expect(profile).toContain('group: "Interview"');
+    const agy = await readFile("src/renderer/AgyView.tsx", "utf8");
+    expect(agy.match(/group: "Behavior"/g)).toHaveLength(2);
+    expect(agy.match(/group: "History"/g)).toHaveLength(2);
   });
 });

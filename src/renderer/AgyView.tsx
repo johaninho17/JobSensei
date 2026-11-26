@@ -14,7 +14,8 @@ import { SubTabs, SubTabPanel } from "./SubTabs";
 import { PageHead } from "./BentoPrimitives";
 
 type AgyTab = "actions" | "activity" | "behavior" | "conversations" | "memory" | "how";
-const TABS: Array<{ id: AgyTab; label: string }> = [{ id: "actions", label: "Actions" }, { id: "activity", label: "Activity" }, { id: "behavior", label: "Behavior" }, { id: "conversations", label: "Conversations" }, { id: "memory", label: "Memory" }, { id: "how", label: "How it works" }];
+/** Actions · Behavior ▾ (Behavior, Memory) · History ▾ (Activity, Conversations) · How it works (#239). */
+const TABS: Array<{ id: AgyTab; label: string; group?: string }> = [{ id: "actions", label: "Actions" }, { id: "behavior", label: "Behavior", group: "Behavior" }, { id: "memory", label: "Memory", group: "Behavior" }, { id: "activity", label: "Activity", group: "History" }, { id: "conversations", label: "Conversations", group: "History" }, { id: "how", label: "How it works" }];
 
 const SETTING_ROWS: Array<{ id: BehaviorSetting; title: string; value: (behavior: AgyBehavior) => string; help: string }> = [
   { id: "framing", title: "How far wording may reach", value: (behavior) => FRAMING_LABELS[behavior.framing], help: `Lines that reach further than this are flagged after each run. No setting ever invents ${FRAMING_FLOOR}; at "beyond", every line past its evidence is listed so you can keep or reword it.` },

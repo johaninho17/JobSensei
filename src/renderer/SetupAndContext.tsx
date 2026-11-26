@@ -333,7 +333,8 @@ export function ContextHome({ notice, setup, sources, notes, resumes, jobFiles, 
       label="Career context sections"
       value={view}
       onChange={setView}
-      tabs={[...(setup ? [{ id: "setup" as const, label: "Setup" }] : []), { id: "sources", label: "Sources" }, ...(notes ? [{ id: "notes" as const, label: "Recruiter notes" }] : []), { id: "resumes", label: "Resumes" }, { id: "jobs", label: "Job files" }, ...(FEATURES.interviewProfile ? [{ id: "stories" as const, label: "Story bank" }, { id: "voice" as const, label: "Interview voice" }] : [])]}
+      // Setup · Career files ▾ · Interview ▾ (#239).
+      tabs={[...(setup ? [{ id: "setup" as const, label: "Setup" }] : []), { id: "sources", label: "Sources", group: "Career files" }, ...(notes ? [{ id: "notes" as const, label: "Recruiter notes", group: "Career files" }] : []), { id: "resumes", label: "Resumes", group: "Career files" }, { id: "jobs", label: "Job files", group: "Career files" }, ...(FEATURES.interviewProfile ? [{ id: "stories" as const, label: "Story bank", group: "Interview" }, { id: "voice" as const, label: "Interview voice", group: "Interview" }] : [])]}
     />
     <SubTabPanel idPrefix="ctx" value={view}>
       {view === "setup" && setup}
