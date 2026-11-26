@@ -7,12 +7,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { type RunStatus } from "../shared/schemas";
 import { type JobAction } from "./job-actions";
 import "@xterm/xterm/css/xterm.css";
-import { type PromptRequest, type QueueJob, formatBytes, formatRelativeDate, messageOf } from "./app-shared";
-
-// What the Agy chat says first: the Recruiter Edition works for the open candidate, not for the person at the keyboard.
-const AGY_GREETING = FEATURES.candidates
-  ? "Working on the open candidate's folder only. Paste a job description or link to tailor their application, or choose an action below."
-  : "Connected to local career evidence and job workspace. Paste a job description to screen and tailor your application, choose a recommended action, or enter a prompt below.";
+import { type PromptRequest, type QueueJob, formatRelativeDate, messageOf } from "./app-shared";
 
 function stripAnsi(raw: string): string {
   return raw
@@ -109,24 +104,15 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
   const activeStartedAtRef = useRef(0);
   const beginChatRunRef = useRef<(text: string, label?: string, attachedPaste?: PastedBlock, fromQueue?: boolean) => string>(() => "");
   const finishChatRunRef = useRef<(status: "success" | "error", note?: string) => void>(() => undefined);
-  const [chatEntries, setChatEntries] = useState<ChatEntry[]>(() => [
-    {
-      id: "welcome",
-      sender: "system",
-      title: "JobSensei Copilot",
-      content: AGY_GREETING,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    },
-    // Earlier entries for this workspace (`chat-history.ts`): the chat survives a reload or a workspace switch.
-    ...loadChatHistory(window.localStorage, historyKey),
-  ]);
+  // No greeting (#212): an empty chat is just the input. Earlier entries for this workspace come back (`chat-history.ts`).
+  const [chatEntries, setChatEntries] = useState<ChatEntry[]>(() => loadChatHistory(window.localStorage, historyKey));
   const historyWorkspace = useRef(historyKey);
   useEffect(() => {
     // Another workspace: show its own history, never the previous one's.
     if (historyWorkspace.current !== historyKey) {
       historyWorkspace.current = historyKey;
       activeAsstIdRef.current = null;
-      setChatEntries((prev) => [...prev.filter((entry) => entry.id.startsWith("welcome")).slice(0, 1), ...loadChatHistory(window.localStorage, historyKey)]);
+      setChatEntries(loadChatHistory(window.localStorage, historyKey));
       return;
     }
     saveChatHistory(window.localStorage, historyKey, chatEntries);
@@ -192,7 +178,7 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
     finishChatRun("success");
     const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const now = Date.now();
-    const userContent = fromQueue ? `⚡ From the queue: ${label ?? "job"}` : label ? `⚡ ${label}` : text;
+    const userContent = fromQueue ? `From the queue: ${label ?? "job"}` : label ?? text;
     const userMsg: ChatEntry = {
       id: `user-${now}`,
       sender: "user",
@@ -209,14 +195,11 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
     const asstId = `asst-${now}`;
     activeAsstIdRef.current = asstId;
     activeStartedAtRef.current = now;
-    const commandSummary = label || (text.trim() ? (text.length > 40 ? `${text.slice(0, 40)}…` : text) : (attachedPaste ? `Pasted JD (${attachedPaste.lineCount} lines)` : "Task"));
 
     const asstMsg: ChatEntry = {
       id: asstId,
       sender: "assistant",
-      title: label || "Task execution",
       content: "",
-      steps: [`Starting: ${commandSummary}…`],
       status: "running",
       startTime: now,
       timestamp: time,
@@ -322,15 +305,7 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
   const handleClear = () => {
     if (viewMode === "chat") {
       clearChatHistory(window.localStorage, historyKey);
-      setChatEntries([
-        {
-          id: `welcome-${Date.now()}`,
-          sender: "system",
-          title: "JobSensei Copilot",
-          content: AGY_GREETING,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        },
-      ]);
+      setChatEntries([]);
     } else {
       terminalRef.current?.clear();
       void window.sensei.terminal.write("\x0c");
@@ -373,25 +348,9 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
         const activeId = activeAsstIdRef.current;
         setChatEntries((prev) => prev.map((entry) => {
           if (entry.id !== activeId) return entry;
-          const currentSteps = entry.steps ?? [];
-          const newSteps = [...currentSteps];
-          for (const line of meaningfulLines) {
-            if (/(?:✓|done|complete|created|wrote|screening|snapshott|evaluat|prepar|finaliz|tailor|warn|error|building|analyz)/i.test(line)) {
-              const stepText = line.replace(/^[✓\-*•→]\s*/, "");
-              if (!newSteps.includes(stepText) && newSteps.length < 12) {
-                newSteps.push(stepText);
-              }
-            }
-          }
           const existingRaw = entry.rawOutput ?? [];
           const updatedRaw = [...existingRaw, ...meaningfulLines].slice(-60);
-          const lastLine = meaningfulLines[meaningfulLines.length - 1];
-          return {
-            ...entry,
-            steps: newSteps,
-            rawOutput: updatedRaw,
-            content: entry.content || (lastLine && !newSteps.includes(lastLine) ? lastLine : entry.content),
-          };
+          return { ...entry, rawOutput: updatedRaw };
         }));
       }
 
@@ -424,7 +383,7 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
     void window.sensei.terminal.start({}).then(({ cwd: startedCwd, agyStarted }) => {
       terminalReadyRef.current = true;
       setAgyActive(Boolean(agyStarted));
-      setStatus(`${startedCwd} · ${agyStarted ? "⚡ agy ready" : "shell ready"}`);
+      setStatus(`${startedCwd} · ${agyStarted ? "Agy ready" : "shell ready"}`);
       setTerminalReady(true);
       resize();
       terminal.focus();
@@ -495,9 +454,6 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
         <div className="terminal-header-title-group">
           <div className="terminal-brand-badge">
             <div className="terminal-title">Agy</div>
-            <span className={`terminal-engine-tag ${agyActive ? "is-agy" : "is-shell"}`}>
-              {agyActive ? "⚡ agy" : "🐚 shell"}
-            </span>
           </div>
           <div className="terminal-header-view-toggle" role="group" aria-label="Command center view mode">
             <button
@@ -506,7 +462,7 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
               type="button"
               aria-pressed={viewMode === "chat"}
             >
-              💬 Chat
+              Chat
             </button>
             <button
               className={`view-toggle-btn ${viewMode === "console" ? "is-active" : ""}`}
@@ -517,7 +473,7 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
               type="button"
               aria-pressed={viewMode === "console"}
             >
-              🖥️ Console
+              Console
             </button>
           </div>
         </div>
@@ -545,7 +501,7 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
                   <div className="chat-bubble-header">
                     <div className="chat-sender-group">
                       <span className="chat-sender-name">
-                        {entry.sender === "user" ? "You" : entry.sender === "assistant" ? "Sensei Copilot" : "System"}
+                        {entry.sender === "user" ? "You" : entry.sender === "assistant" ? "Agy" : "Note"}
                       </span>
                       {entry.status === "running" && entry.startTime && (
                         <span className="chat-timer-badge is-running">
@@ -566,9 +522,8 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
                     <div className="chat-pasted-card">
                       <div className="chat-pasted-header">
                         <div className="chat-pasted-title-row">
-                          <span className="chat-pasted-icon">📄</span>
                           <span className="chat-pasted-title">
-                            Pasted text [lines 1–{entry.pastedBlock.lineCount} · {formatBytes(entry.pastedBlock.byteCount)}]
+                            Pasted text · {entry.pastedBlock.lineCount} lines
                           </span>
                         </div>
                         <button
@@ -576,7 +531,7 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
                           className="chat-pasted-toggle-btn"
                           onClick={() => toggleExpandPaste(entry.id)}
                         >
-                          {expandedPastes[entry.id] ? "Collapse ▴" : "Preview ▾"}
+                          {expandedPastes[entry.id] ? "Hide" : "Show"}
                         </button>
                       </div>
                       {expandedPastes[entry.id] ? (
@@ -589,32 +544,10 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
                       )}
                     </div>
                   )}
-                  {entry.steps && entry.steps.length > 0 && (entry.status === "running" ? (
-                    <div className="chat-steps">
-                      {entry.steps.map((step, idx) => (
-                        <div key={idx} className="chat-step-item">
-                          <span className="chat-step-check">✓</span>
-                          <span>{step}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    // A finished run's steps are one line that opens on click; a failed one stays open (U89).
-                    <details className="chat-steps-fold" open={entry.status === "error"}>
-                      <summary>{entry.status === "error" ? "Stopped" : "Done"}{entry.durationMs !== undefined ? ` in ${formatDuration(entry.durationMs)}` : ""} · {entry.steps.length} step{entry.steps.length === 1 ? "" : "s"}</summary>
-                      <div className="chat-steps">
-                        {entry.steps.map((step, idx) => (
-                          <div key={idx} className="chat-step-item">
-                            <span className="chat-step-check">✓</span>
-                            <span>{step}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  ))}
+                  {entry.sender === "assistant" && entry.status && entry.status !== "running" && <div className="chat-done">{entry.status === "error" ? "Stopped" : "Done"}{entry.durationMs !== undefined ? ` in ${formatDuration(entry.durationMs)}` : ""}</div>}
                   {entry.status === "running" && (
                     <div className="chat-running-status">
-                      <span className="chat-pulse-dot" /> Executing steps…
+                      <span className="chat-pulse-dot" /> Working…
                     </div>
                   )}
                   {entry.rawOutput && entry.rawOutput.length > 0 && (
@@ -625,8 +558,8 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
                         onClick={() => toggleExpandRaw(entry.id)}
                       >
                         {expandedRawLogs[entry.id]
-                          ? "Hide CLI log ▴"
-                          : `Show CLI log (${entry.rawOutput.length} lines) ▾`}
+                          ? "Hide output"
+                          : "Show output"}
                       </button>
                       {expandedRawLogs[entry.id] && (
                         <pre className="chat-raw-content">
@@ -643,10 +576,9 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
               {pastedAttachment && (
                 <div className="chat-staged-attachment">
                   <div className="chat-staged-body">
-                    <span className="chat-staged-icon">📄</span>
                     <div className="chat-staged-info">
                       <span className="chat-staged-label">
-                        Pasted text [lines 1–{pastedAttachment.lineCount} · {formatBytes(pastedAttachment.byteCount)}]
+                        Pasted text · {pastedAttachment.lineCount} lines
                       </span>
                       <span className="chat-staged-snippet">{pastedAttachment.preview.replace(/\n/g, " · ").slice(0, 75)}…</span>
                     </div>
@@ -688,8 +620,8 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
                   onKeyDown={handleKeyDown}
                   placeholder={
                     pastedAttachment
-                      ? "Add prompt instruction or press Enter to run…"
-                      : "Ask Sensei or paste a job description… (Shift+Enter for newline)"
+                      ? "Add a note, or press Enter"
+                      : "Message Agy or paste a job link"
                   }
                 />
                 <button
@@ -715,10 +647,10 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
         />
       </div>
 
-      <div className="terminal-status">
+      {(promptNotice || /fail|unavailable|stopped/i.test(status)) && <div className="terminal-status">
         <span className={`status-dot ${terminalReady ? "is-ready" : ""}`} />
         <span>{promptNotice || status}</span>
-      </div>
+      </div>}
     </aside>
   );
 }
@@ -726,7 +658,6 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
 function JobActionsMenu({ actions, onInsert }: { actions: JobAction[]; onInsert: (action: JobAction) => void }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const recommended = actions.find((action) => action.recommended) ?? actions[0] ?? null;
   useEffect(() => {
     if (!open) return;
     const close = (event: globalThis.MouseEvent) => { if (!rootRef.current?.contains(event.target as Node)) setOpen(false); };
@@ -741,14 +672,11 @@ function JobActionsMenu({ actions, onInsert }: { actions: JobAction[]; onInsert:
   }
   const groups: JobAction["group"][] = ["Recommended", "Interview", "Application"];
   return <div className="job-actions" ref={rootRef}>
-    <div className="job-actions-split">
-      <button className="terminal-action job-actions-primary" disabled={!recommended} title={recommended ? `Insert without running: ${recommended.prompt}` : "View a job or select one job to enable actions"} onClick={() => recommended && insert(recommended)}>Job Actions</button>
-      <button className="terminal-action job-actions-toggle" disabled={!actions.length} aria-haspopup="menu" aria-expanded={open} aria-label="Show Job Actions" onClick={() => setOpen((value) => !value)}>▾</button>
-    </div>
+    <button className="terminal-action job-actions-toggle" disabled={!actions.length} aria-haspopup="menu" aria-expanded={open} title={actions.length ? undefined : "Open a job to see its actions"} onClick={() => setOpen((value) => !value)}>Job actions ▾</button>
     {open && <div className="job-actions-menu" role="menu" aria-label={`Actions for ${actions[0]?.company ?? "this job"}`}>{actions[0] && <p className="job-actions-for">For {actions[0].company} <code>(job: {actions[0].jobId})</code></p>}{groups.map((group) => {
       const grouped = actions.filter((action) => action.group === group);
       if (!grouped.length) return null;
-      return <section key={group}><span>{group}</span>{grouped.map((action) => <button key={action.id} role="menuitem" onClick={() => insert(action)}><strong>{action.label}</strong><small>Inserts the request; you press Enter to run it</small></button>)}</section>;
+      return <section key={group}><span>{group}</span>{grouped.map((action) => <button key={action.id} role="menuitem" onClick={() => insert(action)}><strong>{action.label}</strong></button>)}</section>;
     })}</div>}
   </div>;
 }

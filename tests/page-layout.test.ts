@@ -166,9 +166,9 @@ describe("Show less, reveal on demand: Agy panel (U89, #186)", () => {
     expect(bar).not.toContain("Top ${run.issues.length} issues");
   });
 
-  it("finished steps fold into one line, Clear and Restart sit in a menu, and one suggestion chip shows", async () => {
+  it("a finished run is one Done line (#212), Clear and Restart sit in a menu, and one suggestion chip shows", async () => {
     const panel = await readFile("src/renderer/TerminalPanel.tsx", "utf8");
-    expect(panel).toContain('<details className="chat-steps-fold" open={entry.status === "error"}>');
+    expect(panel).toContain('className="chat-done"');
     expect(panel).toContain('<details className="jobs-more terminal-more">');
     expect(panel).not.toContain('aria-label="Hide terminal panel" onClick={onClose}>Hide</button>');
     expect(panel).toContain("jobActions.slice(0, 1)");
