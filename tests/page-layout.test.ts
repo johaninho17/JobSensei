@@ -294,3 +294,13 @@ describe("Page tabs grouped into dropdowns (#239)", () => {
     expect(agy.match(/group: "History"/g)).toHaveLength(2);
   });
 });
+
+describe("Profile setup says it once (#240)", () => {
+  it("folds done steps into one line, keeps to-dos to one line, and merges the two add buttons", async () => {
+    const setup = await readFile("src/renderer/SetupAndContext.tsx", "utf8");
+    expect(setup).toContain('<details className="setup-done-group"><summary>{done} done</summary>');
+    expect(setup).toContain('title={item.improves}');
+    expect(setup).not.toContain("<small>{item.improves}</small></div>");
+    expect(setup).toContain('<details className="jobs-more add-menu"><summary className="btn-quiet">Add ▾</summary>');
+  });
+});

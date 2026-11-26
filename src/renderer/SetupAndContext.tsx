@@ -269,11 +269,13 @@ export function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAct
     <span className="setup-state">{READINESS_STATE[item.state]}</span>
     {/* A done step is one line; what it read and what it improves open on request (U82). */}
     {item.state === "done" ? <details className="setup-text setup-done"><summary><strong>{item.title}</strong> <span className="muted">{item.detail}</span></summary>{item.lines.length > 0 && <ul className="setup-lines">{item.lines.map((line) => <li key={line}>{line}</li>)}</ul>}<small>{item.improves}</small></details>
-      : <div className="setup-text"><strong>{item.title}</strong><p>{item.detail}</p>{item.lines.length > 0 && <ul className="setup-lines">{item.lines.map((line) => <li key={line}>{line}</li>)}</ul>}<small>{item.improves}</small></div>}
+      // A to-do is one line: what it is and what's missing; why it helps is the row's tooltip (#240).
+      : <div className="setup-text" title={item.improves}><strong>{item.title}</strong> <span className="muted">{item.detail}</span>{item.lines.length > 0 && <ul className="setup-lines">{item.lines.map((line) => <li key={line}>{line}</li>)}</ul>}</div>}
     <span className="setup-actions">
       {INLINE_SETUP.has(item.action) ? editing !== item.action && <button className={item.state === "done" ? "btn-link" : "btn-quiet"} onClick={() => setEditing(item.action)}>{item.state === "done" ? "Edit" : "Fill in"}</button>
+        // Two ways to add other resumes share one Add menu (#240).
+        : item.action === "other-resumes" && item.state !== "done" ? <details className="jobs-more add-menu"><summary className="btn-quiet">Add ▾</summary><div className="jobs-more-menu"><button className="menu-item" onClick={(event) => { (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); onAction(item.action); }}>A resume</button><button className="menu-item" onClick={(event) => { (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); onAddLinkedin(); }}>LinkedIn export</button></div></details>
         : item.state !== "done" && item.action !== "none" && ACTION_LABEL[item.action] && <button className={item.level === "required" ? "btn-primary" : "btn-quiet"} onClick={() => onAction(item.action)}>{ACTION_LABEL[item.action]}</button>}
-      {item.action === "other-resumes" && <button className="btn-quiet" onClick={onAddLinkedin}>Add LinkedIn export</button>}
       {item.path && /\.(?:md|txt|docx|pdf|json)$/i.test(item.path) && <button className="btn-link" onClick={() => onReveal(item.path!)}>Open</button>}
     </span>
     {editing === item.action && <div className="setup-row-editor"><SetupEditor action={item.action} profile={profile} onSaved={(next) => { onProfileSaved(next); onRefresh(); }} onClose={() => setEditing(null)} /></div>}
@@ -283,7 +285,9 @@ export function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAct
     {(() => { const status = <>{FEATURES.candidates ? (readiness.ready ? "Ready for jobs." : "Add the base resume to start tailoring.") : readiness.ready ? "Ready. The recommended steps make drafts and prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button></>;
       return embedded || FEATURES.candidates ? <p className="setup-status">{status}</p> : <PageHead title="Setup" status={status} />; })()}
     {(["required", "recommended"] as const).map((level) => { const items = readiness.items.filter((item) => item.level === level); const done = items.filter((item) => item.state === "done").length; return <Section key={level} id={`setup-${level}`} title={level === "required" ? "Required" : "Recommended"} count={`${done} of ${items.length}`} defaultOpen={done < items.length}>
-      <ol className="setup-list">{items.map(row)}</ol>
+      {/* To-dos first, one line each; done steps fold into one line (#240). */}
+      {items.some((item) => item.state !== "done") && <ol className="setup-list">{items.filter((item) => item.state !== "done").map(row)}</ol>}
+      {done > 0 && <details className="setup-done-group"><summary>{done} done</summary><ol className="setup-list">{items.filter((item) => item.state === "done").map(row)}</ol></details>}
     </Section>; })}
     <WorkspaceFolders onToast={onToast} onChanged={onRefresh} />
   </section>;

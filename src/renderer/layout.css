@@ -1285,3 +1285,9 @@ summary.run-status-line::-webkit-details-marker { display: none; }
 
 /* A tab row with a dropdown tab never clips its menu (#239). */
 .subtabs-list:has(.tab-menu) { overflow: visible; }
+
+/* Profile setup: done steps fold into one line (#240). */
+.setup-done-group { margin-top: var(--space-2); }
+.setup-done-group > summary { cursor: pointer; color: var(--muted); font: 600 var(--fs-13) var(--font-ui); padding: var(--space-1) 0; }
+.setup-text > .muted { font-size: var(--fs-13); }
+.add-menu > summary { width: auto; height: auto; min-height: 34px; padding: 0 var(--space-3); font: 600 var(--fs-13) var(--font-ui); }
