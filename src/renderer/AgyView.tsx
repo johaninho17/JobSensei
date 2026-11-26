@@ -61,7 +61,6 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
   };
   return <>
     <p className={`settings-score-big is-${score.band}`}><strong className="tabular">{score.score}</strong> of 100 · {band.label}</p>
-    <p className="muted">One number for how lenient Agy's settings are: {SETTINGS_BANDS.map((item) => `${item.label} from ${item.min}`).join(", ")}. Each job keeps the settings it was made under, so changes here apply to jobs drafted from now on.</p>
     <ul className="agy-actions">{SETTING_ROWS.map((row) => <li key={row.id}>
       <div><strong>{row.title}</strong><p>{row.value(behavior)}. {row.help}</p>{CONNECTED.has(row.id) && editors[row.id]}</div>
       <span className="agy-where">{score.parts[row.id]} of 10</span>
@@ -69,7 +68,6 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
     </li>)}</ul>
     <section className="behavior-weights" aria-labelledby="behavior-weights-title">
       <h2 id="behavior-weights-title">Fit score weights</h2>
-      <p className="muted">How much each kind of requirement counts toward a job's fit score. They add up to 100; a category the posting doesn't list is left out and the rest are scaled up. Weights don't change the settings score.</p>
       <div className="behavior-fields">
         <NumberField label="Core work" value={draft.fit.weights.core} min={1} max={100} step={1} onChange={(value) => setWeight("core", value)} />
         <NumberField label="Technical" value={draft.fit.weights.technical} min={0} max={100} step={1} onChange={(value) => setWeight("technical", value)} />
@@ -82,7 +80,6 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
     </section>
     {FEATURES.jobSearch && <section className="behavior-ranking" aria-labelledby="behavior-ranking-title">
       <h2 id="behavior-ranking-title">How Job Search ranks matches</h2>
-      <p className="muted">Each slider is worth up to that many fit points in the order of Job Search matches; the fit shown on a match never changes. Not part of the settings score: it changes the order, not what Agy writes.</p>
       {RANKING_SLIDERS.map((slider) => <label key={slider.key} className="behavior-slider"><span>{slider.label} <strong className="tabular">{draft.search[slider.key].toFixed(2).replace(/0$/, "")}</strong></span>
         <input type="range" min={0} max={slider.max} step={0.05} value={draft.search[slider.key]} aria-describedby={`rank-${slider.key}`} onChange={(event) => { const value = Number(event.target.value); setDraft((current) => ({ ...current, search: { ...current.search, [slider.key]: value } })); setState("idle"); }} />
         <small id={`rank-${slider.key}`} className="muted">{slider.help}</small>
@@ -90,7 +87,6 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
     </section>}
     <section className="behavior-weights" aria-labelledby="behavior-models-title">
       <h2 id="behavior-models-title">Model and effort</h2>
-      <p className="muted">Which model Agy uses and how hard it thinks. Higher effort is more careful and uses more quota. The panel's choice applies the next time Agy starts (Restart in the Agy panel); background runs use theirs from the next run.</p>
       {(["panel", "background"] as const).map((kind) => <div key={kind} className="behavior-fields">
         <label className="behavior-field"><span>{kind === "panel" ? "Agy panel: applications, interview prep" : "Background: job search, ratings, written answers"}</span>
           <select value={draft.models[kind].model ?? ""} onChange={(event) => setModel(kind, { model: event.target.value || null })}>
@@ -112,7 +108,6 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
       <button className="btn-quiet" disabled={state === "saving" || JSON.stringify(draft) === JSON.stringify(DEFAULT_AGY_BEHAVIOR)} onClick={() => { setDraft(DEFAULT_AGY_BEHAVIOR); void save(DEFAULT_AGY_BEHAVIOR); }}>Back to the app's defaults</button>
       <span className="muted" role="status">{state === "error" ? "Couldn't save. Try again." : changed ? "Not saved yet." : ""}</span>
     </div>
-    {SETTING_ROWS.some((row) => !CONNECTED.has(row.id)) && <p className="muted">Settings marked "App rule" become adjustable here once they are connected to Agy, so a change here always changes what Agy does.</p>}
   </>;
 }
 const remembered = (): AgyTab => {

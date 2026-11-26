@@ -20,7 +20,6 @@ export function AgyMemory() {
     try { setItems(await window.sensei.terminal.deleteMemory(ids)); } catch (error) { setProblem(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); }
   };
   return <div className="agy-memory">
-    <p>Agy keeps a few notes from past conversations to work faster next time. They are saved in Agy's own format, so this page shows when each one was saved, not what it says. Agy can't save rules or memories on purpose here; your standing instructions belong in Settings.</p>
     <div className="agy-conversations-bar">
       <p className="muted">{items === null ? "Loading…" : items.length ? `${items.length} memory item${items.length === 1 ? "" : "s"}.` : "Agy remembers nothing yet."}</p>
       {items && items.length > 0 && <button className="btn-quiet" disabled={busy} onClick={() => void remove("all")}>Delete all</button>}

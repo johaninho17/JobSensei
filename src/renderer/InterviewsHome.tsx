@@ -93,7 +93,6 @@ function LearningsView({ jobs, overviews, onOpenFile }: { jobs: JobFolderSummary
   return <div className="learnings">
     {learn.unrecorded > 0 && <p className="learn-note" role="status">{plural(learn.unrecorded, "job")} with interview prep {learn.unrecorded === 1 ? "has" : "have"} no recorded interviews yet, so {learn.unrecorded === 1 ? "it isn't" : "they aren't"} counted below. Record them in each job's "What happened?" (Jobs ⋯ → Data health lists them).</p>}
     <Section id="learn-1" title="How far applications got" defaultOpen={true}>
-      <p className="learn-note">Real interviews only, as recorded in each job. Prep alone doesn't count.</p>
       <dl className="learn-stats">
         <div><dt>Applied</dt><dd className="tabular">{learn.applied}</dd></div>
         <div><dt>Got an interview</dt><dd className="tabular">{learn.interviewed}<small>{percent(learn.interviewed, learn.applied)}</small></dd></div>
@@ -112,7 +111,6 @@ function LearningsView({ jobs, overviews, onOpenFile }: { jobs: JobFolderSummary
       <p className="learn-note">Median posted pay: <strong className="tabular">{money(learn.pay.interviewed)}</strong> for jobs with an interview, <strong className="tabular">{money(learn.pay.notInterviewed)}</strong> for the rest.</p>
     </Section>}
     {learn.gapTerms.length > 0 && <Section id="learn-4" title="Gaps in applications that got no interview" defaultOpen={false}>
-      <p className="learn-note">Tools the posting asked for that your evidence didn't cover, counted per job.</p>
       <ul className="learn-fixes">{learn.gapTerms.map((row) => <li key={row.term}><span>{row.term}</span><small>{row.noInterview} with no interview · {row.interviewed} with one</small></li>)}</ul>
     </Section>}
     {learn.reasons.length > 0 && <Section id="learn-5" title="Why it ended, in your words" defaultOpen={false}>
@@ -208,7 +206,6 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
     {imported.length > 0 && <section className="iv-section">
       <details>
         <summary><h3 className="inline-heading">Imported recordings</h3> <span className="muted">{plural(imported.length, "recording")}</span></summary>
-        <p className="learn-note">What each update took from a recording. "Shared" means Agy didn't say which recording an item came from, so it is counted for each one of that update.</p>
         <ul className="recording-list">{imported.slice(0, 30).map((recording) => <li key={recording.path}>
           <span className="setup-state">{recording.importedAt ? new Date(recording.importedAt).toLocaleDateString() : "Earlier"}</span>
           <span><strong>{recording.path.replace(/^debrief\//, "")}</strong><small>{recording.importedAt ? `Used in: ${usedInText(recording.usedIn ?? [])}${recording.usedInShared ? " (shared)" : ""}` : "Imported before the app kept track"}</small></span>

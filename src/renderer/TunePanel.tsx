@@ -74,7 +74,6 @@ export function TunePanel({ area, title, what, onSendPrompt, onOpenFile, onAppli
     <p className="learn-note">{what}</p>
     {status?.waitingForAgy ? <div className="onboarding-result" role="status">
       <strong>Agy is reading what's new</strong>
-      <p>Its suggestions show up here when it's done. Nothing changes in your files until you apply them.</p>
       <div className="onboarding-actions"><button className="btn-quiet" disabled={busy} onClick={() => void cancel()}>Stop</button></div>
     </div> : <div className="onboarding-actions">
       <button className="btn-primary" disabled={busy || !changed} onClick={() => void start()}>{changed ? `Read ${plural(changed, "new file")}` : "Nothing new to read"}</button>

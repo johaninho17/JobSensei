@@ -226,7 +226,6 @@ function SetupEditor({ action, profile, onSaved, onClose }: { action: ReadinessI
     {action === "private-names" && <PrivateNamesField value={values.names!} onChange={(names) => setValues((current) => ({ ...current, names }))} />}
     {action === "voice" && <VoiceFileField path={voicePath} value={values.voice!} onChange={(voice) => setValues((current) => ({ ...current, voice }))} />}
     {action === "facts" && <>
-      <p className="muted">What employer forms ask for. Each job shows these with copy buttons while you fill in its form. They are never sent to Agy and never guessed; leave anything blank you don't have.</p>
       {field("email", "Email", "alex@example.com")}
       {field("phone", "Phone", "(555) 010-0000")}
       {field("factLocation", "Location", "Denver, CO")}

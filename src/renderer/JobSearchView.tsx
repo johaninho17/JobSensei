@@ -360,7 +360,6 @@ function WatchedCompanies({ watched, onChange, autoWatch, onAutoWatch, watchFoun
   const shown = watched.filter((company) => !filter.trim() || `${company.name} ${company.slug}`.toLowerCase().includes(filter.trim().toLowerCase()));
   const fresh = (suggestions ?? []).filter((item) => !has(item.board, item.slug));
   return <Section id="search-watched" title="Watched companies" defaultOpen={false} count={watched.length || null}>
-    <p className="muted">Checked on every run through their public job boards, with no Agy quota. Only roles that fit your titles, places, and work setups are kept.</p>
     <label className="search-check"><input type="checkbox" checked={autoWatch} onChange={(event) => onAutoWatch(event.target.checked)} />Watch the companies of jobs I add</label>
     <label className="search-check"><input type="checkbox" checked={watchFound} onChange={(event) => onWatchFound(event.target.checked)} />Watch companies Agy finds hiring for my titles</label>
     {watched.length > 0 && <details className="watched-details" open={watched.length <= 12}>
