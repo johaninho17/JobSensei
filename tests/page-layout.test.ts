@@ -229,3 +229,14 @@ describe("Application documents in one dropdown tab (#222)", () => {
     expect(page).toMatch(/tabItems\.filter\(\(item\) => item\.tab !== "application" && item\.id !== "overview"\)/);
   });
 });
+
+describe("Overview and Checks say it once (#223)", () => {
+  it("Tracking folds to one summary line, the empty Interviews card hides, Checks has no files table, the empty Interview tab is one line", async () => {
+    const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
+    expect(page).toMatch(/<details className="tracker-fold">\s*<summary><h2>Tracking<\/h2>/);
+    expect(page).toContain("(interviewLoading || rounds.length > 0) && <section");
+    expect(page).not.toContain("<h2>Application files</h2>");
+    const interview = await readFile("src/renderer/InterviewView.tsx", "utf8");
+    expect(interview).not.toContain("It writes a question bank, prep notes, and company research for this job.");
+  });
+});

@@ -1243,3 +1243,10 @@ summary.run-status-line::-webkit-details-marker { display: none; }
 .chat-done { margin-top: 4px; color: var(--term-muted); font-size: var(--fs-12); }
 .debrief-paste { width: 100%; min-height: 88px; resize: vertical; font: inherit; }
 .debrief-job summary { cursor: pointer; color: var(--muted); font-size: var(--fs-13); }
+
+/* Tracking folds to one summary line (#223). */
+.tracker-fold > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); cursor: pointer; list-style: none; }
+.tracker-fold > summary::-webkit-details-marker { display: none; }
+.tracker-fold > summary h2 { margin: 0; }
+.tracker-fold > summary .muted { font-size: var(--fs-13); }
+.tracker-fold[open] > summary { margin-bottom: var(--space-3); }

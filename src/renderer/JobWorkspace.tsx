@@ -21,13 +21,19 @@ function TrackerPanel({ job, onUpdate }: { job: JobFolderSummary; onUpdate: (upd
   const [notes, setNotes] = useState(tracker?.notes ?? "");
   useEffect(() => { setNotes(tracker?.notes ?? ""); }, [job.id, tracker?.notes]);
   const history = [...(tracker?.history ?? [])].reverse().slice(0, 4);
+  // One summary line that opens to edit (#223): the form is there when you need it, not always on screen.
+  const applied = effectiveAppliedAt(job);
+  const tagCount = tracker?.tags.length ?? 0;
+  const summary = [applied ? `Applied ${formatJobDate(applied)}` : "No applied date", tagCount ? plural(tagCount, "tag") : null, tracker?.notes?.trim() ? "Notes" : null].filter(Boolean).join(" · ");
   return <section className="overview-panel tracker-panel">
-    <h2>Tracking</h2>
-    <div className="tracker-dates">
-      <label><span>Applied</span><input type="date" value={effectiveAppliedAt(job) ?? ""} onChange={(event) => void onUpdate({ appliedAt: event.target.value || null })} /></label>
-    </div>
-    <TagEditor tags={tracker?.tags ?? []} suggestions={[]} onChange={(tags) => void onUpdate({ tags })} />
-    <label className="tracker-notes"><span>Notes</span><textarea rows={1} value={notes} placeholder="Recruiter name, referral, what they said…" onChange={(event) => setNotes(event.target.value)} onBlur={() => { if (notes !== (tracker?.notes ?? "")) void onUpdate({ notes }); }} /></label>
+    <details className="tracker-fold">
+      <summary><h2>Tracking</h2><span className="muted">{summary}</span></summary>
+      <div className="tracker-dates">
+        <label><span>Applied</span><input type="date" value={effectiveAppliedAt(job) ?? ""} onChange={(event) => void onUpdate({ appliedAt: event.target.value || null })} /></label>
+      </div>
+      <TagEditor tags={tracker?.tags ?? []} suggestions={[]} onChange={(tags) => void onUpdate({ tags })} />
+      <label className="tracker-notes"><span>Notes</span><textarea rows={1} value={notes} placeholder="Recruiter name, referral, what they said…" onChange={(event) => setNotes(event.target.value)} onBlur={() => { if (notes !== (tracker?.notes ?? "")) void onUpdate({ notes }); }} /></label>
+    </details>
     {history.length > 0 && <details className="must-group"><summary>History ({tracker?.history.length ?? history.length})</summary><ol className="tracker-history" aria-label="Status history">{history.map((event) => <li key={event.at}><TrackerPill status={event.status} /><span className="muted">{new Date(event.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span></li>)}</ol></details>}
   </section>;
 }
@@ -144,7 +150,8 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
               {job.mustHaves.length === 0 && job.ratingHighlights.length > 0 && <details className="must-group is-met"><summary>Strengths ({job.ratingHighlights.length})</summary><ul>{job.ratingHighlights.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul></details>}
             </>}
           </section>
-          {FEATURES.interviews && <section className="overview-panel">
+          {/* Shown once there are rounds; the Interview tab has the empty state (#223). */}
+          {FEATURES.interviews && (interviewLoading || rounds.length > 0) && <section className="overview-panel">
             <h2>Interviews</h2>
             {interviewLoading ? <p className="muted">Reading rounds…</p> : rounds.length ? <ol className="round-list">{rounds.map((round) => <li key={round.id}><button className="btn-link" onClick={() => navigateRound(round.id)}>{round.label}</button><span className={`round-state is-${round.status}`}>{round.scheduledDate ?? round.status.replace("_", " ")}</span></li>)}</ol> : <p className="muted">No rounds yet.</p>}
           </section>}
@@ -160,7 +167,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
         {FEATURES.applicationQuestions && appView === "questions" && <QuestionsPanel jobId={job.id} />}
         {appView === "evaluation" && <DocInline path={evaluation?.relativePath ?? null} label="evaluation" />}
         {appView === "posting" && <DocInline path={jobDescription?.relativePath ?? null} label="job posting" />}
-        {appView === "checks" && <div className="dashboard-stack"><ApplicationHealth job={job} files={applicationFiles} status={status} loading={applicationLoading} onStatus={onStatus} /><section className="context-block"><h2>Application files</h2><ArtifactTable files={applicationFiles} onSelect={onSelect} empty="No application documents found." /></section></div>}
+        {appView === "checks" && <div className="dashboard-stack"><ApplicationHealth job={job} files={applicationFiles} status={status} loading={applicationLoading} onStatus={onStatus} /></div>}
       </div>
     </>}
     {FEATURES.interviews && activeTab === "interview" && <InterviewView job={job} overview={overview} loading={interviewLoading} initialRoundId={activeRoundId} onRoundChange={navigateRound} onOpenFile={(path) => onSelect(path)} onInsertPrompt={(text, label) => onInsertPrompt({ prompt: text, label })} />}

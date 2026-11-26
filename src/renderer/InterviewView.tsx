@@ -127,8 +127,8 @@ export function InterviewView({ job, overview, loading, initialRoundId, standalo
   const company = job.company ?? job.name;
   if (!round) {
     return <section className="iv-empty-state">
-      <h2>No interview rounds yet</h2>
-      <p>When you get an interview, ask Agy to prepare the recruiter round. It writes a question bank, prep notes, and company research for this job.</p>
+      {/* One line and the action (#223); what preparing writes is in Docs. */}
+      <p>No interview rounds yet.</p>
       {onInsertPrompt && <button className="btn-primary" onClick={() => onInsertPrompt(`Prepare ${company} ${job.title ?? ""} recruiter interview ${jobRef}`.replace(/\s+/g, " "), "Prepare recruiter interview")}>Prepare recruiter round</button>}
     </section>;
   }
