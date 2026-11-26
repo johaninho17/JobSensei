@@ -14,6 +14,7 @@ import { readJobQueue, saveJobQueue } from "./job-queue";
 import { postingRecordFor } from "./posting-record";
 import { addProposal, readProposals } from "./proposals";
 import { loadCanonicalResumeBaseline } from "./canonical-resume";
+import { appFetch } from "./app-fetch";
 
 /** The library is laid out like a workspace, so the posting cleanup and staging code run on it unchanged. */
 export const libraryPath = (root: string) => join(root, RECRUITER_DIR, "library");
@@ -32,7 +33,7 @@ async function libraryMeta(root: string, id: string): Promise<LibraryPosting> {
   return { id, title: meta.title ?? null, company: meta.company ?? null, location: meta.location ?? null, url: meta.url && meta.url !== "pasted" ? meta.url : null };
 }
 
-export async function stageLibraryLink(root: string, url: string, id: string, fetcher: typeof fetch = fetch): Promise<LibraryPosting> {
+export async function stageLibraryLink(root: string, url: string, id: string, fetcher: typeof fetch = appFetch): Promise<LibraryPosting> {
   await stageLinkJobDescription(libraryPath(root), url, checkId(id), fetcher);
   return libraryMeta(root, id);
 }

@@ -21,6 +21,7 @@ import { assertInsideWorkspace } from "./files";
 import { readJson, writeJsonAtomic, writeTextAtomic } from "./persistence";
 import { buildPostingRecord } from "./posting-record";
 import type { AgyRunner } from "./question-agent";
+import { appFetch } from "./app-fetch";
 
 /**
  * Job Search (phase 1). One headless Agy run finds posting links from the user's search settings only (no resume,
@@ -385,7 +386,7 @@ type Candidate = { link: FoundLink; source: "watched" | "search"; board: { ref: 
 
 export async function runSearch(deps: SearchDeps): Promise<{ state: JobSearchState; run: SearchRun }> {
   const now = deps.now ?? (() => new Date());
-  const fetcher = deps.fetcher ?? fetch;
+  const fetcher = deps.fetcher ?? appFetch;
   let settings = await readSearchSettings(deps.workspace, deps.profile);
   let state = await readSearchState(deps.workspace);
   const run: SearchRun = { id: newId("run"), startedAt: now().toISOString(), finishedAt: null, status: "running", found: 0, added: 0, leftOut: {}, leftOutItems: {}, autoQueued: 0, replaced: 0, rated: 0, companies: 0, error: null, source: deps.runner ? "search" : "watched", scheduled: deps.scheduled === true, agyFailed: false, agyOnly: deps.agyOnly === true };

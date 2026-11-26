@@ -7,6 +7,7 @@
 import { boardKey, boardRef, type BoardId, type BoardRef } from "../src/shared/boards";
 import { leverPay } from "../src/shared/pay";
 export { leverPay };
+import { appFetch } from "./app-fetch";
 
 export { boardKey, boardRef, type BoardId, type BoardRef };
 export type BoardJob = {
@@ -45,7 +46,7 @@ export function ashbyPay(value: unknown): string | null {
 }
 
 /** Every live posting on one company's board. Throws when the board can't be read. */
-export async function listBoardJobs(ref: BoardRef, fetcher: typeof fetch = fetch): Promise<BoardJob[]> {
+export async function listBoardJobs(ref: BoardRef, fetcher: typeof fetch = appFetch): Promise<BoardJob[]> {
   const get = async (url: string) => {
     const response = await fetcher(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
     if (!response.ok) throw new Error(`The ${ref.board} board for ${ref.slug} returned HTTP ${response.status}.`);
@@ -89,7 +90,7 @@ export async function listBoardJobs(ref: BoardRef, fetcher: typeof fetch = fetch
 }
 
 /** A board job's posting HTML: from the list (Ashby, Lever) or Greenhouse's per-job API. Null when it can't be read. */
-export async function boardPostingHtml(ref: BoardRef, job: BoardJob, fetcher: typeof fetch = fetch): Promise<string | null> {
+export async function boardPostingHtml(ref: BoardRef, job: BoardJob, fetcher: typeof fetch = appFetch): Promise<string | null> {
   if (job.descriptionHtml) return job.descriptionHtml;
   if (ref.board !== "greenhouse" || !job.postingId) return null;
   const response = await fetcher(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(ref.slug)}/jobs/${encodeURIComponent(job.postingId)}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
