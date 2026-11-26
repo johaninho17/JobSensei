@@ -129,10 +129,13 @@ export function AgyView({ context, saved, onSaveBehavior, busyLabel, onRun, onSh
           const items = actions.filter((action) => action.group === group);
           if (!items.length) return null;
           return <Section key={group} id={`agy-actions-${group.toLowerCase().replace(/\s+/g, "-")}`} title={group === "This job" && context.job ? `This job: ${context.job.name}` : group} count={items.length}>
+            {/* Each action is one row you click; what it does is the tooltip, Run or Open shows on hover (#241). */}
             <ul className="agy-actions">{items.map((action) => <li key={action.id}>
-              <details className="agy-action-more" title={action.what}><summary><strong>{action.label}</strong></summary><p>{action.what}</p></details>
-              {action.unavailable ? <span className="agy-where">{action.unavailable}</span> : action.where !== "Agy panel" ? <span className="agy-where">{action.where}</span> : <span />}
-              <button className="btn-quiet" disabled={Boolean(action.unavailable)} onClick={() => onRun(action)}>{action.run.kind === "app" && action.run.call.startsWith("open") ? "Open" : "Run"}</button>
+              <button className="agy-action-row" disabled={Boolean(action.unavailable)} title={action.unavailable ?? action.what} onClick={() => onRun(action)}>
+                <strong>{action.label}</strong>
+                {action.unavailable ? <span className="agy-where">{action.unavailable}</span> : action.where !== "Agy panel" && <span className="agy-where">{action.where}</span>}
+                <span className="agy-action-go" aria-hidden="true">{action.run.kind === "app" && action.run.call.startsWith("open") ? "Open" : "Run"} ›</span>
+              </button>
             </li>)}</ul>
           </Section>;
         })}

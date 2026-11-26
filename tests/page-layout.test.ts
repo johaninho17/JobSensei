@@ -109,9 +109,10 @@ describe("Quieter job page (U82, #166)", () => {
 
 
 describe("Lists that repeat themselves (U82, #167)", () => {
-  it("Agy action rows show the label; the prompt opens on request and 'Agy panel' is not repeated per row", async () => {
+  it("Agy action rows show the label; the row is the button (#241) and 'Agy panel' is not repeated per row", async () => {
     const agy = await readFile("src/renderer/AgyView.tsx", "utf8");
-    expect(agy).toContain('<details className="agy-action-more" title={action.what}><summary><strong>{action.label}</strong></summary>');
+    expect(agy).toMatch(/<button className="agy-action-row"[^>]*title=\{action\.unavailable \?\? action\.what\}[^>]*onClick=\{\(\) => onRun\(action\)\}>/);
+    expect(agy).not.toContain('<button className="btn-quiet" disabled={Boolean(action.unavailable)} onClick={() => onRun(action)}>');
     expect(agy).toContain('action.where !== "Agy panel"');
     expect(agy).not.toContain("<p>{action.unavailable ?? action.what}</p>");
   });
