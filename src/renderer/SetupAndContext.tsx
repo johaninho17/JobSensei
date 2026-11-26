@@ -274,13 +274,13 @@ export function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAct
       {INLINE_SETUP.has(item.action) ? editing !== item.action && <button className={item.state === "done" ? "btn-link" : "btn-quiet"} onClick={() => setEditing(item.action)}>{item.state === "done" ? "Edit" : "Fill in"}</button>
         : item.state !== "done" && item.action !== "none" && ACTION_LABEL[item.action] && <button className={item.level === "required" ? "btn-primary" : "btn-quiet"} onClick={() => onAction(item.action)}>{ACTION_LABEL[item.action]}</button>}
       {item.action === "other-resumes" && <button className="btn-quiet" onClick={onAddLinkedin}>Add LinkedIn export</button>}
-      {item.path && <button className="btn-link" onClick={() => onReveal(item.path!)}>Show in {navigator.platform.startsWith("Win") ? "Explorer" : "Finder"}</button>}
+      {item.path && /\.(?:md|txt|docx|pdf|json)$/i.test(item.path) && <button className="btn-link" onClick={() => onReveal(item.path!)}>Open</button>}
     </span>
     {editing === item.action && <div className="setup-row-editor"><SetupEditor action={item.action} profile={profile} onSaved={(next) => { onProfileSaved(next); onRefresh(); }} onClose={() => setEditing(null)} /></div>}
   </li>;
   return <section className="setup-home">
     {/* Embedded in Profile this is a one-line status, not a second page header (U82). */}
-    {(() => { const status = <>{FEATURES.candidates ? (readiness.ready ? "Ready for jobs." : "Add the base resume to start tailoring.") : readiness.ready ? "Ready. The recommended steps make drafts and prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button> · <button className="btn-link" onClick={() => onReveal("")}>Open folder</button></>;
+    {(() => { const status = <>{FEATURES.candidates ? (readiness.ready ? "Ready for jobs." : "Add the base resume to start tailoring.") : readiness.ready ? "Ready. The recommended steps make drafts and prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button></>;
       return embedded || FEATURES.candidates ? <p className="setup-status">{status}</p> : <PageHead title="Setup" status={status} />; })()}
     {(["required", "recommended"] as const).map((level) => { const items = readiness.items.filter((item) => item.level === level); const done = items.filter((item) => item.state === "done").length; return <Section key={level} id={`setup-${level}`} title={level === "required" ? "Required" : "Recommended"} count={`${done} of ${items.length}`} defaultOpen={done < items.length}>
       <ol className="setup-list">{items.map(row)}</ol>
@@ -318,7 +318,6 @@ export function ContextAdder({ onAdd, onReveal }: { onAdd: (kind: "structured" |
     <div className="context-add-actions">
       <button className="btn-primary" onClick={() => onAdd(kind)}>Add files</button>
       <span className="muted">or drop files here (Word, PDF, Markdown, text). Copies are added and checked for Agy; your originals stay where they are.</span>
-      <button className="btn-link" onClick={onReveal}>Show the context folder</button>
     </div>
   </div>;
 }

@@ -218,7 +218,7 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
       <ul className="recording-list">{CONTENT_SOURCES.map((source) => <li key={source.path}>
         <span className="setup-state">{source.path.endsWith(".md") ? "File" : "Folder"}</span>
         <span><strong>{source.title}</strong><small>{source.what}</small></span>
-        {source.path.endsWith(".md") ? <button className="btn-link" onClick={() => onOpenFile(source.path)}>Open</button> : <button className="btn-link" onClick={() => void window.sensei.files.reveal(source.path).catch(() => undefined)}>Show</button>}
+        <button className="btn-link" onClick={() => onOpenFile(source.path)}>Open</button>
       </li>)}</ul>
     </section>
   </div>;
