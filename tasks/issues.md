@@ -2,6 +2,12 @@
 
 Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; change the issue on GitHub and regenerate.
 
+## P0
+
+| # | Issue | Features | Blocked |
+|---|---|---|---|
+| #171 | Read job links with a Chromium fallback when a site refuses Node's fetch | FEAT-013 |  |
+
 ## P1
 
 | # | Issue | Features | Blocked |
@@ -14,6 +20,9 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #127 | Phase 5.3: Split-pane Paper Sheet Resume/JD Viewer, pdf-freshness stale warnings, Apply-time drag-out/Finder, and Solo ZIP backup | FEAT-002, FEAT-009 |  |
 | #161 | Answer logistics and choice questions from the profile | FEAT-003 |  |
 | #162 | Reuse approved application answers across jobs | FEAT-003 | yes |
+| #172 | Pay period and work setup read from the wrong sentence | FEAT-013 |  |
+| #173 | Posting sections: run-together bold paragraphs, bold-lead requirements, Job Description heading | FEAT-013 |  |
+| #174 | Pages whose text comes out as script: read the real sections (amazon.jobs) | FEAT-013 |  |
 
 ## P2
 
@@ -22,9 +31,9 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #19 | Investigate one continuing Agy conversation in the regular app | FEAT-006 |  |
 | #112 | Phase 1.5: Add scoped --continue settings (Solo terminal, auto-reset after Tune, per-job interview continuity) | FEAT-006 | yes |
 | #164 | Declutter text and boxes after the density pass | FEAT-009 |  |
-| #166 | Quieter job header, one PDF button, plain documents | FEAT-002 |  |
 | #167 | One-line Agy actions, folded setup, vertical Settings tabs | FEAT-008, FEAT-009, FEAT-012 |  |
 | #168 | Global shortcut adds the copied job link to the queue | FEAT-006 |  |
+| #175 | Application questions from more places: embedded Greenhouse, SmartRecruiters, Oracle | FEAT-003 |  |
 
 ## P3
 
@@ -45,4 +54,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #124 | Phase 4.4: Global Connectors tab, per-job Activity & Emails timeline, Email Prep PDF action, and Undo toasts | FEAT-002, FEAT-014 | yes |
 | #133 | Multi-AI groundwork: agent brief, activity log, headless streaming, prompt caching, quota backoff | FEAT-006 |  |
 
-23 open, 8 of them for later.
+27 open, 8 of them for later.

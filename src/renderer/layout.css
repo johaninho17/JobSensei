@@ -726,6 +726,10 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .setup-row.is-missing .setup-state { color: var(--ink); }
 .setup-text p { margin: 2px 0; }
 .setup-text small { color: var(--muted); }
+.setup-row.is-done { padding: var(--space-2) 0; }
+.setup-done summary { cursor: pointer; list-style: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setup-done summary::-webkit-details-marker { display: none; }
+.setup-done[open] summary { white-space: normal; }
 .setup-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; justify-content: flex-end; }
 @media (max-width: 760px) { .setup-row { grid-template-columns: minmax(0, 1fr); } .setup-actions { justify-content: flex-start; } }
 
@@ -775,7 +779,6 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .find-tag.is-gap { background: transparent; border: 1px solid var(--line); color: var(--muted); }
 .find-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); justify-content: flex-end; align-items: center; max-width: 260px; }
 .find-sort select { margin-left: var(--space-1); }
-.find-note { margin-top: var(--space-4); font-size: var(--fs-13); }
 .find-runs { display: grid; gap: var(--space-2); padding: 0; list-style: none; font-size: var(--fs-13); }
 .search-settings { display: grid; gap: var(--space-4); max-width: 760px; }
 .search-settings fieldset { display: grid; gap: var(--space-3); margin: 0; padding: var(--space-3) 0 0; border: 0; border-top: 1px solid var(--line); }
@@ -793,7 +796,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .watched-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; font-size: var(--fs-13); }
 .find-main .find-tag { margin-left: var(--space-2); }
 .fit-badge-source { display: block; font-size: 10px; font-weight: 500; line-height: 1; opacity: 0.8; }
-.find-callout { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; margin-bottom: var(--space-3); padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-m); background: var(--raised); border-left: 3px solid var(--accent); font-size: var(--fs-13); }
+.find-callout { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; margin-bottom: var(--space-3); padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-m); background: var(--raised); font-size: var(--fs-13); }
 .find-schedule { font-size: var(--fs-13); }
 .setup-status { margin: 0 0 var(--card-gap); color: var(--muted); font-size: var(--fs-13); }
 .find-schedule.is-off { color: var(--ink); }
@@ -1042,7 +1045,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 
 /* Agy page: one row per action (what it does, where it runs, a button). */
 .agy-actions { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
-.agy-actions li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
+.agy-actions li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-4); padding: var(--space-2) 0; border-bottom: 1px solid var(--line); }
 .agy-actions li:last-child { border-bottom: 0; }
 .agy-conversations-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-3); }
 .agy-conversation { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; }
@@ -1051,6 +1054,10 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .agy-actions strong { font: 600 var(--fs-15) var(--font-ui); color: var(--ink); }
 .agy-actions p { margin: 2px 0 0; color: var(--muted); font: var(--fs-13)/1.45 var(--font-ui); max-width: 75ch; }
 .agy-where { color: var(--muted); font: var(--fs-12) var(--font-ui); white-space: nowrap; }
+.agy-action-more summary { cursor: pointer; list-style: none; }
+.agy-action-more summary::-webkit-details-marker { display: none; }
+.agy-action-more summary::after { content: "▸"; margin-left: var(--space-2); color: var(--muted); font-size: var(--fs-12); }
+.agy-action-more[open] summary::after { content: "▾"; }
 .agy-busy { margin: 0 0 var(--space-4); padding: var(--space-3) var(--space-4); border-left: 3px solid var(--brass); background: var(--brass-tint); color: var(--ink); font: var(--fs-13)/1.45 var(--font-ui); }
 
 /* Settings score (src/shared/agy-behavior.ts): the band is always written out, colour only supports it. */
@@ -1220,3 +1227,12 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .pdf-menu summary.is-stale { border-color: var(--brass); color: var(--ink); }
 .pdf-menu .jobs-more-menu { gap: var(--space-2); min-width: 220px; padding: var(--space-2); }
 .document-meta .info-tip { margin-right: auto; }
+
+/* Settings: tabs as a vertical list on the left, one line each (U82, #167). */
+.settings-modal { display: grid; grid-template-columns: 180px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "head head" "nav body" "foot foot"; }
+.settings-header { grid-area: head; }
+.settings-nav { grid-area: nav; flex-direction: column; gap: 2px; padding: var(--space-3) var(--space-2); overflow-y: auto; border-bottom: 0; border-right: 1px solid var(--line); }
+.settings-nav button { padding: var(--space-2) var(--space-3); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.settings-body { grid-area: body; }
+.settings-footer { grid-area: foot; }
+@media (max-width: 640px) { .settings-modal { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; grid-template-areas: "head" "nav" "body" "foot"; } .settings-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); } }

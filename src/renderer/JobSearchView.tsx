@@ -1,6 +1,6 @@
 // Job Search page: search settings, Run now, and the inbox of found postings ranked by quick fit.
 // Agy only finds links; the app opened, saved, and rated every posting shown here (electron/job-search.ts).
-import { FitRing, PageHead } from "./BentoPrimitives";
+import { FitRing, InfoTip, PageHead } from "./BentoPrimitives";
 import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_JOB_SEARCH_SETTINGS, SEARCH_BOARDS, SEARCH_LEVELS, SKIPPED_BOARDS, WORK_SETUPS, DEFAULT_RANKING, effectiveFit, rankInbox, rankReason, searchProgressText, type RankingWeights,
@@ -259,7 +259,7 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
 
     {tab === "matches" && <div role="tabpanel" aria-labelledby="job-search-tab-matches">
       {unwatched.length > 0 && !running && <div className="find-callout">
-        <span>{unwatched.length} compan{unwatched.length === 1 ? "y" : "ies"} from your jobs post on Ashby, Greenhouse, or Lever. Watching them means every run reads their open jobs directly: free, with real dates.</span>
+        <span title="They post on Ashby, Greenhouse, or Lever: every run reads their open jobs directly, free, with real dates.">{unwatched.length} compan{unwatched.length === 1 ? "y" : "ies"} from your jobs can be watched for free.</span>
         <button className="btn-quiet" disabled={!settings?.titles.length} onClick={() => void watchJobCompaniesAndCheck()}>Watch them and check now</button>
       </div>}
       {selecting && <div className="select-bar" role="toolbar" aria-label="Selected matches">
@@ -275,13 +275,12 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
         </span>
       </div>}
       {!live.length ? <div className="dashboard-empty"><h2>{running ? "Searching…" : "No matches yet"}</h2><p>{running ? "Matches appear here as each posting is checked." : lastRun && lastRun.status !== "running" ? runSummary(lastRun) : settings?.titles.length ? "Run a search to find postings that fit your settings." : "Start in Search settings: add the job titles you want."}</p></div> : <>
-        <section className="jobs-group" aria-labelledby="find-above"><h2 id="find-above">At or above your bar ({bar.toFixed(1)}) <span>{above.length}</span></h2>
+        <section className="jobs-group" aria-labelledby="find-above"><h2 id="find-above">At or above your bar ({bar.toFixed(1)}) <span>{above.length}</span> <InfoTip label="About fit scores">Quick fit is the app's own check of your resume and checked work records against the posting's requirements (no quota). Scores marked Agy are its light rating of the requirements against a short card of your roles, skills, and story. The full rating runs when you draft an application.</InfoTip></h2>
           {above.length ? <ul className="find-list">{above.map(renderItem)}</ul> : <p className="muted">Nothing above your bar in this search.</p>}</section>
         {below.length > 0 && <details className="jobs-group"><summary><h2>Below your bar <span>{below.length}</span></h2></summary>
           <p className="muted">Live postings that scored under {bar.toFixed(1)} or have a blocker. They're never drafted automatically.</p>
           <ul className="find-list">{below.map(renderItem)}</ul></details>}
       </>}
-      <p className="muted find-note">Quick fit is the app's own check of your resume and checked work records against the posting's requirements (no quota). Scores marked Agy are its light rating of the requirements against a short card of your roles, skills, and story. The full rating runs when you draft an application.</p>
     </div>}
 
     {(tab === "drafting" || tab === "saved" || tab === "dismissed") && <div role="tabpanel" aria-labelledby={`job-search-tab-${tab}`}>

@@ -122,7 +122,7 @@ export function AgyView({ context, saved, onSaveBehavior, busyLabel, onRun, onSh
   const [tab, setTab] = useState<AgyTab>(remembered);
   const actions = buildAgyActions(context);
   return <section className="agy-home">
-    <PageHead title="Agy" tip="Everything Agy can do for you, in one place: actions you can send, what it did, how it behaves, your conversations, and what it remembers." />
+    <PageHead title="Agy" tip="Everything Agy can do for you, in one place: actions you can send, what it did, how it behaves, your conversations, and what it remembers. Actions run in the Agy panel unless the row says Background or In the app; open a row to see exactly what it sends." />
     <SubTabs<AgyTab> idPrefix="agy" label="Agy sections" value={tab} tabs={TABS}
       onChange={(next) => { setTab(next); try { window.localStorage.setItem("sensei-agy-tab", next); } catch { /* not remembered */ } }} />
     <SubTabPanel idPrefix="agy" value={tab}>
@@ -133,8 +133,8 @@ export function AgyView({ context, saved, onSaveBehavior, busyLabel, onRun, onSh
           if (!items.length) return null;
           return <Section key={group} id={`agy-actions-${group.toLowerCase().replace(/\s+/g, "-")}`} title={group === "This job" && context.job ? `This job: ${context.job.name}` : group} count={items.length}>
             <ul className="agy-actions">{items.map((action) => <li key={action.id}>
-              <div><strong>{action.label}</strong><p>{action.unavailable ?? action.what}</p></div>
-              <span className="agy-where">{action.where}</span>
+              <details className="agy-action-more" title={action.what}><summary><strong>{action.label}</strong></summary><p>{action.what}</p></details>
+              {action.unavailable ? <span className="agy-where">{action.unavailable}</span> : action.where !== "Agy panel" ? <span className="agy-where">{action.where}</span> : <span />}
               <button className="btn-quiet" disabled={Boolean(action.unavailable)} onClick={() => onRun(action)}>{action.run.kind === "app" && action.run.call.startsWith("open") ? "Open" : "Run"}</button>
             </li>)}</ul>
           </Section>;
