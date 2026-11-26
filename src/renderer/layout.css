@@ -1258,3 +1258,10 @@ summary.run-status-line::-webkit-details-marker { display: none; }
 .framing-review > summary { display: inline-flex; cursor: pointer; list-style: none; }
 .framing-review > summary::-webkit-details-marker { display: none; }
 .framing-review > summary .check-chip { pointer-events: none; }
+
+/* Sidebar Favorites (U89, #187): fold like the Jobs views; one line per job (company, then the title, muted). */
+.side-recent h2 { padding: 0; }
+.side-recent .side-recent-toggle { display: flex; align-items: center; gap: var(--space-2); color: var(--muted); font: 600 var(--fs-13) var(--font-ui); }
+.side-recent .side-recent-toggle .side-count { margin-left: auto; }
+.side-recent ul button { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-recent ul button strong, .side-recent ul button small { display: inline; }

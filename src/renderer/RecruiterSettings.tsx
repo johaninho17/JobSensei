@@ -2,6 +2,7 @@
 // candidate inherits unless their Profile → Settings says otherwise, and privacy. Opened from the sidebar, ⌘, and
 // the Candidates page. Only rendered when FEATURES.candidates is on.
 import { BrowserSetting } from "./BrowserSetting";
+import { toast } from "./app-shared";
 import { useEffect, useState } from "react";
 import { APP_RECRUITER_DEFAULTS, type RecruiterDefaults } from "../shared/candidates";
 import { AGY_INSTRUCTION_LIMITS, instructionLines, type PdfTextSize } from "../shared/schemas";
@@ -34,7 +35,7 @@ export function RecruiterSettingsDialog({ onClose, onSaved }: { onClose: () => v
     setState("saving"); setError(null);
     const problem = instructionProblem(instructionLines(instructions));
     if (problem) { setError(problem); setState("ready"); return; }
-    try { await window.sensei.candidates.saveRecruiterSettings({ recruiterName: name.trim() || null, agency: agency.trim() || null, defaults, agyInstructions: instructionLines(instructions) }); setState("saved"); onSaved?.(); }
+    try { await window.sensei.candidates.saveRecruiterSettings({ recruiterName: name.trim() || null, agency: agency.trim() || null, defaults, agyInstructions: instructionLines(instructions) }); setState("saved"); toast("Saved."); onSaved?.(); }
     catch (caught) { setError(message(caught)); setState("ready"); }
   }
   const set = (patch: Partial<RecruiterDefaults>) => { setDefaults((current) => ({ ...current, ...patch })); setState("ready"); };
@@ -65,7 +66,6 @@ export function RecruiterSettingsDialog({ onClose, onSaved }: { onClose: () => v
       <div className="onboarding-actions">
         {tab === "recruiter" && <button className="btn-primary" disabled={state === "loading" || state === "saving"} onClick={() => void save()}>{state === "saving" ? "Saving…" : "Save"}</button>}
         <button className="btn-quiet" onClick={onClose}>Close</button>
-        {state === "saved" && <span className="muted" role="status">Saved</span>}
       </div>
     </div>
   </div>;

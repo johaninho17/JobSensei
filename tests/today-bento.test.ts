@@ -149,7 +149,7 @@ describe("One page header (U82, #165)", () => {
 
   it("Favorites appears only when a job is starred", async () => {
     const app = await readFile("src/renderer/App.tsx", "utf8");
-    expect(app).toContain("{!FEATURES.candidates && favoriteJobs.length > 0 && <section className=\"side-recent\"");
+    expect(app).toContain("{!FEATURES.candidates && favoriteJobs.length > 0 && (() => {");
     expect(app).not.toContain("Star a job (☆) in Jobs to keep it here.");
   });
 });
@@ -229,7 +229,7 @@ describe("Show less, reveal on demand: job page (U89, #184)", () => {
     expect(page).not.toContain('className="job-pdf-files"');
     const button = page.slice(page.indexOf("function JobPdfExportButton"), page.indexOf("export function shortLocation"));
     expect(button).toContain('className="pdf-state"');
-    expect(button).toContain('new CustomEvent("sensei-announce"');
+    expect(button).toContain('toast(coverLetterPath ? "PDFs saved." : "Resume PDF saved.")');
     expect(button).toContain("startPdfDrag");
     expect(button).toContain("copyPdfPath");
     expect(button).not.toContain("export-message");
@@ -270,5 +270,26 @@ describe("Show less, reveal on demand: documents (U89, #185)", () => {
     expect(docs).toContain("canExport && exportHere && <MarkdownExportButton");
     expect(docs).not.toContain('setMessage("Saved locally")');
     expect(docs).not.toContain('state === "saved" ? "Saved"');
+  });
+});
+
+describe("Show less, reveal on demand: sidebar and saved messages (U89, #187)", () => {
+  it("Favorites fold, remembered, and start folded past three", async () => {
+    const app = await readFile("src/renderer/App.tsx", "utf8");
+    expect(app).toContain("favoritesOpenPick ?? favoriteJobs.length <= 3");
+    expect(app).toContain('window.localStorage.setItem("sensei-side-favorites"');
+    expect(app).toContain('className="side-recent-toggle" aria-expanded={favoritesOpen}');
+  });
+
+  it("finished saves are a toast, not a label that stays", async () => {
+    const shared = await readFile("src/renderer/app-shared.tsx", "utf8");
+    expect(shared).toContain("export function toast(message: string)");
+    for (const file of ["AgyView", "BrowserSetting", "CandidateProfile", "RecruiterSettings"]) {
+      const source = await readFile(`src/renderer/${file}.tsx`, "utf8");
+      expect(source, file).toContain("toast(");
+      expect(source, file).not.toMatch(/role="status">Saved\.?</);
+    }
+    const agy = await readFile("src/renderer/AgyView.tsx", "utf8");
+    expect(agy).not.toContain('state === "saved" ? "Saved. Jobs drafted');
   });
 });

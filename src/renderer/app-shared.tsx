@@ -59,6 +59,9 @@ export function FitBadge({ rating, gate = FIT_GATE }: { rating: number | null; /
   return <span className={`fit-badge is-${tone}`} title={`${rating.toFixed(1)} of 5 fit`}><span className="tabular">{rating.toFixed(1)}</span></span>;
 }
 
+/** A pop-up for something that just finished ("Saved."): a toast, never a label that stays on the page (U89). */
+export function toast(message: string): void { window.dispatchEvent(new CustomEvent("sensei-announce", { detail: message })); }
+
 /** A result for a page the user may have left: shown in place while it's open, as an app toast once it's gone. */
 export function useAnnounce() {
   const mounted = useRef(true);

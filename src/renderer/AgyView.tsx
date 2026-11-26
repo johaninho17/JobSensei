@@ -1,6 +1,7 @@
 // The Agy page: what Agy can do for you, as buttons, and how it uses your data. `src/shared/agy-actions.ts` owns the
 // list of actions; the text of "How it works" is docs/app/how-agy-uses-it.md (the same owner the Docs page reads).
 import { useEffect, useState, type ReactNode } from "react";
+import { toast } from "./app-shared";
 import type { AgyActivity } from "../shared/schemas";
 import howAgy from "../../docs/app/how-agy-uses-it.md?raw";
 import { AGY_ACTION_GROUPS, buildAgyActions, type AgyAction, type AgyActionContext } from "../shared/agy-actions";
@@ -46,7 +47,7 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
   const setFit = (key: keyof AgyBehavior["fit"], value: number) => { setDraft((current) => ({ ...current, fit: { ...current.fit, [key]: value } })); setState("idle"); };
   const save = async (next: AgyBehavior) => {
     setState("saving");
-    try { await onSave(agyBehaviorSchema.parse(next)); setState("saved"); } catch { setState("error"); }
+    try { await onSave(agyBehaviorSchema.parse(next)); setState("saved"); toast("Saved. Jobs drafted from now on use these settings."); } catch { setState("error"); }
   };
   const editors: Partial<Record<BehaviorSetting, ReactNode>> = {
     framing: <div className="behavior-fields"><label className="behavior-field"><span>Setting</span><select value={draft.framing} onChange={(event) => { setDraft((current) => ({ ...current, framing: event.target.value as FramingStop })); setState("idle"); }}>{FRAMING_STOPS.map((stop) => <option key={stop} value={stop}>{FRAMING_LABELS[stop]}</option>)}</select></label></div>,
@@ -109,7 +110,7 @@ function BehaviorTab({ saved, onSave }: { saved: AgyBehavior; onSave: (next: Agy
     <div className="behavior-actions">
       <button className="btn-primary" disabled={!changed || !valid || state === "saving"} onClick={() => void save(draft)}>{state === "saving" ? "Saving…" : "Save settings"}</button>
       <button className="btn-quiet" disabled={state === "saving" || JSON.stringify(draft) === JSON.stringify(DEFAULT_AGY_BEHAVIOR)} onClick={() => { setDraft(DEFAULT_AGY_BEHAVIOR); void save(DEFAULT_AGY_BEHAVIOR); }}>Back to the app's defaults</button>
-      <span className="muted" role="status">{state === "saved" ? "Saved. Jobs drafted from now on use these settings." : state === "error" ? "Couldn't save. Try again." : changed ? "Not saved yet." : ""}</span>
+      <span className="muted" role="status">{state === "error" ? "Couldn't save. Try again." : changed ? "Not saved yet." : ""}</span>
     </div>
     {SETTING_ROWS.some((row) => !CONNECTED.has(row.id)) && <p className="muted">Settings marked "App rule" become adjustable here once they are connected to Agy, so a change here always changes what Agy does.</p>}
   </>;
