@@ -55,6 +55,8 @@ The finalizer then:
 - writes the reviewable Markdown resume, cover letter, and evaluation;
 - stops after one attempt, even when review warnings exist.
 
+**Posting side by side** (job page, on Resume, Cover letter and Evaluation) shows the job posting beside the document, read only and scrolling on its own, while you read or edit the document. It is off until you turn it on, is remembered on this computer, and is also in ⌘K. In a narrow window the document shows alone.
+
 Lines that reach further than your framing setting (Agy → Behavior) open from a "N to review" chip above the resume and the cover letter on the job's Resume and Cover letter tabs, each with its reason. **Keep** leaves the line as written and clears its warning until the line changes. **Revert** puts back your base resume's bullet in the same place; it is offered only when there is one (not for a new bullet, a role that gained or lost bullets, or a letter line). You can always edit a line in place instead.
 
 This structure keeps Agy fast without making it blind: evidence coverage remains in the immutable snapshot, while only duplicate metadata and repeated instructions are removed from the model-facing packet.
