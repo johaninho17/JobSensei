@@ -69,6 +69,8 @@ Every page (ledger U77 pilot on Today, U78 everywhere). One shared surfaces bloc
 - Every page starts with `PageHead` (`BentoPrimitives.tsx`): title, one short status line, at most one main action, and an optional "?" `InfoTip` holding what the page used to explain in a paragraph. No help paragraphs under titles.
 - Explanations live in a tip, a tooltip, or Docs; the page shows state and actions. Boxes only around things you act on.
 - Empty sidebar groups don't render (Favorites appears once a job is starred; Jobs views with no jobs are hidden, Active and All stay).
+- Lists say the repeated part once: Agy action rows show the label (the prompt opens on request, "Agy panel" is the default and not printed); a done setup step is one line that opens for details, and a fully done group starts folded; Settings tabs are a vertical list.
+- Notices are neutral (no coloured edge) and one sentence; the reason goes in a tooltip.
 
 ## Accessibility
 Native buttons and inputs; visible focus (`--focus`); `aria-current` for navigation, `aria-pressed` for toggles, `aria-expanded` for cards; menus and dialogs close on Escape and return focus; keyboard paths for the interview view (↑ ↓, Enter, /, L; live mode ← → R Esc); `prefers-reduced-motion` honored.

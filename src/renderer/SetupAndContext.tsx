@@ -268,7 +268,9 @@ export function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAct
   if (!readiness) return <section className="setup-home"><p className="muted">Checking your setup…</p></section>;
   const row = (item: ReadinessItem) => <li key={item.id} className={`setup-row is-${item.state}`}>
     <span className="setup-state">{READINESS_STATE[item.state]}</span>
-    <div className="setup-text"><strong>{item.title}</strong><p>{item.detail}</p>{item.lines.length > 0 && <ul className="setup-lines">{item.lines.map((line) => <li key={line}>{line}</li>)}</ul>}<small>{item.improves}</small></div>
+    {/* A done step is one line; what it read and what it improves open on request (U82). */}
+    {item.state === "done" ? <details className="setup-text setup-done"><summary><strong>{item.title}</strong> <span className="muted">{item.detail}</span></summary>{item.lines.length > 0 && <ul className="setup-lines">{item.lines.map((line) => <li key={line}>{line}</li>)}</ul>}<small>{item.improves}</small></details>
+      : <div className="setup-text"><strong>{item.title}</strong><p>{item.detail}</p>{item.lines.length > 0 && <ul className="setup-lines">{item.lines.map((line) => <li key={line}>{line}</li>)}</ul>}<small>{item.improves}</small></div>}
     <span className="setup-actions">
       {INLINE_SETUP.has(item.action) ? editing !== item.action && <button className={item.state === "done" ? "btn-link" : "btn-quiet"} onClick={() => setEditing(item.action)}>{item.state === "done" ? "Edit" : "Fill in"}</button>
         : item.state !== "done" && item.action !== "none" && ACTION_LABEL[item.action] && <button className={item.level === "required" ? "btn-primary" : "btn-quiet"} onClick={() => onAction(item.action)}>{ACTION_LABEL[item.action]}</button>}
@@ -281,7 +283,7 @@ export function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAct
     {/* Embedded in Profile this is a one-line status, not a second page header (U82). */}
     {(() => { const status = <>{FEATURES.candidates ? (readiness.ready ? "Ready for jobs." : "Add the base resume to start tailoring.") : readiness.ready ? "Ready. The recommended steps make drafts and prep better." : "Finish the required steps so JobSensei can send jobs to Agy."} <button className="btn-link" onClick={onRefresh}>Check again</button> · <button className="btn-link" onClick={() => onReveal("")}>Open folder</button></>;
       return embedded || FEATURES.candidates ? <p className="setup-status">{status}</p> : <PageHead title="Setup" status={status} />; })()}
-    {(["required", "recommended"] as const).map((level) => { const items = readiness.items.filter((item) => item.level === level); const done = items.filter((item) => item.state === "done").length; return <Section key={level} id={`setup-${level}`} title={level === "required" ? "Required" : "Recommended"} count={`${done} of ${items.length}`} defaultOpen={level === "recommended" || done < items.length}>
+    {(["required", "recommended"] as const).map((level) => { const items = readiness.items.filter((item) => item.level === level); const done = items.filter((item) => item.state === "done").length; return <Section key={level} id={`setup-${level}`} title={level === "required" ? "Required" : "Recommended"} count={`${done} of ${items.length}`} defaultOpen={done < items.length}>
       <ol className="setup-list">{items.map(row)}</ol>
     </Section>; })}
     <WorkspaceFolders onToast={onToast} onChanged={onRefresh} />

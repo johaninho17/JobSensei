@@ -180,3 +180,33 @@ describe("Quieter job page (U82, #166)", () => {
   });
 });
 
+
+describe("Lists that repeat themselves (U82, #167)", () => {
+  it("Agy action rows show the label; the prompt opens on request and 'Agy panel' is not repeated per row", async () => {
+    const agy = await readFile("src/renderer/AgyView.tsx", "utf8");
+    expect(agy).toContain('<details className="agy-action-more" title={action.what}><summary><strong>{action.label}</strong></summary>');
+    expect(agy).toContain('action.where !== "Agy panel"');
+    expect(agy).not.toContain("<p>{action.unavailable ?? action.what}</p>");
+  });
+
+  it("done setup steps are one line and a fully done group starts folded", async () => {
+    const setup = await readFile("src/renderer/SetupAndContext.tsx", "utf8");
+    expect(setup).toContain('item.state === "done" ? <details className="setup-text setup-done">');
+    expect(setup).toContain("defaultOpen={done < items.length}");
+  });
+
+  it("Job Search has a neutral one-line notice and the Quick fit note as a tip", async () => {
+    const search = await readFile("src/renderer/JobSearchView.tsx", "utf8");
+    const css = await readFile("src/renderer/layout.css", "utf8");
+    expect(search).toContain('<InfoTip label="About fit scores">');
+    expect(search).not.toContain("find-note");
+    expect(css.match(/\.find-callout \{[^}]*\}/)?.[0]).not.toContain("border-left");
+  });
+
+  it("Settings tabs are a vertical list", async () => {
+    const modal = await readFile("src/renderer/SettingsModal.tsx", "utf8");
+    const css = await readFile("src/renderer/layout.css", "utf8");
+    expect(modal).toContain('role="tablist" aria-label="Settings sections" aria-orientation="vertical"');
+    expect(css).toMatch(/\.settings-nav \{ grid-area: nav; flex-direction: column;/);
+  });
+});
