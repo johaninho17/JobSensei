@@ -393,7 +393,6 @@
 /* ---------- Phase 6: run status, add a job, setup ---------- */
 .run-status { display: grid; gap: 2px; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); background: var(--raised); font-size: var(--fs-13); }
 .run-status-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-.run-status-line .btn-link { margin-left: auto; }
 .run-label { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
 .run-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .run-status.is-running .run-dot { background: var(--brass); animation: run-pulse 1.2s ease-in-out infinite; }
@@ -402,10 +401,8 @@
 .run-status.is-failed .run-dot { background: var(--risk); }
 @keyframes run-pulse { 50% { opacity: .35; } }
 .run-status-meta { margin: 0; color: var(--muted); }
-.run-issues summary { color: var(--ink); cursor: pointer; }
-.run-issues ul { display: grid; gap: 4px; margin: 4px 0 0; padding-left: 1.1em; }
+.run-issues { display: grid; gap: 4px; margin: 4px 0 0; padding-left: 1.1em; }
 .run-issues li.is-error { color: var(--risk); }
-.run-issues code { font-size: var(--fs-12); }
 .add-job { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-2) var(--space-3); margin-bottom: var(--space-4); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); }
 .add-job label { font-weight: 650; }
 .add-job textarea { min-height: 36px; padding: var(--space-2) var(--space-3); resize: vertical; line-height: 1.4; border: 1px solid var(--line-strong); border-radius: var(--radius-s); color: var(--ink); background: var(--canvas); font: inherit; }
@@ -1242,3 +1239,16 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .pdf-row.is-stale .pdf-pill-file { border-color: var(--brass); background: var(--brass-tint); }
 .pdf-row .icon-button { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: var(--radius-s); background: transparent; color: var(--muted); cursor: pointer; }
 .pdf-row .icon-button:hover { color: var(--ink); border-color: var(--line-strong); }
+
+/* Agy panel (U89, #186): a finished run is one line that opens; finished steps fold; Clear and Restart in ⋯. */
+summary.run-status-line { cursor: pointer; list-style: none; }
+summary.run-status-line::-webkit-details-marker { display: none; }
+.run-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.run-when, .run-done, .run-count { margin-left: auto; white-space: nowrap; }
+.run-done { color: var(--leaf); }
+.run-count { padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--brass-tint); color: var(--ink); font-size: var(--fs-12); font-weight: 600; }
+.run-count.is-failed { background: var(--risk-tint); color: var(--risk); }
+.run-status-meta .btn-link { margin-left: 0; }
+.chat-steps-fold summary { cursor: pointer; color: var(--term-muted); font-size: var(--fs-12); }
+.terminal-more summary { width: auto; min-height: 0; }
+.terminal-hide { font-size: var(--fs-15); line-height: 1; }

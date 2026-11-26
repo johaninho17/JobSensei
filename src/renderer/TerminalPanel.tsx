@@ -51,16 +51,20 @@ function RunStatusBar({ run, onOpen }: { run: RunStatus | null; onOpen: (run: Ru
   const elapsed = Math.max(0, Math.round((now - Date.parse(run.at)) / 1000));
   const duration = run.state === "running" ? `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}` : run.durationSeconds !== null ? `${run.durationSeconds}s` : null;
   const when = run.state === "running" ? null : formatRelativeDate(run.at);
-  return <section className={`run-status is-${run.state}`} aria-label="Latest run" aria-live="polite">
-    <div className="run-status-line">
-      <span className="run-dot" aria-hidden="true" />
-      <strong>{RUN_KIND_LABEL[run.kind]}</strong>
-      <span className="run-label">{run.label}</span>
-      {run.jobId && run.kind !== "fetch" && <button className="btn-link" onClick={() => onOpen(run)}>Open</button>}
-    </div>
-    <p className="run-status-meta">{[RUN_STATE_LABEL[run.state], duration, run.fitScore !== null ? `fit ${run.fitScore.toFixed(1)}` : null, run.gate, when].filter(Boolean).join(", ")}</p>
-    {run.issues.length > 0 && <details className="run-issues"><summary>{run.issues.length === 1 ? "1 issue" : `Top ${run.issues.length} issues`}</summary><ul>{run.issues.map((issue, index) => <li key={`${issue.code}-${index}`} className={`is-${issue.severity}`}><code>{issue.code}</code> {issue.message}</li>)}</ul></details>}
-  </section>;
+  const toCheck = run.issues.length;
+  const line = <>
+    <span className="run-dot" aria-hidden="true" />
+    <strong>{RUN_KIND_LABEL[run.kind]}</strong>
+    <span className="run-label">{run.label}</span>
+    {running ? <span className="run-when tabular">{duration}</span> : run.state === "passed" ? <span className="run-done" aria-label="Done">✓</span> : toCheck > 0 ? <span className={`run-count is-${run.state}`}>{toCheck} to {run.state === "failed" ? "fix" : "check"}</span> : null}
+  </>;
+  // A running job is one live line; a finished one is one line that opens for details (U89). A failed run opens.
+  if (running) return <section className="run-status is-running" aria-label="Latest run" aria-live="polite"><div className="run-status-line">{line}</div></section>;
+  return <details className={`run-status is-${run.state}`} aria-label="Latest run" open={run.state === "failed"}>
+    <summary className="run-status-line">{line}</summary>
+    <p className="run-status-meta">{[RUN_STATE_LABEL[run.state], duration, run.fitScore !== null ? `fit ${run.fitScore.toFixed(1)}` : null, run.gate, when].filter(Boolean).join(", ")}{run.jobId && run.kind !== "fetch" && <> · <button className="btn-link" onClick={() => onOpen(run)}>Open</button></>}</p>
+    {toCheck > 0 && <ul className="run-issues">{run.issues.map((issue, index) => <li key={`${issue.code}-${index}`} className={`is-${issue.severity}`}>{issue.message}</li>)}</ul>}
+  </details>;
 }
 
 export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, selectedCareerPaths, theme, visible, onClose, jobActions, promptRequest, onPromptHandled, onInsertPrompt, onOpenRun, onQueueJob, busyLabel }: { latestRun: RunStatus | null; onOpenRun: (run: RunStatus) => void; onQueueJob: QueueJob; busyLabel: string | null; cwd: string; /** The open workspace (or candidate) folder: one chat history each. */ historyKey: string; selectedJobFiles: string[]; selectedCareerPaths: string[]; theme: "dark" | "light"; visible: boolean; onClose: () => void; jobActions: JobAction[]; promptRequest: PromptRequest | null; onPromptHandled: (id: number) => void; onInsertPrompt: (action: JobAction) => void }) {
@@ -519,9 +523,15 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
         </div>
         <div className="terminal-header-actions">
           <JobActionsMenu actions={jobActions} onInsert={onInsertPrompt} />
-          <button className="terminal-action" onClick={handleClear} title="Clear conversation or console output">Clear</button>
-          <button className="terminal-action" onClick={() => void window.sensei.terminal.restart().then((res) => { if (res?.agyStarted !== undefined) setAgyActive(Boolean(res.agyStarted)); })} title="Restart session">Restart</button>
-          <button className="terminal-action" aria-label="Hide terminal panel" onClick={onClose}>Hide</button>
+          {/* Clear and Restart are rare: one ⋯ menu, and Hide is an icon (U89). */}
+          <details className="jobs-more terminal-more">
+            <summary className="terminal-action" aria-label="More Agy panel actions" title="More">⋯</summary>
+            <div className="jobs-more-menu">
+              <button className="menu-item" onClick={(event) => { (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); handleClear(); }} title="Clear conversation or console output">Clear</button>
+              <button className="menu-item" onClick={(event) => { (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); void window.sensei.terminal.restart().then((res) => { if (res?.agyStarted !== undefined) setAgyActive(Boolean(res.agyStarted)); }); }} title="Restart session">Restart</button>
+            </div>
+          </details>
+          <button className="terminal-action terminal-hide" aria-label="Hide terminal panel" title="Hide" onClick={onClose}>×</button>
         </div>
       </div>
 
@@ -579,7 +589,7 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
                       )}
                     </div>
                   )}
-                  {entry.steps && entry.steps.length > 0 && (
+                  {entry.steps && entry.steps.length > 0 && (entry.status === "running" ? (
                     <div className="chat-steps">
                       {entry.steps.map((step, idx) => (
                         <div key={idx} className="chat-step-item">
@@ -588,7 +598,20 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
                         </div>
                       ))}
                     </div>
-                  )}
+                  ) : (
+                    // A finished run's steps are one line that opens on click; a failed one stays open (U89).
+                    <details className="chat-steps-fold" open={entry.status === "error"}>
+                      <summary>{entry.status === "error" ? "Stopped" : "Done"}{entry.durationMs !== undefined ? ` in ${formatDuration(entry.durationMs)}` : ""} · {entry.steps.length} step{entry.steps.length === 1 ? "" : "s"}</summary>
+                      <div className="chat-steps">
+                        {entry.steps.map((step, idx) => (
+                          <div key={idx} className="chat-step-item">
+                            <span className="chat-step-check">✓</span>
+                            <span>{step}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
                   {entry.status === "running" && (
                     <div className="chat-running-status">
                       <span className="chat-pulse-dot" /> Executing steps…
@@ -640,7 +663,8 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
               )}
               {jobActions.length > 0 && (
                 <div className="chat-quick-actions">
-                  {jobActions.slice(0, 3).map((action) => (
+                  {/* One suggestion: the next step. The rest are in Job Actions (U89). */}
+                  {jobActions.slice(0, 1).map((action) => (
                     <button
                       key={action.id}
                       type="button"
@@ -648,7 +672,7 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
                       onClick={() => sendToAgy(action.prompt, action.label)}
                       title={action.prompt}
                     >
-                      ⚡ {action.label}
+                      Next: {action.label}
                     </button>
                   ))}
                 </div>
