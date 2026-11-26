@@ -51,10 +51,12 @@ describe("The job page, compact (U79, #157)", () => {
   it("the job page's next step and check count sit in the header card, and the Fit card doesn't repeat the score", async () => {
     const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
     const head = page.slice(page.indexOf('<header className="job-head">'), page.indexOf("</header>", page.indexOf('<header className="job-head">')));
-    expect(head).toContain('className="next-bar"');
+    // #221: the next step is a split button in the header's line, not a band.
+    expect(head).toContain('className="next-split"');
     expect(head).toContain("check-chip");
     expect(page).not.toContain('className="review-line"');
-    expect(page.match(/className="next-bar"/g)).toHaveLength(1);
+    expect(page).not.toContain('className="next-bar"');
+    expect(page.match(/className="next-split"/g)).toHaveLength(1);
     expect(page).not.toContain("job.rating.toFixed(1)}</strong> of 5");
     expect(page).not.toContain('className="fit-bar"');
   });
@@ -77,12 +79,14 @@ describe("One page header (U82, #165)", () => {
 });
 
 describe("Quieter job page (U82, #166)", () => {
-  it("the header keeps status, ring, short location, and the settings score; the rest is in its menu", async () => {
+  it("the header keeps status, ring and short location; the settings score is in the Fit card; the rest is in its menu (#221)", async () => {
     const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
     const head = page.slice(page.indexOf('<header className="job-head">'), page.indexOf("</header>", page.indexOf('<header className="job-head">')));
-    expect(head).toContain('job.applicationStage && trackerStatus === "saved" && <StatusPill');
+    expect(head).not.toContain("<StatusPill");
     expect(head).toContain("locationLine(job.location, job.role?.workMode ?? null)");
-    expect(head).toContain("Settings <strong");
+    expect(head).not.toContain("Settings <strong");
+    const fit = page.slice(page.indexOf("<h2>Fit</h2>"), page.indexOf("</section>", page.indexOf("<h2>Fit</h2>")));
+    expect(fit).toContain("Settings <strong");
     expect(head).toMatch(/<details className="jobs-more job-head-more">[\s\S]*Added \{formatJobDate[\s\S]*Edit details/);
     expect(page).toContain('<details className="jobs-more pdf-menu">');
     expect(page.match(/<PdfTextSizeSelect/g)).toHaveLength(1);

@@ -12,7 +12,7 @@ import { InterviewView } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { ReviewPanel } from "./Review";
 import { TagEditor } from "./JobOrganize";
-import { type JobWorkspaceTab, StatusPill, TrackerPill, displayJobName, fileNodes, findNode, formatJobDate, formatRelativeDate, messageOf, plural, toast } from "./app-shared";
+import { type JobWorkspaceTab, TrackerPill, displayJobName, fileNodes, findNode, formatJobDate, formatRelativeDate, messageOf, plural, toast } from "./app-shared";
 import { DocumentView, PdfTextSizeSelect, documentsChanged, pdfsCreated, usePdfFreshness } from "./Documents";
 import { askConfirm } from "./confirm";
 
@@ -87,15 +87,17 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
         <h1>{job.title ?? "Role not recorded"}</h1>
         <div className="job-head-meta">
           <label className={`tracker-select is-${trackerStatus}`}><span className="sr-only">Application status</span><select value={trackerStatus} onChange={(event) => void onUpdateTracker({ status: event.target.value as TrackerStatus })}>{TRACKER_STATUSES.map((value) => <option key={value} value={value}>{value === "saved" && job.hasApplicationMaterials ? draftedLabel() : TRACKER_LABELS[value]}</option>)}</select></label>
-          {/* "Application ready" only while not applied: after that the status says it (U82). */}
-          {job.applicationStage && trackerStatus === "saved" && <StatusPill value={job.applicationStage} />}
           {job.rating !== null && <span className="job-head-fit" title={`Fit ${job.rating.toFixed(1)} of 5`}><FitRing rating={job.rating} size={36} /></span>}
-          {job.hasApplicationMaterials && (() => { const score = jobSettingsScore(job.settingsScore); return <span className={`settings-score is-${score.band}`} title={`Agy's settings when these drafts were made: ${score.score} of 100 (${settingsScoreLabel(score).split(" ")[1]}). Higher means more lenient. See Agy → Behavior.`}>Settings <strong className="tabular">{score.score}</strong> {settingsScoreLabel(score).split(" ")[1]}</span>; })()}
           {locationLine(job.location, job.role?.workMode ?? null) && <span>{locationLine(job.location, job.role?.workMode ?? null)}</span>}
           {/* The last check's result is a count you can open, not a sentence (U89). */}
           {allIssues.length > 0 && <button className={`check-chip ${allIssues.some((issue) => issue.severity === "error") ? "is-error" : ""}`} title="From the last check of this application" onClick={openChecks}>{allIssues.length} to {allIssues.some((issue) => issue.severity === "error") ? "fix" : "check"}</button>}
           {/* One PDFs control in the header line, so the tab row stays one line (U89). */}
           {resumeMarkdown && <JobPdfExportButton jobId={job.id} resumePath={resumeMarkdown.relativePath} coverLetterPath={coverLetterMarkdown?.relativePath ?? null} />}
+          {/* The next step is a split button at the end of this line, not a band of its own (#221). */}
+          {next && trackerStatus !== "rejected" && trackerStatus !== "withdrawn" && <span className="next-split" role="group" aria-label="Next step">
+            <button className="btn-primary" title={`Sends this request to Agy for ${job.company ?? displayJobName(job.name)}, ${job.title ?? "this job"}.`} onClick={() => onInsertPrompt(next)}><span className="next-split-label">Next</span> {next.label}</button>
+            {more.length > 0 && <details className="jobs-more next-split-more"><summary aria-label="Other next steps">▾</summary><div className="jobs-more-menu">{more.slice(0, 6).map((action) => <button key={action.id} className="menu-item" onClick={() => onInsertPrompt(action)}>{action.label}</button>)}</div></details>}
+          </span>}
           {/* Added date, corrected fields, and Edit details live in the header's menu (U82). */}
           <details className="jobs-more job-head-more">
             <summary aria-label="Job details">⋯</summary>
@@ -108,13 +110,6 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
           </details>
         </div>
       </div>
-      {/* The next step and the last check's result live in the header card (U79), not as bands of their own. */}
-      {next && trackerStatus !== "rejected" && trackerStatus !== "withdrawn" && <section className="next-bar" aria-label="Next step">
-        <span className="next-bar-label">Next</span>
-        <strong className="next-bar-title" title={`Sends this request to Agy for ${job.company ?? displayJobName(job.name)}, ${job.title ?? "this job"}.`}>{next.label}</strong>
-        <button className="btn-primary" onClick={() => onInsertPrompt(next)}>Send to Agy</button>
-        {more.length > 0 && <details className="jobs-more next-bar-more"><summary aria-label="Other next steps">More</summary><div className="jobs-more-menu">{more.slice(0, 6).map((action) => <button key={action.id} className="menu-item" onClick={() => onInsertPrompt(action)}>{action.label}</button>)}</div></details>}
-      </section>}
     </header>
     {editingDetails && <EditJobDetails job={job} onClose={() => setEditingDetails(false)} onSaved={(next) => { onJobChanged(next); setEditingDetails(false); }} />}
     <div className="workspace-tabs-row">
@@ -132,6 +127,8 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
             {job.rating === null ? <p className="muted">Not rated yet. Ask Agy to evaluate this job.</p> : <>
               {/* The score itself is the header's fit ring (U79); this card explains it. */}
               <p className="fit-score">{job.ratingConfidence ? `${job.ratingConfidence[0]!.toUpperCase()}${job.ratingConfidence.slice(1)} confidence` : "Rated"}{evaluation && <> · <button className="btn-link" onClick={() => openAppView("evaluation")}>evaluation</button></>}</p>
+              {/* Agy's settings when these drafts were made: a detail of the fit, not a header fact (#221). */}
+              {job.hasApplicationMaterials && (() => { const score = jobSettingsScore(job.settingsScore); return <span className={`settings-score fit-settings is-${score.band}`} title={`Agy's settings when these drafts were made: ${score.score} of 100 (${settingsScoreLabel(score).split(" ")[1]}). Higher means more lenient. See Agy → Behavior.`}>Settings <strong className="tabular">{score.score}</strong> {settingsScoreLabel(score).split(" ")[1]}</span>; })()}
               {job.stretch && <StretchSummary stretch={job.stretch} />}
               <MustHaveGroups mustHaves={job.mustHaves} gaps={job.requirementGaps.length ? job.requirementGaps : job.ratingGaps.filter((item) => !/^none\b/i.test(item)).map((item) => item.replace(/^(?:must|req):\d+\s*/i, ""))} />
               {job.mustHaves.length === 0 && job.ratingHighlights.length > 0 && <details className="must-group is-met"><summary>Strengths ({job.ratingHighlights.length})</summary><ul>{job.ratingHighlights.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul></details>}

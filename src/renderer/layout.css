@@ -613,11 +613,12 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .pdf-pill-file:hover { border-color: var(--accent); }
 .pdf-pill-file em { font-style: normal; font-weight: 600; color: var(--brass); }
 /* Next step as one slim line. */
-.next-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-2) var(--space-3); border-left: 3px solid var(--brass); border-radius: var(--radius-s); background: var(--brass-tint); }
-.next-bar-label { color: var(--brass); font: 700 var(--fs-12) var(--font-ui); }
-.next-bar-title { flex: 1 1 200px; min-width: 0; font-size: var(--fs-15); }
-.next-bar .btn-primary { min-height: 32px; padding: 0 var(--space-3); font-size: var(--fs-13); }
-.next-bar-more summary { width: auto; padding: 0 var(--space-2); font: 600 var(--fs-13) var(--font-ui); }
+.next-split { display: inline-flex; align-items: stretch; margin-left: auto; }
+.next-split .btn-primary { min-height: 32px; padding: 0 var(--space-3); border-radius: var(--radius-m) 0 0 var(--radius-m); font-size: var(--fs-13); }
+.next-split .btn-primary:only-child { border-radius: var(--radius-m); }
+.next-split-label { opacity: .8; font-weight: 700; }
+.next-split-more summary { display: grid; place-items: center; width: 30px; min-height: 32px; height: 100%; border-radius: 0 var(--radius-m) var(--radius-m) 0; border-left: 1px solid var(--line); color: var(--on-accent); background: var(--accent); }
+.fit-settings { display: block; margin: 0 0 var(--space-2); font-size: var(--fs-13); }
 /* Role facts on the Overview. */
 .role-points { display: grid; gap: 4px; margin: 0; padding-left: 1.1em; font-size: var(--fs-13); line-height: 1.5; }
 .role-facts { display: grid; gap: 4px; margin: var(--space-2) 0 0; font-size: var(--fs-13); }

@@ -31,6 +31,8 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #211 | Archived replaces Closed; the Jobs count shows live applications | FEAT-001 |  |
 | #212 | A quieter Agy chat | FEAT-006 |  |
 | #213 | Paste a debrief in the app; a job is optional | FEAT-005 |  |
+| #221 | Job header in two lines: Next becomes a split button | FEAT-002 |  |
+| #222 | Application documents in one dropdown tab | FEAT-002 |  |
 
 ## P2
 
@@ -44,6 +46,8 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #202 | Remove explanation paragraphs across pages | FEAT-009 |  |
 | #203 | Edit details opens with the job's details filled in | FEAT-013 |  |
 | #214 | Open files in the app instead of Finder | FEAT-008 |  |
+| #223 | Overview and Checks say it once | FEAT-002 |  |
+| #224 | Jobs page: one View menu, and sidebar counts that agree | FEAT-001 |  |
 
 ## P3
 
@@ -65,4 +69,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #124 | Phase 4.4: Global Connectors tab, per-job Activity & Emails timeline, Email Prep PDF action, and Undo toasts | FEAT-002, FEAT-014 | yes |
 | #133 | Multi-AI groundwork: agent brief, activity log, headless streaming, prompt caching, quota backoff | FEAT-006 |  |
 
-38 open, 8 of them for later.
+42 open, 8 of them for later.
