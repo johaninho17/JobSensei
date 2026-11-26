@@ -48,6 +48,7 @@ export function WorkspaceFolders({ onToast, onChanged }: { onToast: (message: st
       {plan.notes.length > 0 && <ul className="folders-notes">{plan.notes.map((note) => <li key={note}>{note}</li>)}</ul>}
       {plan.conflicts.length > 0 && <p className="inline-error" role="alert">Can't tidy yet: {plan.conflicts.slice(0, 3).join("; ")}{plan.conflicts.length > 3 ? ` and ${plan.conflicts.length - 3} more` : ""}. Rename or move those, then check again.</p>}
     </>}
+    <TidyFiles onToast={onToast} onChanged={onChanged} />
     {problem && <p className="inline-error" role="alert">{problem}</p>}
     <div className="folders-actions">
       {!tidy && !confirming && <button className="btn-quiet" disabled={busy || plan.conflicts.length > 0 || plan.moves.length === 0} onClick={() => setConfirming(true)}>Tidy folders…</button>}
@@ -56,6 +57,44 @@ export function WorkspaceFolders({ onToast, onChanged }: { onToast: (message: st
       {(!tidy || plan.stray.length > 0) && <button className="btn-link" disabled={busy} onClick={load}>Check again</button>}
     </div>
   </Section>;
+}
+
+type TidyPlan = Awaited<ReturnType<Window["sensei"]["tidy"]["plan"]>>;
+
+/** Tidy files (#238): recordings into their job folders with one name pattern, leftovers to a backup. */
+function TidyFiles({ onToast, onChanged }: { onToast: (message: string) => void; onChanged: () => void }) {
+  const [plan, setPlan] = useState<TidyPlan | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  const [canUndo, setCanUndo] = useState(false);
+  const load = () => void window.sensei.tidy.plan().then(setPlan).catch((reason) => setProblem(message(reason)));
+  useEffect(load, []);
+  if (!plan) return null;
+  const count = plan.moves.length + plan.toBackup.length;
+  async function run(action: "apply" | "undo") {
+    setBusy(true);
+    setProblem("");
+    try {
+      if (action === "apply") { const done = await window.sensei.tidy.apply(); onToast(`Files tidied: ${done.moved} moved, ${done.backedUp} to the backup.`); setCanUndo(true); }
+      else { const done = await window.sensei.tidy.undo(); onToast(`Put back ${done.restored} file${done.restored === 1 ? "" : "s"}.`); setCanUndo(false); }
+      load();
+      onChanged();
+    } catch (reason) { setProblem(message(reason)); } finally { setBusy(false); }
+  }
+  return <div className="tidy-files">
+    <h3>Tidy files</h3>
+    {count === 0 ? <p className="muted">Every recording is in its job folder with a plain name.</p> : <>
+      {plan.moves.length > 0 && <details className="folders-moves"><summary>{plan.moves.length} recording{plan.moves.length === 1 ? "" : "s"} to rename or move</summary>
+        <ul>{plan.moves.map((move) => <li key={move.from}><code>{move.from}</code> → <code>{move.to}</code></li>)}</ul></details>}
+      {plan.toBackup.length > 0 && <details className="folders-moves"><summary>{plan.toBackup.length} leftover{plan.toBackup.length === 1 ? "" : "s"} to the backup</summary>
+        <ul>{plan.toBackup.map((item) => <li key={item.path}><code>{item.path}</code> <span className="muted">· {item.why}</span></li>)}</ul></details>}
+    </>}
+    {problem && <p className="inline-error" role="alert">{problem}</p>}
+    <div className="folders-actions">
+      {count > 0 && <button className="btn-quiet" disabled={busy} onClick={() => void run("apply")}>{busy ? "Tidying…" : `Tidy ${count} file${count === 1 ? "" : "s"}`}</button>}
+      {canUndo && <button className="btn-link" disabled={busy} onClick={() => void run("undo")}>Undo</button>}
+    </div>
+  </div>;
 }
 
 const message = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");

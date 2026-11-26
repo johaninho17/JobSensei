@@ -1418,6 +1418,12 @@ export interface SenseiApi {
     importRecordingText(text: string, kind: "interview" | "practice", jobId: string | null): Promise<ContextImportResult>;
   };
   /** Workspace folders: preview the tidy layout, apply it, undo it. */
+  /** Tidy files (#238, electron/tidy-files.ts): recordings into job folders, one name pattern, leftovers to a backup. */
+  tidy: {
+    plan(): Promise<{ moves: Array<{ from: string; to: string; why: string }>; toBackup: Array<{ path: string; why: string }> }>;
+    apply(): Promise<{ moved: number; backedUp: number; rewritten: number }>;
+    undo(): Promise<{ restored: number }>;
+  };
   layout: {
     plan(): Promise<LayoutPlan>;
     apply(): Promise<LayoutPlan>;

@@ -35,6 +35,7 @@ import { invalidateJobCache, listJobArtifacts, listJobFolders, listJobTree } fro
 import { assertInsideWorkspace, indexContext, layoutVersion, summarizeWorkspace, workspaceFile } from "./workspace";
 import { toLogical } from "../src/shared/workspace-layout";
 import { applyMigration, healStrayPaths, planMigration, undoMigration } from "./layout-migration";
+import { applyWorkspaceTidy, planWorkspaceTidy, undoWorkspaceTidy } from "./tidy-files";
 import { framingLinesFor, keepFramingLine, revertFramingLine } from "./framing-choices";
 import { readJobOverrides, saveJobOverrides } from "./job-overrides";
 import type { JobOverridesInput } from "../src/shared/job-overrides";
@@ -590,6 +591,10 @@ async function readinessNow() {
 }
 ipcMain.handle("setup:readiness", async () => readinessNow());
 // Workspace folders: preview, tidy, undo (electron/layout-migration.ts; names owned by src/shared/workspace-layout.ts).
+// Tidy files (#238): recordings into job folders with one name pattern, leftovers to a backup; preview, apply, undo.
+ipcMain.handle("tidy:plan", async () => planWorkspaceTidy(requireWorkspace()));
+ipcMain.handle("tidy:apply", async () => { const manifest = await applyWorkspaceTidy(requireWorkspace()); return { moved: manifest.moves.length, backedUp: manifest.backedUp.length, rewritten: manifest.rewritten?.length ?? 0 }; });
+ipcMain.handle("tidy:undo", async () => undoWorkspaceTidy(requireWorkspace()));
 ipcMain.handle("layout:plan", async () => planMigration(requireWorkspace()));
 ipcMain.handle("layout:apply", async () => {
   const workspace = requireWorkspace();

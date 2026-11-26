@@ -33,6 +33,11 @@ const api: SenseiApi = {
     importRecordingPaths: (paths, kind, jobId) => ipcRenderer.invoke("content:import-recording-paths", paths, kind, jobId),
     importRecordingText: (text, kind, jobId) => ipcRenderer.invoke("content:import-recording-text", text, kind, jobId),
   },
+  tidy: {
+    plan: () => ipcRenderer.invoke("tidy:plan"),
+    apply: () => ipcRenderer.invoke("tidy:apply"),
+    undo: () => ipcRenderer.invoke("tidy:undo"),
+  },
   layout: {
     plan: () => ipcRenderer.invoke("layout:plan"),
     apply: () => ipcRenderer.invoke("layout:apply"),

@@ -1278,3 +1278,7 @@ summary.run-status-line::-webkit-details-marker { display: none; }
 
 /* An empty chat says what it's for (#237). */
 .chat-empty { margin: auto; max-width: 30ch; padding: var(--space-5) var(--space-3); color: var(--muted); font-size: var(--fs-13); text-align: center; }
+
+/* Tidy files in Setup → Your folders (#238). */
+.tidy-files { display: grid; gap: var(--space-2); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.tidy-files h3 { margin: 0; font-size: var(--fs-15); }
