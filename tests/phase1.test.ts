@@ -12,6 +12,8 @@ import { exportMarkdownPdf } from "../electron/pdf-export";
 
 async function makeWorkspace(): Promise<string> {
   const path = await mkdtemp(join(tmpdir(), "sensei-viewer-"));
+  // An existing workspace on the original layout: it already has the user's context/ folder, so it stays on it (#104).
+  await mkdir(join(path, "context"), { recursive: true });
   await initializeWorkspace(path);
   return path;
 }

@@ -42,8 +42,11 @@ describe("candidate roster", () => {
     const dir = await root();
     const alex = await addCandidate(dir, "Alex Morgan", { suffix: "7k2f" });
     const folder = join(dir, "candidates", alex.id);
-    for (const name of ["profile", "resumes", "context", "jobs"]) expect(await exists(join(folder, name)), name).toBe(true);
+    // New candidate folders start on the tidy layout (#104).
+    for (const name of ["profile", "resumes", "career/records", "career/notes", "jobs"]) expect(await exists(join(folder, name)), name).toBe(true);
+    expect(await exists(join(folder, "context"))).toBe(false);
     expect(await exists(join(folder, "debrief"))).toBe(false);
+    expect(await exists(join(folder, "interviews"))).toBe(false);
     const skills = await readdir(join(folder, ".agents", "skills"));
     expect(skills).toContain("jobsensei-resume-tailor");
     expect(skills).not.toContain("jobsensei-interview-pipeline");

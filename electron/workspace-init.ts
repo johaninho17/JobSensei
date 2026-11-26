@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { agentTextForLayout, type LayoutVersion } from "../src/shared/workspace-layout";
+import { agentTextForLayout, DEFAULT_LAYOUT_VERSION, LAYOUT_FILE, type LayoutVersion } from "../src/shared/workspace-layout";
 import { agentsMdFor, featuresFor, includedAgentEntry, type Features } from "../src/shared/edition";
 import { currentEdition } from "./edition";
-import { layoutVersion, workspaceFile } from "./layout";
+import { forgetLayout, layoutVersion, workspaceFile } from "./layout";
 import { healStrayPaths } from "./layout-migration";
 
 /** Agy runtime directories the app owns and keeps in sync inside the workspace. */
@@ -30,6 +30,7 @@ export interface AgentSyncReport {
 }
 
 export async function initializeWorkspace(workspacePath: string, features: Features = featuresFor(currentEdition())): Promise<AgentSyncReport> {
+  await markNewWorkspaceLayout(workspacePath);
   // Logical names; the layout decides where each one sits on disk.
   await Promise.all([...["profile", "context/structured", "context/broad", "resumes", "jobs", ...(features.contentRefresh ? ["debrief"] : []), "fallback-references"].map((folder) => mkdir(workspaceFile(workspacePath, folder), { recursive: true })),
     mkdir(join(workspacePath, ".sensei"), { recursive: true }),
@@ -38,6 +39,21 @@ export async function initializeWorkspace(workspacePath: string, features: Featu
 
   return syncWorkspaceAgentFiles(workspacePath, { features });
 }
+
+/**
+ * A workspace with nothing of the user's in it starts on DEFAULT_LAYOUT_VERSION (#104). Anything else keeps the
+ * layout it has: no layout file still means the original layout, and only the migration the user runs changes it.
+ * Hidden entries (`.sensei`, `.agents`, `.DS_Store`) and what the app itself seeds don't count as the user's.
+ */
+async function markNewWorkspaceLayout(workspacePath: string): Promise<void> {
+  if (DEFAULT_LAYOUT_VERSION === 1 || await exists(join(workspacePath, LAYOUT_FILE))) return;
+  const entries = await readdir(workspacePath).catch(() => [] as string[]);
+  if (!entries.every((name) => name.startsWith(".") || APP_SEEDED.has(name))) return;
+  await mkdir(join(workspacePath, ".sensei"), { recursive: true });
+  await writeFile(join(workspacePath, LAYOUT_FILE), `${JSON.stringify({ version: DEFAULT_LAYOUT_VERSION, createdAt: new Date().toISOString() }, null, 2)}\n`, "utf8");
+  forgetLayout(workspacePath);
+}
+const APP_SEEDED = new Set(["AGENTS.md", "fallback-references"]);
 
 interface AgentSource {
   root: string;

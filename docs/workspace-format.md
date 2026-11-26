@@ -50,7 +50,7 @@ Files outside `data/` are application source and public documentation. Never pla
 
 ## Folder layouts
 
-A workspace uses one of two folder layouts. The app, its saved data, and every check name files the same way in both (the *logical* path, the left column); only the place on disk differs. `src/shared/workspace-layout.ts` owns the names, and `.sensei/layout.json` records which layout a workspace uses (no file = original).
+A workspace uses one of two folder layouts. The app, its saved data, and every check name files the same way in both (the *logical* path, the left column); only the place on disk differs. `src/shared/workspace-layout.ts` owns the names, and `.sensei/layout.json` records which layout a workspace uses (no file = original). A new workspace or Recruiter candidate folder that starts empty gets the tidy layout; one that already has the user's files keeps the original layout until the user moves it in Setup → Your folders.
 
 | Logical path (always) | Original layout | Tidy layout |
 |---|---|---|

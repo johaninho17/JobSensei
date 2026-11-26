@@ -239,3 +239,40 @@ describe("tidying a workspace", () => {
     expect(await stat(join(root, "context")).catch(() => null)).toBeNull();
   });
 });
+
+describe("new workspaces start tidy (#104)", () => {
+  const fresh = async () => { const root = await mkdtemp(join(tmpdir(), "sensei-new-")); made.push(root); return root; };
+
+  it("an empty folder gets the tidy layout and its folders", async () => {
+    const root = await fresh();
+    await writeFile(join(root, ".DS_Store"), "");
+    await initializeWorkspace(root);
+    expect(layoutVersion(root)).toBe(2);
+    expect(JSON.parse(await readFile(join(root, ".sensei/layout.json"), "utf8")).version).toBe(2);
+    for (const folder of ["profile", "resumes", "career/records", "career/notes", "jobs"]) expect((await stat(join(root, folder))).isDirectory(), folder).toBe(true);
+    expect(await stat(join(root, "context")).catch(() => null)).toBeNull();
+    expect(workspaceFile(root, "context/structured/work.md")).toBe(join(root, "career/records/work.md"));
+    const plan = await planMigration(root);
+    expect(plan.canUndo).toBe(false);
+  });
+
+  it("a folder with the user's files keeps the original layout, and reopening never changes it", async () => {
+    const root = await fresh();
+    await mkdir(join(root, "resumes"), { recursive: true });
+    await writeFile(join(root, "resumes/base.md"), "# Alex Morgan\n");
+    await initializeWorkspace(root);
+    await initializeWorkspace(root);
+    expect(layoutVersion(root)).toBe(1);
+    expect(await stat(join(root, ".sensei/layout.json")).catch(() => null)).toBeNull();
+    expect((await stat(join(root, "context/structured"))).isDirectory()).toBe(true);
+  });
+
+  it("a tidy workspace stays tidy when it is opened again", async () => {
+    const root = await fresh();
+    await initializeWorkspace(root);
+    await writeFile(workspaceFile(root, "context/structured/work.md"), "# Work\n");
+    await initializeWorkspace(root);
+    expect(layoutVersion(root)).toBe(2);
+    expect(await readFile(join(root, "career/records/work.md"), "utf8")).toBe("# Work\n");
+  });
+});

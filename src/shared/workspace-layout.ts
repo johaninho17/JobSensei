@@ -13,8 +13,9 @@
 export const LAYOUT_FILE = ".sensei/layout.json";
 export const LAYOUT_VERSIONS = [1, 2] as const;
 export type LayoutVersion = (typeof LAYOUT_VERSIONS)[number];
-/** New workspaces start on this version; existing ones change only through the migration the user runs. */
-export const DEFAULT_LAYOUT_VERSION: LayoutVersion = 1;
+/** Empty new workspaces (and new Recruiter candidate folders) start on this version (#104); existing ones change
+ * only through the migration the user runs. */
+export const DEFAULT_LAYOUT_VERSION: LayoutVersion = 2;
 
 /** Logical → disk, most specific first. A rule covers the path itself and everything under it. */
 export const LAYOUT_V2_RULES: ReadonlyArray<readonly [logical: string, disk: string]> = [

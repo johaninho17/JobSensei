@@ -17,10 +17,10 @@ The base resume protects presentation and fixed career fields. It is not trusted
 
 ## First Launch
 
-1. JobSensei creates the local `data/` workspace.
+1. JobSensei creates the local `data/` workspace. A new, empty workspace starts on the tidy folder layout (`profile/`, `resumes/`, `career/records/`, `career/notes/`, `jobs/`, `interviews/`); a workspace that already has files keeps the layout it has.
 2. First-run steps, all in the app: your name and file prefix; your base resume (the app shows what it read); Agy sign-in; then recommended extras (career files, career story, interview logistics, names to keep private, writing voice). The Setup page in the sidebar keeps the same list with what each step improves.
 3. Adding a job waits until the required steps (name, a readable base resume, Agy installed) are done.
-4. Career evidence is added under `data/context/structured/`; source notes may be added under `data/context/broad/`.
+4. Career evidence is added as work records (`career/records/`, or `context/structured/` on the original layout); source notes go in notes (`career/notes/`, or `context/broad/`).
 5. The app creates an active context manifest from the files selected in the interface.
 6. The Agy panel (top bar → Agy) launches Agy from the repository root so it can discover `.agents/skills/`.
 
@@ -176,7 +176,7 @@ See [Privacy](docs/privacy.md), [Workspace Format](docs/workspace-format.md), an
 
 - **Jobs page:** Filters (company, work setup, fit, went to interview, tags), Group (company, kind of role, status, work setup), and saved views that bring back a tab, search, filters, grouping, and sort in one click. Filtering to one company shows its summary (jobs by status, average fit, interviews, a link to its research and prep). Tags are added on a job's Overview under Tracking.
 - **Adding a job you already have** (same posting link, or same company and title) asks before adding it again.
-- **Your folders (Setup):** a map of where each kind of file lives, named for the layout in use, and a quiet list of items at the top of the workspace that belong elsewhere, each with a suggested home (nothing is moved for you). Also an optional tidy layout for the workspace folder with plain names. Preview first, apply, undo. Job folders and resumes are never moved. See `docs/workspace-format.md` § Folder layouts.
+- **Your folders (Setup):** a map of where each kind of file lives, named for the layout in use, and a quiet list of items at the top of the workspace that belong elsewhere, each with a suggested home (nothing is moved for you). Workspaces made before the tidy layout became the default can move to it here, with plain names. Preview first, apply, undo. Job folders and resumes are never moved. See `docs/workspace-format.md` § Folder layouts.
 
 ## What runs in the background
 
