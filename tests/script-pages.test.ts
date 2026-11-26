@@ -28,7 +28,7 @@ describe("amazon.jobs", () => {
     const { extracted } = await fetchAndClean("https://www.amazon.jobs/en/jobs/4242/dock-coordinator", fetcher, { render: false });
     const record = buildPostingRecord(extracted.markdown);
     expect(record).toMatchObject({ title: "Dock Coordinator", company: "Amazon", postedAt: "2026-10-02", jobId: "4242" });
-    expect(record.location).toMatch(/^Springfield, Ohio/);
+    expect(record.location).toBe("Springfield, OH"); // one location form: normalLocation (src/shared/posting-fields.ts)
     expect(record.responsibilities).toEqual(["Check the dock", "Log shipments"]);
     expect(record.requiredItems).toContain("High school or equivalent");
     expect(record.preferred).toEqual(["1+ years in logistics"]);
