@@ -23,7 +23,6 @@ function TrackerPanel({ job, onUpdate }: { job: JobFolderSummary; onUpdate: (upd
     <h2>Tracking</h2>
     <div className="tracker-dates">
       <label><span>Applied</span><input type="date" value={effectiveAppliedAt(job) ?? ""} onChange={(event) => void onUpdate({ appliedAt: event.target.value || null })} /></label>
-      {FEATURES.nudges && <label><span>Follow up on</span><input type="date" value={tracker?.nextFollowUpAt ?? ""} onChange={(event) => void onUpdate({ nextFollowUpAt: event.target.value || null })} /></label>}
     </div>
     <TagEditor tags={tracker?.tags ?? []} suggestions={[]} onChange={(tags) => void onUpdate({ tags })} />
     <label className="tracker-notes"><span>Notes</span><textarea rows={1} value={notes} placeholder="Recruiter name, referral, what they said…" onChange={(event) => setNotes(event.target.value)} onBlur={() => { if (notes !== (tracker?.notes ?? "")) void onUpdate({ notes }); }} /></label>

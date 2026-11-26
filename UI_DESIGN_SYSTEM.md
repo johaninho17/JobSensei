@@ -51,7 +51,7 @@ Light is the default theme. Dark is neutral graphite with green accents, not dar
 ## Components
 - Buttons: `btn-primary` (one per area), `btn-quiet`, `btn-link`. Labels say what happens ("Send to Agy", "Start live mode").
 - `segmented`: filters and view switches, with counts.
-- `tracker-pill` / `tracker-select` (Saved muted, Applied accent, Interviewing leaf, Offer solid accent, Rejected risk, Withdrawn dashed), `status-pill` for pipeline state, `fit-badge`, `next-badge` (brass only when a follow-up is due): never color alone; the text carries the meaning.
+- `tracker-pill` / `tracker-select` (Saved muted, Applied accent, Interviewing leaf, Offer solid accent, Rejected risk, Withdrawn dashed), `status-pill` for pipeline state, `fit-badge`: never color alone; the text carries the meaning.
 - Interview card (`icard`): question in the UI font (15px, semibold), kind badge for non-questions, Say points as a short list, Proof in plain words (story and evidence IDs only in the tooltip), "Land on" with a leaf rule, "They may ask next" muted, "Careful" in risk color.
 
 ## Bento

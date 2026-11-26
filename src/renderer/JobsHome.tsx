@@ -5,15 +5,15 @@ import { askConfirm } from "./confirm";
 import { createPortal } from "react-dom";
 import { TRACKER_STATUSES, type JobQueue, type JobTrackerUpdate, type TrackerStatus, type JobFolderSummary } from "../shared/schemas";
 import { jobsToCsv } from "../shared/jobs-csv";
-import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, readyToSend, statusLabel, followUpDays, reachedInterview, staleApplications } from "../shared/tracker";
+import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, readyToSend, statusLabel, reachedInterview, staleApplications } from "../shared/tracker";
 import { type Readiness } from "../shared/readiness";
 import { CompanyStrip, JobFilters, SavedViews, storeJobViews, storedJobViews } from "./JobOrganize";
 import { FitRing, PageHead } from "./BentoPrimitives";
 import { GROUPINGS, NO_FACETS, countWithin, jobDotOf, settingsSortKey, groupJobs, matchesFacets, type Grouping, type JobFacets, type JobView } from "../shared/job-organize";
 import { FitBadge, type JobWorkspaceTab, type QueueJob, TrackerPill, displayJobName, formatJobDate, formatTrackerDate, messageOf, plural, saveFavoriteJobIds, storedFavoriteJobIds } from "./app-shared";
 
-// CSV columns follow the edition: no follow-up or interview columns where those features are left out.
-export const CSV_COLUMNS = { followUps: FEATURES.nudges, interviews: FEATURES.interviews };
+// CSV columns follow the edition: no interview column where interviews are left out.
+export const CSV_COLUMNS = { interviews: FEATURES.interviews };
 
 const HEALTH_GROUPS: Array<{ id: string; title: string; help: string; match: (job: JobFolderSummary) => boolean }> = [
   { id: "tracking", title: "Interviews not recorded", help: "Prep exists or the job reached interviews, but the real interviews and how it ended aren't recorded. This feeds Learnings.", match: (job) => job.health?.tracking === "missing" || job.health?.tracking === "partial" },
@@ -45,7 +45,7 @@ function DataHealthPanel({ jobs, onOpenJob, onClose }: { jobs: JobFolderSummary[
   </div>;
 }
 
-type JobsFilter = "all" | "active" | "interviewing" | "follow-up" | "review" | "favorites";
+type JobsFilter = "all" | "active" | "interviewing" | "review" | "favorites";
 type JobsView = "list" | "cards";
 export type JobsTab = "active" | "ready" | "interviewing" | "offer" | "reached" | "applied" | "saved" | "closed" | "all";
 /** Jobs by status (U79: sidebar sub-items under Jobs and the status menu in the page header); Active is the default. */
@@ -92,9 +92,9 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
   const [views, setViews] = useState<JobView[]>(storedJobViews);
   const [group, setGroup] = useState<Grouping>(() => { const stored = window.localStorage.getItem("sensei-jobs-group"); return GROUPINGS.includes(stored as Grouping) ? stored as Grouping : "none"; });
   useEffect(() => { window.localStorage.setItem("sensei-jobs-group", group); }, [group]);
-  const [sort, setSort] = useState<"added" | "company" | "role" | "follow-up" | "fit" | "settings">(() => {
+  const [sort, setSort] = useState<"added" | "company" | "role" | "fit" | "settings">(() => {
     const stored = window.localStorage.getItem("sensei-jobs-sort");
-    return ["added", "company", "role", "follow-up", "fit", "settings"].includes(stored ?? "") ? stored as "added" : "added";
+    return ["added", "company", "role", "fit", "settings"].includes(stored ?? "") ? stored as "added" : "added";
   });
   const [view, setView] = useState<JobsView>(() => {
     const stored = window.localStorage.getItem("sensei-jobs-view");
@@ -113,11 +113,9 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
   }
   const matches = (job: JobFolderSummary, value: JobsFilter) => {
     const status = effectiveStatus(job);
-    const due = followUpDays(job.tracker);
     return value === "all"
       || (value === "active" && ACTIVE_STATUSES.includes(status))
       || (value === "interviewing" && (status === "interviewing" || Boolean(job.interviewRoundLabel) && ACTIVE_STATUSES.includes(status)))
-      || (value === "follow-up" && due !== null && due <= 0 && ACTIVE_STATUSES.includes(status))
       || (value === "review" && /review|pending|stale|invalid/.test(job.applicationStage?.toLowerCase() ?? ""))
       || (value === "favorites" && favorites.has(job.id));
   };
@@ -127,7 +125,7 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
   // The jobs the open tab, filters, and search show; a quick filter's count is how many of these it keeps (#15).
   const normalizedQuery = query.trim().toLowerCase();
   const inView = (job: JobFolderSummary) => inTab(job, tab) && matchesFacets(job, facets) && (!normalizedQuery || `${job.company ?? ""} ${job.title ?? ""} ${job.name} ${job.location ?? ""} ${effectiveStatus(job)} ${job.interviewRoundLabel ?? ""} ${job.tracker?.notes ?? ""}`.toLowerCase().includes(normalizedQuery));
-  const filterCounts = countWithin(jobs, inView, ["all", "active", "interviewing", "follow-up", "review", "favorites"] as JobsFilter[], matches);
+  const filterCounts = countWithin(jobs, inView, ["all", "active", "interviewing", "review", "favorites"] as JobsFilter[], matches);
   const visibleJobs = useMemo(() => {
     const text = (value: string | null | undefined, fallback: string) => (value ?? fallback).toLowerCase();
     return jobs
@@ -137,7 +135,6 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
         if (sort === "role") return text(a.title, "").localeCompare(text(b.title, ""));
         if (sort === "fit") return (b.rating ?? -1) - (a.rating ?? -1);
         if (sort === "settings") return settingsSortKey(b) - settingsSortKey(a);
-        if (sort === "follow-up") return (followUpDays(a.tracker) ?? 9999) - (followUpDays(b.tracker) ?? 9999);
         return Date.parse(b.createdAt) - Date.parse(a.createdAt) || text(a.company, displayJobName(a.name)).localeCompare(text(b.company, displayJobName(b.name)));
       });
   }, [jobs, query, filter, sort, favorites, tab, facets]);
@@ -184,7 +181,7 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
     exitSelect();
   }
   const menuHandlers = (job: JobFolderSummary): JobMenuHandlers => ({ onOpen: () => onOpenJob(job.id), onOpenEvaluation: () => onOpenEvaluation(job.id), onOpenInterview: job.interviewRoundLabel ? () => onOpenJobView(job.id, "interview") : null, onMoveToTrash: () => onMoveToTrash(job.id), onSetStatus: (status) => void onUpdateTracker(job.id, { status }) });
-  const filterLabels: Record<JobsFilter, string> = { all: "All", active: "Active", interviewing: "Interviewing", "follow-up": FEATURES.nudges ? "Follow-up due" : "", review: "Needs review", favorites: "Favorites" };
+  const filterLabels: Record<JobsFilter, string> = { all: "All", active: "Active", interviewing: "Interviewing", review: "Needs review", favorites: "Favorites" };
   const renderJobs = (list: JobFolderSummary[]) => view === "cards" ? <div className="job-card-grid">{list.map((job) => <JobCard key={job.id} job={job} favorite={favorites.has(job.id)} onToggleFavorite={() => toggleFavorite(job.id)} handlers={menuHandlers(job)} selecting={selecting} selected={selected.has(job.id)} onSelect={(event) => toggleSelected(job.id, event as { shiftKey?: boolean })} />)}</div>
       : <div className="jobs-table-wrap"><table className="jobs-table"><thead><tr>{selecting && <th scope="col"><span className="sr-only">Selected</span></th>}<th scope="col">Role</th><th scope="col">Fit</th><th scope="col">Status</th><th scope="col">Interview</th><th scope="col">Next</th><th scope="col" className="col-added">Added</th><th scope="col"><span className="sr-only">Favorite and actions</span></th></tr></thead><tbody>{list.map((job) => <tr key={job.id} tabIndex={0} className={selected.has(job.id) ? "is-selected" : undefined} aria-selected={selecting ? selected.has(job.id) : undefined} onClick={(event) => { if (selecting || event.metaKey || event.ctrlKey) toggleSelected(job.id, event); else onOpenJob(job.id); }} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); if (selecting) toggleSelected(job.id, event); else onOpenJob(job.id); } }}>{selecting && <td><input type="checkbox" className="job-select" checked={selected.has(job.id)} aria-label={`Select ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => toggleSelected(job.id, { shiftKey: (event.nativeEvent as globalThis.MouseEvent).shiftKey })} /></td>}<td className="jobs-role"><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></td><td><FitBadge rating={job.rating} gate={jobSettingsScore(job.settingsScore).behavior.fit.gate} /></td><td><TrackerPill status={effectiveStatus(job)} job={job} /></td><td>{job.interviewRoundLabel ? <button className="btn-link" onClick={(event) => { event.stopPropagation(); onOpenJobView(job.id, "interview"); }}>{job.interviewRoundLabel}</button> : <span className="muted">None</span>}</td><td><NextBadge job={job} /></td><td className="tabular muted col-added">{formatJobDate(job.createdAt)}</td><td><button className={`job-favorite ${favorites.has(job.id) ? "is-favorite" : ""}`} aria-pressed={favorites.has(job.id)} aria-label={`Favorite ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => { event.stopPropagation(); toggleFavorite(job.id); }}>{favorites.has(job.id) ? "★" : "☆"}</button><JobMenuButton job={job} handlers={menuHandlers(job)} /></td></tr>)}</tbody></table></div>;
   return <section className="jobs-home">
@@ -196,14 +193,14 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
     {setup}
     <div className="jobs-view">
     <SavedViews views={views} current={{ tab, query, facets, group, sort }} onChange={(next) => { setViews(next); storeJobViews(next); }}
-      onApply={(saved) => { setStatusGroup(saved.tab); setQuery(saved.query); setFacets(saved.facets); setGroup(saved.group); if (["added", "company", "role", "follow-up", "fit", "settings"].includes(saved.sort)) setSort(saved.sort as typeof sort); setFilter("all"); }} />
+      onApply={(saved) => { setStatusGroup(saved.tab); setQuery(saved.query); setFacets(saved.facets); setGroup(saved.group); if (["added", "company", "role", "fit", "settings"].includes(saved.sort)) setSort(saved.sort as typeof sort); setFilter("all"); }} />
     <div className="jobs-toolbar">
       <label className="workspace-search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search jobs…" aria-label="Search jobs" /></label>
-      {(["follow-up", "review", "favorites"] as JobsFilter[]).filter((value) => FEATURES.nudges || value !== "follow-up").filter((value) => filterCounts[value] > 0 || filter === value).map((value) => <button key={value} className="filter-toggle" aria-pressed={filter === value} onClick={() => setFilter(filter === value ? "all" : value)}>{filterLabels[value]}<span>{filterCounts[value]}</span></button>)}
+      {(["review", "favorites"] as JobsFilter[]).filter((value) => filterCounts[value] > 0 || filter === value).map((value) => <button key={value} className="filter-toggle" aria-pressed={filter === value} onClick={() => setFilter(filter === value ? "all" : value)}>{filterLabels[value]}<span>{filterCounts[value]}</span></button>)}
       <details className="jobs-more jobs-view-menu">
         <summary>View</summary>
         <div className="jobs-more-menu">
-  <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option>{FEATURES.nudges && <option value="follow-up">Follow-up date</option>}<option value="fit">Best fit</option><option value="settings">Agy settings (boldest first)</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
+  <label className="jobs-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sort jobs"><option value="added">Recently added</option><option value="fit">Best fit</option><option value="settings">Agy settings (boldest first)</option><option value="company">Company A-Z</option><option value="role">Role A-Z</option></select></label>
   <label className="jobs-sort"><span>Group</span><select value={group} onChange={(event) => setGroup(event.target.value as Grouping)} aria-label="Group jobs"><option value="none">No groups</option><option value="company">Company</option><option value="role">Kind of role</option><option value="status">Status</option><option value="work">Work setup</option></select></label>
         </div>
       </details>
@@ -339,14 +336,9 @@ function JobQueueBox({ open, queue, jobs, agyReady, onOpenAgy, onSave, onQueueJo
   </section>;
 }
 
-/** Follow-up due, or the applied date, in plain words. */
+/** The applied date, in plain words. */
 function NextBadge({ job, quiet = false, due = false }: { job: JobFolderSummary; quiet?: boolean; due?: boolean }) {
-  const days = followUpDays(job.tracker);
   const status = effectiveStatus(job);
-  if (FEATURES.nudges && days !== null && ACTIVE_STATUSES.includes(status)) {
-    const label = days < 0 ? `Follow up, ${-days} day${days === -1 ? "" : "s"} late` : days === 0 ? "Follow up today" : `Follow up in ${days} day${days === 1 ? "" : "s"}`;
-    return <span className={`next-badge ${days <= 0 ? "is-due" : ""}`}>{label}</span>;
-  }
   const appliedAt = effectiveAppliedAt(job);
   if (due) return null;
   if (appliedAt) return <span className="muted">Applied {formatTrackerDate(appliedAt)}</span>;

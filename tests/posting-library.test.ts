@@ -138,7 +138,7 @@ describe("pipeline across candidates (recruiter plan R5)", () => {
     const after = await listPipeline(root);
     expect(after.every((row) => row.tracker?.status === "applied")).toBe(true);
     const csv = pipelineToCsv(after);
-    expect(csv.split("\r\n")[0]).toBe("﻿Candidate,Company,Title,Status,Applied,Follow up,Fit,Interview,Location,Added,Notes,Job ID,Sent via,Resume version sent");
+    expect(csv.split("\r\n")[0]).toBe("﻿Candidate,Company,Title,Status,Applied,Fit,Interview,Location,Added,Notes,Job ID,Sent via,Resume version sent");
     expect(csv).toContain("Jordan Lee,");
     await expect(setPipelineStatus(root, [{ candidateId: alex.id, jobId: "northstar-support" }], "hired")).rejects.toThrow();
   });
@@ -178,7 +178,7 @@ describe("candidate approval, weekly report, insight (recruiter plan R8 P5)", ()
     const { candidateInsight, reportRows, reportText, shortlistText } = await import("../src/shared/recruiter-insight");
     const { setPdfsMarkApplied } = await import("../src/shared/tracker");
     setPdfsMarkApplied(false); // the Recruiter Edition: only Mark applied counts
-    const job = (status: string | null, appliedAt: string | null, company = "Northstar Labs") => ({ tracker: status ? { status, appliedAt, nextFollowUpAt: null, notes: "", history: [] } : null, hasApplicationMaterials: true, interviewRoundLabel: null, createdAt: "2026-11-01T10:00:00.000Z", company, name: company.toLowerCase(), title: "Support Engineer", rating: 3.6, statusText: status === "interviewing" ? "Interviewing" : "Applied" }) as never;
+    const job = (status: string | null, appliedAt: string | null, company = "Northstar Labs") => ({ tracker: status ? { status, appliedAt, notes: "", history: [] } : null, hasApplicationMaterials: true, interviewRoundLabel: null, createdAt: "2026-11-01T10:00:00.000Z", company, name: company.toLowerCase(), title: "Support Engineer", rating: 3.6, statusText: status === "interviewing" ? "Interviewing" : "Applied" }) as never;
     const now = new Date(2026, 10, 11, 12);
     const jobs = [job("applied", "2026-11-10"), job("interviewing", "2026-11-03"), job("rejected", "2026-10-20"), job(null, null)];
     expect(candidateInsight(jobs, now)).toEqual({ applied: 3, appliedThisWeek: 1, responses: 2, interviews: 1, offers: 0, responseRate: 2 / 3 });

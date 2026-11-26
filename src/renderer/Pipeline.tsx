@@ -61,7 +61,7 @@ export function PipelineView({ activeId, onOpenJob, onOpenCandidate, onToast }: 
   }
 
   async function exportCsv() {
-    const path = await window.sensei.jobs.exportCsv(pipelineToCsv(shown, { followUps: FEATURES.nudges, interviews: FEATURES.interviews })).catch(() => null);
+    const path = await window.sensei.jobs.exportCsv(pipelineToCsv(shown, { interviews: FEATURES.interviews })).catch(() => null);
     if (path) onToast(`Saved ${shown.length} job${shown.length === 1 ? "" : "s"} to ${path.split(/[\\/]/).pop()}`);
   }
 

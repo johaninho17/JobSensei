@@ -1,10 +1,10 @@
 import type { JobFolderSummary } from "./schemas";
 import { effectiveAppliedAt, statusLabel } from "./tracker";
 
-const ALL_COLUMNS = ["Company", "Title", "Status", "Applied", "Follow up", "Fit", "Interview", "Location", "Added", "Notes", "Job ID"] as const;
-/** Follow-up and interview columns exist only where those features do (the Recruiter Edition stops at applying). */
-export type CsvColumns = { followUps?: boolean; interviews?: boolean };
-const keepFor = (options: CsvColumns) => ALL_COLUMNS.map((column) => !(column === "Follow up" && options.followUps === false) && !(column === "Interview" && options.interviews === false));
+const ALL_COLUMNS = ["Company", "Title", "Status", "Applied", "Fit", "Interview", "Location", "Added", "Notes", "Job ID"] as const;
+/** The interview column exists only where interviews do (the Recruiter Edition stops at applying). */
+export type CsvColumns = { interviews?: boolean };
+const keepFor = (options: CsvColumns) => ALL_COLUMNS.map((column) => !(column === "Interview" && options.interviews === false));
 
 /** RFC 4180 cell: quoted when needed; a leading = + - @ (or tab/CR) gets an apostrophe so spreadsheets never run it as a formula. */
 export function csvCell(value: string | number | null | undefined): string {
@@ -35,7 +35,6 @@ function fullRow(job: JobFolderSummary): Array<string | number | null> {
     job.title ?? "",
     statusLabel(job),
     effectiveAppliedAt(job) ?? "",
-    job.tracker?.nextFollowUpAt ?? "",
     job.rating === null ? "" : job.rating.toFixed(1),
     job.interviewRoundLabel ?? "",
     job.location ?? "",

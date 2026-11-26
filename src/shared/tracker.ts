@@ -46,15 +46,6 @@ export function effectiveAppliedAt(job: TrackedJob): string | null {
   return `${added.getFullYear()}-${String(added.getMonth() + 1).padStart(2, "0")}-${String(added.getDate()).padStart(2, "0")}`;
 }
 
-/** Days until the follow-up date (negative when overdue), or null. Dates are local calendar days. */
-export function followUpDays(tracker: Pick<JobTracker, "nextFollowUpAt"> | null, today = new Date()): number | null {
-  if (!tracker?.nextFollowUpAt) return null;
-  const [y, m, d] = tracker.nextFollowUpAt.split("-").map(Number);
-  const due = Date.UTC(y!, m! - 1, d!);
-  const base = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-  return Math.round((due - base) / 86_400_000);
-}
-
 /** True when the job got as far as interviews: recorded interviews, prepared rounds, or the tracker was ever Interviewing or Offer. */
 export function reachedInterview(job: { interviewRoundLabel: string | null; interviewRoundCount?: number; tracker: { status: TrackerStatus; history?: Array<{ status?: TrackerStatus | null }>; interviews?: unknown[] } | null }): boolean {
   if ((job.tracker?.interviews?.length ?? 0) > 0) return true;

@@ -17,8 +17,8 @@ export type Features = {
   learnings: boolean;
   /** Story bank and interview voice. */
   interviewProfile: boolean;
-  /** Follow-up dates, stale-application nudges, "N new career files". */
-  nudges: boolean;
+  /** "New since you last looked" for career files on Profile. */
+  newFilesNotice: boolean;
   /** Job Search: finding postings on boards, watched companies, and scheduled searches. */
   jobSearch: boolean;
   /** Several candidates in one folder (recruiter plan R1). */
@@ -38,8 +38,8 @@ export type Features = {
 };
 
 const FEATURES: Record<Edition, Features> = {
-  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, tune: true, learnings: true, interviewProfile: true, nudges: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, profileQuestions: true, pdfsMarkApplied: true, pdfResumes: false, agyPage: true },
-  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, tune: false, learnings: false, interviewProfile: false, nudges: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, profileQuestions: false, pdfsMarkApplied: false, pdfResumes: true, agyPage: false },
+  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, tune: true, learnings: true, interviewProfile: true, newFilesNotice: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, profileQuestions: true, pdfsMarkApplied: true, pdfResumes: false, agyPage: true },
+  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, tune: false, learnings: false, interviewProfile: false, newFilesNotice: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, profileQuestions: false, pdfsMarkApplied: false, pdfResumes: true, agyPage: false },
 };
 
 export type EditionInfo = {

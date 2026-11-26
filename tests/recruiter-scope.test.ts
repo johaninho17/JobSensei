@@ -91,16 +91,13 @@ describe("the edition stops at applying", () => {
     expect(statusLabel({ ...drafted, hasPdfs: true })).toBe("Applied");
   });
 
-  it("sets no follow-up date when a recruiter marks a job applied", async () => {
+  it("fills the applied date when a recruiter marks a job applied", async () => {
     const { folder } = await candidateFolder();
     await mkdir(join(folder, "jobs", "northstar-support"), { recursive: true });
     process.env.JOBSENSEI_EDITION = "recruiter";
     const tracker = await updateJobTracker(folder, "northstar-support", { status: "applied" });
-    expect(tracker.nextFollowUpAt).toBeNull();
     expect(tracker.appliedAt).not.toBeNull();
     delete process.env.JOBSENSEI_EDITION;
-    await mkdir(join(folder, "jobs", "juniper-support"), { recursive: true });
-    expect((await updateJobTracker(folder, "juniper-support", { status: "applied" })).nextFollowUpAt).not.toBeNull();
   });
 });
 

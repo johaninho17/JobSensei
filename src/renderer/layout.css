@@ -332,8 +332,6 @@
 .tracker-pill.is-offer { color: var(--on-accent); background: var(--accent); }
 .tracker-pill.is-rejected { color: var(--risk); background: var(--risk-tint); }
 .tracker-pill.is-withdrawn { color: var(--muted); border-color: var(--line-strong); border-style: dashed; }
-.next-badge { font-size: var(--fs-13); color: var(--muted); white-space: nowrap; }
-.next-badge.is-due { padding: 2px 8px; border-radius: var(--radius-pill); color: var(--brass); background: var(--brass-tint); font-weight: 650; }
 .side-due { padding: 0 6px; border-radius: var(--radius-pill); color: var(--brass); background: var(--brass-tint); font-size: var(--fs-12); font-weight: 650; }
 .side-due + .side-count { margin-left: var(--space-2); }
 .side-nav button .side-due { margin-left: auto; }
@@ -419,7 +417,7 @@
 .add-job textarea:focus-visible { outline: none; box-shadow: var(--focus); }
 .add-job p { grid-column: 2 / -1; margin: 0; color: var(--muted); font-size: var(--fs-13); }
 @media (max-width: 900px) { .add-job { grid-template-columns: 1fr; } .add-job p { grid-column: 1; } }
-.jobs-table .next-badge, .jobs-table td:nth-child(5) { white-space: nowrap; }
+.jobs-table td:nth-child(5) { white-space: nowrap; }
 @container (max-width: 820px) { .jobs-table .col-added { display: none; } .jobs-table .jobs-role { min-width: 180px; } }
 .job-actions-for { margin: 0; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); color: var(--muted); font-size: var(--fs-12); }
 
