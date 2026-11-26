@@ -11,7 +11,7 @@ import { parseJobDescriptionMetadata } from "./job-description";
 import { POSTING_BOARDS, POSTING_EXPECTED_FIELDS, POSTING_SCHEMA_VERSION, postingRecordSchema, type PostingPay, type PostingRecord, type PostingWorkSetup } from "../src/shared/posting";
 
 /** Bump when any parsing rule changes: saved records with an older version are rebuilt. */
-export const POSTING_PARSER_VERSION = 7;
+export const POSTING_PARSER_VERSION = 8;
 export const POSTING_RECORD_FILE = ".sensei/posting.json";
 
 type SectionKind = "requirements" | "responsibilities" | "preferred" | "benefits" | "pay" | "company" | "role" | "legal" | "other";
@@ -40,6 +40,8 @@ function kindOf(heading: string): SectionKind {
 
 /** Header lines the fetch or paste adds ("Source URL: …", "- Location: …"): facts, never overview or company prose. */
 const META_LINE = /^(?:[-*•]\s*)?(?:\*\*)?(?:source(?: url)?|url|job url|company|employer|location|job id|requisition id|posted(?: on)?|date posted|department|team|employment type|job type)(?:\*\*)?\s*:|https?:\/\//i;
+/** Header facts with a value ("**Pay:** $90,000–$120,000/year"): facts, never section headings (issue #173). */
+const FACT_LINE = /^(?:[-*•]\s*)?(?:\*\*)?(?:work setup|workplace type|remote type|pay|compensation|salary|time type)(?:\*\*)?\s*:(?:\*\*)?\s*\S/i;
 const clean = (line: string) => line.replace(/[*_`]/g, "").replace(/([a-z])\.([A-Z])/g, "$1. $2").replace(/\s+/g, " ").trim();
 const isTag = (line: string) => /^#[A-Za-z][\w-]*$/.test(line.trim());
 
@@ -48,7 +50,7 @@ function sections(body: string): Section[] {
   const out: Section[] = [{ heading: "", kind: "role", items: [], prose: [] }];
   for (const raw of body.split("\n")) {
     const line = raw.trim();
-    if (!line || isTag(line) || META_LINE.test(line)) continue;
+    if (!line || isTag(line) || META_LINE.test(line) || FACT_LINE.test(line)) continue;
     const item = BULLET.exec(raw)?.[1];
     if (item) { out.at(-1)!.items.push(clean(item)); continue; }
     if (isHeadingLike(raw) && !/^#\s/.test(line)) {
@@ -275,6 +277,14 @@ function labeled(body: string, label: RegExp): string | null {
   return null;
 }
 
+/** A line describing the company itself ("Northwind is the platform for…", "The same principles … our team"), not the role. */
+function aboutCompany(line: string, company: string | null): boolean {
+  // "Northwind is looking to hire…" is about the role.
+  if (/\b(?:is|are) (?:looking|hiring|seeking)\b/i.test(line.slice(0, 80))) return false;
+  if (company && line.toLowerCase().startsWith(`${company.toLowerCase()} `) && /^\S+(?:\s+\S+){0,3}?\s+(?:is|was|enables|helps|builds|makes|provides|powers)\b/i.test(line)) return true;
+  return /^(?:the same principles|our (?:mission|values|culture)|we(?:'|’)re (?:proud|a (?:global|remote))|founded in)\b/i.test(line);
+}
+
 export function buildPostingRecord(posting: string): PostingRecord {
   const body = postingBody(posting);
   const metadata = parseJobDescriptionMetadata(posting);
@@ -290,7 +300,7 @@ export function buildPostingRecord(posting: string): PostingRecord {
     && ((companyName && line.toLowerCase().includes(companyName.toLowerCase())) || /^(?:we|our)\b|\b(?:we are|we're|we build|we help)\b/i.test(line))) ?? null;
   // The role overview: prose under role headings (or before any heading), without the company paragraph.
   const rolePara = all.filter((section) => section.kind === "role").flatMap((section) => section.prose)
-    .filter((line) => line.length > 60 && line !== companyPara && !LEGAL.test(line.slice(0, 120)) && !(companyName && line.toLowerCase().startsWith(`at ${companyName.toLowerCase()}`)));
+    .filter((line) => line.length > 60 && line !== companyPara && !LEGAL.test(line.slice(0, 120)) && !(companyName && line.toLowerCase().startsWith(`at ${companyName.toLowerCase()}`)) && !aboutCompany(line, companyName));
   const lines = body.split("\n").map((line) => clean(line.replace(BULLET, "$1"))).filter(Boolean);
   const experience = experienceOf(required, body);
   const record: PostingRecord = {

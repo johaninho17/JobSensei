@@ -561,6 +561,13 @@ export function extractRequiredItems(jobDescription: string): string[] {
       if (plain && isProse(items)) { items.length = 0; plain = false; inside = isRequiredHeading(heading(line)); continue; }
       break;
     }
+    // A bold paragraph inside a bulleted list ("**Strong coding skills - You can build…, specifically:**") is one of
+    // its items, often introducing sub-bullets; the list goes on after it (issue #173).
+    if (inside && items.length && !plain && /^\s*\*\*/.test(line) && line.replace(/[*_]/g, "").trim().length > 80) {
+      const text = line.replace(/[*_]/g, "").trim();
+      if (!isSoftItem(text)) items.push(text);
+      continue;
+    }
     if (inside && items.length) break;
     if (!inside && isHeadingLike(line) && isRequiredHeading(heading(line))) inside = true;
   }
@@ -630,19 +637,18 @@ function skillSectionItems(lines: string[]): string[] {
 
 const PREFERRED_ITEM = /\b(?:is|are) (?:preferred|a plus|desired|advantageous)\b|\b(?:advantageous|nice to have|a plus|bonus points?)\b/i;
 
-export const RESPONSIBILITY_HEADING = /\b(?:responsibilit(?:y|ies)|what you(?:'|’)?ll do|what you will do|what you(?:'|’)?ll be doing|the role|in this role|your role|your impact|day[- ]to[- ]day|duties|what you(?:'|’)?ll work on)\b/i;
+export const RESPONSIBILITY_HEADING = /\b(?:responsibilit(?:y|ies)|activities|(?:your |key |main )?tasks|what you(?:'|’)?ll do|what you will do|what you(?:'|’)?ll be doing|the role|in this role|your role|your impact|day[- ]to[- ]day|duties|what you(?:'|’)?ll work on)\b/i;
 
-/**
- * The posting's responsibilities: bullets under its "What you'll do" heading. Plain sub-headings
- * inside that section are skipped; the next markdown or requirements heading ends it.
- */
-export function extractResponsibilityItems(jobDescription: string): string[] {
+/** Headings that name the duties outright; "the role" / "your role" headings are often an overview instead. */
+const DUTY_HEADING = /\b(?:responsibilit(?:y|ies)|activities|(?:your |key |main )?tasks|what you(?:'|’)?ll do|what you will do|what you(?:'|’)?ll be doing|in this role|your impact|day[- ]to[- ]day|duties|what you(?:'|’)?ll work on)\b/i;
+
+function responsibilityScan(body: string, headingRe: RegExp): string[] {
   const heading = (line: string) => line.replace(/^#+\s*/, "").replace(/[*_]/g, "").replace(/:\s*$/, "").trim();
   const bullet = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
   const items: string[] = [];
   let inside = false;
   let plain = false;
-  for (const line of postingBody(jobDescription).split("\n")) {
+  for (const line of body.split("\n")) {
     if (!line.trim()) continue;
     const item = bullet.exec(line)?.[1]?.replace(/[*_]/g, "").trim();
     if (inside && item) {
@@ -662,14 +668,49 @@ export function extractResponsibilityItems(jobDescription: string): string[] {
       if (RESPONSIBILITY_HEADING.test(heading(line)) && (!items.length || plain)) { items.length = 0; plain = false; continue; }
       break;
     }
-    if (!inside && isHeadingLike(line) && RESPONSIBILITY_HEADING.test(heading(line))) inside = true;
+    if (!inside && isHeadingLike(line) && headingRe.test(heading(line))) inside = true;
   }
+  return items;
+}
+
+/**
+ * The posting's responsibilities: bullets under its "What you'll do" heading. Plain sub-headings
+ * inside that section are skipped; the next markdown or requirements heading ends it.
+ */
+export function extractResponsibilityItems(jobDescription: string): string[] {
+  const body = postingBody(jobDescription);
+  // Explicit duty headings first; "About the role" style headings only when the posting has none (its overview is
+  // not a duty list), then the bullets under "Job Description" (issue #173).
+  const items = responsibilityScan(body, DUTY_HEADING);
+  if (!items.length) items.push(...responsibilityScan(body, RESPONSIBILITY_HEADING));
+  if (!items.length) items.push(...jobDescriptionBullets(body));
   if (!items.length) {
     // Some postings give duties as one paragraph ("Duties: Build… Review…"): each sentence is a duty.
-    const paragraph = /^(?:duties|responsibilities|key responsibilities|what you(?:'|’)?ll do)\s*:\s*(.{40,})$/im.exec(postingBody(jobDescription))?.[1] ?? "";
+    const paragraph = /^(?:duties|responsibilities|key responsibilities|what you(?:'|’)?ll do)\s*:\s*(.{40,})$/im.exec(body)?.[1] ?? "";
     items.push(...paragraph.split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter((sentence) => sentence.split(/\s+/).length >= 4).slice(0, 6));
   }
   return items.slice(0, MAX_REQUIRED_ITEMS);
+}
+
+/** Headings that hold the whole job ("Job Description", "About the job"): their bullets are duties when nothing else is. */
+const JOB_HEADING = /^(?:job description|description|about the (?:job|position)|position (?:summary|description|overview)|role (?:description|overview)|job summary)$/i;
+
+/**
+ * The bullets right under a "Job Description" heading, when the posting has no duties heading (issue #173). Only
+ * bullets count, never plain lines (they are the overview), and the next heading ends them.
+ */
+function jobDescriptionBullets(body: string): string[] {
+  const bullet = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
+  const items: string[] = [];
+  let inside = false;
+  for (const line of body.split("\n")) {
+    if (!line.trim()) continue;
+    const item = bullet.exec(line)?.[1]?.replace(/[*_]/g, "").trim();
+    if (inside && item) { items.push(item); continue; }
+    if (inside && items.length && (/^#/.test(line.trim()) || isHeadingLike(line))) break;
+    if (/^#/.test(line.trim()) || isHeadingLike(line)) inside = JOB_HEADING.test(sectionHeadingText(line));
+  }
+  return items;
 }
 
 const GENERIC_MUST_HAVE_TOKENS = new Set(["strong", "clear", "hands-on", "concept", "understanding", "including", "common", "similar", "role", "year", "years", "2+", "3+", "5+", "able", "comfort", "proficiency", "fluency", "familiarity", "solid", "good", "excellent", "plus", "etc", "other", "related", "both", "keep", "even", "when", "thing", "get", "hard", "natural"]);
