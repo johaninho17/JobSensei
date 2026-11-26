@@ -11,6 +11,7 @@ import { evaluationCategoryLabels, evaluationCredits, evaluationLabel, evaluatio
 import { parseQuestionBank, type QuestionEntry } from "./question-navigation";
 import { inferCodeLanguage, markdownHtml, sanitizeHtml } from "./markdown";
 import { formatBytes, messageOf, useAnnounce } from "./app-shared";
+import { InfoTip } from "./BentoPrimitives";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -319,9 +320,9 @@ function MarkdownDocument({ preview, focusAnchor, onExported, onDirtyChange, onS
 
   return <article ref={articleRef} className={`document markdown-document markdown-workspace ${isQuestionBank ? "question-bank-document" : ""}`}>
     <div className="document-meta">
-      <span>{preview.relativePath}</span>
-      <span>{formatBytes(new Blob([draft]).size)} · {new Date(expectedModifiedAt).toLocaleDateString()}</span>
-      <span className={`edit-status ${dirty ? "is-dirty" : ""}`}>{dirty ? "Unsaved changes" : state === "saved" ? "Saved" : editable ? "Local artifact" : "Source locked"}</span>
+      {/* The file's path, size, and date are a tip, not a line above every document (U82). */}
+      <InfoTip label="File details"><p>{preview.relativePath}</p><p>{formatBytes(new Blob([draft]).size)} · {new Date(expectedModifiedAt).toLocaleDateString()}{editable ? "" : " · source file, read only"}</p></InfoTip>
+      {(dirty || state === "saved" || !editable) && <span className={`edit-status ${dirty ? "is-dirty" : ""}`}>{dirty ? "Unsaved changes" : state === "saved" ? "Saved" : "Source locked"}</span>}
       <span className="markdown-actions">
         {editable && <button className={`editor-button ${mode === "edit" ? "is-active" : ""}`} onClick={() => setMode(mode === "view" ? "edit" : "view")}>{mode === "view" ? "Edit Markdown" : "View document"}</button>}
         {mode === "edit" && <button className="editor-button" disabled={!dirty || state === "saving"} onClick={() => void save()}>{state === "saving" ? "Saving…" : "Save"}</button>}

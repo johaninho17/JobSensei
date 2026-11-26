@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 // #21: the posting, the evaluation, and job files open inside the job page, so its header and tabs stay visible.
 describe("job documents open inside the job page (#21)", () => {
   const source = readFileSync("src/renderer/JobWorkspace.tsx", "utf8");
-  it("Job posting and the Fit panel's evaluation link switch the Application subtab instead of leaving the page", () => {
-    expect(source).toContain(`onClick={() => openAppView("posting")}>Job posting</button>`);
+  it("the posting is the Application tab's Posting subtab (no second Job posting button, U82); the evaluation link switches the subtab", () => {
+    expect(source).not.toContain(">Job posting</button>");
     expect(source).toContain(`onClick={() => openAppView("evaluation")}>evaluation</button>`);
     expect(source).not.toMatch(/onSelect\((?:jobDescription|evaluation)\.relativePath\)/);
     expect(source).toContain(`{ id: "posting", label: "Posting", disabled: !jobDescription }`);
