@@ -1414,6 +1414,8 @@ export interface SenseiApi {
     /** Adds recordings or practice-interview transcripts (copies) to the job's recording folder. */
     addRecordings(kind: "interview" | "practice", jobId: string | null): Promise<ContextImportResult>;
     importRecordingPaths(paths: string[], kind: "interview" | "practice", jobId: string | null): Promise<ContextImportResult>;
+    /** Pasted notes or a transcript, saved as a recording; the job is optional (#213). */
+    importRecordingText(text: string, kind: "interview" | "practice", jobId: string | null): Promise<ContextImportResult>;
   };
   /** Workspace folders: preview the tidy layout, apply it, undo it. */
   layout: {

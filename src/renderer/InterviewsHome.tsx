@@ -180,7 +180,7 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
       </div> : <>
         {waiting.length ? <ul className="recording-list">{waiting.map((recording) => <li key={recording.path}>
           <span className="setup-state">{RECORDING_STATE[recording.state]}</span>
-          <span><strong>{recording.path.replace(/^debrief\//, "")}</strong><small>{jobName(recording.jobId) ?? "Job not matched: Agy will ask which job it was"}</small></span>
+          <span><strong>{recording.path.split("/").pop()}</strong><small>{jobName(recording.jobId) ?? "Not linked to a job"}</small></span>
           <button className="btn-link" onClick={() => onOpenFile(recording.path)}>Open</button>
           <button className="btn-link" disabled={busy} onClick={() => void run(() => window.sensei.content.skip([recording.path]), "Couldn't skip it.")}>Skip</button>
         </li>)}</ul> : <p className="muted">No new recordings. Add a transcript or your notes below and it shows up here.</p>}
@@ -189,7 +189,7 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
       </>}
       {message && <p role="status" className="export-note">{message}</p>}
     </section>
-    {!data?.pending && <TunePanel area="interviews" title="Learn from new recordings" what="Agy reads only the new recordings above and suggests updates to your story bank, interview voice, role memory, and interview stories. Nothing changes until you apply a suggestion." onSendPrompt={onSendPrompt} onOpenFile={onOpenFile} onApplied={() => { void load(); onChanged(); }} />}
+    {!data?.pending && <TunePanel key={waiting.map((recording) => recording.path).join("|")} area="interviews" title="Learn from new recordings" what="Agy suggests updates to your story bank, interview voice, role memory, and interview stories. You pick what to apply." onSendPrompt={onSendPrompt} onOpenFile={onOpenFile} onApplied={() => { void load(); onChanged(); }} />}
     {review && <section className="iv-section content-review" aria-label="What the update changed">
       <h3>What the update changed</h3>
       {!review.changeListFound && <p className="learn-note">Agy didn't write its change list, so anything removed or shortened will be put back.</p>}
@@ -229,6 +229,7 @@ function RecordingAdder({ jobs, onAdded }: { jobs: JobFolderSummary[]; onAdded: 
   const [kind, setKind] = useState<RecordingKind>("interview");
   const [jobId, setJobId] = useState("");
   const [over, setOver] = useState(false);
+  const [pasted, setPasted] = useState("");
   const sorted = [...jobs].sort((a, b) => (a.company ?? a.name).localeCompare(b.company ?? b.name));
   async function add(paths?: string[]) {
     try {
@@ -238,6 +239,13 @@ function RecordingAdder({ jobs, onAdded }: { jobs: JobFolderSummary[]; onAdded: 
       onAdded([result.added.length ? `Added ${plural(result.added.length, "file")}.` : "", ...skipped.map((item) => `${item.name}: ${item.reason}.`)].filter(Boolean).join(" "));
     } catch (caught) { onAdded(messageOf(caught, "Couldn't add those files.")); }
   }
+  async function addPasted() {
+    try {
+      await window.sensei.content.importRecordingText(pasted, kind, jobId || null);
+      setPasted("");
+      onAdded("Added your notes.");
+    } catch (caught) { onAdded(messageOf(caught, "Couldn't add those notes.").replace(/^Error invoking remote method '[^']+': (Error: )?/, "")); }
+  }
   return <div className={`context-add${over ? " is-over" : ""}`} aria-label="Add recordings"
     onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); setOver(true); } }}
     onDragLeave={() => setOver(false)}
@@ -246,14 +254,15 @@ function RecordingAdder({ jobs, onAdded }: { jobs: JobFolderSummary[]; onAdded: 
       <button aria-pressed={kind === "interview"} onClick={() => setKind("interview")}>Real interview</button>
       <button aria-pressed={kind === "practice"} onClick={() => setKind("practice")}>Practice interview</button>
     </div>
-    <p>{kind === "interview" ? "A transcript or your own notes from a real interview. Choose the job so prep for its next round uses it." : "A mock interview with an AI or a friend. It shapes your interview voice and the hard questions to practice."}</p>
-    {kind === "interview" && <label className="search-field"><span>Job</span><select value={jobId} onChange={(event) => setJobId(event.target.value)}>
-      <option value="">Not sure (Agy will ask)</option>
+    <textarea className="debrief-paste" value={pasted} onChange={(event) => setPasted(event.target.value)} rows={4} placeholder="Paste notes or a transcript" aria-label="Paste notes or a transcript" />
+    {kind === "interview" && <details className="debrief-job"><summary>{jobId ? `Linked to ${(() => { const job = sorted.find((candidate) => candidate.id === jobId); return job?.company ?? jobId; })()}` : "Link to a job (optional)"}</summary><label className="search-field"><span>Job</span><select value={jobId} onChange={(event) => setJobId(event.target.value)}>
+      <option value="">No job</option>
       {sorted.map((job) => <option key={job.id} value={job.id}>{job.company ?? displayJobName(job.name)}{job.title ? `, ${job.title}` : ""}</option>)}
-    </select></label>}
+    </select></label></details>}
     <div className="context-add-actions">
-      <button className="btn-primary" onClick={() => void add()}>Add files</button>
-      <span className="muted">or drop files here (text, Word, PDF, Markdown, subtitles). Copies are added; your originals stay where they are.</span>
+      <button className="btn-primary" disabled={!pasted.trim()} onClick={() => void addPasted()}>Add notes</button>
+      <button className="btn-quiet" onClick={() => void add()}>Add files</button>
+      <span className="muted">or drop files here</span>
     </div>
   </div>;
 }

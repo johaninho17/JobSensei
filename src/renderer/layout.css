@@ -1236,3 +1236,5 @@ summary.run-status-line::-webkit-details-marker { display: none; }
 .side-recent ul button { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-recent ul button strong, .side-recent ul button small { display: inline; }
 .chat-done { margin-top: 4px; color: var(--term-muted); font-size: var(--fs-12); }
+.debrief-paste { width: 100%; min-height: 88px; resize: vertical; font: inherit; }
+.debrief-job summary { cursor: pointer; color: var(--muted); font-size: var(--fs-13); }

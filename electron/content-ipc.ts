@@ -1,5 +1,5 @@
 // Interview content refresh IPC. Loaded only when the edition has `features.contentRefresh` (src/shared/edition.ts).
-import { RECORDING_EXTENSIONS, importRecordings } from "./recording-import";
+import { RECORDING_EXTENSIONS, importRecordingText, importRecordings } from "./recording-import";
 import type { RecordingKind } from "../src/shared/recordings";
 import { dialog, ipcMain } from "electron";
 import { finishUpdate, readPendingUpdate, reviewUpdate, scanRecordings, skipRecordings, undoUpdate } from "./content-refresh";
@@ -24,6 +24,7 @@ export function registerContentIpc(ctx: FeatureContext): void {
     if (!Array.isArray(paths) || paths.length > 50 || paths.some((path) => typeof path !== "string" || !path)) throw new Error("Choose up to 50 files.");
     return importRecordings(ctx.requireWorkspace(), paths as string[], kindOf(kind), jobOf(jobId));
   });
+  ipcMain.handle("content:import-recording-text", async (_event, text: unknown, kind: unknown, jobId: unknown) => importRecordingText(ctx.requireWorkspace(), typeof text === "string" ? text : "", kindOf(kind), jobOf(jobId)));
   ipcMain.handle("content:review-update", async () => reviewUpdate(ctx.requireWorkspace()));
   ipcMain.handle("content:finish-update", async (_event, keepOld: unknown) => finishUpdate(ctx.requireWorkspace(), Array.isArray(keepOld) ? keepOld.filter((item): item is string => typeof item === "string") : []));
   ipcMain.handle("content:undo-update", async () => undoUpdate(ctx.requireWorkspace()));

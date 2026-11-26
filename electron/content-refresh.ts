@@ -230,7 +230,7 @@ export async function startUpdate(workspacePath: string, recordings: Recording[]
     const update: PendingUpdate = { startedAt: now.toISOString(), backup, files, recordings: await Promise.all(chosen.map(async (recording) => { const data = await readFile(workspaceFile(root, recording.path)); return { path: recording.path, hash: sha(data), size: data.length }; })) };
     await writeJsonAtomic(workspaceFile(root, UPDATE_FILE), update);
     const version = layoutVersion(root);
-    const list = chosen.map((recording) => `- ${toDisk(recording.path, version)}${isPracticeRecording(recording.path) ? " (practice interview, no job: follow step 6 of the workflow)" : recording.jobId ? ` (job: ${recording.jobId}${jobNames[recording.jobId] ? `, ${jobNames[recording.jobId]}` : ""})` : " (job not matched: ask me which job it was)"}${recording.state === "changed" ? " — a newer version of a recording imported before; import only what's new in it" : ""}`).join("\n");
+    const list = chosen.map((recording) => `- ${toDisk(recording.path, version)}${isPracticeRecording(recording.path) ? " (practice interview, no job: follow step 6 of the workflow)" : recording.jobId ? ` (job: ${recording.jobId}${jobNames[recording.jobId] ? `, ${jobNames[recording.jobId]}` : ""})` : " (not linked to a job)"}${recording.state === "changed" ? " — a newer version of a recording imported before; import only what's new in it" : ""}`).join("\n");
     const brief = [
       "# Interview content update",
       "",

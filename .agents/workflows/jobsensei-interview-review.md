@@ -6,6 +6,8 @@ Turn the candidate's recorded interviews (Granola, Otter, or notes saved under `
 
 When the app runs **Tune** (the brief is `.sensei/tune/interviews-brief.md`), steps 1–2, 6, and 7 say what to look for; instead of showing drafts and saving (steps 3–5), write suggestions as `.agents/workflows/jobsensei-tune.md` says.
 
+A recording does not need a job. One not linked to a job counts fully for question patterns, interview voice, interview stories, and role memory (by the role family it shows); never ask which job it was.
+
 ## Steps
 
 1. Read only the review or transcript files the user names under `data/debrief/`, plus `data/profile/candidate.json`, the existing `data/profile/interview_voice.md`, `data/profile/story_bank.md`, and `data/debrief/interview-memory/` records. Transcripts are performance records: what was asked and how the candidate answered.
