@@ -115,7 +115,6 @@
 .topbar-menu-list { position: absolute; z-index: 60; top: calc(100% + 6px); right: 0; display: grid; width: 270px; padding: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); box-shadow: var(--shadow); }
 .topbar-menu-list [role="menuitem"] { min-height: 36px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-s); background: none; text-align: left; cursor: pointer; }
 .topbar-menu-list [role="menuitem"]:hover, .topbar-menu-list [role="menuitem"]:focus-visible { background: var(--hover); }
-.topbar-menu-note { margin: var(--space-1) 0 0; padding: var(--space-2) var(--space-3) var(--space-1); border-top: 1px solid var(--line); color: var(--muted); font-size: var(--fs-13); }
 .standalone-topbar { min-height: 52px; }
 .standalone-topbar .wordmark { display: inline-flex; align-items: center; gap: var(--space-2); font: 560 var(--fs-18) var(--font-display); }
 .standalone-topbar .theme-toggle { margin-left: auto; }

@@ -305,3 +305,12 @@ describe("Profile setup says it once (#240)", () => {
     expect(setup).toContain('<details className="jobs-more add-menu"><summary className="btn-quiet">Add ▾</summary>');
   });
 });
+
+describe("Navigation says it once (#242)", () => {
+  it("the top bar's quick settings drop what the sidebar and its toggle already do, and the note paragraph", async () => {
+    const app = await readFile("src/renderer/App.tsx", "utf8");
+    const menu = app.slice(app.indexOf("function TopbarMenu("), app.indexOf("function CompanyDialog("));
+    expect(menu).not.toMatch(/Hide sidebar|Show sidebar|"Settings…"|topbar-menu-note/);
+    expect(menu).toContain('aria-label="Quick settings"');
+  });
+});

@@ -1014,14 +1014,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
         <TopbarMenu
           theme={theme}
           onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
-          navigationOpen={leftPanelOpen}
-          onToggleNavigation={() => setLeftPanelOpen((open) => !open)}
           onRescan={configured ? () => void refresh() : null}
           notificationsOn={notificationsOn}
           onToggleNotifications={() => setNotificationsOn((on) => { if (!on) void Notification.requestPermission?.(); return !on; })}
           onShowShortcuts={() => setShortcutsOpen(true)}
-          onOpenSettings={configured ? () => setSettingsModalOpen(true) : null}
-          note={configured ? `${workspace.contextFileCount} context files and ${workspace.jobCount} job folders. Everything stays on this computer; career sources are never changed.` : "No workspace selected."}
         />
       </header>
       <SearchPalette open={searchOpen} actions={paletteActions} onClose={() => setSearchOpen(false)} onOpenResult={openSearchResult} />
@@ -1158,18 +1154,17 @@ function ShortcutsPanel({ onClose }: { onClose: () => void }) {
   </div>;
 }
 
-/** Settings menu in the top bar: theme, navigation, rescan, and Settings. Keyboard: arrows move, Escape closes. */
-function TopbarMenu({ theme, onToggleTheme, navigationOpen, onToggleNavigation, onRescan, onOpenSettings, notificationsOn, onToggleNotifications, onShowShortcuts, note }: { theme: "dark" | "light"; onToggleTheme: () => void; navigationOpen: boolean; onToggleNavigation: () => void; onRescan: (() => void) | null; onOpenSettings: (() => void) | null; notificationsOn: boolean; onToggleNotifications: () => void; onShowShortcuts: () => void; note: string }) {
+/** Quick settings in the top bar: theme, notifications, shortcuts, rescan (#242). Keyboard: arrows move, Escape closes. */
+function TopbarMenu({ theme, onToggleTheme, onRescan, notificationsOn, onToggleNotifications, onShowShortcuts }: { theme: "dark" | "light"; onToggleTheme: () => void; onRescan: (() => void) | null; notificationsOn: boolean; onToggleNotifications: () => void; onShowShortcuts: () => void }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const items = [
     { label: theme === "dark" ? "Use light theme" : "Use dark theme", run: onToggleTheme },
-    { label: navigationOpen ? "Hide sidebar" : "Show sidebar", run: onToggleNavigation },
     { label: notificationsOn ? "Turn notifications off" : "Turn notifications on", run: onToggleNotifications },
     { label: "Keyboard shortcuts  ?", run: onShowShortcuts },
     ...(onRescan ? [{ label: "Rescan workspace", run: onRescan }] : []),
-    ...(onOpenSettings ? [{ label: "Settings…", run: onOpenSettings }] : []),
+    // Settings and the sidebar toggle are one click away already (sidebar, top-left button): said once (#242).
   ];
   useEffect(() => {
     if (!open) return;
@@ -1187,10 +1182,9 @@ function TopbarMenu({ theme, onToggleTheme, navigationOpen, onToggleNavigation, 
     buttons[(index + (event.key === "ArrowDown" ? 1 : buttons.length - 1)) % buttons.length]?.focus();
   }
   return <div className="topbar-menu" ref={rootRef} onKeyDown={onKeyDown}>
-    <button ref={triggerRef} className="topbar-menu-trigger" aria-haspopup="menu" aria-expanded={open} aria-label="Settings menu" title="Settings menu" onClick={() => setOpen((value) => !value)}><span aria-hidden="true">⚙</span></button>
-    {open && <div className="topbar-menu-list" role="menu" aria-label="Settings menu">
+    <button ref={triggerRef} className="topbar-menu-trigger" aria-haspopup="menu" aria-expanded={open} aria-label="Quick settings" title="Quick settings" onClick={() => setOpen((value) => !value)}><span aria-hidden="true">⚙</span></button>
+    {open && <div className="topbar-menu-list" role="menu" aria-label="Quick settings">
       {items.map((item) => <button key={item.label} role="menuitem" onClick={() => { setOpen(false); item.run(); }}>{item.label}</button>)}
-      <p className="topbar-menu-note">{note}</p>
     </div>}
   </div>;
 }
