@@ -207,7 +207,6 @@
 .pq-remove { margin-left: auto; font-size: var(--fs-12); color: var(--muted); }
 .pq-pending { margin: var(--space-2) 0 0; font-size: var(--fs-12); }
 .framing-lines { margin: var(--space-2) 0 var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); font-size: var(--fs-13); }
-.framing-lines-note { margin: 0 0 var(--space-2); }
 .iv-pending { margin: 0 0 var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: var(--radius-m); font-size: var(--fs-13); }
 .iv-pending p { margin: 0 0 var(--space-2); }
 .iv-pending-actions { display: flex; gap: var(--space-2); align-items: center; }
