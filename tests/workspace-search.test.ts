@@ -232,8 +232,9 @@ describe("design system (Phase 3)", () => {
     expect(palette).toContain("rememberRecent(entry.action.id)");
   });
 
-  it("keeps the terminal panel dark in both themes", async () => {
+  it("keeps the console dark in both themes, while the Agy panel and chat follow the theme (#237)", async () => {
     const tokens = await readFile(join(process.cwd(), "src/renderer/tokens.css"), "utf8");
-    expect(tokens).toMatch(/\.terminal-panel \{[^}]*--canvas: var\(--term-bg\)/);
+    expect(tokens).toMatch(/\.terminal-host, \.console-note \{[^}]*--canvas: var\(--term-bg\)/);
+    expect(tokens).not.toMatch(/\.terminal-panel \{[^}]*--canvas: var\(--term-bg\)/);
   });
 });

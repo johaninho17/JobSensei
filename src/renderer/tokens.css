@@ -109,8 +109,9 @@ p, li { text-wrap: pretty; }
 code, pre, kbd, samp { font-family: var(--font-mono); }
 .tabular, td, .count { font-variant-numeric: tabular-nums; }
 
-/* The terminal panel is always dark: re-scope the color tokens inside it. */
-.terminal-panel {
+/* The console (Agy's real terminal) is always dark: re-scope the color tokens inside it. The panel around it and the
+   chat follow the app's light or dark theme (#237). */
+.terminal-host, .console-note {
   color-scheme: dark;
   --canvas: var(--term-bg);
   --raised: var(--term-raised);

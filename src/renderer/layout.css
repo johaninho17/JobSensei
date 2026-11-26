@@ -1246,7 +1246,7 @@ summary.run-status-line::-webkit-details-marker { display: none; }
 .side-recent .side-recent-toggle .side-count { margin-left: auto; }
 .side-recent ul button { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-recent ul button strong, .side-recent ul button small { display: inline; }
-.chat-done { margin-top: 4px; color: var(--term-muted); font-size: var(--fs-12); }
+.chat-done { margin-top: 4px; color: var(--muted); font-size: var(--fs-12); }
 .debrief-paste { width: 100%; min-height: 88px; resize: vertical; font: inherit; }
 .debrief-job summary { cursor: pointer; color: var(--muted); font-size: var(--fs-13); }
 
@@ -1275,3 +1275,6 @@ summary.run-status-line::-webkit-details-marker { display: none; }
 .job-head-meta .check-chip, .job-head-meta .tracker-select select, .job-head-meta .pdf-menu > summary { box-sizing: border-box; height: 32px; min-height: 32px; }
 .job-head-meta .tracker-select select { padding-block: 0; }
 .job-head-meta .pdf-menu > summary { display: inline-flex; align-items: center; line-height: 1; }
+
+/* An empty chat says what it's for (#237). */
+.chat-empty { margin: auto; max-width: 30ch; padding: var(--space-5) var(--space-3); color: var(--muted); font-size: var(--fs-13); text-align: center; }

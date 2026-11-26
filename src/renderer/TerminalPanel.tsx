@@ -496,6 +496,7 @@ export function TerminalPanel({ latestRun, cwd, historyKey, selectedJobFiles, se
         {viewMode === "chat" ? (
           <div className="chat-container">
             <div className="chat-stream" ref={chatStreamRef}>
+              {chatEntries.length === 0 && <p className="chat-empty">Ask Agy anything, or paste a job link to add it.</p>}
               {chatEntries.map((entry) => (
                 <div key={entry.id} className={`chat-bubble is-${entry.sender}`}>
                   <div className="chat-bubble-header">
