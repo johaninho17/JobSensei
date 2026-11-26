@@ -3,6 +3,8 @@ import { FitRing } from "./BentoPrimitives";
 import { jobSettingsScore, settingsScoreLabel } from "../shared/agy-behavior";
 import { DEFAULT_PDF_TEXT_SIZE, INTERVIEW_ROUNDS, OUTCOME_RESULTS, TRACKER_STATUSES, type InterviewEvent, type InterviewRoundKind, type JobOutcome, type JobTrackerUpdate, type TrackerStatus, type ApplicationStatus, type ApplicationValidationReport, type FilePreview, type FileTreeNode, type InterviewOverview, type JobFolderSummary, type PdfTextSize, type QuestionsState, type FramingLine } from "../shared/schemas";
 import { overrideLabel } from "../shared/job-overrides";
+import { locationLine } from "../shared/posting-fields";
+import { PAY_SYMBOLS } from "../shared/pay";
 import { TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, draftedLabel } from "../shared/tracker";
 import { type JobAction } from "./job-actions";
 import { markdownHtml } from "./markdown";
@@ -89,7 +91,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
           {job.applicationStage && trackerStatus === "saved" && <StatusPill value={job.applicationStage} />}
           {job.rating !== null && <span className="job-head-fit" title={`Fit ${job.rating.toFixed(1)} of 5`}><FitRing rating={job.rating} size={36} /></span>}
           {job.hasApplicationMaterials && (() => { const score = jobSettingsScore(job.settingsScore); return <span className={`settings-score is-${score.band}`} title={`Agy's settings when these drafts were made: ${score.score} of 100 (${settingsScoreLabel(score).split(" ")[1]}). Higher means more lenient. See Agy → Behavior.`}>Settings <strong className="tabular">{score.score}</strong> {settingsScoreLabel(score).split(" ")[1]}</span>; })()}
-          {job.location && <span title={job.location}>{shortLocation(job.location)}</span>}
+          {locationLine(job.location, job.role?.workMode ?? null) && <span>{locationLine(job.location, job.role?.workMode ?? null)}</span>}
           {/* The last check's result is a count you can open, not a sentence (U89). */}
           {allIssues.length > 0 && <button className={`check-chip ${allIssues.some((issue) => issue.severity === "error") ? "is-error" : ""}`} title="From the last check of this application" onClick={openChecks}>{allIssues.length} to {allIssues.some((issue) => issue.severity === "error") ? "fix" : "check"}</button>}
           {/* One PDFs control in the header line, so the tab row stays one line (U89). */}
@@ -428,7 +430,7 @@ function EditJobDetails({ job, onClose, onSaved }: { job: JobFolderSummary; onCl
       const initial: Form = {
         company: saved.company ?? job.company ?? "", title: saved.title ?? job.title ?? "", location: saved.location ?? job.location ?? "",
         workMode: saved.workMode ?? job.role?.workMode ?? "",
-        min: pay?.min?.toString() ?? "", max: pay?.max?.toString() ?? "", currency: pay?.currency ?? "USD", period: pay?.period ?? "year",
+        min: pay?.min != null ? String(Math.round(pay.min)) : "", max: pay?.max != null ? String(Math.round(pay.max)) : "", currency: pay?.currency ?? "USD", period: pay?.period ?? "year",
       };
       setStart({ form: initial, saved });
       setForm(initial);
@@ -436,6 +438,9 @@ function EditJobDetails({ job, onClose, onSaved }: { job: JobFolderSummary; onCl
   }, [job.id]);
   if (!form) return problem ? <p className="inline-error" role="alert">{problem}</p> : null;
   const set = (key: keyof NonNullable<typeof form>) => (event: { target: { value: string } }) => setForm({ ...form, [key]: event.target.value });
+  // Pay is typed as digits and shown formatted ("$120,000"), in the form's currency.
+  const digits = (value: string) => value.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
+  const money = (value: string) => value ? `${PAY_SYMBOLS[form.currency.toUpperCase()] ?? ""}${Number(value).toLocaleString("en-US")}${PAY_SYMBOLS[form.currency.toUpperCase()] ? "" : ` ${form.currency.toUpperCase()}`}` : "";
   const number = (value: string) => { const parsed = Number(value.replace(/[^0-9.]/g, "")); return value.trim() && Number.isFinite(parsed) ? parsed : null; };
   async function save() {
     if (!form || !start) return;
@@ -461,9 +466,9 @@ function EditJobDetails({ job, onClose, onSaved }: { job: JobFolderSummary; onCl
       <label><span>Title</span><input value={form.title} onChange={set("title")} placeholder="Not in the posting" /></label>
       <label><span>Location</span><input value={form.location} onChange={set("location")} placeholder="Not in the posting" /></label>
       <label><span>Work setup</span><select value={form.workMode} onChange={set("workMode")}><option value="">Not in the posting</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="onsite">On-site</option></select></label>
-      <label><span>Pay from</span><input inputMode="numeric" value={form.min} onChange={set("min")} placeholder="e.g. 120000" /></label>
-      <label><span>Pay to</span><input inputMode="numeric" value={form.max} onChange={set("max")} placeholder="e.g. 150000" /></label>
-      <label><span>Currency</span><input value={form.currency} onChange={set("currency")} maxLength={8} /></label>
+      <label><span>Pay from</span><input inputMode="numeric" value={money(form.min)} onChange={(event) => setForm({ ...form, min: digits(event.target.value) })} placeholder="Not in the posting" /></label>
+      <label><span>Pay to</span><input inputMode="numeric" value={money(form.max)} onChange={(event) => setForm({ ...form, max: digits(event.target.value) })} placeholder="Not in the posting" /></label>
+      <label><span>Currency</span><select value={form.currency} onChange={set("currency")}>{[...new Set([...Object.keys(PAY_SYMBOLS), form.currency])].map((code) => <option key={code} value={code}>{code}</option>)}</select></label>
       <label><span>Per</span><select value={form.period} onChange={set("period")}><option value="year">Year</option><option value="month">Month</option><option value="hour">Hour</option></select></label>
     </div>
     {problem && <p className="inline-error" role="alert">{problem}</p>}
@@ -609,12 +614,6 @@ function JobPdfExportButton({ jobId, resumePath, coverLetterPath }: { jobId: str
 
 /** "San Francisco, CA (Remote / Telecommute - United States)" → "San Francisco, CA · Remote"; the full text is the
  * tooltip (U82). */
-export function shortLocation(location: string): string {
-  const base = location.split("(")[0]!.trim().replace(/[,;\s]+$/, "");
-  const remote = /\bremote\b/i.test(location) && !/\bremote\b/i.test(base);
-  const hybrid = /\bhybrid\b/i.test(location) && !/\bhybrid\b/i.test(base);
-  return [base || location, remote ? "Remote" : hybrid ? "Hybrid" : null].filter(Boolean).join(" · ");
-}
 
 
 

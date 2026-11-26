@@ -1,7 +1,7 @@
 // One normal form for posting fields (#53): real-world shapes of each value, written with fictional names.
 import { describe, expect, it } from "vitest";
 import { buildPostingRecord } from "../electron/posting-record";
-import { companyKey, normalCompany, normalEmploymentType, normalLocation, normalPostedDate, normalTitle } from "../src/shared/posting-fields";
+import { companyKey, locationLine, normalCompany, normalEmploymentType, normalLocation, normalPostedDate, normalTitle, workSetupInLocation } from "../src/shared/posting-fields";
 
 describe("posting fields", () => {
   it.each([
@@ -33,6 +33,9 @@ describe("posting fields", () => {
     ["Remote - US", "Remote (US)"],
     ["Remote", "Remote"],
     ["London, United Kingdom", "London, United Kingdom"],
+    ["San Francisco, CA (Remote / Telecommute - United States)", "San Francisco, CA"],
+    ["Austin, TX (Hybrid)", "Austin, TX"],
+    ["New York, NY (Midtown)", "New York, NY (Midtown)"],
   ])("location %s", (value, expected) => expect(normalLocation(value)).toBe(expected));
 
   it.each([
@@ -66,5 +69,13 @@ describe("posting fields", () => {
       "- 2+ years supporting customers of a software product",
     ].join("\n"));
     expect(record).toMatchObject({ title: "Support Engineer", company: "Northstar Labs", location: "Denver, CO", employmentType: "Full-time", postedAt: "2026-11-10", jobId: "R-2048" });
+  });
+  it("reads the work setup from a location note and shows place and setup on one line (#209)", () => {
+    expect(workSetupInLocation("San Francisco, CA (Remote / Telecommute - United States)")).toBe("remote");
+    expect(workSetupInLocation("Austin, TX (Hybrid)")).toBe("hybrid");
+    expect(workSetupInLocation("Austin, TX")).toBeNull();
+    expect(locationLine("San Francisco, CA", "remote")).toBe("San Francisco, CA · Remote");
+    expect(locationLine("Remote (US)", "remote")).toBe("Remote (US)");
+    expect(locationLine(null, "onsite")).toBe("On-site");
   });
 });

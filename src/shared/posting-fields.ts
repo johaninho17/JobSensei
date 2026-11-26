@@ -38,6 +38,23 @@ export function normalTitle(value: string | null | undefined, company?: string |
   return title.trim() || null;
 }
 
+const WORK_NOTE = /\s*\((?=[^)]*\b(?:remote|telecommute|hybrid|on[- ]?site|in[- ]office)\b)[^)]*\)\s*$/i;
+
+/** The work setup a location's parenthetical note states ("… (Remote / Telecommute)" → remote), or null. */
+export function workSetupInLocation(value: string | null | undefined): "remote" | "hybrid" | "onsite" | null {
+  const note = WORK_NOTE.exec((value ?? "").trim())?.[0] ?? "";
+  return /hybrid/i.test(note) ? "hybrid" : /remote|telecommute/i.test(note) ? "remote" : /on[- ]?site|in[- ]office/i.test(note) ? "onsite" : null;
+}
+
+const WORK_LABEL = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" } as const;
+
+/** One line for a job's place: "San Francisco, CA · Remote" (the setup left out when the place already says it). */
+export function locationLine(location: string | null, workMode: "remote" | "hybrid" | "onsite" | null): string | null {
+  const setup = workMode ? WORK_LABEL[workMode] : null;
+  if (!location) return setup;
+  return setup && !new RegExp(setup.replace("-", "[- ]?"), "i").test(location) ? `${location} · ${setup}` : location;
+}
+
 const COUNTRY = /^(?:united states(?: of america)?|usa|us|u\.s\.a?\.?)$/i;
 
 /**
@@ -45,7 +62,9 @@ const COUNTRY = /^(?:united states(?: of america)?|usa|us|u\.s\.a?\.?)$/i;
  * "Mexico - Mexico City" → "Mexico City, Mexico", "Remote - US" → "Remote (US)".
  */
 export function normalLocation(value: string | null | undefined): string | null {
-  const text = (value ?? "").replace(/\s+/g, " ").trim();
+  // A work-setup note in parentheses belongs to the work setup, not the place (#209):
+  // "San Francisco, CA (Remote / Telecommute - United States)" → "San Francisco, CA".
+  const text = (value ?? "").replace(/\s+/g, " ").trim().replace(WORK_NOTE, "").trim();
   if (!text) return null;
   const remote = text.match(/^remote\b[\s,:\-–()]*(.*?)\)?$/i);
   if (remote) {

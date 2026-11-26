@@ -2,6 +2,7 @@
 // `jobs/<id>/.sensei/job-overrides.json`. Only the user writes it (the job page's Edit details). It is laid over what
 // the app read from the posting wherever a job is shown or named, and a re-read of the posting never touches it.
 import { z } from "zod";
+import { formatPay } from "./pay";
 import type { JobFolderSummary } from "./schemas";
 
 export const JOB_OVERRIDES_FILE = ".sensei/job-overrides.json";
@@ -38,15 +39,9 @@ export function overriddenFields(overrides: JobOverrides): OverriddenField[] {
 
 export const overrideLabel = (field: OverriddenField) => LABELS[field];
 
-const SYMBOL: Record<string, string> = { USD: "$", CAD: "$", AUD: "$", EUR: "€", GBP: "£" };
-const PERIOD = { year: "a year", month: "a month", hour: "an hour" } as const;
-
-/** Pay as one line: "$120,000–$150,000 a year". */
+/** Pay as one line, through the one pay formatter (src/shared/pay.ts, #209). */
 export function payLine(pay: NonNullable<JobOverrides["pay"]>): string {
-  const symbol = SYMBOL[pay.currency.toUpperCase()] ?? "";
-  const money = (value: number) => `${symbol}${value.toLocaleString("en-US")}${symbol ? "" : ` ${pay.currency.toUpperCase()}`}`;
-  const range = pay.min !== null && pay.max !== null && pay.min !== pay.max ? `${money(pay.min)}–${money(pay.max)}` : money((pay.min ?? pay.max)!);
-  return `${range} ${PERIOD[pay.period]}`;
+  return formatPay(pay.min, pay.max, pay.currency, pay.period) ?? "";
 }
 
 const WORK = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" } as const;

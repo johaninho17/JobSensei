@@ -1,6 +1,6 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { jobSettingsScore, settingsScoreSchema } from "../src/shared/agy-behavior";
-import { normalCompany, normalTitle } from "../src/shared/posting-fields";
+import { normalCompany, normalLocation, normalTitle, workSetupInLocation } from "../src/shared/posting-fields";
 import { basename, join } from "node:path";
 import { evidenceSnapshotSchema, stretchScoreSchema, type ArtifactFile, type FileTreeNode, type JobFolderSummary } from "../src/shared/schemas";
 import { previewFile } from "./files";
@@ -292,10 +292,15 @@ async function readJobSummary(path: string, name: string): Promise<JobFolderSumm
     applicationStage,
     rating,
     ...insights,
-    location: stringValue(metadata.location, legacyStatus.location),
+    // Shown clean everywhere, without rewriting old postings (#209); a setup note in it fills the work setup.
+    location: normalLocation(stringValue(metadata.location, legacyStatus.location)),
     interviewRoundLabel,
     interviewRoundCount,
-    role: await readRoleFacts(path),
+    role: await (async () => {
+      const role = await readRoleFacts(path);
+      const noted = workSetupInLocation(stringValue(metadata.location, legacyStatus.location));
+      return role && !role.workMode && noted ? { ...role, workMode: noted } : role;
+    })(),
     hasApplicationMaterials,
     hasPdfs: pdfs > 0,
     pdfsAt,

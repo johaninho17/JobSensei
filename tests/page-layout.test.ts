@@ -81,19 +81,16 @@ describe("Quieter job page (U82, #166)", () => {
     const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
     const head = page.slice(page.indexOf('<header className="job-head">'), page.indexOf("</header>", page.indexOf('<header className="job-head">')));
     expect(head).toContain('job.applicationStage && trackerStatus === "saved" && <StatusPill');
-    expect(head).toContain("{shortLocation(job.location)}");
+    expect(head).toContain("locationLine(job.location, job.role?.workMode ?? null)");
     expect(head).toContain("Settings <strong");
     expect(head).toMatch(/<details className="jobs-more job-head-more">[\s\S]*Added \{formatJobDate[\s\S]*Edit details/);
     expect(page).toContain('<details className="jobs-more pdf-menu">');
     expect(page.match(/<PdfTextSizeSelect/g)).toHaveLength(1);
   });
 
-  it("short locations keep the place and the work setup", async () => {
-    const { shortLocation } = await import("../src/renderer/JobWorkspace");
-    expect(shortLocation("San Francisco, CA (Remote / Telecommute - United States)")).toBe("San Francisco, CA · Remote");
-    expect(shortLocation("Austin, TX")).toBe("Austin, TX");
-    expect(shortLocation("Remote (US)")).toBe("Remote");
-    expect(shortLocation("Denver, CO (Hybrid)")).toBe("Denver, CO · Hybrid");
+  it("the job header's place line comes from posting-fields (#209)", async () => {
+    const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
+    expect(page).not.toContain("function shortLocation");
   });
 
   it("documents show file details as a tip, not a line", async () => {
@@ -151,7 +148,7 @@ describe("Show less, reveal on demand: job page (U89, #184)", () => {
     expect(page).not.toContain("Resume and cover letter PDFs saved");
     expect(page).not.toContain("function JobPdfFiles");
     expect(page).not.toContain('className="job-pdf-files"');
-    const button = page.slice(page.indexOf("function JobPdfExportButton"), page.indexOf("export function shortLocation"));
+    const button = page.slice(page.indexOf("function JobPdfExportButton"), page.indexOf("function ArtifactTableLocation"));
     expect(button).toContain('className="pdf-state"');
     expect(button).toContain('toast(coverLetterPath ? "PDFs saved." : "Resume PDF saved.")');
     expect(button).toContain("startPdfDrag");

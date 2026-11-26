@@ -31,7 +31,7 @@ describe("the corrections file (#114)", () => {
   });
 
   it("writes pay as one line", () => {
-    expect(payLine({ min: 120000, max: 150000, currency: "USD", period: "year" })).toBe("$120,000–$150,000 a year");
+    expect(payLine({ min: 120000, max: 150000, currency: "USD", period: "year" })).toBe("$120,000 – $150,000 a year");
     expect(payLine({ min: 40, max: null, currency: "EUR", period: "hour" })).toBe("€40 an hour");
     expect(payLine({ min: 90000, max: 90000, currency: "CHF", period: "year" })).toBe("90,000 CHF a year");
   });
@@ -45,7 +45,7 @@ describe("the corrections file (#114)", () => {
     expect(shown.company).toBe("Right Co");
     expect(shown.title).toBe("Engineer");
     expect(shown.role?.workMode).toBe("remote");
-    expect(shown.role?.pay).toBe("$100,000–$120,000 a year");
+    expect(shown.role?.pay).toBe("$100,000 – $120,000 a year");
     expect(shown.role?.missing).toEqual([]);
     expect(shown.editedFields).toEqual(["company", "workMode", "pay"]);
   });
