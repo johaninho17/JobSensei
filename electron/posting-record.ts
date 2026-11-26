@@ -19,7 +19,7 @@ type Section = { heading: string; kind: SectionKind; items: string[]; prose: str
 
 const BULLET = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
 const LEGAL = /\b(?:equal (?:employment )?opportunity|eeo|accommodations?|privacy|notice|disclaimer|recruitment process|recruiting process|fraud|e-verify|automated employment|pay transparency|applicant)\b/i;
-const PREFERRED = /\b(?:preferred|nice[- ]to[- ]haves?|bonus|pluses|desired|desirable|extra credit)\b/i;
+const PREFERRED = /\b(?:preferred|nice[- ]to[- ]haves?|stand out|set you apart|bonus|pluses|desired|desirable|extra credit)\b/i;
 const BENEFITS = /\b(?:benefits|perks|what we offer|we offer|you can expect|why (?:join|work)|what(?:'|’)?s in it for you|the role offers)\b/i;
 const PAY_HEADING = /\b(?:compensation|salary|pay(?: range)?|total rewards)\b/i;
 const COMPANY = /^(?:about (?!the (?:role|job|position)|this (?:role|job|position)|you\b)|who we are|our (?:mission|company|story|team)|company (?:overview|description))/i;

@@ -490,8 +490,8 @@ export function normalizeEvidenceClassifications(markdown: string, snapshot: Evi
 }
 
 /** Headings are matched by meaning, not exact text, across ATS formats (Workday, Greenhouse, Lever, Ashby, bank postings). */
-export const REQUIRED_HEADING = /\b(?:required|requirements?|minimum|basic qualifications|qualifications|what you(?:'|’)?ll need|what you need|what you(?:'|’)?ll bring|what you bring|what we(?:'|’)?re looking for|must[- ]haves?|you have|you(?:'|’)?ll have|who you are|about you|ideal candidates?|(?:great|good) fit|a fit if|skills and experience|looking for someone|someone who (?:has|is)|you should apply if|candidates? (?:will )?have|your (?:background|experience|skills)|experience (?:and|&) skills)\b/i;
-export const NOT_REQUIRED_HEADING = /\b(?:preferred|nice|bonus|plus(?:es)?|desired|desirable|optional|extra credit|benefits|perks|compensation|salary|about us|about the company|required fields?)\b/i;
+export const REQUIRED_HEADING = /\b(?:required|requirements?|minimum|basic qualifications|qualifications|what you(?:'|’)?ll need|what you need|what you(?:'|’)?ll bring|what you bring|what we(?:'|’)?re looking for|what we need(?: to see)?|must[- ]haves?|you have|you(?:'|’)?ll have|who you are|about you|ideal candidates?|(?:great|good) fit|a fit if|skills and experience|looking for someone|someone who (?:has|is)|you should apply if|candidates? (?:will )?have|your (?:background|experience|skills)|experience (?:and|&) skills)\b/i;
+export const NOT_REQUIRED_HEADING = /\b(?:preferred|nice|bonus|stand out|set you apart|plus(?:es)?|desired|desirable|optional|extra credit|benefits|perks|compensation|salary|about us|about the company|required fields?)\b/i;
 /**
  * The posting itself, without the application form a fetched page often ends with, and with headings that were
  * glued together on copy ("Who You AreQualifications") split back into words.

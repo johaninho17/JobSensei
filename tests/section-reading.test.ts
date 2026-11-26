@@ -32,4 +32,11 @@ describe("section reading", () => {
     const noSubheading = `${header}## Job Description\n\nThe developer builds web applications.\n- Build frontend components\n- Fix production issues\n\n## Qualifications\n- 3 years of full stack work\n`;
     expect(extractResponsibilityItems(noSubheading)).toEqual(["Build frontend components", "Fix production issues"]);
   });
+
+  it("reads 'What we need to see' as requirements and 'Ways to stand out' as preferred", () => {
+    const posting = `${header}** What you'll be doing: **\n- Design numerical methods for simulation\n- Publish and ship the results\n\n** What we need to see: **\n- PhD in applied mathematics or equivalent experience\n- 5+ years writing numerical software\n\n** Ways to stand out from the crowd: **\n- Open-source solver contributions\n`;
+    expect(extractResponsibilityItems(posting)).toEqual(["Design numerical methods for simulation", "Publish and ship the results"]);
+    expect(extractRequiredItems(posting)).toEqual(["PhD in applied mathematics or equivalent experience", "5+ years writing numerical software"]);
+    expect(buildPostingRecord(posting).preferred).toEqual(["Open-source solver contributions"]);
+  });
 });
