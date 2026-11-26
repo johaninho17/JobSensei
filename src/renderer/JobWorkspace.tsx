@@ -464,8 +464,9 @@ function EditJobDetails({ job, onClose, onSaved }: { job: JobFolderSummary; onCl
 }
 
 /**
- * Lines that reach further than the framing setting (#97), above the resume or letter: each with its reason, Keep, and
- * (when the base resume has a line in the same place) Revert. The validator decides the lines; this only asks.
+ * Lines that reach further than the framing setting (#97), as one closed chip above the resume or letter (#195): each
+ * line with its reason, Keep, and (when the base resume has a line in the same place) Revert. Nothing shows once every
+ * line is decided. The validator decides the lines; this only asks.
  */
 function FramingLines({ jobId, artifact, onReverted }: { jobId: string; artifact: FramingLine["artifact"]; onReverted: () => void }) {
   const [lines, setLines] = useState<FramingLine[] | null>(null);
@@ -486,25 +487,22 @@ function FramingLines({ jobId, artifact, onReverted }: { jobId: string; artifact
       if (choice === "revert") onReverted();
     } catch (caught) { setProblem(messageOf(caught, "That didn't work.")); } finally { setBusy(""); }
   }
-  const mine = (lines ?? []).filter((line) => line.artifact === artifact);
-  const open = mine.filter((line) => !line.kept);
-  const kept = mine.length - open.length;
-  if (!open.length && !kept) return null;
+  const open = (lines ?? []).filter((line) => line.artifact === artifact && !line.kept);
+  // Nothing to decide, nothing shown (#195): kept lines need no reminder.
+  if (!open.length) return null;
   const plain = (text: string) => text.replace(/[*_`]/g, "");
   // A chip that opens the lines, not a card above the document (U89, Teal's review panel). Closed until asked.
   return <details className="framing-review" aria-label="Lines past your framing setting">
-    <summary>{open.length > 0 ? <span className="check-chip">{open.length} to review</span> : <span className="muted">{plural(kept, "line")} kept as written</span>}</summary>
+    <summary title={`Further than your framing setting. Keep a line you can explain in an interview${artifact === "resume" ? ", or revert it to your base resume's line" : ""}.`}><span className="check-chip">{plural(open.length, "line")} to review</span></summary>
     <div className="framing-lines">
-      {open.length > 0 && <p className="framing-lines-note">{open.length === 1 ? "This line reaches" : "These lines reach"} further than your framing setting. Keep a line if you can explain it in an interview{artifact === "resume" ? ", or revert it to your base resume's line" : ""}.</p>}
-      {open.length > 0 && <ul>{open.map((line) => <li key={line.text}>
+      <ul>{open.map((line) => <li key={line.text}>
         <p className="framing-line-text">{plain(line.text)}</p>
         <p className="muted">{line.reason}{line.revertTo ? <> Revert puts back: “{plain(line.revertTo)}”</> : null}</p>
         <div className="framing-line-actions">
           {line.revertTo && <button className="btn-quiet" disabled={Boolean(busy)} onClick={() => void choose(line, "revert")}>{busy === line.text ? "Working…" : "Revert"}</button>}
           <button className="btn-link" disabled={Boolean(busy)} onClick={() => void choose(line, "keep")}>Keep</button>
         </div>
-      </li>)}</ul>}
-      {kept > 0 && open.length > 0 && <p className="muted">{plural(kept, "line")} kept as written.</p>}
+      </li>)}</ul>
       {problem && <p className="inline-error" role="alert">{problem}</p>}
     </div>
   </details>;
