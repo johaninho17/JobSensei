@@ -3,12 +3,8 @@ import { fileAnswers, readAnswerInbox } from "../electron/answer-filing";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildToday, candidateQuestions, mergeQuestions, ratingAccuracy } from "../src/shared/today";
-import { answerQuestion, checkClosedPostings, keepPosting, readClosedPostings, removeQuestion } from "../electron/today";
-import { provenLinesFor } from "../electron/proven-lines";
-import { companyResearchFor } from "../electron/interview-context";
-import { likeInterviewed, searchLearning } from "../electron/job-search";
-import { rankInbox } from "../src/shared/job-search";
+import { candidateQuestions, mergeQuestions } from "../src/shared/profile-questions";
+import { answerQuestion, removeQuestion } from "../electron/profile-questions";
 import type { JobFolderSummary } from "../src/shared/schemas";
 
 const NOW = new Date("2026-11-10T12:00:00Z");
@@ -20,12 +16,12 @@ const job = (id: string, patch: Partial<JobFolderSummary> = {}): JobFolderSummar
 const tracker = (patch: Record<string, unknown>) => ({ schemaVersion: 1, status: "applied", appliedAt: "2026-10-01", nextFollowUpAt: null, notes: "", history: [], interviews: [], outcome: null, updatedAt: null, ...patch }) as never;
 
 async function workspace() {
-  const root = await mkdtemp(join(tmpdir(), "sensei-today-"));
+  const root = await mkdtemp(join(tmpdir(), "sensei-questions-"));
   await mkdir(join(root, ".sensei"), { recursive: true });
   return root;
 }
 
-describe("Today questions", () => {
+describe("Profile questions", () => {
   const base = { jobs: [] as JobFolderSummary[], gapTerms: [], knownTerms: () => false, searchTitlesWithoutMatches: [], blankLogistics: [], hasUpcomingInterview: false, now: NOW };
 
   it("asks nothing on a day with no real gap", () => {
@@ -53,7 +49,7 @@ describe("Today questions", () => {
   });
 });
 
-describe("Today answers go to their owners", () => {
+describe("Profile answers go to their owners", () => {
   it("queues a skill answer, and Agy's filing puts it in the right career record (never a separate answers file)", async () => {
     const root = await workspace();
     await mkdir(join(root, "context/structured"), { recursive: true });
@@ -65,7 +61,7 @@ describe("Today answers go to their owners", () => {
     ].join("\n"));
     await writeFile(join(root, ".sensei/today-questions.json"), JSON.stringify({ questions: mergeQuestions([], [{ id: "skill:salesforce", kind: "skill", subject: "Salesforce", options: [], text: "Have you used Salesforce?", why: "" }], NOW) }));
     const result = await answerQuestion(root, "skill:salesforce", "Built reports and dashboards in Salesforce for a customer success team at Northstar Labs.", NOW);
-    expect(result).toMatchObject({ addedPath: null, queued: true });
+    expect(result).toEqual({ queued: true });
     expect(await readFile(join(root, "context/structured/answers-from-today.md"), "utf8").catch(() => null)).toBeNull();
     expect((await readAnswerInbox(root)).map((answer) => answer.status)).toEqual(["pending"]);
     await expect(answerQuestion(root, "skill:salesforce", "again", NOW)).rejects.toThrow("already answered");
@@ -107,82 +103,39 @@ describe("Today answers go to their owners", () => {
     const stored = JSON.parse(await readFile(join(root, ".sensei/today-questions.json"), "utf8")).questions;
     expect(stored.map((question: { status: string }) => question.status)).toEqual(["answered", "removed"]);
   });
-});
-
-describe("closed postings", () => {
-  it("flags open jobs no longer on their company's live list, once a day, and respects Keep", async () => {
+  it("updates the row that already covers the subject, removes one the answer contradicts, and adds nothing new", async () => {
     const root = await workspace();
-    for (const [id, url] of [["northstar-se", "https://jobs.ashbyhq.com/northstar/live-1"], ["northstar-pm", "https://jobs.ashbyhq.com/northstar/gone-2"], ["acme-se", "https://careers.acme.example/7"]]) {
-      await mkdir(join(root, `jobs/${id}/.sensei`), { recursive: true });
-      await writeFile(join(root, `jobs/${id}/.sensei/posting.json`), JSON.stringify({ url }));
-    }
-    let reads = 0;
-    const fetcher = (async () => { reads += 1; return Response.json({ jobs: [{ title: "Solutions Engineer", jobUrl: "https://jobs.ashbyhq.com/northstar/live-1", isListed: true }] }); }) as typeof fetch;
-    const jobs = ["northstar-se", "northstar-pm", "acme-se"].map((id) => job(id, { tracker: tracker({}) }));
-    const state = await checkClosedPostings(root, jobs, { fetcher, now: NOW });
-    expect(state.closed.map((entry) => entry.jobId)).toEqual(["northstar-pm"]);
-    expect(reads).toBe(1);
-    await checkClosedPostings(root, jobs, { fetcher, now: NOW });
-    expect(reads).toBe(1);
-    await keepPosting(root, "northstar-pm");
-    expect((await readClosedPostings(root)).closed).toEqual([]);
-    expect((await checkClosedPostings(root, jobs, { fetcher, now: NOW, force: true })).closed).toEqual([]);
-  });
-});
-
-describe("Today page data", () => {
-  it("lists what's due and today's activity, and hides closed jobs from closed postings", () => {
-    const jobs = [
-      job("a", { createdAt: "2026-11-10T09:00:00Z", tracker: tracker({ nextFollowUpAt: "2026-11-08" }) }),
-      job("b", { tracker: tracker({ status: "rejected" }) }),
-      job("c", { tracker: tracker({ appliedAt: "2026-09-01" }) }),
-    ];
-    const today = buildToday({ jobs, search: null, closedPostings: [{ jobId: "b", company: null, title: null, since: "2026-11-09" }], interviewDates: [{ jobId: "a", date: "2026-11-12", round: "Hiring manager" }], insights: [], questions: [], now: NOW });
-    expect(today.activity.added.map((entry) => entry.id)).toEqual(["a"]);
-    expect(today.due.followUps).toEqual([{ id: "a", label: "Northstar Labs, Solutions Engineer", days: 2 }]);
-    expect(today.due.interviewsThisWeek[0]).toMatchObject({ id: "a", date: "2026-11-12" });
-    expect(today.due.closedPostings).toEqual([]);
-    expect(today.due.stale.map((entry) => entry.id)).toEqual(["c"]);
-  });
-
-  it("measures the light rating against the full one once there are a few pairs", () => {
-    expect(ratingAccuracy([{ light: 4, full: 3.5 }])).toBeNull();
-    expect(ratingAccuracy([{ light: 4, full: 3.4 }, { light: 4.2, full: 3.6 }, { light: 3, full: 3 }])).toEqual({ count: 3, averageGap: 0.4, lightHigher: 2 });
-  });
-});
-
-describe("learning from interviews", () => {
-  it("offers lines from resumes that got interviews only when all their evidence is routed to the new job", async () => {
-    const root = await workspace();
-    await mkdir(join(root, "jobs/won/.sensei"), { recursive: true });
-    await writeFile(join(root, "jobs/won/.sensei/tracker.json"), JSON.stringify({ interviews: [{ round: "recruiter" }] }));
-    await writeFile(join(root, "jobs/won/.sensei/application_evidence.json"), JSON.stringify({ resume: { claimMappings: [
-      { publicText: "Led onboarding for enterprise customers.", claimType: "candidate", evidenceIds: ["context:a:1"] },
-      { publicText: "Built dashboards in Looker.", claimType: "framed", evidenceIds: ["context:a:2", "context:b:9"] },
-      { publicText: "Unchanged base bullet.", claimType: "baseline", evidenceIds: [] },
-    ] } }));
-    const lines = await provenLinesFor(root, new Set(["context:a:1", "context:a:2"]), () => "Northstar Labs");
-    expect(lines).toEqual([{ text: "Led onboarding for enterprise customers.", evidenceIds: ["context:a:1"], employer: "Northstar Labs", from: "won" }]);
-  });
-
-  it("reuses recent company research from another job at the same company", async () => {
-    const root = await workspace();
-    for (const id of ["northstar-se", "northstar-pm"]) {
-      await mkdir(join(root, `jobs/${id}/.sensei`), { recursive: true });
-      await writeFile(join(root, `jobs/${id}/.sensei/job.json`), JSON.stringify({ company: "Northstar Labs, Inc." }));
-    }
-    await mkdir(join(root, "jobs/northstar-se/interviews"), { recursive: true });
-    await writeFile(join(root, "jobs/northstar-se/interviews/company_research.md"), "# Research");
-    expect(await companyResearchFor(root, "northstar-pm", "Northstar Labs", NOW)).toMatchObject({ path: null, reuseFrom: "jobs/northstar-se/interviews/company_research.md" });
-    expect(await companyResearchFor(root, "northstar-pm", "Northstar Labs", new Date(Date.now() + 90 * 86_400_000))).toMatchObject({ reuseFrom: null });
-    expect(await companyResearchFor(root, "northstar-se", "Northstar Labs", NOW)).toMatchObject({ path: "jobs/northstar-se/interviews/company_research.md" });
-  });
-
-  it("ranks matches like jobs that got interviews a little higher", () => {
-    const learned = searchLearning([job("won", { title: "Technical Implementation Specialist", company: "Northstar Labs", tracker: tracker({ interviews: [{ round: "recruiter", date: "2026-11-01", note: "", source: "user" }] }) })]);
-    expect(likeInterviewed("Implementation Specialist, Technical", learned)).toBe("Like your Northstar Labs interview");
-    expect(likeInterviewed("Account Executive", learned)).toBeNull();
-    const item = (id: string, score: number, like: string | null) => ({ id, fit: { score, why: "", covered: 0, total: 0, gaps: [], blockers: [], flags: [] }, agyFit: null, likeInterviewed: like, foundAt: NOW.toISOString(), postedAt: null }) as never;
-    expect(rankInbox([item("plain", 3.8, null), item("like", 3.6, "Like your interview")]).map((entry: { id: string }) => entry.id)).toEqual(["like", "plain"]);
+    await mkdir(join(root, "context/structured"), { recursive: true });
+    const file = "context/structured/northstar.md";
+    await writeFile(join(root, file), [
+      "# Evidence: Northstar Labs work", "", "## Evidence Inventory", "",
+      "| Evidence ID | Year | Project | Explicit claim | Scope note | Source locator | Confidence | Public use |",
+      "| --- | --- | --- | --- | --- | --- | --- | --- |",
+      "| context:northstar:looker | 2025 | Reporting | Built Looker dashboards. | Dashboards only. | Work email | high | eligible |",
+      "| context:northstar:kotlin | 2024 | Mobile | Wrote Kotlin services. | | Old resume | medium | eligible |", "",
+    ].join("\n"));
+    await writeFile(join(root, ".sensei/today-questions.json"), JSON.stringify({ questions: mergeQuestions([], [
+      { id: "skill:looker", kind: "skill", subject: "Looker", options: [], text: "Looker?", why: "" },
+      { id: "skill:kotlin", kind: "skill", subject: "Kotlin", options: [], text: "Kotlin?", why: "" },
+      { id: "skill:dbt", kind: "skill", subject: "dbt", options: [], text: "dbt?", why: "" },
+    ], NOW) }));
+    await answerQuestion(root, "skill:looker", "I also modeled the LookML for those dashboards.", NOW);
+    await answerQuestion(root, "skill:kotlin", "I never wrote Kotlin there; that was Java.", NOW);
+    await answerQuestion(root, "skill:dbt", "Some dbt models.", NOW);
+    let prompt = "";
+    const [looker, kotlin, dbt] = await readAnswerInbox(root);
+    const result = await fileAnswers(root, async (text) => { prompt = text; return { conversationId: null, response: JSON.stringify({ skipped: [], filings: [
+      { answerId: looker!.id, action: "update", file, evidenceId: "context:northstar:looker", year: "2025", project: "Reporting", claim: "Built Looker dashboards and modeled their LookML.", scope: "Dashboards and their LookML.", publicUse: "eligible" },
+      { answerId: kotlin!.id, action: "remove", file, evidenceId: "context:northstar:kotlin", year: "2024", project: "Mobile", claim: "Wrote Kotlin services.", scope: "", publicUse: "eligible" },
+      // An update naming a row that isn't in the file writes nothing and waits.
+      { answerId: dbt!.id, action: "update", file, evidenceId: "context:northstar:dbt", year: "2025", project: "Data", claim: "Some dbt models.", scope: "", publicUse: "eligible" },
+    ] }) }; }, NOW);
+    expect(prompt).toContain("context:northstar:looker | 2025 | Reporting | Built Looker dashboards. | Dashboards only.");
+    expect(result.filed.map((answer) => answer.action)).toEqual(["update", "remove"]);
+    const record = await readFile(join(root, file), "utf8");
+    expect(record).toContain("| context:northstar:looker | 2025 | Reporting | Built Looker dashboards and modeled their LookML. | Dashboards and their LookML. | Work email; updated: Profile question, answered 2026-11-10 | high | eligible |");
+    expect(record).not.toContain("Kotlin");
+    expect(record.match(/\| context:/g)).toHaveLength(1);
+    expect((await readAnswerInbox(root)).map((answer) => answer.status)).toEqual(["filed", "filed", "pending"]);
   });
 });

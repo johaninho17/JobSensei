@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { SECOND_PRESS_MS, goTarget, neighborJob, statusKeyAction } from "../src/shared/shortcuts";
 
-const all = { today: true, jobSearch: true, interviews: true };
+const all = { jobSearch: true, interviews: true };
 
 describe("safer shortcuts (#23)", () => {
   it("g s and g d open Job Search and Docs; letters for left-out pages do nothing", () => {
     expect(goTarget("s", all)).toBe("search-home");
     expect(goTarget("d", all)).toBe("docs-home");
-    expect(goTarget("t", all)).toBe("today-home");
-    expect(goTarget("s", { today: false, jobSearch: false, interviews: false })).toBeNull();
-    expect(goTarget("i", { today: false, jobSearch: false, interviews: false })).toBeNull();
+    expect(goTarget("t", all)).toBeNull();
+    expect(goTarget("s", { jobSearch: false, interviews: false })).toBeNull();
+    expect(goTarget("i", { jobSearch: false, interviews: false })).toBeNull();
     expect(goTarget("x", all)).toBeNull();
     expect(goTarget("a", { ...all, agyPage: true })).toBe("agy-home");
     expect(goTarget("a", all)).toBeNull();

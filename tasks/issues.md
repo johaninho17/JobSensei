@@ -22,7 +22,8 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #172 | Pay period and work setup read from the wrong sentence | FEAT-013 |  |
 | #173 | Posting sections: run-together bold paragraphs, bold-lead requirements, Job Description heading | FEAT-013 |  |
 | #174 | Pages whose text comes out as script: read the real sections (amazon.jobs) | FEAT-013 |  |
-| #183 | Show less, reveal on demand: done is a check, one tab row, runs collapse | FEAT-009 |  |
+| #193 | Remove the Today page; Questions for you move to Profile | FEAT-007 |  |
+| #194 | Remove follow-up dates and reminders | FEAT-001 |  |
 
 ## P2
 
@@ -32,15 +33,13 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #112 | Phase 1.5: Add scoped --continue settings (Solo terminal, auto-reset after Tune, per-job interview continuity) | FEAT-006 | yes |
 | #168 | Global shortcut adds the copied job link to the queue | FEAT-006 |  |
 | #175 | Application questions from more places: embedded Greenhouse, SmartRecruiters, Oracle | FEAT-003 |  |
-| #185 | Documents: review chip with inline lines, one document menu | FEAT-002, FEAT-012 |  |
-| #186 | Agy panel: finished runs collapse to one line | FEAT-006 |  |
+| #195 | Framing flags fold into one line above the document | FEAT-012 |  |
 
 ## P3
 
 | # | Issue | Features | Blocked |
 |---|---|---|---|
 | #147 | Remove the old in-place interview content update once Tune is proven | FEAT-005 |  |
-| #187 | Sidebar Favorites fold, and a sweep for static status text | FEAT-009 |  |
 
 ## Later (future)
 
@@ -55,4 +54,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #124 | Phase 4.4: Global Connectors tab, per-job Activity & Emails timeline, Email Prep PDF action, and Undo toasts | FEAT-002, FEAT-014 | yes |
 | #133 | Multi-AI groundwork: agent brief, activity log, headless streaming, prompt caching, quota backoff | FEAT-006 |  |
 
-28 open, 8 of them for later.
+27 open, 8 of them for later.

@@ -21,7 +21,7 @@ import { CandidateGate, CandidateResumeCard, CandidateSwitcher, RecruiterNotes }
 import { PipelineView } from "./Pipeline";
 import { type CandidatesState } from "../shared/candidates";
 import { JobSearchView } from "./JobSearchView";
-import { TodayView } from "./TodayView";
+import { ProfileQuestions } from "./ProfileQuestions";
 import { DocsView } from "./DocsView";
 import { AgyView } from "./AgyView";
 import { agyBehaviorSchema, effectiveBehavior } from "../shared/agy-behavior";
@@ -46,7 +46,7 @@ const RIGHT_PANEL_MIN = 300;
 const RIGHT_PANEL_MAX = 900;
 const VIEWER_PANEL_MIN = 320;
 type JobLocation = { kind: "job"; jobId: string; tab: JobWorkspaceTab; roundId?: string };
-type PageLocation = { kind: "today-home" } | { kind: "jobs-home" } | { kind: "search-home"; focus?: string } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" } | { kind: "docs-home" } | { kind: "agy-home" } | { kind: "postings-home" } | { kind: "reports-home" };
+type PageLocation = { kind: "jobs-home" } | { kind: "search-home"; focus?: string } | { kind: "interviews-home" } | { kind: "context-home" } | { kind: "setup-home" } | { kind: "pipeline-home" } | { kind: "docs-home" } | { kind: "agy-home" } | { kind: "postings-home" } | { kind: "reports-home" };
 type WorkspaceLocation =
   | PageLocation
   | JobLocation
@@ -96,8 +96,6 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => storedPanelNumber("sensei-left-panel-width", 236));
   const [rightPanelWidth, setRightPanelWidth] = useState(() => storedPanelNumber("sensei-right-panel-width", 430));
   const [leftPanelOpen, setLeftPanelOpen] = useState(() => storedPanelOpen("sensei-left-panel-state"));
-  // Today's Tune tile opens Career context on its Tune tab (U77); any other way in starts on Sources.
-  const [contextStart, setContextStart] = useState<"tune" | null>(null);
   // The Recruiter Edition starts with the Agy chat hidden (it still runs); the queue and job pages show progress.
   const [rightPanelOpen, setRightPanelOpen] = useState(() => FEATURES.candidates ? window.localStorage.getItem("sensei-right-panel-state") === "open" : storedPanelOpen("sensei-right-panel-state"));
   const [searchOpen, setSearchOpen] = useState(false);
@@ -316,7 +314,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       if (event.key === "g") { goPrefix.current = Date.now(); return; }
       if (Date.now() - goPrefix.current < 1200) {
         goPrefix.current = 0;
-        const page = goTarget(event.key, { today: FEATURES.today, jobSearch: FEATURES.jobSearch, interviews: FEATURES.interviews, agyPage: FEATURES.agyPage });
+        const page = goTarget(event.key, { jobSearch: FEATURES.jobSearch, interviews: FEATURES.interviews, agyPage: FEATURES.agyPage });
         if (page) { event.preventDefault(); void showPage(page); }
         return;
       }
@@ -386,7 +384,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       return next;
     });
   }, [activeJobId]);
-  const [navigationHistory, setNavigationHistory] = useState<WorkspaceLocation[]>([{ kind: FEATURES.today ? "today-home" : "jobs-home" }]);
+  const [navigationHistory, setNavigationHistory] = useState<WorkspaceLocation[]>([{ kind: "jobs-home" }]);
   const [navigationIndex, setNavigationIndex] = useState(0);
   const previewRequestId = useRef(0);
 
@@ -543,7 +541,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
 
   function currentReturnLocation(jobId: string | null): JobLocation | PageLocation {
     const current = navigationHistory[navigationIndex];
-    if (current?.kind === "job" || current?.kind === "today-home" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home" || current?.kind === "docs-home" || current?.kind === "agy-home" || current?.kind === "postings-home" || current?.kind === "reports-home") return current;
+    if (current?.kind === "job" || current?.kind === "search-home" || current?.kind === "interviews-home" || current?.kind === "context-home" || current?.kind === "setup-home" || current?.kind === "pipeline-home" || current?.kind === "docs-home" || current?.kind === "agy-home" || current?.kind === "postings-home" || current?.kind === "reports-home") return current;
     if (current?.kind === "document") return current.returnTo;
     return jobId ? { kind: "job", jobId, tab: "overview" } : { kind: "jobs-home" };
   }
@@ -599,13 +597,12 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   }
 
   async function showPage(kind: PageLocation["kind"]) {
-    setContextStart(null);
     if (editorDirty && !(await confirmDiscard())) return;
     setEditorDirty(false);
     if (currentLocation.kind === kind) return;
     pushLocation({ kind });
   }
-  function showJobsHome() { showPage(FEATURES.today ? "today-home" : "jobs-home"); }
+  function showJobsHome() { showPage("jobs-home"); }
 
   function openJobView(jobId: string, tab: JobWorkspaceTab, roundId?: string) {
     const current = navigationHistory[navigationIndex];
@@ -909,7 +906,6 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   );
   const recentForStatus = recentJobIds.slice(0, 3).map((id) => jobs.find((job) => job.id === id)).filter((job): job is JobFolderSummary => Boolean(job) && job!.id !== viewedJob?.id);
   const paletteActions: PaletteAction[] = [
-    ...(FEATURES.today ? [{ id: "go-today", title: "Go to Today", subtitle: "Morning search, what's due, insights, and questions", keywords: "home day summary", shortcut: "g t", run: () => showPage("today-home") }] : []),
     ...(FEATURES.agyPage ? [{ id: "go-agy", title: "Go to Agy", subtitle: "Everything Agy can do: actions for this job, interviews, job search, and Agy's own commands", keywords: "assistant actions commands model run", shortcut: "g a", run: () => showPage("agy-home") }] : []),
     { id: "go-docs", title: "Go to Docs", subtitle: "How to get the best results, your data, how Agy uses it, Agy commands", keywords: "help guide documentation commands model theme", shortcut: "g d", run: () => showPage("docs-home") },
     { id: "go-jobs", title: "Go to Jobs", subtitle: "All jobs, the queue, and the status strip", keywords: "home list cards", shortcut: "g j", run: () => showPage("jobs-home") },
@@ -1001,12 +997,11 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
           <li><button onClick={() => void window.sensei.candidates.showAll().then(() => window.location.reload())}><NavIcon name="people" /><span className="side-label">Candidates</span><span className="side-count">{candidates.candidates.filter((candidate) => candidate.status !== "archived").length}</span></button></li>
           <li><button aria-current={activePage === "pipeline-home" ? "page" : undefined} onClick={() => showPage("pipeline-home")}><NavIcon name="pipeline" /><span className="side-label">Pipeline</span></button></li>
           <li><button aria-current={activePage === "postings-home" ? "page" : undefined} onClick={() => showPage("postings-home")}><NavIcon name="jobs" /><span className="side-label">Postings</span></button></li>
-          <li><button aria-current={activePage === "reports-home" ? "page" : undefined} onClick={() => showPage("reports-home")}><NavIcon name="today" /><span className="side-label">Reports</span></button></li>
+          <li><button aria-current={activePage === "reports-home" ? "page" : undefined} onClick={() => showPage("reports-home")}><NavIcon name="reports" /><span className="side-label">Reports</span></button></li>
         </ul>
         <CandidateSwitcher state={candidates} />
       </>}
       <ul className="side-nav">
-        {FEATURES.today && <li><button aria-current={activePage === "today-home" ? "page" : undefined} onClick={() => showPage("today-home")}><NavIcon name="today" /><span className="side-label">Today</span></button></li>}
         <li className="side-has-sub"><button aria-current={activePage === "jobs-home" ? "page" : undefined} onClick={() => showPage("jobs-home")}><NavIcon name="jobs" /><span className="side-label">Jobs</span>{followUpsDue > 0 && <span className="side-due" title={`${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"} due`}>{followUpsDue} due</span>}<span className="side-count">{jobs.length}</span></button><button className="side-sub-toggle" aria-label={sideJobsOpen ? "Hide job views" : "Show job views"} aria-expanded={sideJobsOpen} aria-controls="side-jobs-views" onClick={toggleSideJobs}><span aria-hidden="true">{sideJobsOpen ? "▾" : "▸"}</span></button>
           {sideJobsOpen && <ul id="side-jobs-views" className="side-sub">{sideJobViews.map((view) => <li key={view.id}><button aria-current={activePage === "jobs-home" && (jobsStatusGroup ?? "active") === view.id ? "page" : undefined} onClick={() => { setJobsStatusGroup(view.id); void showPage("jobs-home"); }}><span className="side-label">{view.label}</span><span className="side-count">{view.count}</span></button></li>)}</ul>}</li>
         {FEATURES.jobSearch && <li><button aria-current={activePage === "search-home" ? "page" : undefined} onClick={() => showPage("search-home")}><NavIcon name="search" /><span className="side-label">Job Search</span>{searchStatus.running ? <span className="side-due" title={searchProgressText(searchStatus)}>Searching…</span> : searchNew > 0 && <span className="side-count" title={`${searchNew} new match${searchNew === 1 ? "" : "es"}`}>{searchNew}</span>}</button></li>}
@@ -1064,11 +1059,6 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
           <div className="viewer-header"><div><h1>{preview.name}</h1>{preview.jobCompany && <p className="viewer-subtitle">{[preview.jobCompany, preview.jobTitle].filter(Boolean).join(", ")}</p>}</div><div className="viewer-header-actions"><span className={`label ${preview.canPreview ? "source" : "muted"}`}>{preview.fileType.toUpperCase()}</span><button className="btn-quiet" onClick={closeDocument}>Close</button></div></div>
           <DocumentView key={`${preview.relativePath}:${currentLocation.kind === "document" ? currentLocation.anchor ?? "" : ""}`} preview={preview} isBaseResume={preview.relativePath === baseResume} focusAnchor={currentLocation.kind === "document" ? currentLocation.anchor : undefined} onExported={() => void refresh()} onDirtyChange={setEditorDirty} onSaved={markdownSaved} />
         </> : currentLocation.kind === "job" && viewedJob ? <JobWorkspaceDashboard job={viewedJob} status={applicationStatus} applicationLoading={applicationLoading} overview={interviewOverview} interviewLoading={interviewLoading} jobTree={jobTree} jobActions={jobActions} onStatus={setApplicationStatus} onSelect={selectFile} activeTab={currentLocation.tab} activeRoundId={currentLocation.roundId} onNavigate={openJobView} onInsertPrompt={insertJobPrompt} onUpdateTracker={(update) => updateTracker(viewedJob.id, update)} onJobChanged={(next) => { setJobs((current) => current.map((job) => job.id === next.id ? next : job)); showToast(`${next.company ?? displayJobName(next.name)}: details saved`); }} />
-          : FEATURES.today && currentLocation.kind === "today-home" ? <TodayView onOpenJob={openJob} onToast={showToast} onOpenTune={() => void showPage("context-home").then(() => setContextStart("tune"))}
-              onOpenMatch={(id) => pushLocation({ kind: "search-home", focus: id })}
-              onQueueFound={(id) => queueJob({ kind: "found", id, auto: false }, true)}
-              onGo={(target) => showPage(({ setup: "setup-home", jobs: "jobs-home", "job-search": "search-home", interviews: "interviews-home", learnings: "interviews-home", context: "context-home" } as const)[target])}
-              onAnswerAddedFile={(path) => void updateContext([...new Set([...selectedCareerPaths, path])], selectedJobFiles)} />
           : FEATURES.jobSearch && currentLocation.kind === "search-home" ? <JobSearchView key={currentLocation.focus ?? ""} ranking={effectiveBehavior(candidateProfile?.preferences.agy).search} status={searchStatus} focusId={currentLocation.focus} onQueueFound={(id, auto) => queueJob({ kind: "found", id, auto }, !auto)} onQueueSaved={(jobId) => queueJob({ kind: "saved", jobId }, true)} onOpenJob={openJob} onToast={showToast} />
           : FEATURES.interviews && currentLocation.kind === "interviews-home" ? <InterviewsHome jobs={interviewingJobs} allJobs={jobs} newRecordings={newRecordings} onRecordingsChanged={() => void loadRecordings()} onSendPrompt={insertJobPrompt} onOpenFile={(path) => void selectFile(path)} onOpen={(jobId, roundId) => openJobView(jobId, "interview", roundId)} />
           : FEATURES.candidates && currentLocation.kind === "postings-home" ? <PostingsView activeId={candidates?.activeId ?? null} onToast={showToast} onActive={async (pasteId, label, url) => {
@@ -1108,15 +1098,15 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
           />
           : currentLocation.kind === "context-home" || currentLocation.kind === "setup-home" ? <ContextHome key={currentLocation.kind}
             setup={setupHomeBlock}
-            startView={currentLocation.kind === "setup-home" ? "setup" : contextStart}
+            startView={currentLocation.kind === "setup-home" ? "setup" : null}
             onOpen={(path) => void selectFile(path)}
             notes={recruiterNotesBlock}
-            notice={FEATURES.nudges && newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">
+            notice={<>{FEATURES.profileQuestions && <ProfileQuestions onToast={showToast} />}{FEATURES.nudges && newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">
               <h2 id="new-files-title">New since you last looked</h2>
               <p>Check each one, then tick it below if Agy should use it as evidence.</p>
               <ul>{newContextFiles.map((path) => <li key={path}><button className="btn-link" onClick={() => void selectFile(path)}>{path.replace(/^context\//, "")}</button>{selectedCareerPaths.includes(path) ? <span className="doc-state is-ready">Used by Agy</span> : <span className="doc-state">Not used yet</span>}</li>)}</ul>
               <button className="btn-quiet" onClick={markContextReviewed}>Mark as reviewed</button>
-            </section>}
+            </section>}</>}
             resumes={contextResumesBlock}
             sources={contextSourcesBlock}
             tune={FEATURES.tune ? <div className="tune-areas">
@@ -1140,10 +1130,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   </main>;
 }
 
-function NavIcon({ name }: { name: "today" | "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" | "pipeline" | "docs" | "people" | "agy" }) {
+function NavIcon({ name }: { name: "reports" | "jobs" | "search" | "interviews" | "context" | "settings" | "sidebar" | "setup" | "pipeline" | "docs" | "people" | "agy" }) {
   const paths: Record<typeof name, string> = {
     people: "M9 11a3 3 0 1 0 0-6a3 3 0 1 0 0 6z M3 19c0-3 2.7-5 6-5s6 2 6 5 M16 11a2.5 2.5 0 1 0 0-5 M17 14c2.2.4 4 2.2 4 5",
-    today: "M5 6h14v14H5z M5 10h14 M9 4v4 M15 4v4 M9 14h2 M13 14h2 M9 17h2",
+    reports: "M5 6h14v14H5z M5 10h14 M9 4v4 M15 4v4 M9 14h2 M13 14h2 M9 17h2",
     jobs: "M4 8h16v11H4zM9 8V5h6v3M4 13h16",
     search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z M15.5 15.5L20 20",
     interviews: "M5 5h14v10H9l-4 4z M8.5 9.5h7 M8.5 12h4",
@@ -1173,7 +1163,7 @@ function ToastRegion({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: n
 
 const SHORTCUTS: Array<[string, string]> = [
   ["⌘K or Ctrl K", "Search jobs, files, and actions"],
-  ["g then t / j / s / i / c / a / d", "Go to Today, Jobs, Job Search, Interviews, Profile (career sources), Agy, or Docs"],
+  ["g then j / s / i / c / a / d", "Go to Jobs, Job Search, Interviews, Profile (career sources), Agy, or Docs"],
   ["[ and ]", "Previous or next job in the Jobs list you came from (on a job page)"],
   ["1 – 4", "Set the open job to Saved, Applied, Interviewing, or Offer"],
   ["5 5 / 6 6", "Mark the open job Rejected or Withdrawn (press twice; Undo in the toast)"],

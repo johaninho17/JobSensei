@@ -7,7 +7,7 @@ import type { Readiness } from "./readiness";
 import type { StrayItem } from "./workspace-layout";
 import type { JobOverrides, JobOverridesInput } from "./job-overrides";
 import type { JobSearchSettings, JobSearchState, ScheduleInfo, SearchRun, SearchStatus, WatchedSuggestion } from "./job-search";
-import type { TodayData } from "./today";
+import type { QuestionsView } from "./profile-questions";
 
 export const schemaVersion = 1;
 
@@ -1323,7 +1323,7 @@ export type AgyActivity = {
   durationSeconds: number | null;
   result: "running" | "passed" | "warnings" | "failed";
   detail: string | null;
-  open: { jobId?: string; tab?: "application" | "interview"; roundId?: string; page?: "search-home" | "today-home" | "interviews-home" };
+  open: { jobId?: string; tab?: "application" | "interview"; roundId?: string; page?: "search-home" | "setup-home" | "interviews-home" };
 };
 
 export type RecordingInfo = { path: string; size: number; state: "new" | "changed" | "imported" | "duplicate" | "skipped"; duplicateOf: string | null; jobId: string | null; usedIn?: Array<{ area: "Story bank" | "Interview voice" | "Role memory" | "Interview stories"; count: number }>; usedInShared?: boolean; importedAt?: string | null };
@@ -1414,19 +1414,17 @@ export interface SenseiApi {
     addRecordings(kind: "interview" | "practice", jobId: string | null): Promise<ContextImportResult>;
     importRecordingPaths(paths: string[], kind: "interview" | "practice", jobId: string | null): Promise<ContextImportResult>;
   };
-  /** Today: what happened, what's due, insights, and questions (electron/today.ts). */
   /** Workspace folders: preview the tidy layout, apply it, undo it. */
   layout: {
     plan(): Promise<LayoutPlan>;
     apply(): Promise<LayoutPlan>;
     undo(): Promise<{ restored: number; skipped: string[] }>;
   };
-  today: {
-    get(): Promise<TodayData>;
-    answer(id: string, answer: string): Promise<{ addedPath: string | null; queued: boolean }>;
-    removeQuestion(id: string): Promise<void>;
-    keepPosting(jobId: string): Promise<void>;
-    closePosting(jobId: string): Promise<void>;
+  /** Questions for you on the Profile page (electron/profile-questions.ts). */
+  profileQuestions: {
+    get(): Promise<QuestionsView>;
+    answer(id: string, answer: string): Promise<{ queued: boolean }>;
+    remove(id: string): Promise<void>;
     onChanged(callback: () => void): () => void;
   };
   /** Job Search: settings, the inbox of found postings, and the search run (Agy finds links; the app checks them). */

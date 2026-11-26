@@ -59,9 +59,9 @@ async function main(): Promise<number> {
       if (!/already searched|not a search day/.test(outcome.reason)) await log(outcome.reason);
       return 0;
     }
-    const { run, picks, summaryLine } = outcome;
+    const { run, picks } = outcome;
     if (run.status === "failed") notify("JobSensei search didn't finish", run.error ?? "Open Job Search for details.");
-    else notify("JobSensei: your day", `${summaryLine ?? `${run.added} new match${run.added === 1 ? "" : "es"}.`}${picks ? ` ${picks} will be drafted when you open the app.` : ""}${run.agyFailed ? " Agy's search will try once more later today." : ""}`);
+    else notify("JobSensei: new matches", `${run.added} new match${run.added === 1 ? "" : "es"}.${picks ? ` ${picks} will be drafted when you open the app.` : ""}${run.agyFailed ? " Agy's search will try once more later today." : ""}`);
     return 0;
   } catch (error) {
     await log(`error: ${error instanceof Error ? error.message : String(error)}`);

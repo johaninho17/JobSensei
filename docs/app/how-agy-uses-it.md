@@ -48,13 +48,13 @@ Each requirement from the posting is rated against your records: met, close, lea
 **Agy reads:** your search settings only (titles, places, level, pay floor, words to leave out). Never your resume or records.
 **It finds:** companies hiring for your titles; the app then reads their job boards itself. A quick rating of the best matches uses a short summary of your roles and skills.
 <!-- /feature -->
-<!-- feature:today -->
+<!-- feature:profileQuestions -->
 
-## Your Today answers
+## Your answers to Profile questions
 
-**When:** about a minute after you answer a Today question, and after the morning search.
-**Agy reads:** your answers and the list of your work record files.
-**It does:** puts each answer into the record it belongs to (your current job, an earlier one, education, or interview stories), keeping your exact limits. Drafts then use it from there.
+**When:** about a minute after you answer a question on **Profile**, and after the scheduled search.
+**Agy reads:** your answers and your career record files with their rows.
+**It does:** updates the row that already covers the subject (adding what you said, or correcting what your answer contradicts), and adds a new row only when nothing covers it yet. It keeps your exact limits, and the app backs up each file first. Drafts then use it from there.
 <!-- /feature -->
 
 ## What runs in the background
@@ -79,10 +79,8 @@ These run without the Agy panel open, and keep going when you switch pages. The 
 | Watched companies | With every search, and alone with Check watched companies | No |
 | Light rating | After a search, up to 10 of the best new matches in one call; or Rate with Agy | Yes, one call |
 <!-- /feature -->
-<!-- feature:today -->
-| Filing your Today answers | About a minute after you answer, when the app opens with answers waiting, and after the morning search | Yes, one call for all waiting answers |
-| Closed postings | Once a day: when Today opens and after the morning search | No |
-| Morning summary | After a scheduled search | No |
+<!-- feature:profileQuestions -->
+| Filing your answers | About a minute after you answer a Profile question, when the app opens with answers waiting, and after the scheduled search | Yes, one call for all waiting answers |
 <!-- /feature -->
 <!-- feature:contentRefresh -->
 | Interview content update | Only when you press Update from new recordings | Yes |

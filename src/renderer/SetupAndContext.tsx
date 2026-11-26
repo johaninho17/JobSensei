@@ -324,9 +324,9 @@ export function ContextAdder({ onAdd, onReveal }: { onAdd: (kind: "structured" |
   </div>;
 }
 
-export function ContextHome({ notice, setup, sources, notes, resumes, jobFiles, tune, startView, onOpen }: { notice: React.ReactNode; /** Setup as the Profile page's first tab (U78: Setup and Career context are one page). */ setup?: React.ReactNode; tune?: React.ReactNode; /** A tab to switch to when another page asks (Setup in the sidebar, Today's Tune tile). */ startView?: "setup" | "tune" | null; sources: React.ReactNode; notes: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
+export function ContextHome({ notice, setup, sources, notes, resumes, jobFiles, tune, startView, onOpen }: { notice: React.ReactNode; /** Setup as the Profile page's first tab (U78: Setup and Career context are one page). */ setup?: React.ReactNode; tune?: React.ReactNode; /** A tab to switch to when another page asks (Setup in the sidebar). */ startView?: "setup" | null; sources: React.ReactNode; notes: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
   const [view, setView] = useState<ContextView>(startView === "setup" && setup ? "setup" : "sources");
-  useEffect(() => { if ((startView === "tune" && tune) || (startView === "setup" && setup)) setView(startView); }, [startView, tune !== undefined, setup !== undefined]);
+  useEffect(() => { if (startView === "setup" && setup) setView(startView); }, [startView, setup !== undefined]);
   return <section className="jobs-home context-home">
     <PageHead title={setup ? "Profile" : "Career context"} tip={FEATURES.candidates ? "The candidate's resume, files, and your notes: what Agy may use when tailoring. Files are only read, never changed." : setup ? "Your setup and the sources Agy treats as facts about you. Source files are only read, never changed." : "The sources Agy treats as facts about you. Source files are only read, never changed."} />
     {notice}

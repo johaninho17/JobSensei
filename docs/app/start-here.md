@@ -52,6 +52,6 @@ JobSensei Recruiter Edition tailors resumes for your candidates from their own f
 3. Apply on the employer's site, then **Mark applied**. The exact PDFs are frozen with the date and where they went, so you can always show what was sent.
 4. Keep the status current. **Reports** turns it into a client update, and shows jobs waiting for a candidate's approval.
 <!-- /feature -->
-<!-- feature:today -->
-4. Check **Today** each morning: new matches, what's due, and questions whose answers make your records stronger.
+<!-- feature:profileQuestions -->
+4. When **Profile** shows **Questions for you**, answer them: each answer updates your career records.
 <!-- /feature -->

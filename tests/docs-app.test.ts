@@ -17,9 +17,9 @@ describe("in-app docs", () => {
   it("drops left-out features from the Recruiter Edition's text", () => {
     const recruiter = featuresFor("recruiter");
     const text = DOCS.map((name) => featureText(recruiter, read(name))).join("\n");
-    for (const phrase of ["Story bank", "story bank", "Interview prep", "Today", "Job search", "debrief", "Written application questions"]) expect(text, phrase).not.toContain(phrase);
+    for (const phrase of ["Story bank", "story bank", "Interview prep", "Questions for you", "Job search", "debrief", "Written application questions"]) expect(text, phrase).not.toContain(phrase);
     const solo = DOCS.map((name) => featureText(featuresFor("solo"), read(name))).join("\n");
-    for (const phrase of ["story bank", "Interview prep", "Today", "Job search"]) expect(solo, phrase).toContain(phrase);
+    for (const phrase of ["story bank", "Interview prep", "Questions for you", "Job search"]) expect(solo, phrase).toContain(phrase);
     expect(text).not.toMatch(/<!-- \/?feature/);
   });
 
@@ -52,7 +52,7 @@ describe("in-app docs", () => {
     const solo = featureText(featuresFor("solo"), read("how-agy-uses-it"));
     const recruiter = featureText(featuresFor("recruiter"), read("how-agy-uses-it"));
     const soloRows = table(solo).slice(2).map((line) => line.split("|")[1]!.trim());
-    expect(soloRows).toEqual(["Application drafts", "Written application questions", "Job search", "Watched companies", "Light rating", "Filing your Today answers", "Closed postings", "Morning summary", "Interview content update", "Interview prep"]);
+    expect(soloRows).toEqual(["Application drafts", "Written application questions", "Job search", "Watched companies", "Light rating", "Filing your answers", "Interview content update", "Interview prep"]);
     expect(table(recruiter).slice(2).map((line) => line.split("|")[1]!.trim())).toEqual(["Application drafts"]);
     expect(recruiter).toContain("the app opens the next candidate with jobs waiting");
     // The rows follow the header with no gap, so Markdown draws one table in both editions.

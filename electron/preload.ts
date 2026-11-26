@@ -37,13 +37,11 @@ const api: SenseiApi = {
     apply: () => ipcRenderer.invoke("layout:apply"),
     undo: () => ipcRenderer.invoke("layout:undo"),
   },
-  today: {
-    get: () => ipcRenderer.invoke("today:get"),
-    answer: (id, answer) => ipcRenderer.invoke("today:answer", id, answer),
-    removeQuestion: (id) => ipcRenderer.invoke("today:remove-question", id),
-    keepPosting: (jobId) => ipcRenderer.invoke("today:keep-posting", jobId),
-    closePosting: (jobId) => ipcRenderer.invoke("today:close-posting", jobId),
-    onChanged: (callback) => { const listener = () => callback(); ipcRenderer.on("today:changed", listener); return () => ipcRenderer.removeListener("today:changed", listener); },
+  profileQuestions: {
+    get: () => ipcRenderer.invoke("profile-questions:get"),
+    answer: (id, answer) => ipcRenderer.invoke("profile-questions:answer", id, answer),
+    remove: (id) => ipcRenderer.invoke("profile-questions:remove", id),
+    onChanged: (callback) => { const listener = () => callback(); ipcRenderer.on("profile-questions:changed", listener); return () => ipcRenderer.removeListener("profile-questions:changed", listener); },
   },
   // Recruiter Edition only (registered when the edition has candidates).
   candidates: {

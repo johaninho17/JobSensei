@@ -1,28 +1,20 @@
 // Screenshots of the built app's pages (ledger U77, U78) for visual QA: light and dark, wide and narrow, with the Agy
 // panel open and closed. Runs on a scratch copy of the fictional demo workspace, never on data/.
-// Usage: npm run build && node scripts/screenshot-pages.mjs <out-dir> [Today,Jobs,...]  (sidebar names; default Today)
-import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+// Usage: npm run build && node scripts/screenshot-pages.mjs <out-dir> [Today,Jobs,...]  (sidebar names; default Jobs)
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { _electron } from "playwright-core";
 
 const out = resolve(process.argv[2] ?? "screenshots");
-const pages = (process.argv[3] ?? "Today").split(",").map((name) => name.trim()).filter(Boolean);
+const pages = (process.argv[3] ?? "Jobs").split(",").map((name) => name.trim()).filter(Boolean);
 const root = process.cwd();
 const require = createRequire(import.meta.url);
 const scratch = await mkdtemp(join(tmpdir(), "sensei-shot-"));
 const workspace = join(scratch, "workspace");
 await cp(join(root, "examples", "demo-workspace"), workspace, { recursive: true });
 await mkdir(out, { recursive: true });
-// Give the scratch copy's first job an overdue follow-up, so "Do this next" has something to show.
-const [firstJob] = await readdir(join(workspace, "jobs"));
-if (firstJob) {
-  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-  await mkdir(join(workspace, "jobs", firstJob, ".sensei"), { recursive: true });
-  await writeFile(join(workspace, "jobs", firstJob, ".sensei", "tracker.json"), JSON.stringify({ schemaVersion: 1, status: "applied", appliedAt: yesterday, nextFollowUpAt: yesterday }));
-}
-
 const app = await _electron.launch({
   executablePath: require("electron"),
   args: [join(root, "dist-electron", "electron", "main.js")],

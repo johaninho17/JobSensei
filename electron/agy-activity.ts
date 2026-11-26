@@ -3,7 +3,7 @@
 //   panel: application runs (run_timing.json + validation_report.json), interview prep (interviews/.sensei),
 //          content updates (content-sources.json import dates, content-update.json while one runs);
 //   background: job searches (job-search/state.json), written answers (application_questions.json),
-//               Today answers filed into career records (today-answers.json).
+//               Profile answers filed into career records (today-answers.json).
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgyActivity } from "../src/shared/schemas";
@@ -58,7 +58,7 @@ export async function agyActivity(workspacePath: string, options: { now?: number
   }
   const filed = await json<Array<{ id: string; subject: string; status: string; answeredAt: string; filedAt?: string | null; filedTo?: string | null }> | { answers?: Array<{ id: string; subject: string; status: string; answeredAt: string; filedAt?: string | null; filedTo?: string | null }> }>(workspaceFile(root, ".sensei/today-answers.json"));
   for (const answer of Array.isArray(filed) ? filed : filed?.answers ?? []) {
-    out.push({ id: `filing:${answer.id}`, kind: "filing", where: "background", label: `Today answer filed: ${answer.subject}`, at: answer.filedAt ?? answer.answeredAt, durationSeconds: null, result: answer.status === "pending" ? "running" : answer.status === "filed" ? "passed" : "warnings", detail: answer.filedTo ? `into ${answer.filedTo.split("/").pop()}` : answer.status === "skipped" ? "not added" : null, open: { page: "today-home" } });
+    out.push({ id: `filing:${answer.id}`, kind: "filing", where: "background", label: `Answer filed: ${answer.subject}`, at: answer.filedAt ?? answer.answeredAt, durationSeconds: null, result: answer.status === "pending" ? "running" : answer.status === "filed" ? "passed" : "warnings", detail: answer.filedTo ? `into ${answer.filedTo.split("/").pop()}` : answer.status === "skipped" ? "not added" : null, open: { page: "setup-home" } });
   }
   const ledger = await json<{ files?: Record<string, { status: string; importedAt?: string | null }> }>(workspaceFile(root, ".sensei/content-sources.json"));
   const updates = new Map<string, number>();

@@ -2,7 +2,7 @@
 
 export const PRIORITIES = ["P0", "P1", "P2", "P3"];
 export const TYPES = ["feat", "fix", "refactor", "perf", "test", "docs", "ci", "chore"];
-export const SCOPES = ["jobs", "workspace", "pipeline", "search", "interviews", "agy", "today", "setup", "ui", "recruiter", "ci", "docs"];
+export const SCOPES = ["jobs", "workspace", "pipeline", "search", "interviews", "agy", "setup", "ui", "recruiter", "ci", "docs"];
 
 /** `<type>(<scope>): summary (refs #N)`: the form every commit and PR title takes. */
 export const TITLE_PATTERN = new RegExp(`^(${TYPES.join("|")})\\((${SCOPES.join("|")})\\)!?: .+ \\(refs #\\d+(, ?(#\\d+|FEAT-\\d{3}))*\\)$`);

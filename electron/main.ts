@@ -695,7 +695,7 @@ async function registerFeatureIpc(): Promise<void> {
   if (features.contentRefresh) (await import("./content-ipc.js")).registerContentIpc(featureContext);
   if (features.tune) (await import("./tune-ipc.js")).registerTuneIpc(featureContext);
   if (features.jobSearch) (await import("./search-ipc.js")).registerSearchIpc(featureContext);
-  if (features.today) (await import("./today-ipc.js")).registerTodayIpc(featureContext, { readiness: () => readinessNow() });
+  if (features.profileQuestions) (await import("./profile-questions-ipc.js")).registerProfileQuestionsIpc(featureContext);
   if (features.candidates) (await import("./candidate-ipc.js")).registerCandidateIpc({
     root: () => { if (!recruiterRoot) throw new Error("The recruiter folder isn't open."); return recruiterRoot; },
     busyReason: candidateBusyReason,

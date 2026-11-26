@@ -1,12 +1,11 @@
 // Keyboard shortcut rules that are easy to get wrong (#23): which page each "g" chord opens, which job [ and ] move to,
 // and how a status key that closes a job (Rejected, Withdrawn) needs a second press.
 
-export type GoPage = "today-home" | "jobs-home" | "search-home" | "interviews-home" | "context-home" | "agy-home" | "docs-home";
+export type GoPage = "jobs-home" | "search-home" | "interviews-home" | "context-home" | "agy-home" | "docs-home";
 
 /** "g" then a letter opens a page; letters for pages the edition leaves out do nothing. */
-export function goTarget(key: string, features: { today: boolean; jobSearch: boolean; interviews: boolean; agyPage?: boolean }): GoPage | null {
+export function goTarget(key: string, features: { jobSearch: boolean; interviews: boolean; agyPage?: boolean }): GoPage | null {
   const pages: Record<string, GoPage | null> = {
-    t: features.today ? "today-home" : null,
     j: "jobs-home",
     s: features.jobSearch ? "search-home" : null,
     i: features.interviews ? "interviews-home" : null,
