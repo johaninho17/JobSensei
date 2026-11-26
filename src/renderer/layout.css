@@ -973,8 +973,27 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .review-panel { display: grid; gap: var(--space-3); }
 .review-bar { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); flex-wrap: wrap; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); }
 .review-actions { display: flex; gap: var(--space-2); align-items: center; }
-.review-cols { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: var(--space-4); align-items: start; }
-@media (max-width: 900px) { .review-cols { grid-template-columns: 1fr; } }
+/* Two documents side by side (#127): a document and the posting, or the Recruiter Review's job summary and resume.
+   One layout; columns stack, or the posting steps aside, when the page is too narrow to read two columns. */
+.doc-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr); gap: var(--space-4); align-items: start; }
+.doc-split.is-aside-first { grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); }
+.doc-split-main { min-width: 0; }
+.doc-split-main .doc-inline { max-width: none; }
+.workspace-tabs-row .side-by-side-toggle { min-height: 30px; margin-bottom: 6px; padding: 0 var(--space-3); font-size: var(--fs-13); }
+.doc-split-narrow { display: none; margin: var(--space-2) 0 0; font-size: var(--fs-12); }
+.posting-pane { position: sticky; top: 56px; max-height: calc(100vh - 160px); overflow-y: auto; margin-top: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); font-size: var(--fs-13); line-height: 1.55; }
+.posting-pane-head { display: flex; justify-content: space-between; gap: var(--space-2); padding-bottom: var(--space-2); border-bottom: 1px solid var(--line); font: 600 var(--fs-12) var(--font-ui); }
+.posting-pane-body h1 { font-size: var(--fs-18); margin: var(--space-3) 0 var(--space-2); }
+.posting-pane-body h2, .posting-pane-body h3 { font-size: var(--fs-15); margin: var(--space-3) 0 var(--space-1); }
+.posting-pane-body ul { padding-left: var(--space-4); }
+@container (max-width: 900px) {
+  .doc-split, .doc-split.is-aside-first { grid-template-columns: 1fr; }
+  .doc-split .posting-pane, .side-by-side-toggle { display: none; }
+  .doc-split-narrow { display: block; }
+}
+/* Documents read at a comfortable line length and spacing (#127). */
+.doc-inline .markdown-document { line-height: 1.55; }
+.doc-inline .markdown-document > div:not(.document-meta):not(.markdown-editor-grid) { max-width: 72ch; }
 .review-job h3, .review-resume h3 { margin: 0 0 var(--space-2); font-size: var(--fs-15); }
 .review-job h4, .review-section h4 { margin: var(--space-3) 0 var(--space-1); font-size: var(--fs-13); color: var(--muted); text-transform: none; }
 .review-job ul, .review-section ul { margin: 0; padding-left: var(--space-4); }

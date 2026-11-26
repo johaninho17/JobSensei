@@ -45,7 +45,7 @@ export function ReviewPanel({ job, onUpdateTracker, onOpenResume }: { job: JobFo
       </span>
     </div>
     {actionError && <p className="inline-error" role="alert">{actionError}</p>}
-    <div className="review-cols">
+    <div className="doc-split is-aside-first">
       <div className="review-job">
         <h3>The job</h3>
         <p>{[job.company, job.title].filter(Boolean).join(" · ")}{job.rating !== null ? ` · fit ${job.rating.toFixed(1)} of 5` : ""}</p>

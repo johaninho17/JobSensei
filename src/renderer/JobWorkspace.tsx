@@ -11,6 +11,7 @@ import { markdownHtml } from "./markdown";
 import { InterviewView } from "./InterviewView";
 import { SubTabPanel, SubTabs } from "./SubTabs";
 import { ReviewPanel } from "./Review";
+import { sideBySideFits, useSideBySide } from "./side-by-side";
 import { TagEditor } from "./JobOrganize";
 import { type JobWorkspaceTab, StatusPill, TrackerPill, displayJobName, fileNodes, findNode, formatJobDate, formatRelativeDate, messageOf, plural, toast } from "./app-shared";
 import { DocumentView, PdfTextSizeSelect, documentsChanged, pdfsCreated, usePdfFreshness } from "./Documents";
@@ -63,6 +64,11 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
   function openChecks() { setAppView("checks"); onNavigate(job.id, "application"); }
   // The posting and the evaluation open inside the job page (Application tab), keeping the header and tabs (#21).
   function openAppView(view: ApplicationView) { setAppView(view); onNavigate(job.id, "application"); }
+  // The posting beside the resume, letter or evaluation, when the user turned it on (#127).
+  const [sideBySide, setSideBySide] = useSideBySide();
+  const postingPath = jobDescription?.relativePath ?? null;
+  const canSplit = activeTab === "application" && sideBySideFits(appView) && postingPath !== null;
+  const split = sideBySide && canSplit;
   // One tab row (U89, #184): the application's documents are tabs of the job page, not a second row under it. A tab
   // shows only when there is something in it; Evaluation opens from Overview's Fit card.
   type JobTabItem = { id: string; label: string; count?: number | null; tab: JobWorkspaceTab; view?: ApplicationView };
@@ -119,6 +125,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
     {editingDetails && <EditJobDetails job={job} onClose={() => setEditingDetails(false)} onSaved={(next) => { onJobChanged(next); setEditingDetails(false); }} />}
     <div className="workspace-tabs-row">
       <nav className="workspace-tabs" role="tablist" aria-label="Job sections">{tabItems.map((item) => { const active = isActive(item) || (!anyActive && item.id === "overview"); return <button key={item.id} role="tab" id={`job-tab-${item.id}`} aria-selected={active} className={active ? "is-active" : ""} onClick={() => { if (item.view) setAppView(item.view); onNavigate(job.id, item.tab, item.tab === "interview" ? activeRoundId : undefined); }}>{item.label}{item.count ? <span>{item.count}</span> : null}</button>; })}</nav>
+      {canSplit && <button className="btn-quiet side-by-side-toggle" aria-pressed={sideBySide} title="Read the job posting beside this document. Remembered on this computer." onClick={() => setSideBySide(!sideBySide)}>{sideBySide ? "Hide posting" : "Posting side by side"}</button>}
     </div>
     {activeTab === "overview" && <div className="job-overview">
       {FEATURES.interviews && (trackerStatus === "rejected" || trackerStatus === "withdrawn" || trackerStatus === "interviewing" || trackerStatus === "offer") && <DebriefPanel job={job} closed={trackerStatus === "rejected" || trackerStatus === "withdrawn"} onUpdateTracker={onUpdateTracker} onInsertPrompt={onInsertPrompt} />}
@@ -148,10 +155,10 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
     {activeTab === "application" && <>
       <div role="tabpanel" aria-label="Application document" className="app-doc-panel">
         {FEATURES.candidates && appView === "review" && <ReviewPanel job={job} onUpdateTracker={onUpdateTracker} onOpenResume={() => setAppView("resume")} />}
-        {appView === "resume" && <><FramingLines jobId={job.id} artifact="resume" onReverted={() => setDocVersion((value) => value + 1)} /><DocInline key={docVersion} path={resumeMarkdown?.relativePath ?? null} label="resume" /></>}
-        {appView === "letter" && (letterSkipped ? <p className="muted doc-skipped">No cover letter: {letterSkipped}</p> : <><FramingLines jobId={job.id} artifact="cover-letter" onReverted={() => undefined} /><DocInline path={coverLetterMarkdown?.relativePath ?? null} label="cover letter" /></>)}
+        {appView === "resume" && <WithPosting on={split} postingPath={postingPath}><FramingLines jobId={job.id} artifact="resume" onReverted={() => setDocVersion((value) => value + 1)} /><DocInline key={docVersion} path={resumeMarkdown?.relativePath ?? null} label="resume" /></WithPosting>}
+        {appView === "letter" && (letterSkipped ? <p className="muted doc-skipped">No cover letter: {letterSkipped}</p> : <WithPosting on={split} postingPath={postingPath}><FramingLines jobId={job.id} artifact="cover-letter" onReverted={() => undefined} /><DocInline path={coverLetterMarkdown?.relativePath ?? null} label="cover letter" /></WithPosting>)}
         {FEATURES.applicationQuestions && appView === "questions" && <QuestionsPanel jobId={job.id} />}
-        {appView === "evaluation" && <DocInline path={evaluation?.relativePath ?? null} label="evaluation" />}
+        {appView === "evaluation" && <WithPosting on={split} postingPath={postingPath}><DocInline path={evaluation?.relativePath ?? null} label="evaluation" /></WithPosting>}
         {appView === "posting" && <DocInline path={jobDescription?.relativePath ?? null} label="job posting" />}
         {appView === "checks" && <div className="dashboard-stack"><ApplicationHealth job={job} files={applicationFiles} status={status} loading={applicationLoading} onStatus={onStatus} /><section className="context-block"><h2>Application files</h2><ArtifactTable files={applicationFiles} onSelect={onSelect} empty="No application documents found." /></section></div>}
       </div>
@@ -392,6 +399,42 @@ function DebriefPanel({ job, closed, onUpdateTracker, onInsertPrompt }: { job: J
     </div>}
     {interviews.length > 0 && <button className="btn-link" onClick={() => onInsertPrompt({ prompt: `${company} debrief (job: ${job.id})`, label: "Debrief this interview" })}>Ask Agy to debrief</button>}
   </section>;
+}
+
+/**
+ * A document with the job posting beside it (#127): the document stays as it is (read, Edit Markdown); the posting is
+ * read-only and scrolls on its own. A window too narrow for two readable columns shows the document alone and says so.
+ */
+function WithPosting({ on, postingPath, children }: { on: boolean; postingPath: string | null; children: React.ReactNode }) {
+  if (!on || !postingPath) return <>{children}</>;
+  return <>
+    <p className="doc-split-narrow muted">The posting shows beside the document when the window is wider.</p>
+    <div className="doc-split">
+      <div className="doc-split-main">{children}</div>
+      <PostingPane path={postingPath} />
+    </div>
+  </>;
+}
+
+/** The job posting as read-only text, for reading beside a document. Reread when the path changes. */
+export function PostingPane({ path }: { path: string }) {
+  const [preview, setPreview] = useState<FilePreview | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setPreview(null);
+    setFailed(false);
+    void window.sensei.files.preview(path).then((next) => { if (!cancelled) setPreview(next); }).catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [path]);
+  const markdown = preview?.contentType !== "data-url" && preview?.content ? preview.content : null;
+  return <aside className="posting-pane" aria-label="Job posting">
+    <div className="posting-pane-head"><span>Job posting</span><span className="muted">Read only</span></div>
+    {failed ? <p className="doc-inline-empty">The posting could not be read.</p>
+      : !preview ? <p className="doc-inline-empty">Reading the posting…</p>
+        : markdown ? <div className="posting-pane-body" dangerouslySetInnerHTML={{ __html: markdownHtml(markdown) }} />
+          : <p className="doc-inline-empty">This posting is a {preview.fileType.toUpperCase()} file. Open it from the Posting tab.</p>}
+  </aside>;
 }
 
 /**

@@ -35,6 +35,7 @@ import { ContextAdder, ContextHome, Onboarding, SetupHome } from "./SetupAndCont
 import { DocumentView } from "./Documents";
 import { DocInline, JobWorkspaceDashboard } from "./JobWorkspace";
 import { InterviewsHome } from "./InterviewsHome";
+import { readSideBySide, setSideBySide } from "./side-by-side";
 
 const emptyWorkspace: WorkspaceSummary = { path: "", repositoryRoot: "", status: "unconfigured", contextFileCount: 0, jobCount: 0, hasIndex: false, hasCandidateProfile: false, hasBaseResume: false, agyAvailable: false, warnings: [] };
 const emptySettings: Settings = { schemaVersion: 1, workspacePath: null, baseResumePath: null, secondaryResumePaths: [], linkedinProfilePath: null, updatedAt: "" };
@@ -912,6 +913,13 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
       keywords: `${action.group} ${action.prompt}${action.id === "team-panel-interview" ? " final panel executive panel" : ""}`,
       run: () => insertJobPrompt(action),
     })),
+    {
+      id: "toggle-side-by-side",
+      title: readSideBySide() ? "Hide the posting beside documents" : "Show the posting side by side",
+      subtitle: "Job page → Application: resume, cover letter, evaluation",
+      keywords: "posting job description side by side split compare resume letter",
+      run: () => setSideBySide(!readSideBySide()),
+    },
     {
       id: "toggle-files",
       title: leftPanelOpen ? "Collapse navigation" : "Expand navigation",
