@@ -3,7 +3,7 @@
 import { FitRing, InfoTip, PageHead } from "./BentoPrimitives";
 import { useEffect, useMemo, useState } from "react";
 import {
-  DEFAULT_JOB_SEARCH_SETTINGS, SEARCH_BOARDS, SEARCH_LEVELS, SKIPPED_BOARDS, WORK_SETUPS, DEFAULT_RANKING, effectiveFit, rankInbox, rankReason, searchProgressText, type RankingWeights,
+  DEFAULT_JOB_SEARCH_SETTINGS, SEARCH_BOARDS, SEARCH_LEVELS, SKIPPED_BOARDS, WORK_SETUPS, DEFAULT_RANKING, effectiveFit, rankInbox, searchProgressText, type RankingWeights,
   type InboxItem, type JobSearchSettings, type JobSearchState, type ScheduleInfo, type SearchRun, type SearchStatus, type WatchedSuggestion,
 } from "../shared/job-search";
 import { SubTabs } from "./SubTabs";
@@ -121,22 +121,6 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
     }
   }
 
-  // Companies of the user's jobs on Ashby/Greenhouse/Lever: watched in one click, then checked right away (free).
-  const [jobCompanies, setJobCompanies] = useState<WatchedSuggestion[]>([]);
-  useEffect(() => { void window.sensei.jobSearch.suggestWatched().then(setJobCompanies).catch(() => undefined); }, [settings?.watched.length]);
-  const unwatched = settings ? jobCompanies.filter((company) => !settings.watched.some((watched) => watched.board === company.board && watched.slug.toLowerCase() === company.slug.toLowerCase())) : [];
-  async function watchJobCompaniesAndCheck() {
-    if (!settings) return;
-    setError("");
-    try {
-      const next = await window.sensei.jobSearch.saveSettings({ ...settings, watched: [...settings.watched, ...unwatched.map((company) => ({ board: company.board, slug: company.slug, name: company.name, source: "jobs" as const }))] });
-      setSettings(next);
-      await runNow("watched");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(reason));
-    }
-  }
-
   function toggle(id: string) {
     setSelected((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   }
@@ -205,30 +189,22 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
       {selecting && <input type="checkbox" checked={isSelected} onChange={() => toggle(item.id)} onClick={(event) => event.stopPropagation()} aria-label={`Select ${item.company ?? ""} ${item.title ?? ""}`} />}
       <span className="find-fit" title={item.agyFit ? `Agy's light rating (quick fit ${item.fit.score.toFixed(1)}); the full rating runs when you draft` : "Quick fit: the app's own check of your files against the posting, not a full rating"}><FitRing rating={effectiveFit(item)} size={40} />{item.agyFit && <small className="fit-badge-source">Agy</small>}</span>
       <div className="find-main">
-        {selecting ? <strong>{item.title ?? "Untitled role"}</strong> : <button className="find-title" title="Open the posting in your browser" onClick={() => void window.sensei.jobSearch.openPosting(item.id)}>{item.title ?? "Untitled role"}</button>} <span className="muted">· {item.company ?? "Company not named"}</span>{item.watched && <span className="find-tag">Watched company</span>}{item.likeInterviewed && <span className="find-tag" title="Ranked a little higher: similar to a job where you got a real interview">{item.likeInterviewed}</span>}
+        {selecting ? <strong>{item.title ?? "Untitled role"}</strong> : <button className="find-title" title="Open the posting in your browser" onClick={() => void window.sensei.jobSearch.openPosting(item.id)}>{item.title ?? "Untitled role"} <span aria-hidden="true">↗</span></button>} <span className="muted">· {item.company ?? "Company not named"}</span>{item.watched && <span className="find-tag">Watched company</span>}{item.likeInterviewed && <span className="find-tag" title="Ranked a little higher: similar to a job where you got a real interview">{item.likeInterviewed}</span>}
         {facts.length > 0 && <p className="find-facts">{facts.join(" · ")}</p>}
-        {item.agyFit && <p className="find-why">{item.agyFit.why}{item.agyFit.gaps.length > 0 && <span className="muted"> Gaps: {item.agyFit.gaps.join("; ")}.</span>}</p>}
-        <p className={item.agyFit ? "find-why muted" : "find-why"}>{item.agyFit ? `Quick check: ${item.fit.why}` : item.fit.why}</p>
-        {item.status === "new" && sort === "fit" && <p className="find-why muted find-rank">Ranked by {rankReason(item, ranking)}</p>}
-        {(item.fit.blockers.length > 0 || item.fit.flags.length > 0 || item.fit.gaps.length > 0) && <p className="find-tags">
-          {item.fit.blockers.map((text) => <span key={text} className="find-tag is-blocker">{text}</span>)}
-          {item.fit.flags.map((text) => <span key={text} className="find-tag">{text}</span>)}
-          {item.fit.gaps.length > 0 && <span className="find-tag is-gap">To learn: {item.fit.gaps.slice(0, 4).join(", ")}</span>}
-        </p>}
+        {item.fit.blockers.length > 0 && <p className="find-tags">{item.fit.blockers.map((text) => <span key={text} className="find-tag is-blocker">{text}</span>)}</p>}
       </div>
       {!selecting && <div className="find-actions">
-        <button className="btn-quiet" onClick={() => void window.sensei.jobSearch.openPosting(item.id)}>Open posting</button>
         {item.status === "new" && <>
-          <button className="btn-quiet" disabled={busy} onClick={() => void queue([item.id])}>Draft application</button>
-          <button className="btn-quiet" disabled={busy} onClick={() => void save([item.id])}>Save for later</button>
+          <button className="btn-quiet btn-small" disabled={busy} onClick={() => void queue([item.id])}>Draft</button>
+          <button className="btn-quiet btn-small" disabled={busy} onClick={() => void save([item.id])}>Save</button>
           <button className="btn-link" disabled={busy} onClick={() => void dismiss([item.id])}>Dismiss</button>
         </>}
         {item.status === "saved" && item.jobId && <>
-          <button className="btn-quiet" disabled={busy} onClick={() => void draftSaved(item.jobId!)}>Draft application</button>
-          <button className="btn-link" onClick={() => onOpenJob(item.jobId!)}>In Jobs: open</button>
+          <button className="btn-quiet btn-small" disabled={busy} onClick={() => void draftSaved(item.jobId!)}>Draft</button>
+          <button className="btn-link" onClick={() => onOpenJob(item.jobId!)}>Open in Jobs</button>
         </>}
         {item.status === "queued" && <span className="muted">{item.autoQueued ? "Sent for drafts automatically" : "Sent for drafts"}{item.queuedAt ? ` · ${new Date(item.queuedAt).toLocaleDateString()}` : ""}</span>}
-        {item.status === "dismissed" && <button className="btn-quiet" disabled={busy} onClick={() => void window.sensei.jobSearch.setStatus([item.id], "new").then(setState)}>Restore</button>}
+        {item.status === "dismissed" && <button className="btn-quiet btn-small" disabled={busy} onClick={() => void window.sensei.jobSearch.setStatus([item.id], "new").then(setState)}>Restore</button>}
       </div>}
     </li>;
   }
@@ -237,7 +213,7 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
   return <section className="jobs-home job-search">
     <PageHead title="Job Search"
       status={<>{running ? <strong role="status">{searchProgressText(status)} You can leave this page.</strong>
-        : lastRun && lastRun.status !== "running" ? <span>{`Last ${lastRun.source === "watched" ? "check" : "search"} ${new Date(lastRun.startedAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}: ${runSummary(lastRun)}`}</span> : null}
+        : lastRun && lastRun.status !== "running" ? <span title={runSummary(lastRun)}>{`Last ${lastRun.source === "watched" ? "check" : "search"} ${new Date(lastRun.startedAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}: ${lastRun.status === "failed" ? "didn't finish" : `${lastRun.added} new`}`}</span> : null}
         {settings && <ScheduleStatus settings={settings} onTurnOn={() => void turnOnSchedule()} />}</>}
       tip={<><p>Agy searches the job boards with your settings; the app opens every link, drops closed and old postings, and rates each one against your files.</p><p>A search uses one Agy run; checking watched companies and rating postings use none.</p></>}
       action={<>
@@ -258,10 +234,6 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
     </> : null} />
 
     {tab === "matches" && <div role="tabpanel" aria-labelledby="job-search-tab-matches">
-      {unwatched.length > 0 && !running && <div className="find-callout">
-        <span title="They post on Ashby, Greenhouse, or Lever: every run reads their open jobs directly, free, with real dates.">{unwatched.length} compan{unwatched.length === 1 ? "y" : "ies"} from your jobs can be watched for free.</span>
-        <button className="btn-quiet" disabled={!settings?.titles.length} onClick={() => void watchJobCompaniesAndCheck()}>Watch them and check now</button>
-      </div>}
       {selecting && <div className="select-bar" role="toolbar" aria-label="Selected matches">
         <strong aria-live="polite">{selected.size ? `${plural(selected.size, "job")} selected` : "Click jobs to select them"}</strong>
         <button className="btn-link" onClick={() => setSelected(new Set(visibleNew))}>Select all {visibleNew.length} new</button>
@@ -278,13 +250,11 @@ export function JobSearchView({ ranking = DEFAULT_RANKING, status, focusId, onQu
         <section className="jobs-group" aria-labelledby="find-above"><h2 id="find-above">At or above your bar ({bar.toFixed(1)}) <span>{above.length}</span> <InfoTip label="About fit scores">Quick fit is the app's own check of your resume and checked work records against the posting's requirements (no quota). Scores marked Agy are its light rating of the requirements against a short card of your roles, skills, and story. The full rating runs when you draft an application.</InfoTip></h2>
           {above.length ? <ul className="find-list">{above.map(renderItem)}</ul> : <p className="muted">Nothing above your bar in this search.</p>}</section>
         {below.length > 0 && <details className="jobs-group"><summary><h2>Below your bar <span>{below.length}</span></h2></summary>
-          <p className="muted">Live postings that scored under {bar.toFixed(1)} or have a blocker. They're never drafted automatically.</p>
           <ul className="find-list">{below.map(renderItem)}</ul></details>}
       </>}
     </div>}
 
     {(tab === "drafting" || tab === "saved" || tab === "dismissed") && <div role="tabpanel" aria-labelledby={`job-search-tab-${tab}`}>
-      <p className="muted find-tab-note">{tab === "drafting" ? "Jobs you sent to the queue for a tailored resume and letter. Each becomes a job in Jobs once Agy finishes." : tab === "saved" ? "Jobs you saved for later. They're in Jobs as Saved." : "Jobs you dismissed. They never come back in a search; restore one to see it in Matches again."}</p>
       {(() => { const list = tab === "drafting" ? drafting : tab === "saved" ? savedItems : dismissedItems; return list.length ? <ul className="find-list">{list.map(renderItem)}</ul> : <p className="muted">Nothing here yet.</p>; })()}
     </div>}
 

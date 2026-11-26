@@ -118,12 +118,14 @@ describe("Lists that repeat themselves (U82, #167)", () => {
     expect(setup).toContain("defaultOpen={done < items.length}");
   });
 
-  it("Job Search has a neutral one-line notice and the Quick fit note as a tip", async () => {
+  it("Job Search keeps the Quick fit note as a tip and has no notices or per-match explanations (#201)", async () => {
     const search = await readFile("src/renderer/JobSearchView.tsx", "utf8");
     const css = await readFile("src/renderer/layout.css", "utf8");
     expect(search).toContain('<InfoTip label="About fit scores">');
     expect(search).not.toContain("find-note");
-    expect(css.match(/\.find-callout \{[^}]*\}/)?.[0]).not.toContain("border-left");
+    expect(css).not.toContain(".find-callout");
+    for (const gone of ["find-callout", "find-why", "find-tab-note", "Quick check:", "Ranked by", "To learn:"]) expect(search, gone).not.toContain(gone);
+    expect(css.match(/\.find-actions \{[^}]*\}/)?.[0]).toContain("flex-wrap: nowrap");
   });
 
   it("Settings tabs are a vertical list", async () => {

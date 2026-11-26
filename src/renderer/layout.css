@@ -760,7 +760,7 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 /* Job Search (src/renderer/JobSearchView.tsx) */
 .job-search .page-head > .btn-primary { flex: none; }
 .find-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.find-row { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3); align-items: start; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); }
+.find-row { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3); align-items: center; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); }
 .find-row:has(> input[type="checkbox"]) { grid-template-columns: auto auto 1fr; cursor: pointer; }
 .find-row.is-selected { border-color: var(--line-strong); box-shadow: inset 3px 0 0 var(--accent); }
 .find-main { min-width: 0; }
@@ -770,12 +770,12 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .find-row.is-focused { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
 .find-main p { margin: var(--space-1) 0 0; }
 .find-facts { color: var(--muted); font-size: var(--fs-13); }
-.find-why { font-size: var(--fs-13); }
 .find-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .find-tag { padding: 1px 8px; border-radius: var(--radius-pill); background: var(--brass-tint); color: var(--ink); font-size: var(--fs-12); }
 .find-tag.is-blocker { background: var(--risk-tint); color: var(--risk); }
 .find-tag.is-gap { background: transparent; border: 1px solid var(--line); color: var(--muted); }
-.find-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); justify-content: flex-end; align-items: center; max-width: 260px; }
+.find-actions { display: flex; flex-wrap: nowrap; gap: var(--space-2); justify-content: flex-end; align-items: center; align-self: center; white-space: nowrap; }
+.find-actions .btn-link { font-size: var(--fs-13); }
 .find-sort select { margin-left: var(--space-1); }
 .find-runs { display: grid; gap: var(--space-2); padding: 0; list-style: none; font-size: var(--fs-13); }
 .search-settings { display: grid; gap: var(--space-4); max-width: 760px; }
@@ -794,7 +794,6 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .watched-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; font-size: var(--fs-13); }
 .find-main .find-tag { margin-left: var(--space-2); }
 .fit-badge-source { display: block; font-size: 10px; font-weight: 500; line-height: 1; opacity: 0.8; }
-.find-callout { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; margin-bottom: var(--space-3); padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-m); background: var(--raised); font-size: var(--fs-13); }
 .find-schedule { font-size: var(--fs-13); }
 .setup-status { margin: 0 0 var(--card-gap); color: var(--muted); font-size: var(--fs-13); }
 .find-schedule.is-off { color: var(--ink); }
@@ -819,7 +818,6 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .search-checks input[type="checkbox"], .search-checks input[type="radio"] { width: 14px; height: 14px; }
 .search-field > span { font-size: var(--fs-12); font-weight: 600; letter-spacing: .01em; }
 .search-check { padding: 2px 0; }
-.find-tab-note { margin: 0 0 var(--space-3); font-size: var(--fs-13); }
 .search-field input[type="number"], .search-field input[type="time"] { max-width: 180px; }
 
 /* Setup → Your folders (WorkspaceFolders.tsx) */
@@ -1059,7 +1057,6 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .behavior-ranking h2 { margin: 0; font: 600 var(--fs-15) var(--font-ui); }
 .behavior-slider { display: grid; gap: 2px; max-width: 460px; }
 .behavior-slider small { font-size: var(--fs-12); }
-.find-rank { font-size: var(--fs-12); }
 
 /* Bento (ledger U77 Today pilot, U78 every page). Shared surfaces: every card-like template gets the same raised card
    (shadow, specular edge, radius). This block is the only place the card shadows are used. The Today grid follows the
