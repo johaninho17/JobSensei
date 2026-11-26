@@ -123,7 +123,7 @@ describe("workspace map and stray items", () => {
     expect(Object.keys(by).sort()).toEqual(["Alex Morgan Resume.pdf", "call.m4a", "notes.md", "old-drafts", "photo.heic", "run.paste-2.json"]);
     expect(by["Alex Morgan Resume.pdf"]).toMatch(/resumes\//);
     expect(by["notes.md"]).toMatch(/context\/broad\//);
-    expect(by["call.m4a"]).toMatch(/debrief\/<company>\//);
+    expect(by["call.m4a"]).toMatch(/Move it into debrief\/ \(Tidy files names it\)/);
     expect(by["old-drafts"]).toMatch(/doesn't read this folder/);
     expect(by["run.paste-2.json"]).toMatch(/archive\//);
     expect(by["photo.heic"]).toMatch(/doesn't read files here/);

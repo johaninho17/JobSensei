@@ -45,21 +45,60 @@ export function usedInText(usedIn: UsedIn[]): string {
  * review workflow treats as practice (.agents/workflows/jobsensei-interview-review.md step 6). */
 export type RecordingKind = "interview" | "practice";
 
-/** Where an added recording goes (logical path; the layout maps it to disk). A real interview goes under its job's ID,
- * so the scan matches it to that job; without a job it goes to "other". */
-export function recordingFolder(kind: RecordingKind, jobId: string | null): string {
-  if (kind === "practice") return "debrief/mock-interviews";
-  return `debrief/${jobId && /^[a-z0-9][a-z0-9-]*$/.test(jobId) ? jobId : "other"}`;
+/** Where an added recording goes: always `debrief/` itself, no subfolders (#244). The file's name links it to its job. */
+export function recordingFolder(_kind: RecordingKind, _jobId: string | null): string {
+  return "debrief";
 }
 
-/** A practice interview (a mock with an AI interviewer or a friend): saved under mock-interviews/, or named mock,
+/**
+ * The name an added recording gets (#244): `<job-or-company>-<stage>[-n].<ext>` for an interview, `mock-<name>` for
+ * practice. `prefix` is the company, or the job ID when the company has more than one job, so the name alone links it.
+ */
+export function recordingName(original: string, kind: RecordingKind, prefix: string | null, stage: string | null): string {
+  const dot = original.lastIndexOf(".");
+  const ext = dot > 0 ? original.slice(dot).toLowerCase() : "";
+  const stem = (dot > 0 ? original.slice(0, dot) : original).toLowerCase().replace(/\(\d+\)/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (kind === "practice") return `${stem.startsWith("mock") ? stem : `mock-${stem || "interview"}`}${ext}`;
+  const head = prefix ? prefix.toLowerCase().replace(/[^a-z0-9]+/g, "-") : null;
+  const rest = head && stem.startsWith(`${head}-`) ? stem.slice(head.length + 1) : stem;
+  return `${[head, stage ?? (rest || "interview")].filter(Boolean).join("-")}${ext}`;
+}
+
+/** A practice interview (a mock with an AI interviewer or a friend): named mock (or under an older mock-interviews/ folder),
  * simulation, or practice. It belongs to no job (review workflow step 6). */
 export function isPracticeRecording(path: string): boolean {
   const normal = path.replace(/\\/g, "/");
-  return /(^|\/)mock-interviews\//.test(normal) || /\b(mock|simulation|practice)\b/i.test(normal.split("/").pop() ?? "");
+  return /(^|\/)mock-interviews\//.test(normal) || /\b(mock|simulation|practice)\b/i.test((normal.split("/").pop() ?? "").replace(/_/g, " "));
 }
 
 /** A changed path (logical or tidy-layout disk path) is a recording, so the Interviews badge and list refresh. */
 export function isRecordingPath(path: string): boolean {
   return /^(?:debrief|interviews\/recordings)\//.test(path.replace(/\\/g, "/")) && !/^debrief\/interview-memory\//.test(path);
+}
+
+const STAGE_WORDS: Array<[RegExp, string]> = [
+  [/recruit|\bscreen\b|phone/i, "recruiter"],
+  [/hiring[\s_-]*manager|\bhm\b|\bmanager\b/i, "hiring-manager"],
+  [/technical|\btech\b|coding|practical|\bcase\b/i, "technical"],
+  [/panel|onsite|on-site|final/i, "panel"],
+  [/\bintro\b/i, "intro"],
+];
+
+/** The stage words in a name, in interview order ("recruiter-hiring-manager"); "interview" when it only says so. */
+export function stageOf(name: string): string | null {
+  const words = name.replace(/[_]+/g, " ");
+  const found = STAGE_WORDS.filter(([pattern]) => pattern.test(words)).map(([, stage]) => stage);
+  const stages = [...new Set(found)].join("-");
+  const summary = /\bsummary\b/i.test(words) ? "-summary" : "";
+  if (stages) return stages + summary;
+  return /interview|intrerview|transcript/i.test(words) ? `interview${summary}` : null;
+}
+
+/** Whether a job ID is at this company: "product-board-ai-cse" matches "productboard" and "product-board" (#244). */
+export function jobAtCompany(jobId: string, company: string): boolean {
+  const key = company.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!key) return false;
+  const segments = jobId.split("-");
+  for (let n = 1; n <= Math.min(3, segments.length); n += 1) if (segments.slice(0, n).join("") === key) return true;
+  return false;
 }

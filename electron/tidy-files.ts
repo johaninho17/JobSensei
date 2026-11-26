@@ -1,30 +1,23 @@
-// Tidy files (issue #238): one shape for interview recordings and no leftovers. Every recording lives in its job's
-// folder (`debrief/<job-id>/`, which is how the recording scan links it to the job) and is named
-// `<company>-<stage>[-<date>][-n].<ext>`; practice runs go to `debrief/mock-interviews/mock-<n>`, notes to
-// `debrief/notes/`, and recordings with no job to `debrief/other/`. A job's own `transcripts/` folder joins its debrief
-// folder. Leftovers (.DS_Store, debug run files at the top, original_jd.txt beside original_jd.md) go to a backup,
+// Tidy files (issues #238, #244): one shape for interview recordings and no leftovers. Every recording sits straight in
+// `debrief/` (no subfolders), named `<company>-<stage>[-<date>][-n].<ext>` (the job ID instead of the company when the
+// company has more than one job), which is how the recording scan links it to its job; practice runs are `mock-…`. A
+// job's own `transcripts/` folder joins them. Leftovers (.DS_Store, debug run files at the top, original_jd.txt beside original_jd.md) go to a backup,
 // never deleted. Apply writes a manifest, so Undo puts everything back; the import ledger's paths move with the files,
 // so nothing reads as new. Paths are logical (the layout maps them to disk).
 import { copyFile, mkdir, readFile, readdir, rename, rmdir, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { readJson, writeJsonAtomic, writeTextAtomic } from "./persistence";
 import { assertInsideWorkspace, workspaceFile } from "./workspace";
-import { isPracticeRecording } from "../src/shared/recordings";
+import { isPracticeRecording, jobAtCompany, stageOf } from "../src/shared/recordings";
+export { stageOf };
 
 export type TidyMove = { from: string; to: string; why: string };
 export type TidyPlan = { moves: TidyMove[]; toBackup: Array<{ path: string; why: string }> };
 export type TidyJob = { id: string; reached: boolean };
 
-const KEEP_FOLDERS = /^debrief\/(?:interview-memory|notes)\//;
+const KEEP_FOLDERS = /^debrief\/interview-memory\//;
 const TIDY_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*\.[a-z0-9]+$/;
 const NOTE_NAME = /\b(?:review|scan|index|readme|routing)\b/i;
-const STAGE_WORDS: Array<[RegExp, string]> = [
-  [/recruit|\bscreen\b|phone/i, "recruiter"],
-  [/hiring[\s_-]*manager|\bhm\b|\bmanager\b/i, "hiring-manager"],
-  [/technical|\btech\b|coding|practical|\bcase\b/i, "technical"],
-  [/panel|onsite|on-site|final/i, "panel"],
-  [/\bintro\b/i, "intro"],
-];
 
 const slug = (value: string) => value.toLowerCase().replace(/\(\d+\)/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 const extOf = (name: string) => { const dot = name.lastIndexOf("."); return dot > 0 ? name.slice(dot).toLowerCase() : ""; };
@@ -32,15 +25,6 @@ const stem = (name: string) => { const dot = name.lastIndexOf("."); return dot >
 /** The name without a leading company word ("IronSite_recruiter.md" → "recruiter.md"). */
 const withoutCompany = (name: string, company: string) => name.replace(new RegExp(`^${company.replace(/[^a-z0-9]/gi, "")}[\\s_-]*`, "i"), "");
 
-/** The stage words in a name, in interview order ("recruiter-hiring-manager"); "interview" when it only says so. */
-export function stageOf(name: string): string | null {
-  const words = name.replace(/[_]+/g, " ");
-  const found = STAGE_WORDS.filter(([pattern]) => pattern.test(words)).map(([, stage]) => stage);
-  const stages = [...new Set(found)].join("-");
-  const summary = /\bsummary\b/i.test(words) ? "-summary" : "";
-  if (stages) return stages + summary;
-  return /interview|intrerview|transcript/i.test(words) ? `interview${summary}` : null;
-}
 
 /** A date (and time) in a name, kept so several transcripts of one stage stay apart: "-2026-07-31-2013". */
 function dateOf(name: string): string {
@@ -54,75 +38,84 @@ export function jobFor(company: string, jobs: TidyJob[]): string | null {
   if (!key) return null;
   const exact = jobs.find((job) => job.id === key);
   if (exact) return exact.id;
-  const matches = jobs.filter((job) => job.id.startsWith(`${key}-`));
+  const matches = jobs.filter((job) => jobAtCompany(job.id, key));
   if (matches.length === 1) return matches[0]!.id;
   const reached = matches.filter((job) => job.reached);
   return reached.length === 1 ? reached[0]!.id : null;
 }
 
+/** The start of a recording's name: the company, or the job ID when the company has more than one job (#244). */
+function prefixFor(jobId: string, jobs: TidyJob[], company = jobId.split("-")[0]!): string {
+  const key = company.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return jobs.filter((job) => jobAtCompany(job.id, key)).length > 1 ? jobId : key;
+}
+
 /**
- * The tidy plan for these recording files (logical paths under debrief/ and jobs/<id>/transcripts/), the jobs, and
- * the leftovers found. `existing` holds every file already in debrief/, so new names never collide.
+ * The tidy plan (#238, flat since #244): every recording sits directly in debrief/, named
+ * `<company or job-id>-<stage>[-<date>][-n].<ext>`; practice runs `mock-…`. Recordings come from debrief/ (any depth)
+ * and jobs/<id>/transcripts/; debrief/interview-memory/ (the app's own data) stays. `existing` holds files already in
+ * debrief/, so new names never collide.
  */
 export function planTidy(input: { recordings: string[]; jobs: TidyJob[]; leftovers: Array<{ path: string; why: string }>; existing?: string[] }): TidyPlan {
-  const taken = new Set((input.existing ?? []).map((path) => path.toLowerCase()));
+  const taken = new Set((input.existing ?? []).filter((path) => path.split("/").length === 2).map((path) => path.toLowerCase()));
   const moves: TidyMove[] = [];
   const jobIds = new Set(input.jobs.map((job) => job.id));
-  const claim = (folder: string, base: string, ext: string) => {
-    let name = `${folder}/${base}${ext}`;
-    for (let n = 2; taken.has(name.toLowerCase()); n += 1) name = `${folder}/${base}-${n}${ext}`;
+  const claim = (base: string, ext: string) => {
+    let name = `debrief/${base}${ext}`;
+    for (let n = 2; taken.has(name.toLowerCase()); n += 1) name = `debrief/${base}-${n}${ext}`;
     taken.add(name.toLowerCase());
     return name;
   };
-  for (const path of [...input.recordings].sort()) {
+  for (const path of [...input.recordings].sort((x, y) => x.split("/").length - y.split("/").length || x.localeCompare(y))) {
     if (KEEP_FOLDERS.test(path)) continue;
     const parts = path.split("/");
     const name = parts.at(-1)!;
-    // Already tidy: a plain lowercase name in a job folder, other/, or mock-interviews/. A second run changes nothing.
-    if (parts.length === 3 && parts[0] === "debrief" && (parts[1] === "other" || parts[1] === "mock-interviews" || jobIds.has(parts[1]!)) && TIDY_NAME.test(name)) { taken.add(path.toLowerCase()); continue; }
     const ext = extOf(name);
-    let folder: string;
+    // Already tidy: a plain lowercase name straight in debrief/. A second run changes nothing.
+    if (parts.length === 2 && parts[0] === "debrief" && TIDY_NAME.test(name)) continue;
     let base: string;
     let why: string;
-    if (path.startsWith("jobs/")) {
+    const folder = parts.length > 2 && parts[0] === "debrief" ? parts[1]! : null;
+    if (folder && (jobIds.has(folder) || ["other", "mock-interviews", "notes"].includes(folder)) && TIDY_NAME.test(name)) {
+      // Made by the first Tidy (folders): the name is right, the folder goes. A company with more than one job gets the
+      // job ID at the front, so the name alone links it.
+      base = stem(name);
+      if (jobIds.has(folder)) {
+        const company = folder.split("-")[0]!;
+        const prefix = prefixFor(folder, input.jobs);
+        if (prefix !== company && base.startsWith(`${company}-`)) base = `${prefix}-${base.slice(company.length + 1)}`;
+      }
+      why = "Recordings sit straight in debrief/";
+    } else if (path.startsWith("jobs/")) {
       const jobId = parts[1]!;
       const company = jobId.split("-")[0]!;
       const sub = parts.slice(3, -1).join(" ");
       if (/\b(?:mock|practice|simulation)\b/i.test(sub.replace(/[_-]+/g, " "))) {
-        // A practice call for this job is still practice: it belongs to no job (review workflow step 6).
-        folder = "debrief/mock-interviews";
         base = `${company}-mock${/\bsummary\b/i.test(name.replace(/_/g, " ")) ? "-summary" : ""}`;
         why = "Practice interview";
       } else {
         const stage = stageOf(`${sub} ${withoutCompany(name, company)}`);
-        folder = `debrief/${jobId}`;
-        base = `${company}-${stage ?? slug(stem(name))}${dateOf(name)}`;
-        why = "A job's transcripts belong with its recordings";
+        base = `${prefixFor(jobId, input.jobs)}-${stage ?? slug(stem(name))}${dateOf(name)}`;
+        why = "A job's transcripts sit with the other recordings";
       }
     } else if (isPracticeRecording(path)) {
       const number = /(\d+)(?!.*\d)/.exec(stem(name))?.[1];
-      folder = "debrief/mock-interviews";
-      base = number ? `mock-${number}` : `mock-${slug(stem(name))}`;
+      base = number ? `mock-${number}` : `mock-${slug(stem(name)).replace(/^mock-?/, "") || "interview"}`;
       why = "Practice interview";
     } else if (NOTE_NAME.test(name.replace(/_/g, " ")) && (stageOf(name) ?? "interview").startsWith("interview")) {
-      folder = "debrief/notes";
       base = slug(stem(name));
-      why = "Notes, not a recording";
+      why = "Notes";
     } else {
-      const inFolder = parts.length > 2 ? parts[1]! : null;
-      const company = inFolder ?? stem(name).split(/[_\s-]+/)[0]!;
+      const company = folder ?? stem(name).split(/[_\s-]+/)[0]!;
       const jobId = jobFor(company, input.jobs);
-      const companyName = (jobId ?? slug(company)).split("-")[0]!;
-      // The stage is read after the company's name, so a company like "IronSite" never reads as "onsite".
-      const rest = withoutCompany(name, companyName);
+      const key = (jobId && !jobAtCompany(jobId, company) ? jobId.split("-")[0]! : company).toLowerCase().replace(/[^a-z0-9]/g, "");
+      // The stage is read after the company's name, so "IronSite" never reads as "onsite".
+      const rest = withoutCompany(name, key);
       const stage = stageOf(rest) ?? (slug(stem(rest)) || "interview");
-      folder = `debrief/${jobId ?? "other"}`;
-      base = `${companyName}-${stage}${dateOf(name)}`;
+      base = `${jobId ? prefixFor(jobId, input.jobs, key) : key}-${stage}${dateOf(name)}`;
       why = jobId ? `Recording for job ${jobId}` : "Recording with no matching job";
     }
-    const target = `${folder}/${base}${ext}`;
-    if (target.toLowerCase() === path.toLowerCase()) { taken.add(path.toLowerCase()); continue; }
-    moves.push({ from: path, to: claim(folder, base, ext), why });
+    moves.push({ from: path, to: claim(base, ext), why });
   }
   return { moves, toBackup: input.leftovers };
 }
@@ -233,6 +226,8 @@ export async function applyWorkspaceTidy(workspacePath: string, now = new Date()
   }
   await pruneEmpty(root, "debrief");
   for (const step of done) if (step.from.startsWith("jobs/")) await pruneEmpty(root, step.from.split("/").slice(0, 3).join("/"));
+  // An earlier tidy's record is kept beside this one's backup, so its moves can still be traced.
+  if (await exists(root, MANIFEST)) { await mkdir(dirname(workspaceFile(root, `${backup}/previous-tidy-files.json`)), { recursive: true }); await copyFile(workspaceFile(root, MANIFEST), workspaceFile(root, `${backup}/previous-tidy-files.json`)); }
   const manifest: Manifest = { at: now.toISOString(), backup, moves: done, backedUp, rewritten };
   await writeJsonAtomic(workspaceFile(root, MANIFEST), manifest);
   return manifest;

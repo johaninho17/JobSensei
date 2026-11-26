@@ -122,6 +122,8 @@ describe("job matching", () => {
   it("matches a recording's folder to exactly one job", () => {
     expect(matchJob("debrief/Northstar/call.md", ["northstar-support-engineer", "orbit-analyst"])).toBe("northstar-support-engineer");
     expect(matchJob("debrief/orbit/call.md", ["orbit-analyst", "orbit-analyst-2"])).toBeNull();
-    expect(matchJob("debrief/review.md", ["review-lead"])).toBeNull();
+    // A flat recording is linked by its name (#244); a name that names no job links to none.
+    expect(matchJob("debrief/review.md", ["review-lead"])).toBe("review-lead");
+    expect(matchJob("debrief/granola-notes.md", ["review-lead"])).toBeNull();
   });
 });

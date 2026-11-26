@@ -2,7 +2,7 @@
 // never loses content without a better replacement (`.agents/workflows/jobsensei-interview-review.md` step 4 owns the
 // rule for Agy; this file owns the check).
 import { CAREER_LOCK, withWriteLock } from "./write-lock";
-import { isPracticeRecording, usageByRecording, waitingToImport, type UsedIn } from "../src/shared/recordings";
+import { isPracticeRecording, jobAtCompany, usageByRecording, waitingToImport, type UsedIn } from "../src/shared/recordings";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -115,12 +115,21 @@ export async function scanRecordings(workspacePath: string, jobIds: string[] = [
   return recordings;
 }
 
-/** The job whose ID starts with the recording's folder name ("debrief/northstar/…" → "northstar-support-engineer"), when only one does. */
+/**
+ * The job a recording belongs to (#244). Recordings sit directly in debrief/ and their name links them: a name that
+ * starts with a job ID ("sprig-customer-success-engineer-recruiter.md") is that job; otherwise its first word is the
+ * company ("arize-recruiter.md"), when only one job is at that company. An older recording in a folder
+ * ("debrief/northstar/…") still matches by the folder's name.
+ */
 export function matchJob(path: string, jobIds: string[]): string | null {
-  const folder = path.split("/")[1]?.toLowerCase().replace(/[^a-z0-9]+/g, "-") ?? "";
-  if (!folder || !path.split("/")[2]) return null;
-  const matches = jobIds.filter((id) => id === folder || id.startsWith(`${folder}-`));
-  return matches.length === 1 ? matches[0]! : null;
+  const parts = path.split("/");
+  const slug = (value: string) => value.toLowerCase().replace(/\.[a-z0-9]+$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const byPrefix = (key: string) => { const matches = jobIds.filter((id) => id === key || jobAtCompany(id, key)); return matches.length === 1 ? matches[0]! : null; };
+  if (parts.length > 2) return parts[1] ? byPrefix(slug(parts[1])) : null;
+  const name = slug(parts[1] ?? "");
+  if (!name) return null;
+  const named = jobIds.filter((id) => name === id || name.startsWith(`${id}-`)).sort((a, b) => b.length - a.length)[0];
+  return named ?? byPrefix(name.split("-")[0]!);
 }
 
 // ---- Content snapshot and change check -------------------------------------------------------------------

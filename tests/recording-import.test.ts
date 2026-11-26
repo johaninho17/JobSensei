@@ -19,21 +19,22 @@ async function setup() {
 }
 
 describe("adding recordings from the app (#16)", () => {
-  it("puts a real interview under its job and a practice interview in mock-interviews", () => {
-    expect(recordingFolder("interview", "northstar-solutions-engineer")).toBe("debrief/northstar-solutions-engineer");
-    expect(recordingFolder("interview", null)).toBe("debrief/other");
-    expect(recordingFolder("interview", "../escape")).toBe("debrief/other");
-    expect(recordingFolder("practice", "northstar-solutions-engineer")).toBe("debrief/mock-interviews");
+  it("puts every recording straight in debrief/, with no subfolders (#244)", () => {
+    expect(recordingFolder("interview", "northstar-solutions-engineer")).toBe("debrief");
+    expect(recordingFolder("interview", null)).toBe("debrief");
+    expect(recordingFolder("interview", "../escape")).toBe("debrief");
+    expect(recordingFolder("practice", "northstar-solutions-engineer")).toBe("debrief");
   });
 
   it("copies the files, which the scan lists as new and matched to the job", async () => {
     const { root, transcript, mock } = await setup();
-    expect((await importRecordings(root, [transcript], "interview", "northstar-solutions-engineer")).added).toEqual(["debrief/northstar-solutions-engineer/recruiter-call.txt"]);
-    expect((await importRecordings(root, [mock], "practice", null)).added).toEqual(["debrief/mock-interviews/mock-1.md"]);
+    // Named by company and stage, so the name alone links it to the job (#244).
+    expect((await importRecordings(root, [transcript], "interview", "northstar-solutions-engineer")).added).toEqual(["debrief/northstar-recruiter.txt"]);
+    expect((await importRecordings(root, [mock], "practice", null)).added).toEqual(["debrief/mock-1.md"]);
     const waiting = waitingToImport(await scanRecordings(root, ["northstar-solutions-engineer"]));
     expect(waiting.map((recording) => [recording.path, recording.jobId])).toEqual([
-      ["debrief/mock-interviews/mock-1.md", null],
-      ["debrief/northstar-solutions-engineer/recruiter-call.txt", "northstar-solutions-engineer"],
+      ["debrief/mock-1.md", null],
+      ["debrief/northstar-recruiter.txt", "northstar-solutions-engineer"],
     ]);
     expect(await readFile(transcript, "utf8")).toContain("Tell me about");
   });

@@ -33,7 +33,7 @@ export async function importContextFiles(workspacePath: string, sources: string[
  * ("notes-2.md"), skips folders, unreadable types, files over 20 MB, and exact copies already there. Shared by career
  * context and interview recordings (electron/recording-import.ts).
  */
-export async function copyFilesInto(workspacePath: string, folderRelative: string, sources: string[], extensions: string[]): Promise<ImportResult> {
+export async function copyFilesInto(workspacePath: string, folderRelative: string, sources: string[], extensions: string[], rename?: (name: string) => string): Promise<ImportResult> {
   const root = resolve(workspacePath);
   const folder = workspaceFile(root, folderRelative);
   await mkdir(folder, { recursive: true });
@@ -55,7 +55,7 @@ export async function copyFilesInto(workspacePath: string, folderRelative: strin
     }));
     const duplicate = duplicates.find(Boolean);
     if (duplicate) { result.skipped.push({ name, reason: `already added as ${duplicate}` }); result.added.push(`${folderRelative}/${duplicate}`); continue; }
-    const target = await freeName(folder, name);
+    const target = await freeName(folder, rename ? rename(name) : name);
     await copyFile(absolute, join(folder, target));
     result.added.push(`${folderRelative}/${target}`);
   }

@@ -37,7 +37,7 @@ export const LAYOUT_V2_FOLDERS: ReadonlyArray<readonly [folder: string, purpose:
   ["career/records", "Work records: the facts drafts are built from"],
   ["career/notes", "Notes and documents that add background"],
   ["jobs", "One folder per job"],
-  ["interviews/recordings", "Interview recordings and transcripts, one folder per job"],
+  ["interviews/recordings", "Interview recordings and transcripts, one folder, named by company and stage"],
   ["interviews/memory", "What interviewers asked, by kind of role"],
   ["archive", "Older and duplicate files the app no longer uses; nothing is deleted"],
 ];
@@ -91,7 +91,7 @@ function suggestHome(entry: RootEntry, version: LayoutVersion, notes: string, re
   }
   if (/^run\.paste-.*\.json$/i.test(entry.name)) return "Leftover from an old run. Move it to archive/.";
   if (DOCUMENT.test(entry.name) && /(resume|résumé|\bcv\b)/i.test(entry.name)) return "Looks like a resume. Move it to resumes/.";
-  if (RECORDING.test(entry.name)) return `Looks like an interview recording. Move it to ${recordings}/<company>/.`;
+  if (RECORDING.test(entry.name)) return `Looks like an interview recording. Move it into ${recordings}/ (Tidy files names it).`;
   if (DOCUMENT.test(entry.name)) return `If it's about your career, add it from Profile → Sources (it goes to ${notes}/).`;
   return "The app doesn't read files here. Move it into a folder, or to archive/.";
 }
