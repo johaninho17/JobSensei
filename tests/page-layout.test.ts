@@ -267,3 +267,14 @@ describe("Fit lists as tabs inside the card (#226)", () => {
     expect(page).toMatch(/<span>\{list\.label\}<\/span><strong className="tabular">\{list\.items\.length\}<\/strong>/);
   });
 });
+
+describe("Job page alignment (#235)", () => {
+  it("centers the page and its document with the Agy panel closed, and gives the header controls one height", async () => {
+    const css = await readFile("src/renderer/layout.css", "utf8");
+    expect(css).toMatch(/\.job-page \{ max-width: 1180px; margin-inline: auto; \}/);
+    expect(css).toMatch(/\.jobs-home \{ max-width: 1180px; margin-inline: auto; \}/);
+    expect(css).toMatch(/\.doc-inline \{ max-width: 820px; margin-inline: auto;/);
+    expect(css).toMatch(/\.framing-review \{ max-width: 820px; margin: 0 auto/);
+    expect(css).toMatch(/\.job-head-meta \.check-chip, \.job-head-meta \.tracker-select select, \.job-head-meta \.pdf-menu > summary \{[^}]*height: 32px/);
+  });
+});
