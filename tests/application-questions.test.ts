@@ -85,9 +85,13 @@ describe("form readers", () => {
     expect(formSource("https://jobs.ashbyhq.com/northstar/abc-123?utm_source=x")).toEqual({ board: "ashby", parts: ["northstar", "abc-123"] });
     expect(formSource("https://jobs.lever.co/northstar/abc-123")).toEqual({ board: "lever", parts: ["https://jobs.lever.co", "northstar", "abc-123"] });
     expect(formSource("https://northstar.wd5.myworkdayjobs.com/en-US/careers/job/123")).toBeNull();
-    let called = false;
-    const fetcher = (async () => { called = true; return new Response("{}"); }) as unknown as typeof fetch;
+    // Systems with no public form are never fetched; another page is read once for an embedded board (#175).
+    const asked: string[] = [];
+    const fetcher = (async (input: unknown) => { asked.push(String(input)); return new Response("<h1>Role</h1>"); }) as unknown as typeof fetch;
+    expect(await fetchApplicationForm("https://northstar.wd5.myworkdayjobs.com/en-US/careers/job/123", fetcher)).toBeNull();
+    expect(await fetchApplicationForm("https://jobs.smartrecruiters.com/Northstar/123", fetcher)).toBeNull();
+    expect(asked).toEqual([]);
     expect(await fetchApplicationForm("https://careers.example.com/jobs/1", fetcher)).toBeNull();
-    expect(called).toBe(false);
+    expect(asked).toEqual(["https://careers.example.com/jobs/1"]);
   });
 });

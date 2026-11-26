@@ -3,6 +3,7 @@
 // `preferences.applicationFacts.extra`. Nothing here reaches Agy.
 import { join } from "node:path";
 import { applicationFactsSchema, candidateProfileSchema, type CandidateProfile } from "../src/shared/schemas";
+import { LOGISTICS_FACT_KEYS, PROFILE_FACT_KEYS, type ProfileFactKey } from "../src/shared/profile-answers";
 import { candidateProfileRelativePath, readCandidateProfile } from "./candidate-profile";
 import { writeJsonAtomic } from "./persistence";
 
@@ -28,7 +29,30 @@ export async function saveApplicationFacts(folder: string, input: FactsInput): P
   const next = candidateProfileSchema.parse({
     ...current,
     identity: { ...current.identity, email: orNull(text(input.email), current.identity.email), phone: orNull(text(input.phone, 60), current.identity.phone), location: orNull(text(input.location, 120), current.identity.location), links },
-    preferences: { ...current.preferences, interview: logistics, applicationFacts: { extra } },
+    preferences: { ...current.preferences, interview: logistics, applicationFacts: { ...current.preferences.applicationFacts, extra } },
+    updatedAt: new Date().toISOString(),
+  });
+  await writeJsonAtomic(join(folder, candidateProfileRelativePath), next);
+  return next;
+}
+
+/**
+ * Saves one application fact from the Questions tab (issue #161) to its owner: interview logistics for the five shared
+ * ones, `applicationFacts.answers` for the rest. Every job's form questions then use it.
+ */
+export async function saveProfileFact(folder: string, key: ProfileFactKey, value: string): Promise<CandidateProfile> {
+  if (!(PROFILE_FACT_KEYS as readonly string[]).includes(key)) throw new Error("Unknown profile fact.");
+  const current = await readCandidateProfile(folder);
+  if (!current) throw new Error("Finish setup first: there's no candidate profile to save this to.");
+  const clean = value.trim().slice(0, 300);
+  const isLogistics = (LOGISTICS_FACT_KEYS as readonly string[]).includes(key);
+  const next = candidateProfileSchema.parse({
+    ...current,
+    preferences: {
+      ...current.preferences,
+      interview: isLogistics ? { ...current.preferences.interview, [key]: clean } : current.preferences.interview,
+      applicationFacts: isLogistics ? current.preferences.applicationFacts : { ...current.preferences.applicationFacts, answers: { ...current.preferences.applicationFacts.answers, [key]: clean } },
+    },
     updatedAt: new Date().toISOString(),
   });
   await writeJsonAtomic(join(folder, candidateProfileRelativePath), next);

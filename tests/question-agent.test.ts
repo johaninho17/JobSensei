@@ -109,7 +109,8 @@ describe("background question answers", () => {
     await agent.ask(JOB, "How did you find this job posting?");
     expect(prompts).toHaveLength(2);
     const logistics = await agent.get(JOB);
-    expect(logistics!.answers.find((answer) => answer.id === "q:3")).toMatchObject({ decision: "skip", reason: expect.stringMatching(/Logistics/) });
+    // No profile in this workspace, so the fact is asked for (never guessed) and keeps its key for saving in place.
+    expect(logistics!.answers.find((answer) => answer.id === "q:3")).toMatchObject({ decision: "skip", factKey: "heardAbout", reason: expect.stringMatching(/Not in your profile yet/) });
     await agent.answerAnyway(JOB, "q:3");
     expect(prompts).toHaveLength(3);
     expect(prompts[2]).toMatch(/q:3: How did you find this job posting\?\n.*\n  The candidate asked for this one/);

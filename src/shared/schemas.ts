@@ -116,6 +116,17 @@ export const EMPTY_CANDIDATE_TARGETS: CandidateTargets = { roles: [], locations:
  */
 export const applicationFactsSchema = z.object({
   extra: z.array(z.object({ label: z.string().trim().min(1).max(80), value: z.string().trim().max(500) })).max(30).default([]),
+  /**
+   * Form answers that aren't interview logistics, saved once and used on every job's application questions
+   * (src/shared/profile-answers.ts owns which question takes which fact). Blank means "ask the user", never a guess.
+   */
+  answers: z.object({
+    sponsorship: z.string().trim().max(300).default(""),
+    relocation: z.string().trim().max(300).default(""),
+    heardAbout: z.string().trim().max(300).default(""),
+    pronouns: z.string().trim().max(60).default(""),
+    yearsExperience: z.string().trim().max(120).default(""),
+  }).prefault({}),
 });
 export type ApplicationFacts = z.infer<typeof applicationFactsSchema>;
 
@@ -189,7 +200,7 @@ export const candidateProfileSchema = z.object({
     }),
     interview: interviewLogisticsSchema.default(EMPTY_INTERVIEW_LOGISTICS),
     targets: candidateTargetsSchema.default(EMPTY_CANDIDATE_TARGETS),
-    applicationFacts: applicationFactsSchema.default({ extra: [] }),
+    applicationFacts: applicationFactsSchema.prefault({}),
     /** Recruiter Edition (plan Q3): the recruiter's instructions to Agy for this candidate; they win over the recruiter's own. */
     agyInstructions: agyInstructionsSchema.default([]),
     /** How Agy behaves (src/shared/agy-behavior.ts owns the settings, their defaults, and which are connected). */
@@ -1290,16 +1301,24 @@ export type ApplicationQuestion = {
   /** The question asks for the candidate's own words ("Please write this one yourself"): notes only, never a draft. */
   writeYourself: boolean;
   required: boolean;
-  /** Plainly logistics ("How did you hear about us?"): skipped without asking Agy. */
+  /** Logistics or a choice question ("How did you hear about us?", a Yes/No dropdown): answered from the profile (src/shared/profile-answers.ts), never by Agy unless the user asks. */
   logistics?: boolean;
   /** The user pressed "Answer anyway": Agy must answer it, not skip it. */
   force?: boolean;
+  /** A dropdown, yes/no, or checkbox question: its options. Answered from the profile or picked by the user, never by Agy. */
+  options?: string[];
 };
 /** What Agy decided for a question: answer it, skip it (with a reason), or give notes only (write-yourself). */
 export type QuestionDecision = "answer" | "skip" | "notes";
 /** How a question is answered: a real example, why this company, how the candidate would go about it, or other. */
 export type QuestionKind = "experience" | "motivation" | "approach" | "other";
-export type QuestionAnswer = { id: string; text: string | null; notes: string[]; evidenceIds: string[]; storyIds: string[]; words: number; issues: string[]; decision?: QuestionDecision; kind?: QuestionKind; reason?: string | null };
+export type QuestionAnswer = {
+  id: string; text: string | null; notes: string[]; evidenceIds: string[]; storyIds: string[]; words: number; issues: string[]; decision?: QuestionDecision; kind?: QuestionKind; reason?: string | null;
+  /** Where a form-fact answer came from: the candidate profile, or the user typing or picking it for this job. Absent for Agy's answers. */
+  source?: "profile" | "you";
+  /** The profile fact this question asks for (src/shared/profile-answers.ts), so a blank one can be filled in place. */
+  factKey?: import("./profile-answers").ProfileFactKey;
+};
 /** A job's application questions and their background answers (`jobs/<id>/.sensei/application_questions.json`). */
 export type QuestionsState = {
   source: "posting" | "pasted";
@@ -1570,6 +1589,10 @@ export interface SenseiApi {
     retry(jobId: string): Promise<void>;
     /** Answers a question Agy (or the logistics filter) skipped. */
     answerAnyway(jobId: string, questionId: string): Promise<void>;
+    /** Your own answer to one form question on this job (typed or an option picked); empty clears it. */
+    setAnswer(jobId: string, questionId: string, text: string): Promise<void>;
+    /** Saves a blank profile fact from a question (issue #161); every job's form questions then use it. */
+    saveFact(jobId: string, key: import("./profile-answers").ProfileFactKey, value: string): Promise<QuestionsState | null>;
     onUpdated(callback: (jobId: string, state: QuestionsState) => void): () => void;
   };
   queue: {
