@@ -7,6 +7,7 @@ import { basename, join, resolve } from "node:path";
 import { writeJsonAtomic, writeTextAtomic } from "./persistence";
 import { parseJobDescriptionMetadata } from "./job-description";
 import { cleanPosting, postingUrl, splitPageTitle } from "./posting-clean";
+import { appFetch } from "./app-fetch";
 
 /** Fetched postings are staged here until the job is accepted and a job folder exists. */
 export const FETCHED_JD_PATH = ".sensei/fetched_jd.md";
@@ -460,14 +461,14 @@ async function fetchOracleCloudPosting(url: string, fetcher: typeof fetch): Prom
   return { url, title, company, location, suggestedJobId: suggestJobId(company, title), markdown: `${header.join("\n")}\n${body}\n` };
 }
 
-export async function fetchJobDescription(workspacePath: string, url: string, fetcher: typeof fetch = fetch): Promise<FetchedJobDescription> {
+export async function fetchJobDescription(workspacePath: string, url: string, fetcher: typeof fetch = appFetch): Promise<FetchedJobDescription> {
   if (!/^https?:\/\//i.test(url)) throw new Error("Provide a full http(s) job posting URL.");
   const { extracted, form } = await fetchAndClean(url, fetcher);
   return stageFetched(workspacePath, extracted, form);
 }
 
 /** One page or API response as text, with the same browser headers and timeout as posting fetches. */
-export async function fetchText(url: string, fetcher: typeof fetch = fetch, init: RequestInit = {}): Promise<string> {
+export async function fetchText(url: string, fetcher: typeof fetch = appFetch, init: RequestInit = {}): Promise<string> {
   const response = await fetcher(url, {
     ...init,
     headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", Accept: "text/html,application/xhtml+xml,application/json", ...(init.headers as Record<string, string> | undefined) },
@@ -569,7 +570,7 @@ export async function setStagedCompany(workspacePath: string, id: string, compan
  * queue hands Agy a saved posting it loads with `jd:fetch --staged <id>`, the same as a paste. Throws a plain
  * message when the page can't be read, so the user is asked for a paste right away.
  */
-export async function stageLinkJobDescription(workspacePath: string, url: string, id: string, fetcher: typeof fetch = fetch, now = new Date()): Promise<Omit<FetchedJobDescription, "markdown">> {
+export async function stageLinkJobDescription(workspacePath: string, url: string, id: string, fetcher: typeof fetch = appFetch, now = new Date()): Promise<Omit<FetchedJobDescription, "markdown">> {
   if (!/^https?:\/\//i.test(url)) throw new Error("Provide a full http(s) job posting URL.");
   let extracted: Omit<FetchedJobDescription, "fetchedAt">;
   let form: string | null;

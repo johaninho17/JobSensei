@@ -1,4 +1,5 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, powerMonitor, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, powerMonitor, session, shell } from "electron";
+import { useChromiumFallback } from "./app-fetch";
 import { execFile } from "node:child_process";
 import { deleteMemory, listMemory } from "./agy-memory";
 import { conversationExists, deleteConversations, listConversations } from "./agy-conversations";
@@ -791,6 +792,8 @@ async function resolveInitialWorkspacePath(store: SettingsStore): Promise<string
 
 app.whenReady().then(async () => {
   setPageRenderer(renderPage);
+  // A site that refuses Node's fetch is asked again through Chromium's network stack (issue #171).
+  useChromiumFallback((input, init) => net.fetch(input as string | Request, init));
   // A morning search the computer slept through runs when it wakes or unlocks (the check decides if it's due).
   if (features.jobSearch) {
     let wakeTimer: NodeJS.Timeout | null = null;

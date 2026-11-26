@@ -6,6 +6,7 @@
 import { postingRef } from "../src/shared/boards";
 import type { ApplicationQuestion } from "../src/shared/schemas";
 import { decodeEntities, fetchText } from "./jd-fetch";
+import { appFetch } from "./app-fetch";
 
 export type { ApplicationQuestion };
 
@@ -122,7 +123,7 @@ export function formSource(url: string): { board: "greenhouse" | "ashby" | "leve
 }
 
 /** The form's fields from a posting link, or null when the board isn't supported. */
-export async function fetchApplicationForm(url: string, fetcher: typeof fetch = fetch): Promise<FormField[] | null> {
+export async function fetchApplicationForm(url: string, fetcher: typeof fetch = appFetch): Promise<FormField[] | null> {
   const source = formSource(url);
   if (!source) return null;
   if (source.board === "greenhouse") {
