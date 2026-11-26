@@ -541,13 +541,13 @@ export async function fetchJobDescription(workspacePath: string, url: string, fe
   return stageFetched(workspacePath, extracted, form);
 }
 
-/** One page or API response as text, with the same browser headers and timeout as posting fetches. */
 /**
  * Headers for reading a page. Compression is limited to gzip, deflate and br: some servers answer Node 26's default
  * zstd offer with a reply its fetch cuts off at 1 KB (amazon.jobs, issue #174).
  */
 const PAGE_HEADERS = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", "Accept-Encoding": "gzip, deflate, br" } as const;
 
+/** One page or API response as text, with the same browser headers and timeout as posting fetches. */
 export async function fetchText(url: string, fetcher: typeof fetch = fetch, init: RequestInit = {}): Promise<string> {
   const response = await fetcher(url, {
     ...init,
