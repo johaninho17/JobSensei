@@ -54,7 +54,7 @@ function sections(body: string): Section[] {
     const item = BULLET.exec(raw)?.[1];
     if (item) { out.at(-1)!.items.push(clean(item)); continue; }
     // "Shift: Nights" / "Department: Operations" carry a value: facts in the section, not new headings (issue #174).
-    const labelValue = !/^#/.test(line) && /^(?:\*\*)?[^:*]{2,40}(?:\*\*)?:(?:\*\*)?\s+\S/.test(line);
+    const labelValue = !/^#/.test(line) && /^(?:\*\*)?[^:*]{2,40}(?:\*\*)?:(?:\*\*)?\s*[^*\s]/.test(line);
     if (isHeadingLike(raw) && !labelValue && !/^#\s/.test(line)) {
       const heading = sectionHeadingText(raw);
       out.push({ heading, kind: kindOf(heading), items: [], prose: [] });
