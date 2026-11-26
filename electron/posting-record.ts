@@ -86,6 +86,14 @@ const MILLIONS = /^\s*(?:m|mm|b|bn|million|billion)\b/i;
  * How likely a line is to state the job's pay: labeled pay lines and pay words count for it; company money (ARR,
  * funding, revenue), perks, millions, and a $0 start count against it. Below 1 it isn't treated as pay.
  */
+/** "165,000 USD" / "USD 165,000" written with the currency's sign, so one amount pattern reads every form (#172). */
+function withSigns(line: string): string {
+  const sign: Record<string, string> = { USD: "$", GBP: "£", EUR: "€" };
+  return line
+    .replace(/\b(USD|GBP|EUR)\s?(\d[\d,]*(?:\.\d+)?\s*[kK]?)/g, (_, code: string, value: string) => `${sign[code]}${value}`)
+    .replace(/(^|[^$£€\d,.])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{4,7}(?:\.\d+)?)\s?(USD|GBP|EUR)\b/g, (_, before: string, value: string, code: string) => `${before}${sign[code]}${value} ${code}`);
+}
+
 function payScore(line: string): number {
   if (!/[$£€]\s?\d/.test(line)) return -Infinity;
   const match = RANGE.exec(line) ?? new RegExp(AMOUNT).exec(line);
@@ -107,27 +115,30 @@ function payScore(line: string): number {
 }
 
 export function parsePay(posting: string): PostingPay | null {
-  const lines = posting.split("\n").map((value) => clean(value.replace(BULLET, "$1"))).filter(Boolean);
+  const originals = posting.split("\n").map((value) => clean(value.replace(BULLET, "$1"))).filter(Boolean);
   // The line most likely to state pay, never the first money in the posting ("scaled sales from $0 to $30M in ARR").
+  // Read with currency codes as signs; the posting's own wording is what `line` keeps.
   let line: string | null = null;
+  let original = "";
   let best = 0;
-  for (const value of lines) {
-    const score = payScore(value);
-    if (score > best) { best = score; line = value; }
+  for (const value of originals) {
+    const signed = withSigns(value);
+    const score = payScore(signed);
+    if (score > best) { best = score; line = signed; original = value; }
   }
   if (!line || best < 1) return null;
   const match = RANGE.exec(line);
   if (!match) {
     const single = new RegExp(AMOUNT).exec(line)?.[0];
     const at = new RegExp(AMOUNT).exec(line);
-    return single && at ? { text: single.trim().replace(/[,.]+$/, ""), min: amount(single), max: amount(single), currency: currencyOf(single), period: periodOf(sentenceAt(line, at.index, at[0].length), amount(single)), line: short(line) } : null;
+    return single && at ? { text: single.trim().replace(/[,.]+$/, ""), min: amount(single), max: amount(single), currency: currencyOf(single), period: periodOf(sentenceAt(line, at.index, at[0].length), amount(single)), line: short(original) } : null;
   }
   const min = amount(match[1]!);
   const max = amount(match[2]!.match(/^[$£€]/) ? match[2]! : `${match[1]!.trim()[0]}${match[2]}`);
   const period = periodOf(match[4] ?? sentenceAt(line, match.index, match[0].length), min);
   const written = (value: string) => value.trim().replace(/[,.]+$/, "");
   const text = `${written(match[1]!)}–${written(match[2]!).replace(/^(?![$£€])/, match[1]!.trim()[0]!)}${period ? `/${period}` : ""}`;
-  return { text, min, max, currency: currencyOf(match[1]!) ?? (match[3]?.trim().toUpperCase() || null), period, line: short(line) };
+  return { text, min, max, currency: currencyOf(match[1]!) ?? (match[3]?.trim().toUpperCase() || null), period, line: short(original) };
 }
 /**
  * The sentence holding the amount (issue #172): a pay paragraph often goes on to benefits, and their period words

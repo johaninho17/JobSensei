@@ -9,6 +9,10 @@ describe("pay period", () => {
     const pay = parsePay("The United States base range for this position is $91,000-$128,000 plus equity. The benefits include six month paid parental leave and a monthly wellness allowance.");
     expect(pay).toMatchObject({ min: 91_000, max: 128_000, period: "year", text: "$91,000–$128,000/year" });
   });
+  it("reads amounts written with a currency code instead of a sign", () => {
+    expect(parsePay("Your base salary will depend on location and experience.\n140,000 USD – 210,000 USD for Level 3; and 170,000 USD – 250,000 USD for Level 4.")).toMatchObject({ min: 140_000, max: 210_000, currency: "USD", period: "year", line: "140,000 USD – 210,000 USD for Level 3; and 170,000 USD – 250,000 USD for Level 4." });
+    expect(parsePay("Salary: GBP 55,000 - 70,000 per year")).toMatchObject({ min: 55_000, max: 70_000, currency: "GBP" });
+  });
   it("still reads a period stated with the amount", () => {
     expect(parsePay("Compensation: $6,000 - $7,500 per month, paid twice a month.")?.period).toBe("month");
     expect(parsePay("The hourly rate for this role is $32 to $40. Benefits start after one month.")?.period).toBe("hour");
