@@ -153,3 +153,30 @@ describe("One page header (U82, #165)", () => {
   });
 });
 
+describe("Quieter job page (U82, #166)", () => {
+  it("the header keeps status, ring, short location, and the settings score; the rest is in its menu", async () => {
+    const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
+    const head = page.slice(page.indexOf('<header className="job-head">'), page.indexOf("</header>", page.indexOf('<header className="job-head">')));
+    expect(head).toContain('job.applicationStage && trackerStatus === "saved" && <StatusPill');
+    expect(head).toContain("{shortLocation(job.location)}");
+    expect(head).toContain("Settings <strong");
+    expect(head).toMatch(/<details className="jobs-more job-head-more">[\s\S]*Added \{formatJobDate[\s\S]*Edit details/);
+    expect(page).toContain('<details className="jobs-more pdf-menu">');
+    expect(page.match(/<PdfTextSizeSelect/g)).toHaveLength(1);
+  });
+
+  it("short locations keep the place and the work setup", async () => {
+    const { shortLocation } = await import("../src/renderer/JobWorkspace");
+    expect(shortLocation("San Francisco, CA (Remote / Telecommute - United States)")).toBe("San Francisco, CA · Remote");
+    expect(shortLocation("Austin, TX")).toBe("Austin, TX");
+    expect(shortLocation("Remote (US)")).toBe("Remote");
+    expect(shortLocation("Denver, CO (Hybrid)")).toBe("Denver, CO · Hybrid");
+  });
+
+  it("documents show file details as a tip, not a line", async () => {
+    const docs = await readFile("src/renderer/Documents.tsx", "utf8");
+    expect(docs).toContain('<InfoTip label="File details">');
+    expect(docs).not.toContain("Local artifact");
+  });
+});
+

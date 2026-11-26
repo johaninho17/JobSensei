@@ -1213,3 +1213,10 @@ details.jobs-group > summary { padding: var(--space-2) 0; border-top: 1px solid 
 .info-tip-body p { margin: 0 0 var(--space-2); }
 .info-tip-body p:last-child { margin-bottom: 0; }
 .page-head-status > * + *::before { content: "·"; margin: 0 var(--space-2); color: var(--line-strong); }
+/* Job header menu, one PDFs control, quiet document meta (U82, #166). */
+.job-head-more summary { width: 30px; height: 30px; }
+.menu-note { margin: 0; padding: var(--space-1) var(--space-3); color: var(--muted); font-size: var(--fs-13); }
+.pdf-menu summary { width: auto; padding: 0 var(--space-3); border: 1px solid var(--line-strong); font: 600 var(--fs-13) var(--font-ui); }
+.pdf-menu summary.is-stale { border-color: var(--brass); color: var(--ink); }
+.pdf-menu .jobs-more-menu { gap: var(--space-2); min-width: 220px; padding: var(--space-2); }
+.document-meta .info-tip { margin-right: auto; }

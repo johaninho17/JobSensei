@@ -72,13 +72,20 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
         <h1>{job.title ?? "Role not recorded"}</h1>
         <div className="job-head-meta">
           <label className={`tracker-select is-${trackerStatus}`}><span className="sr-only">Application status</span><select value={trackerStatus} onChange={(event) => void onUpdateTracker({ status: event.target.value as TrackerStatus })}>{TRACKER_STATUSES.map((value) => <option key={value} value={value}>{value === "saved" && job.hasApplicationMaterials ? draftedLabel() : TRACKER_LABELS[value]}</option>)}</select></label>
-          {job.applicationStage && <StatusPill value={job.applicationStage} />}
-          {job.rating !== null && <span className="job-head-fit"><FitRing rating={job.rating} size={36} /> fit</span>}
+          {/* "Application ready" only while not applied: after that the status says it (U82). */}
+          {job.applicationStage && trackerStatus === "saved" && <StatusPill value={job.applicationStage} />}
+          {job.rating !== null && <span className="job-head-fit" title={`Fit ${job.rating.toFixed(1)} of 5`}><FitRing rating={job.rating} size={36} /></span>}
           {job.hasApplicationMaterials && (() => { const score = jobSettingsScore(job.settingsScore); return <span className={`settings-score is-${score.band}`} title={`Agy's settings when these drafts were made: ${score.score} of 100 (${settingsScoreLabel(score).split(" ")[1]}). Higher means more lenient. See Agy → Behavior.`}>Settings <strong className="tabular">{score.score}</strong> {settingsScoreLabel(score).split(" ")[1]}</span>; })()}
-          {job.location && <span>{job.location}</span>}
-          <span>Added {formatJobDate(job.createdAt)}</span>
-          {job.editedFields.length > 0 && <span className="job-edited" title="You corrected these; re-reading the posting never changes them.">Edited: {job.editedFields.map((field) => overrideLabel(field).toLowerCase()).join(", ")}</span>}
-          {!editingDetails && <button className="btn-link" onClick={() => setEditingDetails(true)}>Edit details</button>}
+          {job.location && <span title={job.location}>{shortLocation(job.location)}</span>}
+          {/* Added date, corrected fields, and Edit details live in the header's menu (U82). */}
+          <details className="jobs-more job-head-more">
+            <summary aria-label="Job details">⋯</summary>
+            <div className="jobs-more-menu">
+              <p className="menu-note">Added {formatJobDate(job.createdAt)}</p>
+              {job.editedFields.length > 0 && <p className="menu-note job-edited" title="You corrected these; re-reading the posting never changes them.">Edited: {job.editedFields.map((field) => overrideLabel(field).toLowerCase()).join(", ")}</p>}
+              {!editingDetails && <button className="menu-item" onClick={(event) => { (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); setEditingDetails(true); }}>Edit details</button>}
+            </div>
+          </details>
         </div>
       </div>
       {/* The next step and the last check's result live in the header card (U79), not as bands of their own. */}
@@ -98,7 +105,6 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
     <div className="workspace-tabs-row">
       <nav className="workspace-tabs" role="tablist" aria-label="Job sections">{tabs.map(([value, label, count]) => <button key={value} role="tab" aria-selected={activeTab === value} className={activeTab === value ? "is-active" : ""} onClick={() => onNavigate(job.id, value, value === "interview" ? activeRoundId : undefined)}>{label}{count !== null && <span>{count}</span>}</button>)}</nav>
       <div className="job-head-actions">
-        {jobDescription && <button className="btn-quiet" onClick={() => openAppView("posting")}>Job posting</button>}
         <JobPdfExportButton resumePath={resumeMarkdown?.relativePath ?? null} coverLetterPath={coverLetterMarkdown?.relativePath ?? null} />
       </div>
     </div>
@@ -597,9 +603,28 @@ function JobPdfExportButton({ resumePath, coverLetterPath }: { resumePath: strin
       announce(`PDF creation failed: ${messageOf(caught, "unknown error")}`);
     }
   }
-  return <span className="job-pdf-export"><PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} /><button className="export-button" disabled={missing || state === "working"} title={missing ? "A tailored resume is required" : coverLetterPath ? "Create PDFs for this job's resume and cover letter" : "Create a PDF of this job's resume"} onClick={() => void exportApplicationPdfs()}>{state === "working" ? "Creating PDFs…" : stale.length ? "Update PDFs" : "Create PDFs"}</button>{stale.length > 0 && state !== "working"
-    ? <small className="export-message is-stale" role="status">{stale.length === 1 ? `The ${stale[0]!.kind === "resume" ? "resume" : "cover letter"} PDF is older than your last edit` : "The PDFs are older than your last edits"}</small>
-    : message && <small className={`export-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</small>}</span>;
+  // One PDFs control (U82): the text size sits inside its menu, next to Create.
+  return <span className="job-pdf-export">
+    <details className="jobs-more pdf-menu">
+      <summary className={stale.length ? "is-stale" : undefined} title={stale.length ? "The PDFs are older than your last edits" : "Create PDFs"}>{state === "working" ? "Creating PDFs…" : stale.length ? "Update PDFs" : "PDFs"}</summary>
+      <div className="jobs-more-menu">
+        <PdfTextSizeSelect value={textSize} onChange={setTextSize} disabled={state === "working"} />
+        <button className="btn-primary" disabled={missing || state === "working"} title={missing ? "A tailored resume is required" : coverLetterPath ? "Create PDFs for this job's resume and cover letter" : "Create a PDF of this job's resume"} onClick={(event) => { (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); void exportApplicationPdfs(); }}>{stale.length ? "Update PDFs" : "Create PDFs"}</button>
+      </div>
+    </details>
+    {stale.length > 0 && state !== "working"
+      ? <small className="export-message is-stale" role="status">{stale.length === 1 ? `The ${stale[0]!.kind === "resume" ? "resume" : "cover letter"} PDF is older than your last edit` : "The PDFs are older than your last edits"}</small>
+      : message && <small className={`export-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</small>}
+  </span>;
+}
+
+/** "San Francisco, CA (Remote / Telecommute - United States)" → "San Francisco, CA · Remote"; the full text is the
+ * tooltip (U82). */
+export function shortLocation(location: string): string {
+  const base = location.split("(")[0]!.trim().replace(/[,;\s]+$/, "");
+  const remote = /\bremote\b/i.test(location) && !/\bremote\b/i.test(base);
+  const hybrid = /\bhybrid\b/i.test(location) && !/\bhybrid\b/i.test(base);
+  return [base || location, remote ? "Remote" : hybrid ? "Hybrid" : null].filter(Boolean).join(" · ");
 }
 
 
