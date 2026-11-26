@@ -15,7 +15,6 @@ import { agyActivity } from "./agy-activity";
 import { CONTENT_FILES, MEMORY_DIR, markRecordingsImported, readPendingUpdate, scanRecordings } from "./content-refresh";
 import { readJobQueue } from "./job-queue";
 import { readJson, writeJsonAtomic, writeTextAtomic } from "./persistence";
-import { readJobTracker } from "./tracker";
 import { applyTuneSuggestion } from "./tune-apply";
 import { assertInsideWorkspace, layoutVersion, workspaceFile } from "./workspace";
 import { CAREER_LOCK, withWriteLock } from "./write-lock";
@@ -28,7 +27,7 @@ const runFile = (area: TuneArea) => `${TUNE_DIR}/run-${area}.json`;
 const briefFile = (area: TuneArea) => `${TUNE_DIR}/${area}-brief.md`;
 const sha = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
 
-export const TUNE_LABELS: Record<TuneArea, string> = { interviews: "interview content", career: "career records", "story-bank": "story bank", voice: "writing voice" };
+export const TUNE_LABELS: Record<TuneArea, string> = { interviews: "interview content" };
 
 type Run = { area: TuneArea; startedAt: string; sources: Record<string, string> };
 
@@ -52,26 +51,13 @@ async function jobIds(root: string): Promise<string[]> {
 }
 
 /** Every file an area reads, before filtering to what changed. */
-async function areaSources(root: string, area: TuneArea): Promise<string[]> {
-  if (area === "interviews") return waitingToImport(await scanRecordings(root, await jobIds(root))).map((recording) => recording.path);
-  if (area === "career") return [...await filesUnder(root, "context/broad", /\.(?:md|txt|docx|pdf)$/i), ...await filesUnder(root, "resumes", /\.(?:md|txt|docx|pdf)$/i)];
-  if (area === "story-bank") return filesUnder(root, "context/structured", /\.md$/i);
-  // Writing voice: cover letters of jobs the user applied to (the letters they stood behind).
-  const letters: string[] = [];
-  for (const id of await jobIds(root)) {
-    const tracker = await readJobTracker(join(root, "jobs", id)).catch(() => null);
-    if (!tracker || !["applied", "interviewing", "offer"].includes(tracker.status)) continue;
-    for (const name of await readdir(join(root, "jobs", id)).catch(() => [] as string[])) if (/cover[_ -]?letter.*\.md$/i.test(name)) letters.push(`jobs/${id}/${name}`);
-  }
-  return letters;
+async function areaSources(root: string, _area: TuneArea): Promise<string[]> {
+  return waitingToImport(await scanRecordings(root, await jobIds(root))).map((recording) => recording.path);
 }
 
 /** The content files an area's suggestions may change. */
-export async function areaTargets(root: string, area: TuneArea): Promise<string[]> {
-  if (area === "interviews") return [...CONTENT_FILES, ...await filesUnder(root, MEMORY_DIR, /\.md$/i)];
-  if (area === "career") return (await filesUnder(root, "context/structured", /\.md$/i)).filter((path) => !path.endsWith("/interview-stories.md"));
-  if (area === "story-bank") return ["profile/story_bank.md"];
-  return ["context/application_voice_profile.md"];
+export async function areaTargets(root: string, _area: TuneArea): Promise<string[]> {
+  return [...CONTENT_FILES, ...await filesUnder(root, MEMORY_DIR, /\.md$/i)];
 }
 
 async function hashes(root: string, paths: string[]): Promise<Record<string, string>> {

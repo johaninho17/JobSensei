@@ -174,7 +174,6 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
   return <div className="your-content">
     <section className="iv-section">
       <h3>New recordings</h3>
-      <p className="learn-note">Transcripts and notes in your <code>debrief</code> folder that Agy hasn't read yet. Tune reads only these, plus the content below, so old recordings are never read again.</p>
       {data?.pending ? <div className="onboarding-result" role="status">
         <strong>Update in progress</strong>
         <p>Agy is importing {plural(data.pending.recordings.length, "recording")} (started {new Date(data.pending.startedAt).toLocaleString()}). Confirm its proposals in the Agy panel; once it has saved, review the changes here.</p>
@@ -192,7 +191,7 @@ function YourContent({ jobs, onSendPrompt, onChanged, onOpenFile }: { jobs: JobF
       </>}
       {message && <p role="status" className="export-note">{message}</p>}
     </section>
-    {!data?.pending && <TunePanel area="interviews" title="Tune from new recordings" what="Agy reads only the new recordings above and suggests updates to your story bank, interview voice, role memory, and interview stories. Nothing changes until you apply a suggestion." onSendPrompt={onSendPrompt} onOpenFile={onOpenFile} onApplied={() => { void load(); onChanged(); }} />}
+    {!data?.pending && <TunePanel area="interviews" title="Learn from new recordings" what="Agy reads only the new recordings above and suggests updates to your story bank, interview voice, role memory, and interview stories. Nothing changes until you apply a suggestion." onSendPrompt={onSendPrompt} onOpenFile={onOpenFile} onApplied={() => { void load(); onChanged(); }} />}
     {review && <section className="iv-section content-review" aria-label="What the update changed">
       <h3>What the update changed</h3>
       {!review.changeListFound && <p className="learn-note">Agy didn't write its change list, so anything removed or shortened will be put back.</p>}

@@ -43,7 +43,7 @@ export function buildAgyActions(context: AgyActionContext): AgyAction[] {
     actions.push({
       id: "recordings", group: "Interviews",
       label: context.newRecordings ? `Read ${plural(context.newRecordings, "new recording")}` : "Read new recordings and practice interviews",
-      what: "Opens Your content, where Tune has Agy read the recordings and practice interviews you added and suggest updates to your story bank, interview voice, and role memory. You pick which ones to apply.",
+      what: "Opens Your content, where Agy reads the recordings and practice interviews you added and suggest updates to your story bank, interview voice, and role memory. You pick which ones to apply.",
       where: "In the app", run: { kind: "app", call: "open-recordings" },
     });
     actions.push({

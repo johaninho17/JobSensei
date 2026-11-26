@@ -112,9 +112,9 @@ The detailed rules live in `.agents/skills/jobsensei-interview-pipeline/SKILL.md
 - Import recorded interviews (Granola, Otter, notes) with the interview-review workflow. It drafts question patterns, voice notes, story proposals, and logistics; you confirm before anything is saved.
 - Transcripts are performance records. A work story you told becomes career evidence only after you confirm it into `context/structured/interview-stories.md`; then resumes, letters, and interviews can use it.
 
-### Tune
+### Learn from new recordings
 
-Tune (Interviews → Your content for recordings; Profile → Tune for career records, story bank, and writing voice) updates your career content from what is new: interview recordings, career files and base resumes, your evidence (for the story bank), and the cover letters of jobs you applied to (for your writing voice). The app finds the files that changed since the last Tune and briefs Agy on only those. Agy writes suggestions and never edits your files. You see the strongest five, check the ones to apply, and decline the ones you never want suggested again. The rest wait for the next Tune, and drop once the file they came from changes. Applying backs up first and can be undone; anything replaced or archived keeps its old text in history.
+Interviews → Your content → **Learn from new recordings** updates your interview content (story bank, interview voice, role memory, interview stories) from recordings Agy hasn't read yet. The app briefs Agy on only those. Agy writes suggestions and never edits your files. You see the strongest five, check the ones to apply, and decline the ones you never want suggested again. The rest wait for the next Tune, and drop once the file they came from changes. Applying backs up first and can be undone; anything replaced or archived keeps its old text in history.
 
 ## Context Selection
 

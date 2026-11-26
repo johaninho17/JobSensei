@@ -24,6 +24,8 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #174 | Pages whose text comes out as script: read the real sections (amazon.jobs) | FEAT-013 |  |
 | #193 | Remove the Today page; Questions for you move to Profile | FEAT-007 |  |
 | #194 | Remove follow-up dates and reminders | FEAT-001 |  |
+| #199 | Remove Tune; recordings keep a plain Read new recordings step | FEAT-008 |  |
+| #201 | Job Search: simple matches, tidy row actions, no explanation text | FEAT-004 |  |
 
 ## P2
 
@@ -34,12 +36,14 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #168 | Global shortcut adds the copied job link to the queue | FEAT-006 |  |
 | #175 | Application questions from more places: embedded Greenhouse, SmartRecruiters, Oracle | FEAT-003 |  |
 | #195 | Framing flags fold into one line above the document | FEAT-012 |  |
+| #202 | Remove explanation paragraphs across pages | FEAT-009 |  |
 
 ## P3
 
 | # | Issue | Features | Blocked |
 |---|---|---|---|
 | #147 | Remove the old in-place interview content update once Tune is proven | FEAT-005 |  |
+| #200 | Data analysis: show where Agy thinks the user's data can improve | FEAT-008 |  |
 
 ## Later (future)
 
@@ -54,4 +58,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #124 | Phase 4.4: Global Connectors tab, per-job Activity & Emails timeline, Email Prep PDF action, and Undo toasts | FEAT-002, FEAT-014 | yes |
 | #133 | Multi-AI groundwork: agent brief, activity log, headless streaming, prompt caching, quota backoff | FEAT-006 |  |
 
-27 open, 8 of them for later.
+31 open, 8 of them for later.

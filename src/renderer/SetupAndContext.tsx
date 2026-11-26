@@ -290,7 +290,7 @@ export function SetupHome({ readiness, profile, onProfileSaved, onRefresh, onAct
   </section>;
 }
 
-type ContextView = "setup" | "sources" | "notes" | "resumes" | "jobs" | "stories" | "voice" | "tune";
+type ContextView = "setup" | "sources" | "notes" | "resumes" | "jobs" | "stories" | "voice";
 
 /** Career context: subtabs for sources, resumes, job files, and the profile's story bank and interview voice. */
 /**
@@ -324,7 +324,7 @@ export function ContextAdder({ onAdd, onReveal }: { onAdd: (kind: "structured" |
   </div>;
 }
 
-export function ContextHome({ notice, setup, sources, notes, resumes, jobFiles, tune, startView, onOpen }: { notice: React.ReactNode; /** Setup as the Profile page's first tab (U78: Setup and Career context are one page). */ setup?: React.ReactNode; tune?: React.ReactNode; /** A tab to switch to when another page asks (Setup in the sidebar). */ startView?: "setup" | null; sources: React.ReactNode; notes: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
+export function ContextHome({ notice, setup, sources, notes, resumes, jobFiles, startView, onOpen }: { notice: React.ReactNode; /** Setup as the Profile page's first tab (U78: Setup and Career context are one page). */ setup?: React.ReactNode; /** A tab to switch to when another page asks (Setup in the sidebar). */ startView?: "setup" | null; sources: React.ReactNode; notes: React.ReactNode; resumes: React.ReactNode; jobFiles: React.ReactNode; onOpen: (path: string) => void }) {
   const [view, setView] = useState<ContextView>(startView === "setup" && setup ? "setup" : "sources");
   useEffect(() => { if (startView === "setup" && setup) setView(startView); }, [startView, setup !== undefined]);
   return <section className="jobs-home context-home">
@@ -335,7 +335,7 @@ export function ContextHome({ notice, setup, sources, notes, resumes, jobFiles, 
       label="Career context sections"
       value={view}
       onChange={setView}
-      tabs={[...(setup ? [{ id: "setup" as const, label: "Setup" }] : []), { id: "sources", label: "Sources" }, ...(notes ? [{ id: "notes" as const, label: "Recruiter notes" }] : []), { id: "resumes", label: "Resumes" }, { id: "jobs", label: "Job files" }, ...(tune ? [{ id: "tune" as const, label: "Tune" }] : []), ...(FEATURES.interviewProfile ? [{ id: "stories" as const, label: "Story bank" }, { id: "voice" as const, label: "Interview voice" }] : [])]}
+      tabs={[...(setup ? [{ id: "setup" as const, label: "Setup" }] : []), { id: "sources", label: "Sources" }, ...(notes ? [{ id: "notes" as const, label: "Recruiter notes" }] : []), { id: "resumes", label: "Resumes" }, { id: "jobs", label: "Job files" }, ...(FEATURES.interviewProfile ? [{ id: "stories" as const, label: "Story bank" }, { id: "voice" as const, label: "Interview voice" }] : [])]}
     />
     <SubTabPanel idPrefix="ctx" value={view}>
       {view === "setup" && setup}
@@ -343,7 +343,6 @@ export function ContextHome({ notice, setup, sources, notes, resumes, jobFiles, 
       {view === "notes" && notes}
       {view === "resumes" && resumes}
       {view === "jobs" && jobFiles}
-      {view === "tune" && tune}
       {FEATURES.interviewProfile && view === "stories" && <DocInline path="profile/story_bank.md" label="story bank (it is made on your first interview prep)" />}
       {FEATURES.interviewProfile && view === "voice" && <DocInline path="profile/interview_voice.md" label="interview voice (it is made when you import an interview)" />}
     </SubTabPanel>

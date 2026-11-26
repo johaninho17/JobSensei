@@ -17,14 +17,15 @@ describe("Tune review (#118)", () => {
     expect(panel).toContain("saved for later");
   });
 
-  it("replaces Update from N recordings in Your content, and adds a Tune tab to Career context", async () => {
+  it("reads new recordings in Your content, and Profile has no Tune tab (#199)", async () => {
     const interviews = await read("src/renderer/InterviewsHome.tsx");
     expect(interviews).toContain('<TunePanel area="interviews"');
     expect(interviews).not.toContain("content.startUpdate");
     expect(interviews).not.toMatch(/Update from \$\{plural/);
     const app = await read("src/renderer/App.tsx");
-    expect(app).toMatch(/tune=\{FEATURES\.tune \?/);
-    for (const area of ["career", "story-bank", "voice"]) expect(app).toContain(`<TunePanel area="${area}"`);
+    expect(app).not.toContain("TunePanel");
+    expect(await read("src/renderer/SetupAndContext.tsx")).not.toContain('label: "Tune"');
+    expect(await read("src/renderer/TunePanel.tsx")).not.toMatch(/["`>][^"`<]*\bTune\b/);
     expect(await read("electron/preload.ts")).not.toContain("content:start-update");
   });
 });

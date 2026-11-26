@@ -12,7 +12,8 @@ export const tuneSuggestionsFile = (area: TuneArea) => `${TUNE_DIR}/${area}.json
 /** How many suggestions one Tune shows; the rest wait in the bank. */
 export const TUNE_SHOWN = 5;
 
-export const TUNE_AREAS = ["interviews", "career", "story-bank", "voice"] as const;
+/** Only new recordings are read (#199): the career, story bank, and voice areas were removed with Profile → Tune. */
+export const TUNE_AREAS = ["interviews"] as const;
 export type TuneArea = typeof TUNE_AREAS[number];
 export const TUNE_OPERATIONS = ["add", "enrich", "replace", "archive"] as const;
 export type TuneOperation = typeof TUNE_OPERATIONS[number];

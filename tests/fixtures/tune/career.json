@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "area": "career",
-  "suggestions": [
-    { "operation": "add", "file": "context/structured/work-evidence.md", "section": "Evidence", "text": "| context:work:imports | 2025 | Customer imports | Kept nightly imports running for 30 retail customers | team of 4 | context/broad/northstar-notes.md | high | eligible |", "reason": "New notes describe this work; no row yet", "source": "context/broad/northstar-notes.md", "urgency": 4, "impact": 5 },
-    { "operation": "enrich", "file": "context/structured/work-evidence.md", "section": "Evidence", "target": "context:work:runbooks", "text": "| context:work:runbooks | 2024 | Runbooks | Wrote 12 support runbooks still in use | solo | context/broad/northstar-notes.md | high | eligible |", "reason": "The notes give the count", "source": "context/broad/northstar-notes.md", "urgency": 3, "impact": 3 }
-  ]
-}

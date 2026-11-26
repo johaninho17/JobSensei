@@ -54,7 +54,6 @@ describe("Tune suggestion files (#107)", () => {
     const again = { ...first, text: `  ${first.text!.toUpperCase()}  `, reason: "a different reason" };
     expect(tuneSuggestionId("interviews", first)).toMatch(/^t-[0-9a-f]{12}$/);
     expect(tuneSuggestionId("interviews", again)).toBe(tuneSuggestionId("interviews", first));
-    expect(tuneSuggestionId("voice", first)).not.toBe(tuneSuggestionId("interviews", first));
     expect(new Set(file.suggestions.map((item) => tuneSuggestionId("interviews", item))).size).toBe(file.suggestions.length);
   });
 });

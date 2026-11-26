@@ -11,7 +11,7 @@ export type Features = {
   applicationQuestions: boolean;
   /** Interview content refresh from new recordings (debrief folder). */
   contentRefresh: boolean;
-  /** Tune: Agy suggests updates to interview content, career records, story bank, and writing voice (ledger U76). */
+  /** Learn from new recordings: Agy suggests updates to interview content; the user picks what to apply (U76; career, story bank, and voice areas removed in #199). */
   tune: boolean;
   /** Interviews → Learnings. */
   learnings: boolean;

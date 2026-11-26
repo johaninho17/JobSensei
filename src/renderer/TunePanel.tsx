@@ -43,7 +43,7 @@ export function TunePanel({ area, title, what, onSendPrompt, onOpenFile, onAppli
     const view = await window.sensei.tune.view(area);
     setShown(view.shown); setBanked(view.banked);
   }
-  useEffect(() => { void load().catch((caught) => setMessage(messageOf(caught, "Couldn't read Tune."))); }, [area]);
+  useEffect(() => { void load().catch((caught) => setMessage(messageOf(caught, "Couldn't read the suggestions."))); }, [area]);
   // While Agy works, look for its suggestions every 5 seconds.
   useEffect(() => {
     if (!status?.waitingForAgy) return;
@@ -55,8 +55,8 @@ export function TunePanel({ area, title, what, onSendPrompt, onOpenFile, onAppli
     setBusy(true); setMessage("");
     try { await task(); } catch (caught) { setMessage(messageOf(caught, failure)); } finally { setBusy(false); await load().catch(() => undefined); }
   }
-  const start = () => run(async () => { const prompt = await window.sensei.tune.start(area); onSendPrompt({ prompt, label: `Tune: ${title}` }); }, "Couldn't start Tune.");
-  const cancel = () => run(() => window.sensei.tune.cancel(area), "Couldn't stop Tune.");
+  const start = () => run(async () => { const prompt = await window.sensei.tune.start(area); onSendPrompt({ prompt, label: title }); }, "Couldn't start.");
+  const cancel = () => run(() => window.sensei.tune.cancel(area), "Couldn't stop.");
   const apply = () => run(async () => {
     const outcome = await window.sensei.tune.apply(area, [...checked], []);
     setChecked(new Set());
@@ -69,16 +69,16 @@ export function TunePanel({ area, title, what, onSendPrompt, onOpenFile, onAppli
   const toggle = (id: string, on: boolean) => setChecked((current) => { const next = new Set(current); if (on) next.add(id); else next.delete(id); return next; });
 
   const changed = status?.changed ?? 0;
-  return <section className="iv-section tune-panel" aria-label={`Tune: ${title}`}>
+  return <section className="iv-section tune-panel" aria-label={title}>
     <h3>{title}</h3>
     <p className="learn-note">{what}</p>
     {status?.waitingForAgy ? <div className="onboarding-result" role="status">
       <strong>Agy is reading what's new</strong>
       <p>Its suggestions show up here when it's done. Nothing changes in your files until you apply them.</p>
-      <div className="onboarding-actions"><button className="btn-quiet" disabled={busy} onClick={() => void cancel()}>Stop this Tune</button></div>
+      <div className="onboarding-actions"><button className="btn-quiet" disabled={busy} onClick={() => void cancel()}>Stop</button></div>
     </div> : <div className="onboarding-actions">
-      <button className="btn-primary" disabled={busy || !changed} onClick={() => void start()}>{changed ? `Tune from ${plural(changed, "new file")}` : "Nothing new to tune"}</button>
-      {canUndo && <button className="btn-quiet" disabled={busy} onClick={() => void undo()}>Undo the last Tune</button>}
+      <button className="btn-primary" disabled={busy || !changed} onClick={() => void start()}>{changed ? `Read ${plural(changed, "new file")}` : "Nothing new to read"}</button>
+      {canUndo && <button className="btn-quiet" disabled={busy} onClick={() => void undo()}>Undo the last changes</button>}
     </div>}
     {shown.length > 0 && <>
       <ul className="tune-list">{shown.map((item) => <li key={item.id}>
