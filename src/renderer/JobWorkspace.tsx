@@ -13,7 +13,7 @@ import { SubTabPanel, SubTabs } from "./SubTabs";
 import { ReviewPanel } from "./Review";
 import { TagEditor } from "./JobOrganize";
 import { type JobWorkspaceTab, TrackerPill, displayJobName, fileNodes, findNode, formatJobDate, formatRelativeDate, messageOf, plural, toast } from "./app-shared";
-import { DocumentView, PdfTextSizeSelect, documentsChanged, pdfsCreated, usePdfFreshness } from "./Documents";
+import { DocumentView, PdfTextSizeSelect, documentsChanged, downloadDocumentPdf, pdfsCreated, usePdfFreshness } from "./Documents";
 import { askConfirm } from "./confirm";
 
 function TrackerPanel({ job, onUpdate }: { job: JobFolderSummary; onUpdate: (update: JobTrackerUpdate) => Promise<void> }) {
@@ -659,6 +659,7 @@ function JobPdfExportButton({ jobId, resumePath, coverLetterPath }: { jobId: str
       {pdfs.map((item) => { const isStale = item.state === "stale"; return <div key={item.pdf} className={`pdf-row ${isStale ? "is-stale" : ""}`}>
         <span className="pdf-pill-file" draggable title={isStale ? "Out of date: made before your last edit. Drag it onto a file field, or Update PDFs first." : "Drag onto an application's file field"} onDragStart={(event) => { event.preventDefault(); window.sensei.files.startPdfDrag(item.pdf); }}>{label(item.kind)}{isStale && <em>out of date</em>}</span>
         <button className="icon-button" title={`Show in ${folderApp}`} aria-label={`Show ${label(item.kind)} in ${folderApp}`} onClick={() => void window.sensei.files.revealPdf(item.pdf).catch((caught: unknown) => toast(messageOf(caught, "Couldn't show the PDF.")))}>↗</button>
+        <button className="icon-button" title={isStale ? "Download (updated first: it's older than your last edit)" : "Download this PDF"} aria-label={`Download ${label(item.kind)} PDF`} onClick={() => void downloadDocumentPdf(item.source, textSize).catch((caught: unknown) => toast(messageOf(caught, "Couldn't download the PDF.")))}>⤓</button>
         <button className="icon-button" title="Copy path" aria-label={`Copy ${label(item.kind)} path`} onClick={() => void copyPath(item.pdf, item.kind, isStale)}>⧉</button>
       </div>; })}
       {pdfs.length > 0 && <p className="menu-note">Drag a PDF onto an application's file field.</p>}

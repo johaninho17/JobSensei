@@ -367,6 +367,15 @@ ipcMain.handle("files:pdf-freshness", async (_event, jobId: unknown) => {
 // A job's PDFs outside the app (#127): drag one onto a browser's file field, copy its path, or show it in Finder/Explorer.
 ipcMain.handle("files:copy-pdf-path", async (_event, relativePath: unknown) => { clipboard.writeText(await jobPdfPath(requireWorkspace(), relativePath)); });
 ipcMain.handle("files:reveal-pdf", async (_event, relativePath: unknown) => { shell.showItemInFolder(await jobPdfPath(requireWorkspace(), relativePath)); });
+// One job PDF saved where the user picks (#236); only jobs/<id>/pdfs/*.pdf can leave this way (jobPdfPath).
+ipcMain.handle("files:save-pdf-as", async (_event, relativePath: unknown) => {
+  const source = await jobPdfPath(requireWorkspace(), relativePath);
+  const options = { title: "Download PDF", defaultPath: join(app.getPath("downloads"), basename(source)), filters: [{ name: "PDF", extensions: ["pdf"] }] };
+  const result = mainWindow ? await dialog.showSaveDialog(mainWindow, options) : await dialog.showSaveDialog(options);
+  if (result.canceled || !result.filePath) return null;
+  await copyFile(source, result.filePath);
+  return result.filePath;
+});
 let pdfDragIcon: Electron.NativeImage | null = null;
 /** A small page shape for the drag image (macOS refuses a drag without one); drawn once, no image file needed. */
 function dragIcon(): Electron.NativeImage {

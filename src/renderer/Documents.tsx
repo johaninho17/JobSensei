@@ -330,6 +330,8 @@ function MarkdownDocument({ preview, focusAnchor, exportHere, onExported, onDirt
         {mode === "edit" && <button className="editor-button" disabled={!dirty || state === "saving"} onClick={() => void save()}>{state === "saving" ? "Saving…" : "Save"}</button>}
         {mode === "edit" && <button className="editor-button" onClick={() => void reloadFromDisk()}>Reload</button>}
         {mode === "view" && canExport && exportHere && <MarkdownExportButton relativePath={preview.relativePath} onExported={onExported} />}
+        {/* On the job page the PDFs menu makes both PDFs; each document can still download its own (#236). */}
+        {mode === "view" && canExport && !exportHere && preview.relativePath.startsWith("jobs/") && preview.name !== "submission_checklist.md" && <DownloadPdfButton source={preview.relativePath} />}
       </span>
     </div>
     {message && <p className={`editor-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</p>}
@@ -477,6 +479,29 @@ function filterQuestionBank(markdown: string, filter: QuestionFilter): string {
 
 export function PdfTextSizeSelect({ value, onChange, disabled }: { value: PdfTextSize; onChange: (value: PdfTextSize) => void; disabled: boolean }) {
   return <label className="pdf-text-size"><span>PDF text</span><select aria-label="PDF text size" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value as PdfTextSize)}><option value="auto">Auto fit</option><option value="large">5% larger</option><option value="largest">10% larger</option></select></label>;
+}
+
+/**
+ * Downloads one document's PDF (#236): an out-of-date or missing PDF is made first, then a save dialog opens for that
+ * one file. Returns where it was saved, or null when cancelled.
+ */
+export async function downloadDocumentPdf(source: string, textSize: PdfTextSize = DEFAULT_PDF_TEXT_SIZE): Promise<string | null> {
+  const jobId = source.split("/")[1] ?? "";
+  const current = (await window.sensei.files.pdfFreshness(jobId).catch(() => [] as PdfFreshness[])).find((item) => item.source === source && item.state === "current" && item.pdf);
+  let pdf = current?.pdf ?? null;
+  if (!pdf) {
+    pdf = (await window.sensei.files.exportMarkdownPdf(source, textSize)).relativePath;
+    pdfsCreated(source);
+    documentsChanged();
+  }
+  const saved = await window.sensei.files.savePdfAs(pdf);
+  if (saved) toast(`PDF saved to ${saved.split(/[\\/]/).slice(-2).join("/")}.`);
+  return saved;
+}
+
+function DownloadPdfButton({ source }: { source: string }) {
+  const [working, setWorking] = useState(false);
+  return <button className="editor-button" disabled={working} title="Save this document's PDF on its own (made or updated first if needed)" onClick={() => { setWorking(true); void downloadDocumentPdf(source).catch((caught: unknown) => toast(messageOf(caught, "Couldn't make the PDF."))).finally(() => setWorking(false)); }}>{working ? "Making PDF…" : "Download PDF"}</button>;
 }
 
 function MarkdownExportButton({ relativePath, onExported }: { relativePath: string; onExported: () => void }) {

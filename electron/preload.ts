@@ -127,6 +127,7 @@ const api: SenseiApi = {
     pdfFreshness: (jobId) => ipcRenderer.invoke("files:pdf-freshness", jobId),
     copyPdfPath: (relativePath) => ipcRenderer.invoke("files:copy-pdf-path", relativePath),
     revealPdf: (relativePath) => ipcRenderer.invoke("files:reveal-pdf", relativePath),
+    savePdfAs: (relativePath) => ipcRenderer.invoke("files:save-pdf-as", relativePath),
     startPdfDrag: (relativePath) => ipcRenderer.send("files:start-pdf-drag", relativePath),
     exportBackup: () => ipcRenderer.invoke("workspace:export-backup"),
     deletePath: (relativePath) => ipcRenderer.invoke("files:delete", relativePath),

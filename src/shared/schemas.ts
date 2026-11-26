@@ -1503,6 +1503,8 @@ export interface SenseiApi {
     pdfFreshness(jobId: string): Promise<PdfFreshness[]>;
     /** A job's PDF (`jobs/<id>/pdfs/…pdf`): copy its full path, show it in Finder/Explorer, or drag it out of the app. */
     copyPdfPath(relativePath: string): Promise<void>;
+    /** Saves one job PDF where the user picks; null when cancelled (#236). */
+    savePdfAs(relativePath: string): Promise<string | null>;
     revealPdf(relativePath: string): Promise<void>;
     startPdfDrag(relativePath: string): void;
     /** Regular app: the whole workspace as a .zip where the user picks; null when they cancel. */
