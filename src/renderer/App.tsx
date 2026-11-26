@@ -114,6 +114,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   const [update, setUpdate] = useState<{ version: string; url: string } | null>(null);
   const [notificationsOn, setNotificationsOn] = useState(() => { try { return window.localStorage.getItem("sensei-notifications") !== "off"; } catch { return true; } });
   useEffect(() => { try { window.localStorage.setItem("sensei-notifications", notificationsOn ? "on" : "off"); } catch { /* storage unavailable */ } }, [notificationsOn]);
+  // The system-wide "add the copied job link" shortcut (issue #168): on by default, remembered per computer.
+  const [addJobShortcutOn, setAddJobShortcutOn] = useState(() => { try { return window.localStorage.getItem("sensei-add-job-shortcut") !== "off"; } catch { return true; } });
+  /** True while a job from the shortcut is being added, so a question it needs (duplicate, company) says to open the app. */
+  const shortcutAdding = useRef(false);
   const [jobQueue, setJobQueue] = useState<JobQueue>({ autoRun: true, items: [] });
   const [agyReady, setAgyReady] = useState(false);
   const queueRef = useRef(jobQueue);
@@ -126,7 +130,10 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   }
   const [companyAsk, setCompanyAsk] = useState<{ title: string | null; resolve: (company: string | null) => void } | null>(null);
   /** Asks which company a pasted posting is for; null when the user skips. */
-  const askCompany = (title: string | null) => new Promise<string | null>((resolve) => setCompanyAsk({ title, resolve }));
+  const askCompany = (title: string | null) => {
+    if (shortcutAdding.current) notify("JobSensei has a question", "Which company is this job at? Open JobSensei to finish adding it.");
+    return new Promise<string | null>((resolve) => setCompanyAsk({ title, resolve }));
+  };
   const runningItem = jobQueue.items.find((item) => item.status === "running");
   const busyJobLabel = runningItem ? runningItem.label ?? runningItem.url ?? "a queued job" : null;
   /**
@@ -146,6 +153,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
   async function confirmNotDuplicate(incoming: { url?: string | null; company?: string | null; title?: string | null }): Promise<boolean> {
     const existing = findDuplicateJob(jobs, incoming);
     if (!existing) return true;
+    if (shortcutAdding.current) notify("JobSensei has a question", "You may already have this job. Open JobSensei to finish adding it.");
     return askConfirm({ title: "You already have this job", body: `${[existing.company, existing.title].filter(Boolean).join(", ") || existing.name} (${TRACKER_LABELS[effectiveStatus(existing)].toLowerCase()}, added ${new Date(existing.createdAt).toLocaleDateString()}). Add it again anyway?`, confirmLabel: "Add it again" });
   }
   async function queueJob(input: { kind: "link"; url: string; batch?: { index: number; size: number } } | { kind: "paste"; text: string; note?: string } | { kind: "found"; id: string; auto?: boolean } | { kind: "saved"; jobId: string }, manual: boolean): Promise<number> {
@@ -724,6 +732,29 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     if (document.hasFocus()) { showToast(`${title}. ${body}`); return; }
     try { new Notification(title, { body, silent: false }); } catch { showToast(`${title}. ${body}`); }
   }
+  /** A press of the system-wide shortcut: the copied link goes through the same path as the Add jobs box. */
+  async function addFromShortcut(url: string | null) {
+    if (!url) { notify("No job link copied", "Copy a job posting's link, then press the shortcut again."); return; }
+    shortcutAdding.current = true;
+    try {
+      const ahead = await queueJob({ kind: "link", url }, true);
+      notify("Job added to the queue", ahead ? `${plural(ahead, "job")} ahead of it.` : "It's next.");
+    } catch (caught) {
+      notify("Couldn't add this job", messageOf(caught, "Paste the job description in Add jobs instead."));
+    } finally {
+      shortcutAdding.current = false;
+    }
+  }
+  const addFromShortcutRef = useRef(addFromShortcut);
+  addFromShortcutRef.current = addFromShortcut;
+  useEffect(() => window.sensei.queue.onAddJobShortcut((press) => void addFromShortcutRef.current(press.url)), []);
+  useEffect(() => {
+    try { window.localStorage.setItem("sensei-add-job-shortcut", addJobShortcutOn ? "on" : "off"); } catch { /* storage unavailable */ }
+    if (workspace.status !== "ready") return;
+    void window.sensei.queue.setAddJobShortcut(addJobShortcutOn).then((state) => {
+      if (state.enabled && !state.registered) showToast("Another app is using ⌥⇧⌘J (Ctrl Alt Shift J), so the add-job shortcut is off. Close that app and turn it on again from ⌘K.");
+    }).catch(() => undefined);
+  }, [addJobShortcutOn, workspace.status]);
 
   async function updateContext(careerPaths: string[], jobPaths: string[]) {
     setError(null);
@@ -896,6 +927,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
     ...recentForStatus.flatMap((job) => TRACKER_STATUSES.filter((status) => status !== effectiveStatus(job)).map((status) => ({ id: `tracker:${job.id}:${status}`, title: `Mark ${job.company ?? displayJobName(job.name)} as ${TRACKER_LABELS[status].toLowerCase()}`, subtitle: job.title ?? "Recent job", keywords: `status ${status}`, run: () => void updateTracker(job.id, { status }) }))),
     { id: "export-csv", title: "Export all jobs to CSV", subtitle: "Save a spreadsheet of every job", keywords: "csv excel spreadsheet download", run: () => void window.sensei.jobs.exportCsv(jobsToCsv(jobs, CSV_COLUMNS)).then((path) => { if (path) showToast(`Saved ${jobs.length} jobs to ${path.split(/[\\/]/).pop()}`); }) },
     { id: "queue-toggle", title: jobQueue.autoRun ? "Pause the job queue" : "Resume the job queue", subtitle: `${jobQueue.items.filter((item) => item.status === "queued").length} waiting`, keywords: "queue links automatic", run: () => void saveQueue({ ...jobQueue, autoRun: !jobQueue.autoRun }) },
+    { id: "add-job-shortcut", title: addJobShortcutOn ? "Turn the add-job shortcut off" : "Turn the add-job shortcut on", subtitle: `${IS_MAC ? "⌥⇧⌘J" : "Ctrl Alt Shift J"} from any app adds the copied job link`, keywords: "global hotkey clipboard link queue", run: () => setAddJobShortcutOn((on) => !on) },
     { id: "notifications", title: notificationsOn ? "Turn notifications off" : "Turn notifications on", subtitle: "Run finished, queue done", keywords: "alerts notify", run: () => setNotificationsOn((on) => !on) },
     { id: "shortcuts", title: "Show keyboard shortcuts", subtitle: "Every shortcut in one list", keywords: "keys help", shortcut: "?", run: () => setShortcutsOpen(true) },
     ...(viewedJob ? TRACKER_STATUSES.filter((status) => status !== effectiveStatus(viewedJob)).map((status) => ({
@@ -1145,6 +1177,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["1 – 4", "Set the open job to Saved, Applied, Interviewing, or Offer"],
   ["5 5 / 6 6", "Mark the open job Rejected or Withdrawn (press twice; Undo in the toast)"],
   ["⌘J or Ctrl J", "Show or hide Agy"],
+  ["⌥⇧⌘J or Ctrl Alt Shift J", "From any app: add the copied job link to the queue (turn it off from ⌘K)"],
   ["⌘, or Ctrl ,", "Settings"],
   ["Alt ← / Alt →", "Back or forward"],
   ["/ and L", "Interview tab: search the round, start live mode"],
