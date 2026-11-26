@@ -415,40 +415,52 @@ export function DocInline({ path, label }: { path: string | null; label: string 
  * the job's `.sensei/job-overrides.json`; a blank field goes back to what the posting says.
  */
 function EditJobDetails({ job, onClose, onSaved }: { job: JobFolderSummary; onClose: () => void; onSaved: (job: JobFolderSummary) => void }) {
-  const [form, setForm] = useState<{ company: string; title: string; location: string; workMode: string; min: string; max: string; currency: string; period: "year" | "month" | "hour" } | null>(null);
+  type Form = { company: string; title: string; location: string; workMode: string; min: string; max: string; currency: string; period: "year" | "month" | "hour" };
+  const [form, setForm] = useState<Form | null>(null);
+  // What the form opened with (the job's current details) and the corrections already saved: a field the user doesn't
+  // change keeps its saved correction (or none), so the posting still decides it (#203).
+  const [start, setStart] = useState<{ form: Form; saved: Awaited<ReturnType<typeof window.sensei.jobs.getOverrides>> } | null>(null);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState("");
   useEffect(() => {
-    void window.sensei.jobs.getOverrides(job.id).then((saved) => setForm({
-      company: saved.company ?? "", title: saved.title ?? "", location: saved.location ?? "", workMode: saved.workMode ?? "",
-      min: saved.pay?.min?.toString() ?? "", max: saved.pay?.max?.toString() ?? "", currency: saved.pay?.currency ?? job.role?.payRange?.currency ?? "USD", period: saved.pay?.period ?? "year",
-    })).catch((caught) => setProblem(messageOf(caught, "The details could not be read.")));
+    void window.sensei.jobs.getOverrides(job.id).then((saved) => {
+      const pay = saved.pay ?? job.role?.payRange ?? null;
+      const initial: Form = {
+        company: saved.company ?? job.company ?? "", title: saved.title ?? job.title ?? "", location: saved.location ?? job.location ?? "",
+        workMode: saved.workMode ?? job.role?.workMode ?? "",
+        min: pay?.min?.toString() ?? "", max: pay?.max?.toString() ?? "", currency: pay?.currency ?? "USD", period: pay?.period ?? "year",
+      };
+      setStart({ form: initial, saved });
+      setForm(initial);
+    }).catch((caught) => setProblem(messageOf(caught, "The details could not be read.")));
   }, [job.id]);
   if (!form) return problem ? <p className="inline-error" role="alert">{problem}</p> : null;
   const set = (key: keyof NonNullable<typeof form>) => (event: { target: { value: string } }) => setForm({ ...form, [key]: event.target.value });
   const number = (value: string) => { const parsed = Number(value.replace(/[^0-9.]/g, "")); return value.trim() && Number.isFinite(parsed) ? parsed : null; };
   async function save() {
-    if (!form) return;
+    if (!form || !start) return;
     setSaving(true);
     setProblem("");
     try {
       const min = number(form.min);
       const max = number(form.max);
+      const changed = (key: keyof Form) => form[key] !== start.form[key];
+      const payChanged = changed("min") || changed("max") || changed("currency") || changed("period");
       onSaved(await window.sensei.jobs.saveOverrides(job.id, {
-        company: form.company, title: form.title, location: form.location,
-        workMode: form.workMode === "remote" || form.workMode === "hybrid" || form.workMode === "onsite" ? form.workMode : null,
-        pay: min !== null || max !== null ? { min, max, currency: form.currency || "USD", period: form.period } : null,
+        company: changed("company") ? form.company : start.saved.company ?? "",
+        title: changed("title") ? form.title : start.saved.title ?? "",
+        location: changed("location") ? form.location : start.saved.location ?? "",
+        workMode: !changed("workMode") ? start.saved.workMode : form.workMode === "remote" || form.workMode === "hybrid" || form.workMode === "onsite" ? form.workMode : null,
+        pay: !payChanged ? start.saved.pay : min !== null || max !== null ? { min, max, currency: form.currency || "USD", period: form.period } : null,
       }));
     } catch (caught) { setProblem(messageOf(caught, "The details could not be saved.")); } finally { setSaving(false); }
   }
-  const posting = (value: string | null | undefined) => value ? `From the posting: ${value}` : "Not in the posting";
   return <section className="job-details-form" aria-label="Edit job details">
-    <p className="muted">Correct anything the app read wrong. Leave a field blank to use what the posting says. New drafts use these; files already made keep their names.</p>
     <div className="job-details-grid">
-      <label><span>Company</span><input value={form.company} onChange={set("company")} placeholder={posting(job.editedFields.includes("company") ? null : job.company)} /></label>
-      <label><span>Title</span><input value={form.title} onChange={set("title")} placeholder={posting(job.editedFields.includes("title") ? null : job.title)} /></label>
-      <label><span>Location</span><input value={form.location} onChange={set("location")} placeholder={posting(job.editedFields.includes("location") ? null : job.location)} /></label>
-      <label><span>Work setup</span><select value={form.workMode} onChange={set("workMode")}><option value="">From the posting</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="onsite">On-site</option></select></label>
+      <label><span>Company</span><input value={form.company} onChange={set("company")} placeholder="Not in the posting" /></label>
+      <label><span>Title</span><input value={form.title} onChange={set("title")} placeholder="Not in the posting" /></label>
+      <label><span>Location</span><input value={form.location} onChange={set("location")} placeholder="Not in the posting" /></label>
+      <label><span>Work setup</span><select value={form.workMode} onChange={set("workMode")}><option value="">Not in the posting</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="onsite">On-site</option></select></label>
       <label><span>Pay from</span><input inputMode="numeric" value={form.min} onChange={set("min")} placeholder="e.g. 120000" /></label>
       <label><span>Pay to</span><input inputMode="numeric" value={form.max} onChange={set("max")} placeholder="e.g. 150000" /></label>
       <label><span>Currency</span><input value={form.currency} onChange={set("currency")} maxLength={8} /></label>

@@ -37,6 +37,7 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #175 | Application questions from more places: embedded Greenhouse, SmartRecruiters, Oracle | FEAT-003 |  |
 | #195 | Framing flags fold into one line above the document | FEAT-012 |  |
 | #202 | Remove explanation paragraphs across pages | FEAT-009 |  |
+| #203 | Edit details opens with the job's details filled in | FEAT-013 |  |
 
 ## P3
 
@@ -58,4 +59,4 @@ Generated from GitHub Issues by `npm run issues:index`. Do not edit by hand; cha
 | #124 | Phase 4.4: Global Connectors tab, per-job Activity & Emails timeline, Email Prep PDF action, and Undo toasts | FEAT-002, FEAT-014 | yes |
 | #133 | Multi-AI groundwork: agent brief, activity log, headless streaming, prompt caching, quota backoff | FEAT-006 |  |
 
-31 open, 8 of them for later.
+32 open, 8 of them for later.
