@@ -39,14 +39,14 @@ export function usePdfFreshness(jobId: string | null): PdfFreshness[] {
   return items;
 }
 
-export function DocumentView({ preview, isBaseResume, focusAnchor, onExported, onDirtyChange, onSaved }: { preview: FilePreview; isBaseResume: boolean; focusAnchor?: string; onExported: () => void; onDirtyChange: (dirty: boolean) => void; onSaved: (preview: FilePreview) => Promise<void> }) {
+export function DocumentView({ preview, isBaseResume, focusAnchor, onExported, onDirtyChange, onSaved, exportHere = true }: { preview: FilePreview; isBaseResume: boolean; focusAnchor?: string; /** False on the job page, where the PDFs menu owns export (U89). */ exportHere?: boolean; onExported: () => void; onDirtyChange: (dirty: boolean) => void; onSaved: (preview: FilePreview) => Promise<void> }) {
   if (!preview.canPreview) return <div className="unsupported-state"><div className="file-badge">{preview.fileType.toUpperCase()}</div><h2>Preview unavailable</h2><p>{preview.message}</p><div className="file-meta"><span>{formatBytes(preview.sizeBytes)}</span><span>Modified {new Date(preview.modifiedAt).toLocaleString()}</span></div>{isBaseResume && <span className="label verified">Configured base resume</span>}</div>;
   if (preview.contentType === "data-url" && preview.dataUrl) return preview.fileType === "pdf" ? <PdfDocument preview={preview} /> : <div className="image-document"><img src={preview.dataUrl} alt={preview.name} /></div>;
   if (preview.contentType === "html" && preview.content) return <article className="document rich-document"><div className="document-meta"><span>{preview.relativePath}</span><span>{formatBytes(preview.sizeBytes)} · {new Date(preview.modifiedAt).toLocaleDateString()}</span>{isBaseResume && <span className="label verified">Configured base resume</span>}</div><div dangerouslySetInnerHTML={{ __html: sanitizeHtml(preview.content) }} />{preview.message && <p className="preview-note">{preview.message}</p>}</article>;
   const challengePractice = preview.name === "practice_labs.json" ? parseChallengePractice(preview.content) : null;
   if (challengePractice) return <ChallengePracticeDocument preview={preview} practice={challengePractice} focusAnchor={focusAnchor} />;
   const isMarkdown = preview.name.toLowerCase().endsWith(".md");
-  if (isMarkdown) return <MarkdownDocument preview={preview} focusAnchor={focusAnchor} onExported={onExported} onDirtyChange={onDirtyChange} onSaved={onSaved} />;
+  if (isMarkdown) return <MarkdownDocument preview={preview} focusAnchor={focusAnchor} exportHere={exportHere} onExported={onExported} onDirtyChange={onDirtyChange} onSaved={onSaved} />;
   return <article className="document"><div className="document-meta"><span>{preview.relativePath}</span><span>{formatBytes(preview.sizeBytes)} · {new Date(preview.modifiedAt).toLocaleDateString()}</span>{isBaseResume && <span className="label verified">Configured base resume</span>}</div><pre>{preview.content}</pre></article>;
 }
 
@@ -172,7 +172,7 @@ function ChallengeList({ title, items }: { title: string; items: string[] }) {
   return <section className="challenge-section"><h4>{title}</h4><ul>{items.map((item) => <li key={item}>{item}</li>)}</ul></section>;
 }
 
-function MarkdownDocument({ preview, focusAnchor, onExported, onDirtyChange, onSaved }: { preview: FilePreview; focusAnchor?: string; onExported: () => void; onDirtyChange: (dirty: boolean) => void; onSaved: (preview: FilePreview) => Promise<void> }) {
+function MarkdownDocument({ preview, focusAnchor, exportHere, onExported, onDirtyChange, onSaved }: { preview: FilePreview; focusAnchor?: string; exportHere: boolean; onExported: () => void; onDirtyChange: (dirty: boolean) => void; onSaved: (preview: FilePreview) => Promise<void> }) {
   const articleRef = useRef<HTMLElement>(null);
   const initialContent = preview.content ?? "";
   const [mode, setMode] = useState<"view" | "edit">("view");
@@ -223,7 +223,8 @@ function MarkdownDocument({ preview, focusAnchor, onExported, onDirtyChange, onS
       setDraft(content);
       setExpectedModifiedAt(saved.modifiedAt);
       setState("saved");
-      setMessage("Saved locally");
+      setMessage("");
+      window.dispatchEvent(new CustomEvent("sensei-announce", { detail: "Saved." }));
       documentsChanged();
     } catch (caught) {
       setState("error");
@@ -322,12 +323,13 @@ function MarkdownDocument({ preview, focusAnchor, onExported, onDirtyChange, onS
     <div className="document-meta">
       {/* The file's path, size, and date are a tip, not a line above every document (U82). */}
       <InfoTip label="File details"><p>{preview.relativePath}</p><p>{formatBytes(new Blob([draft]).size)} · {new Date(expectedModifiedAt).toLocaleDateString()}{editable ? "" : " · source file, read only"}</p></InfoTip>
-      {(dirty || state === "saved" || !editable) && <span className={`edit-status ${dirty ? "is-dirty" : ""}`}>{dirty ? "Unsaved changes" : state === "saved" ? "Saved" : "Source locked"}</span>}
+      {/* Saved is a toast, not a label that stays (U89); unsaved changes and a locked source stay visible. */}
+      {(dirty || !editable) && <span className={`edit-status ${dirty ? "is-dirty" : ""}`}>{dirty ? "Unsaved changes" : "Source locked"}</span>}
       <span className="markdown-actions">
-        {editable && <button className={`editor-button ${mode === "edit" ? "is-active" : ""}`} onClick={() => setMode(mode === "view" ? "edit" : "view")}>{mode === "view" ? "Edit Markdown" : "View document"}</button>}
+        {editable && <button className={`editor-button ${mode === "edit" ? "is-active" : ""}`} onClick={() => setMode(mode === "view" ? "edit" : "view")}>{mode === "view" ? "Edit" : "Done editing"}</button>}
         {mode === "edit" && <button className="editor-button" disabled={!dirty || state === "saving"} onClick={() => void save()}>{state === "saving" ? "Saving…" : "Save"}</button>}
         {mode === "edit" && <button className="editor-button" onClick={() => void reloadFromDisk()}>Reload</button>}
-        {mode === "view" && canExport && <MarkdownExportButton relativePath={preview.relativePath} onExported={onExported} />}
+        {mode === "view" && canExport && exportHere && <MarkdownExportButton relativePath={preview.relativePath} onExported={onExported} />}
       </span>
     </div>
     {message && <p className={`editor-message ${state === "error" ? "is-error" : ""}`} role="status">{message}</p>}

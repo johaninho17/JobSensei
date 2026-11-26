@@ -408,7 +408,7 @@ export function DocInline({ path, label }: { path: string | null; label: string 
   if (!path) return <p className="doc-inline-empty">No {label} yet. Ask Agy to draft the application.</p>;
   if (failed) return <p className="doc-inline-empty">The {label} could not be read.</p>;
   if (!preview || preview.relativePath !== path) return <p className="doc-inline-empty">Reading the {label}…</p>;
-  return <div className="doc-inline"><DocumentView key={`${preview.relativePath}:${preview.modifiedAt}`} preview={preview} isBaseResume={false} onExported={() => undefined} onDirtyChange={() => undefined} onSaved={async (saved) => setPreview(saved)} /></div>;
+  return <div className="doc-inline"><DocumentView key={`${preview.relativePath}:${preview.modifiedAt}`} preview={preview} isBaseResume={false} exportHere={false} onExported={() => undefined} onDirtyChange={() => undefined} onSaved={async (saved) => setPreview(saved)} /></div>;
 }
 
 /**
@@ -491,19 +491,23 @@ function FramingLines({ jobId, artifact, onReverted }: { jobId: string; artifact
   const kept = mine.length - open.length;
   if (!open.length && !kept) return null;
   const plain = (text: string) => text.replace(/[*_`]/g, "");
-  return <section className="framing-lines" aria-label="Lines past your framing setting">
-    {open.length > 0 && <p className="framing-lines-note"><strong>{plural(open.length, "line")} {open.length === 1 ? "reaches" : "reach"} further than your framing setting.</strong> Keep a line if you can explain it in an interview{artifact === "resume" ? ", or revert it to your base resume's line" : ""}.</p>}
-    {open.length > 0 && <ul>{open.map((line) => <li key={line.text}>
-      <p className="framing-line-text">{plain(line.text)}</p>
-      <p className="muted">{line.reason}{line.revertTo ? <> Revert puts back: “{plain(line.revertTo)}”</> : null}</p>
-      <div className="framing-line-actions">
-        {line.revertTo && <button className="btn-quiet" disabled={Boolean(busy)} onClick={() => void choose(line, "revert")}>{busy === line.text ? "Working…" : "Revert"}</button>}
-        <button className="btn-link" disabled={Boolean(busy)} onClick={() => void choose(line, "keep")}>Keep</button>
-      </div>
-    </li>)}</ul>}
-    {kept > 0 && <p className="muted">{plural(kept, "line")} kept as written.</p>}
-    {problem && <p className="inline-error" role="alert">{problem}</p>}
-  </section>;
+  // A chip that opens the lines, not a card above the document (U89, Teal's review panel). Closed until asked.
+  return <details className="framing-review" aria-label="Lines past your framing setting">
+    <summary>{open.length > 0 ? <span className="check-chip">{open.length} to review</span> : <span className="muted">{plural(kept, "line")} kept as written</span>}</summary>
+    <div className="framing-lines">
+      {open.length > 0 && <p className="framing-lines-note">{open.length === 1 ? "This line reaches" : "These lines reach"} further than your framing setting. Keep a line if you can explain it in an interview{artifact === "resume" ? ", or revert it to your base resume's line" : ""}.</p>}
+      {open.length > 0 && <ul>{open.map((line) => <li key={line.text}>
+        <p className="framing-line-text">{plain(line.text)}</p>
+        <p className="muted">{line.reason}{line.revertTo ? <> Revert puts back: “{plain(line.revertTo)}”</> : null}</p>
+        <div className="framing-line-actions">
+          {line.revertTo && <button className="btn-quiet" disabled={Boolean(busy)} onClick={() => void choose(line, "revert")}>{busy === line.text ? "Working…" : "Revert"}</button>}
+          <button className="btn-link" disabled={Boolean(busy)} onClick={() => void choose(line, "keep")}>Keep</button>
+        </div>
+      </li>)}</ul>}
+      {kept > 0 && open.length > 0 && <p className="muted">{plural(kept, "line")} kept as written.</p>}
+      {problem && <p className="inline-error" role="alert">{problem}</p>}
+    </div>
+  </details>;
 }
 
 const STRETCH_LABEL = { low: "Low", medium: "Medium", high: "High" } as const;

@@ -73,6 +73,7 @@ Every page (ledger U77 pilot on Today, U78 everywhere). One shared surfaces bloc
 - Notices are neutral (no coloured edge) and one sentence; the reason goes in a tooltip.
 - Done is a ✓, not a sentence (U89): a finished thing shows a ✓ or dot on its control and a toast when it finishes. One tab row per page. Actions repeated per item (Show in Finder, Copy path) live once, in that thing's menu.
 - Agy panel (U89): a running job is one live line; a finished run is one line (✓ or "N to check") that opens for details, and a failed one opens by itself. Finished step lists fold to "Done in 2m 38s · 9 steps". Header: Job Actions, ⋯ (Clear, Restart), ×. One "Next" suggestion chip.
+- Documents (U89): lines past the framing setting open from a "N to review" chip above the document; the job page's documents have Edit only (the PDFs menu owns export); "Saved" is a toast.
 
 ## Accessibility
 Native buttons and inputs; visible focus (`--focus`); `aria-current` for navigation, `aria-pressed` for toggles, `aria-expanded` for cards; menus and dialogs close on Escape and return focus; keyboard paths for the interview view (↑ ↓, Enter, /, L; live mode ← → R Esc); `prefers-reduced-motion` honored.

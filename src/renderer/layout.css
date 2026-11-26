@@ -191,7 +191,7 @@
 .stretch-summary p { margin: var(--space-2) 0; font-size: var(--fs-13); }
 .stretch-lines, .must-group ul { display: grid; gap: var(--space-1); margin: var(--space-1) 0 0; padding-left: var(--space-4); font-size: var(--fs-13); }
 .stretch-tag { font-weight: 600; }
-.framing-lines { margin: 0 0 var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: var(--radius-m); font-size: var(--fs-13); }
+.framing-lines { margin: var(--space-2) 0 var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); font-size: var(--fs-13); }
 .framing-lines-note { margin: 0 0 var(--space-2); }
 .iv-pending { margin: 0 0 var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: var(--radius-m); font-size: var(--fs-13); }
 .iv-pending p { margin: 0 0 var(--space-2); }
@@ -1252,3 +1252,9 @@ summary.run-status-line::-webkit-details-marker { display: none; }
 .chat-steps-fold summary { cursor: pointer; color: var(--term-muted); font-size: var(--fs-12); }
 .terminal-more summary { width: auto; min-height: 0; }
 .terminal-hide { font-size: var(--fs-15); line-height: 1; }
+
+/* Documents (U89, #185): flagged lines are a "N to review" chip that opens; saved is a toast. */
+.framing-review { margin: 0 0 var(--space-2); }
+.framing-review > summary { display: inline-flex; cursor: pointer; list-style: none; }
+.framing-review > summary::-webkit-details-marker { display: none; }
+.framing-review > summary .check-chip { pointer-events: none; }

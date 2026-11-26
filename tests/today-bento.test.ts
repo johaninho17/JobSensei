@@ -253,3 +253,22 @@ describe("Show less, reveal on demand: Agy panel (U89, #186)", () => {
     expect(panel).toContain("jobActions.slice(0, 1)");
   });
 });
+
+describe("Show less, reveal on demand: documents (U89, #185)", () => {
+  it("flagged lines open from a review chip instead of a card above the document", async () => {
+    const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
+    const framing = page.slice(page.indexOf("function FramingLines"), page.indexOf("const STRETCH_LABEL"));
+    expect(framing).toContain('<details className="framing-review"');
+    expect(framing).toContain("to review</span>");
+    expect(framing).not.toContain('<section className="framing-lines"');
+  });
+
+  it("the job page's documents have no second export control, and Saved is a toast", async () => {
+    const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
+    const docs = await readFile("src/renderer/Documents.tsx", "utf8");
+    expect(page).toContain("isBaseResume={false} exportHere={false}");
+    expect(docs).toContain("canExport && exportHere && <MarkdownExportButton");
+    expect(docs).not.toContain('setMessage("Saved locally")');
+    expect(docs).not.toContain('state === "saved" ? "Saved"');
+  });
+});
