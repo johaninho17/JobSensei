@@ -6,6 +6,7 @@ import { PrivacyAndTerms } from "./Privacy";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { EMPTY_INTERVIEW_LOGISTICS, type BulletBank, type BulletBankItem, type CandidateProfile, type InterviewLogistics, type Settings, type VoiceSettings } from "../shared/schemas";
 import { deriveVoicePresets } from "../shared/voice-presets";
+import { InfoTip } from "./BentoPrimitives";
 
 type SettingsTab = "voice" | "story" | "truth" | "interview" | "resume" | "bullets" | "identity" | "preview" | "privacy";
 // Interview prep settings exist only where the edition has interviews (src/shared/edition.ts).
@@ -334,27 +335,13 @@ export function SettingsModal({
           {!FEATURES.candidates && activeTab === "voice" && (
             <div className="settings-section">
               <div className="settings-group">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <h3 className="settings-group-title" id="settings-tone-and-positioning-presets">Tone and positioning presets</h3>
-                  <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-                    Generated dynamically from your profile & career discipline
-                  </span>
-                </div>
-                <p className="settings-group-desc">Controls the voice and personality applied to cover letters, interview prep, and narrative summaries.</p>
-                <div className="settings-cards-grid">
-                  {derivedPresets.map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      className={`settings-card ${voice.tonePreset === preset.id ? "is-selected" : ""}`}
-                      onClick={() => setVoice({ ...voice, tonePreset: preset.id })}
-                    >
-                      <strong>{preset.name}</strong>
-                      <p style={{ fontWeight: 600, color: "var(--ink)", marginBottom: "4px" }}>{preset.tagline}</p>
-                      <p>{preset.description}</p>
-                    </button>
-                  ))}
-                </div>
+                {/* One dropdown with the chosen preset's one-line summary (#243). */}
+                <h3 className="settings-group-title" id="settings-tone-and-positioning-presets">Tone preset <InfoTip label="About tone presets"><p>Made from your profile and field. Sets the voice of cover letters, interview prep, and summaries.</p></InfoTip></h3>
+                <select className="settings-select" aria-labelledby="settings-tone-and-positioning-presets" value={derivedPresets.some((preset) => preset.id === voice.tonePreset) ? voice.tonePreset : ""} onChange={(event) => setVoice({ ...voice, tonePreset: event.target.value as typeof voice.tonePreset })}>
+                  {!derivedPresets.some((preset) => preset.id === voice.tonePreset) && <option value="" disabled>Choose a preset</option>}
+                  {derivedPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                </select>
+                {(() => { const chosen = derivedPresets.find((preset) => preset.id === voice.tonePreset); return chosen ? <p className="settings-preset-line">{chosen.tagline}</p> : null; })()}
               </div>
 
               {voiceFile !== null && <div className="settings-group">
@@ -363,8 +350,8 @@ export function SettingsModal({
               </div>}
 
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-custom-voice-and-tone-guidance-optional">Custom voice and tone guidance (optional)</h3>
-                <p className="settings-group-desc">Provide your own voice instructions to customize drafts further (e.g., "Keep sentences punchy and conversational; emphasize commercial deal sizes; avoid jargon").</p>
+                <h3 className="settings-group-title" id="settings-custom-voice-and-tone-guidance-optional">Custom voice and tone guidance (optional) <InfoTip label="About custom voice and tone guidance (optional)"><p>Provide your own voice instructions to customize drafts further (e.g., "Keep sentences punchy and conversational; emphasize commercial deal sizes; avoid jargon").</p></InfoTip></h3>
+                
                 <textarea aria-labelledby="settings-custom-voice-and-tone-guidance-optional"
                   className="settings-textarea"
                   rows={3}
@@ -386,8 +373,8 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-anti-ai-slop-filter">Anti-AI slop filter</h3>
-                <p className="settings-group-desc">Enforces strict bans on machine clichés (delve, leverage, tapestry, realm, pivotal, rule-of-three corporate lists).</p>
+                <h3 className="settings-group-title" id="settings-anti-ai-slop-filter">Anti-AI slop filter <InfoTip label="About anti-ai slop filter"><p>Enforces strict bans on machine clichés (delve, leverage, tapestry, realm, pivotal, rule-of-three corporate lists).</p></InfoTip></h3>
+                
                 <div className="settings-radio-row">
                   <label className="settings-radio-label">
                     <input aria-labelledby="settings-anti-ai-slop-filter"
@@ -411,8 +398,8 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-cover-letter-narrative-depth">Cover letter narrative depth</h3>
-                <p className="settings-group-desc">Determine whether the cover letter is a human journey or technical proof points.</p>
+                <h3 className="settings-group-title" id="settings-cover-letter-narrative-depth">Cover letter narrative depth <InfoTip label="About cover letter narrative depth"><p>Determine whether the cover letter is a human journey or technical proof points.</p></InfoTip></h3>
+                
                 <div className="settings-radio-row">
                   <label className="settings-radio-label">
                     <input aria-labelledby="settings-cover-letter-narrative-depth"
@@ -436,8 +423,8 @@ export function SettingsModal({
               </div>
 
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-interactive-clarifying-questions">Interactive clarifying questions</h3>
-                <p className="settings-group-desc">When a job introduces adjacent tech domains (e.g. checkout, fintech, compliance), should JobSensei prompt you with multiple-choice questions?</p>
+                <h3 className="settings-group-title" id="settings-interactive-clarifying-questions">Interactive clarifying questions <InfoTip label="About interactive clarifying questions"><p>When a job introduces adjacent tech domains (e.g. checkout, fintech, compliance), should JobSensei prompt you with multiple-choice questions?</p></InfoTip></h3>
+                
                 <div className="settings-radio-row">
                   <label className="settings-radio-label">
                     <input aria-labelledby="settings-interactive-clarifying-questions"
@@ -474,17 +461,17 @@ export function SettingsModal({
           {!FEATURES.candidates && activeTab === "story" && (
             <div className="settings-section">
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-career-story-and-narrative-pillars">Career story and narrative pillars</h3>
-                <p className="settings-group-desc">
+                <h3 className="settings-group-title" id="settings-career-story-and-narrative-pillars">Career story and narrative pillars <InfoTip label="About career story and narrative pillars"><p>
                   JobSensei uses your authentic human journey instead of parroting job descriptions. These three questions define your career transitions, problem-solving ethos, and person-fit across all cover letters and interviews.
-                </p>
+                </p></InfoTip></h3>
+                
               </div>
 
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-cover-letter-shape">Cover letter</h3>
-                <p className="settings-group-desc">
+                <h3 className="settings-group-title" id="settings-cover-letter-shape">Cover letter <InfoTip label="About cover letter"><p>
                   What carries your letters, and how long they are. Career story first tells where you started, why you moved, and how you work now; examples first tells one or two real situations. The longest letter allowed is your maximum plus 50 words.
-                </p>
+                </p></InfoTip></h3>
+                
                 <div className="segmented" role="group" aria-labelledby="settings-cover-letter-shape">
                   <button type="button" aria-pressed={letterFocus === "career-story"} onClick={() => setLetterFocus("career-story")}>Career story first</button>
                   <button type="button" aria-pressed={letterFocus === "examples"} onClick={() => setLetterFocus("examples")}>Examples first</button>
@@ -509,10 +496,10 @@ export function SettingsModal({
                 <PrivateNamesField value={confidentialNamesText} onChange={setConfidentialNamesText} />
               </div>
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-claims-i-never-make">Claims I never make</h3>
-                <p className="settings-group-desc">
+                <h3 className="settings-group-title" id="settings-claims-i-never-make">Claims I never make <InfoTip label="About claims i never make"><p>
                   One per line. Agy treats these as hard limits on every application.
-                </p>
+                </p></InfoTip></h3>
+                
                 <textarea aria-labelledby="settings-claims-i-never-make"
                   className="settings-textarea"
                   rows={4}
@@ -522,10 +509,10 @@ export function SettingsModal({
                 />
               </div>
               {FEATURES.interviews && <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-practice-evidence">Practice interviews</h3>
-                <p className="settings-group-desc">
+                <h3 className="settings-group-title" id="settings-practice-evidence">Practice interviews <InfoTip label="About practice interviews"><p>
                   Stories you told in practice (mock) interviews can back drafts once you confirm them into your interview stories. Turn this off to keep practice interviews for interview voice and practice only. A mock interviewer's feedback never counts.
-                </p>
+                </p></InfoTip></h3>
+                
                 <label className="search-check"><input type="checkbox" checked={practiceEvidence} onChange={(e) => setPracticeEvidence(e.target.checked)} />Practice interviews count as career evidence</label>
               </div>}
             </div>
@@ -538,10 +525,10 @@ export function SettingsModal({
                 <LogisticsForm values={logistics} onChange={setLogistics} />
               </div>
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-story-bank">Story bank</h3>
-                <p className="settings-group-desc">
+                <h3 className="settings-group-title" id="settings-story-bank">Story bank <InfoTip label="About story bank"><p>
                   6–8 true stories every interview round picks from. Agy builds it the first time you prepare an interview; you edit the file directly.
-                </p>
+                </p></InfoTip></h3>
+                
                 {preview?.storyBankPath ? (
                   <button type="button" className="secondary-btn" onClick={() => void window.sensei.files.reveal(preview.storyBankPath!)}>
                     Open story bank
@@ -555,10 +542,10 @@ export function SettingsModal({
           {activeTab === "preview" && (
             <div className="settings-section">
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-what-agy-sees">What Agy sees</h3>
-                <p className="settings-group-desc">
+                <h3 className="settings-group-title" id="settings-what-agy-sees">What Agy sees <InfoTip label="About what agy sees"><p>
                   Exactly what your saved settings and voice profile give Agy on the next application. Save to refresh.
-                </p>
+                </p></InfoTip></h3>
+                
                 {preview ? (
                   <>
                     <strong>Voice & story</strong>
@@ -576,11 +563,11 @@ export function SettingsModal({
           {activeTab === "resume" && (
             <div className="settings-section">
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-professional-summary">Professional summary</h3>
-                <p className="settings-group-desc">
+                <h3 className="settings-group-title" id="settings-professional-summary">Professional summary <InfoTip label="About professional summary"><p>
                   Only applies if your base resume already has a summary section. When on, Agy tailors that summary for each job; when off, it stays exactly as written.
                   {preview?.baseResumeHasSummary === false && <> <strong>Your base resume has no summary section, so this setting has no effect.</strong></>}
-                </p>
+                </p></InfoTip></h3>
+                
                 <label className="settings-toggle-row">
                   <input aria-labelledby="settings-professional-summary"
                     type="checkbox"
@@ -601,10 +588,10 @@ export function SettingsModal({
           {!FEATURES.candidates && activeTab === "bullets" && (
             <div className="settings-section">
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-role-themes-and-reusable-bullets">Role themes and reusable bullets</h3>
-                <p className="settings-group-desc">
+                <h3 className="settings-group-title" id="settings-role-themes-and-reusable-bullets">Role themes and reusable bullets <InfoTip label="About role themes and reusable bullets"><p>
                   JobSensei groups target jobs into common themes. Verified bullets saved here are automatically reused across similar jobs to save compute and preserve consistent, proven wording.
-                </p>
+                </p></InfoTip></h3>
+                
 
                 <div className="settings-theme-selector">
                   {bulletBank?.themes.map((theme) => (
@@ -668,8 +655,8 @@ export function SettingsModal({
           {activeTab === "identity" && (
             <div className="settings-section">
               <div className="settings-group">
-                <h3 className="settings-group-title" id="settings-candidate-identity">Candidate identity</h3>
-                <p className="settings-group-desc">{FEATURES.candidates ? "From the candidate's folder on this computer." : "Used on every resume, cover letter, and file name. Saved in your workspace on this computer."}</p>
+                <h3 className="settings-group-title" id="settings-candidate-identity">Candidate identity <InfoTip label="About candidate identity"><p>{FEATURES.candidates ? "From the candidate's folder on this computer." : "Used on every resume, cover letter, and file name. Saved in your workspace on this computer."}</p></InfoTip></h3>
+                
                 <IdentityForm values={identity} onChange={setIdentity} />
                 <div className="identity-summary-card">
                   <div><span>Base Resume:</span> <strong>{settings.baseResumePath ?? "None selected"}</strong></div>
@@ -689,7 +676,6 @@ export function SettingsModal({
 
         <div className="settings-footer">
           {saveSuccess && <span className="settings-success-indicator">✓ Preferences saved</span>}
-          <button type="button" className="settings-cancel-btn" onClick={onClose}>Close</button>
           <button
             type="button"
             className="settings-save-btn"

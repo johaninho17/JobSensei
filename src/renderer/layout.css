@@ -1296,3 +1296,10 @@ summary.run-status-line::-webkit-details-marker { display: none; }
 .agy-action-row:hover:not(:disabled) .agy-action-go, .agy-action-row:focus-visible .agy-action-go { opacity: 1; }
 .agy-action-row:focus-visible { outline: none; box-shadow: var(--focus); }
 .agy-action-row:disabled { color: var(--muted); cursor: default; }
+
+/* Settings: one preset dropdown and its one-line summary (#243). */
+.settings-select { min-height: 36px; max-width: 360px; padding: 0 var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-m); color: var(--ink); background: var(--raised); font: var(--fs-15) var(--font-ui); }
+.settings-select:focus-visible { outline: none; box-shadow: var(--focus); }
+.settings-preset-line { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--fs-13); }
+.settings-group-title .info-tip, .settings-group-title button { vertical-align: middle; }
+.settings-group-title { display: flex; align-items: center; gap: var(--space-2); }

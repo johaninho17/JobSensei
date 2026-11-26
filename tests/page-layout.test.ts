@@ -314,3 +314,13 @@ describe("Navigation says it once (#242)", () => {
     expect(menu).toContain('aria-label="Quick settings"');
   });
 });
+
+describe("Settings says it once (#243)", () => {
+  it("presets are one dropdown, section help is a tip, and the X is the only close", async () => {
+    const settings = await readFile("src/renderer/SettingsModal.tsx", "utf8");
+    expect(settings).toContain('<select className="settings-select" aria-labelledby="settings-tone-and-positioning-presets"');
+    expect(settings).not.toContain('className={`settings-card ${voice.tonePreset === preset.id');
+    expect(settings.match(/className="settings-group-desc"/g)?.length ?? 0).toBeLessThanOrEqual(1);
+    expect(settings).not.toContain('className="settings-cancel-btn" onClick={onClose}>Close</button>');
+  });
+});
