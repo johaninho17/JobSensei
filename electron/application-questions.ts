@@ -6,7 +6,8 @@
 // Any other job board returns null and nothing happens.
 import { postingRef } from "../src/shared/boards";
 import type { ApplicationQuestion } from "../src/shared/schemas";
-import { decodeEntities, fetchText } from "./jd-fetch";
+import { decodeEntities, embeddedPostingUrl, fetchText } from "./jd-fetch";
+import { postingUrl } from "./posting-clean";
 
 export type { ApplicationQuestion };
 
@@ -131,9 +132,42 @@ export function formSource(url: string): { board: "greenhouse" | "ashby" | "leve
   return { board: ref.board, parts: ref.board === "lever" ? [ref.origin, ref.slug, ref.id] : [ref.slug, ref.id] };
 }
 
+/** Systems whose forms sit behind sign-in or bot checks: no page read (form filling in a browser will cover them). */
+const NO_PUBLIC_FORM = /(?:^|\.)(?:myworkdayjobs\.com|oraclecloud\.com|smartrecruiters\.com|icims\.com|taleo\.net|successfactors\.(?:com|eu)|linkedin\.com|indeed\.com)$/i;
+
+/**
+ * A company careers page that embeds a board's posting (Greenhouse `gh_jid` links, Ashby or Lever frames) has that
+ * board's form (issue #175). One page read; null when the page embeds no supported board or can't be read.
+ */
+export async function embeddedFormSource(url: string, fetcher: typeof fetch = fetch): Promise<ReturnType<typeof formSource>> {
+  try {
+    const { protocol, hostname } = new URL(url);
+    if (!/^https?:$/.test(protocol) || NO_PUBLIC_FORM.test(hostname)) return null;
+  } catch { return null; }
+  const html = await fetchText(url, fetcher).catch(() => null);
+  const embedded = html ? embeddedPostingUrl(html, url) : null;
+  if (embedded && embedded !== url) return formSource(postingUrl(embedded));
+  // A `gh_jid` page that names no board (it renders the posting itself): Greenhouse boards are usually named after
+  // the site, so that board is used only when Greenhouse has this exact job on it.
+  const jid = new URL(url).searchParams.get("gh_jid");
+  const slug = siteBoardName(url);
+  if (!jid || !/^\d+$/.test(jid) || !slug) return null;
+  const found = await fetcher(`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs/${jid}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
+  return found?.ok ? { board: "greenhouse", parts: [slug, jid] } : null;
+}
+
+/** The site's own name as a board name: "careers.northwind.com" → "northwind" (country domains like .co.uk handled). */
+export function siteBoardName(url: string): string | null {
+  let labels: string[];
+  try { labels = new URL(url).hostname.toLowerCase().split("."); } catch { return null; }
+  const index = labels.length >= 3 && /^(?:co|com|org|net|ac)$/.test(labels.at(-2)!) && labels.at(-1)!.length === 2 ? labels.length - 3 : labels.length - 2;
+  const name = labels[index];
+  return name && /^[a-z0-9-]{2,}$/.test(name) ? name : null;
+}
+
 /** The form's fields from a posting link, or null when the board isn't supported. */
 export async function fetchApplicationForm(url: string, fetcher: typeof fetch = fetch): Promise<FormField[] | null> {
-  const source = formSource(url);
+  const source = formSource(url) ?? await embeddedFormSource(url, fetcher);
   if (!source) return null;
   if (source.board === "greenhouse") {
     const [board, id] = source.parts;
