@@ -5,7 +5,7 @@ import { askConfirm } from "./confirm";
 import { createPortal } from "react-dom";
 import { TRACKER_STATUSES, type JobQueue, type JobTrackerUpdate, type TrackerStatus, type JobFolderSummary } from "../shared/schemas";
 import { jobsToCsv } from "../shared/jobs-csv";
-import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, readyToSend, statusLabel, reachedInterview, staleApplications } from "../shared/tracker";
+import { STALE_DAYS, TRACKER_LABELS, effectiveAppliedAt, effectiveStatus, readyToSend, statusLabel, reachedInterview, staleApplications, isArchived } from "../shared/tracker";
 import { type Readiness } from "../shared/readiness";
 import { CompanyStrip, JobFilters, SavedViews, storeJobViews, storedJobViews } from "./JobOrganize";
 import { FitRing, PageHead } from "./BentoPrimitives";
@@ -47,7 +47,7 @@ function DataHealthPanel({ jobs, onOpenJob, onClose }: { jobs: JobFolderSummary[
 
 type JobsFilter = "all" | "active" | "interviewing" | "review" | "favorites";
 type JobsView = "list" | "cards";
-export type JobsTab = "active" | "ready" | "interviewing" | "offer" | "reached" | "applied" | "saved" | "closed" | "all";
+export type JobsTab = "active" | "ready" | "interviewing" | "offer" | "reached" | "applied" | "saved" | "archived" | "all";
 /** Jobs by status (U79: sidebar sub-items under Jobs and the status menu in the page header); Active is the default. */
 export const JOB_TABS: Array<{ id: JobsTab; label: string; statuses: TrackerStatus[] | null }> = [
   { id: "active", label: "Active", statuses: ["saved", "applied", "interviewing", "offer"] },
@@ -59,12 +59,15 @@ export const JOB_TABS: Array<{ id: JobsTab; label: string; statuses: TrackerStat
   ...(FEATURES.interviews ? [{ id: "reached" as const, label: "Went to interview", statuses: null }] : []),
   { id: "applied", label: "Applied", statuses: ["applied"] },
   { id: "saved", label: "Saved", statuses: ["saved"] },
-  { id: "closed", label: "Closed", statuses: ["rejected", "withdrawn"] },
+  // Rejected, withdrawn, or archived by the user (#211): only here, never in another view or the Jobs count.
+  { id: "archived", label: "Archived", statuses: null },
   { id: "all", label: "All", statuses: null },
 ];
 const ACTIVE_STATUSES: TrackerStatus[] = ["saved", "applied", "interviewing", "offer"];
 /** Whether a job belongs to a status view; the page and the sidebar both count with this. */
 export function inJobsTab(job: JobFolderSummary, value: JobsTab): boolean {
+  if (value === "archived") return isArchived(job);
+  if (isArchived(job)) return false;
   if (value === "reached") return reachedInterview(job);
   if (value === "ready") return readyToSend(job);
   const statuses = JOB_TABS.find((candidate) => candidate.id === value)?.statuses ?? null;
@@ -180,7 +183,12 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
     onToast(`Marked ${plural(chosen.length, "job")} as ${TRACKER_LABELS[status].toLowerCase()}`, () => void (async () => { for (const item of before) await onUpdateTracker(item.id, { status: item.status }, { quiet: true }); })());
     exitSelect();
   }
-  const menuHandlers = (job: JobFolderSummary): JobMenuHandlers => ({ onOpen: () => onOpenJob(job.id), onOpenEvaluation: () => onOpenEvaluation(job.id), onOpenInterview: job.interviewRoundLabel ? () => onOpenJobView(job.id, "interview") : null, onMoveToTrash: () => onMoveToTrash(job.id), onSetStatus: (status) => void onUpdateTracker(job.id, { status }) });
+  async function archiveJob(job: JobFolderSummary, archive: boolean) {
+    const today = new Date().toISOString().slice(0, 10);
+    await onUpdateTracker(job.id, { archivedAt: archive ? today : null }, { quiet: true });
+    onToast(`${job.company ?? displayJobName(job.name)}: ${archive ? "archived" : "back in Jobs"}`, () => void onUpdateTracker(job.id, { archivedAt: archive ? null : today }, { quiet: true }));
+  }
+  const menuHandlers = (job: JobFolderSummary): JobMenuHandlers => ({ onOpen: () => onOpenJob(job.id), onOpenEvaluation: () => onOpenEvaluation(job.id), onOpenInterview: job.interviewRoundLabel ? () => onOpenJobView(job.id, "interview") : null, onMoveToTrash: () => onMoveToTrash(job.id), onSetStatus: (status) => void onUpdateTracker(job.id, { status }), onArchive: (archive) => void archiveJob(job, archive) });
   const filterLabels: Record<JobsFilter, string> = { all: "All", active: "Active", interviewing: "Interviewing", review: "Needs review", favorites: "Favorites" };
   const renderJobs = (list: JobFolderSummary[]) => view === "cards" ? <div className="job-card-grid">{list.map((job) => <JobCard key={job.id} job={job} favorite={favorites.has(job.id)} onToggleFavorite={() => toggleFavorite(job.id)} handlers={menuHandlers(job)} selecting={selecting} selected={selected.has(job.id)} onSelect={(event) => toggleSelected(job.id, event as { shiftKey?: boolean })} />)}</div>
       : <div className="jobs-table-wrap"><table className="jobs-table"><thead><tr>{selecting && <th scope="col"><span className="sr-only">Selected</span></th>}<th scope="col">Role</th><th scope="col">Fit</th><th scope="col">Status</th><th scope="col">Interview</th><th scope="col">Next</th><th scope="col" className="col-added">Added</th><th scope="col"><span className="sr-only">Favorite and actions</span></th></tr></thead><tbody>{list.map((job) => <tr key={job.id} tabIndex={0} className={selected.has(job.id) ? "is-selected" : undefined} aria-selected={selecting ? selected.has(job.id) : undefined} onClick={(event) => { if (selecting || event.metaKey || event.ctrlKey) toggleSelected(job.id, event); else onOpenJob(job.id); }} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); if (selecting) toggleSelected(job.id, event); else onOpenJob(job.id); } }}>{selecting && <td><input type="checkbox" className="job-select" checked={selected.has(job.id)} aria-label={`Select ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => toggleSelected(job.id, { shiftKey: (event.nativeEvent as globalThis.MouseEvent).shiftKey })} /></td>}<td className="jobs-role"><strong>{job.company ?? displayJobName(job.name)}</strong><span>{job.title ?? "Role not recorded"}</span></td><td><FitBadge rating={job.rating} gate={jobSettingsScore(job.settingsScore).behavior.fit.gate} /></td><td><TrackerPill status={effectiveStatus(job)} job={job} /></td><td>{job.interviewRoundLabel ? <button className="btn-link" onClick={(event) => { event.stopPropagation(); onOpenJobView(job.id, "interview"); }}>{job.interviewRoundLabel}</button> : <span className="muted">None</span>}</td><td><NextBadge job={job} /></td><td className="tabular muted col-added">{formatJobDate(job.createdAt)}</td><td><button className={`job-favorite ${favorites.has(job.id) ? "is-favorite" : ""}`} aria-pressed={favorites.has(job.id)} aria-label={`Favorite ${job.company ?? displayJobName(job.name)}, ${job.title ?? "role"}`} onClick={(event) => { event.stopPropagation(); toggleFavorite(job.id); }}>{favorites.has(job.id) ? "★" : "☆"}</button><JobMenuButton job={job} handlers={menuHandlers(job)} /></td></tr>)}</tbody></table></div>;
@@ -229,8 +237,8 @@ export function JobsHome({ jobs, onOrderChange, onOpenJob, onOpenJobView, onOpen
     </div>}
     {healthOpen && <DataHealthPanel jobs={jobs} onOpenJob={onOpenJob} onClose={() => setHealthOpen(false)} />}
     {!visibleJobs.length ? <div className="dashboard-empty"><h2>No jobs match this view</h2><p>Clear the search or pick another tab.</p></div>
-      : tab === "closed" ? <>
-        <section className="jobs-group" aria-labelledby="closed-reached"><h2 id="closed-reached">Reached interviews <span>{visibleJobs.filter(reachedInterview).length}</span></h2><p>Jobs that got to at least one interview: the ones worth a debrief.</p>{visibleJobs.some(reachedInterview) ? renderJobs(visibleJobs.filter(reachedInterview)) : <p className="muted">None yet.</p>}</section>
+      : tab === "archived" ? <>
+        <section className="jobs-group" aria-labelledby="archived-reached"><h2 id="archived-reached">Reached interviews <span>{visibleJobs.filter(reachedInterview).length}</span></h2>{visibleJobs.some(reachedInterview) ? renderJobs(visibleJobs.filter(reachedInterview)) : <p className="muted">None yet.</p>}</section>
         <details className="jobs-group"><summary><h2>No interview <span>{visibleJobs.filter((job) => !reachedInterview(job)).length}</span></h2></summary>{renderJobs(visibleJobs.filter((job) => !reachedInterview(job)))}</details>
       </>
       : group === "none" ? renderJobs(visibleJobs)
@@ -345,7 +353,7 @@ function NextBadge({ job, quiet = false, due = false }: { job: JobFolderSummary;
   return quiet ? null : <span className="muted">—</span>;
 }
 
-type JobMenuHandlers = { onOpen: () => void; onOpenEvaluation: () => void; onOpenInterview: (() => void) | null; onMoveToTrash: () => void; onSetStatus: (status: TrackerStatus) => void };
+type JobMenuHandlers = { onOpen: () => void; onOpenEvaluation: () => void; onOpenInterview: (() => void) | null; onMoveToTrash: () => void; onSetStatus: (status: TrackerStatus) => void; onArchive: (archive: boolean) => void };
 
 /** The job actions menu, shared by the ⋯ button and right-click. Arrow keys move, Escape closes. */
 function JobMenu({ job, at, handlers, onClose }: { job: JobFolderSummary; at: { x: number; y: number }; handlers: JobMenuHandlers; onClose: () => void }) {
@@ -379,6 +387,7 @@ function JobMenu({ job, at, handlers, onClose }: { job: JobFolderSummary; at: { 
     {handlers.onOpenInterview && <button role="menuitem" onClick={() => run(handlers.onOpenInterview!)}>Open interview prep</button>}
     <button role="menuitem" onClick={() => run(() => void window.sensei.app.copyText(job.relativePath))}>Copy folder path</button>
     <button role="menuitem" onClick={() => run(() => void window.sensei.files.reveal(job.relativePath))}>Show in file manager</button>
+    <button role="menuitem" onClick={() => run(() => handlers.onArchive(!job.tracker?.archivedAt))}>{job.tracker?.archivedAt ? "Unarchive" : "Archive"}</button>
     <button role="menuitem" className="is-destructive" onClick={() => run(handlers.onMoveToTrash)}>Move job to Trash</button>
   </div>, document.body);
 }

@@ -103,6 +103,7 @@ export function JobWorkspaceDashboard({ job, status, applicationLoading, overvie
               <p className="menu-note">Added {formatJobDate(job.createdAt)}</p>
               {job.editedFields.length > 0 && <p className="menu-note job-edited" title="You corrected these; re-reading the posting never changes them.">Edited: {job.editedFields.map((field) => overrideLabel(field).toLowerCase()).join(", ")}</p>}
               {!editingDetails && <button className="menu-item" onClick={(event) => { (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); setEditingDetails(true); }}>Edit details</button>}
+              <button className="menu-item" onClick={(event) => { (event.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); void onUpdateTracker({ archivedAt: job.tracker?.archivedAt ? null : new Date().toISOString().slice(0, 10) }); }}>{job.tracker?.archivedAt ? "Unarchive" : "Archive"}</button>
             </div>
           </details>
         </div>

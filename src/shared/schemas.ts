@@ -330,6 +330,8 @@ export const jobTrackerSchema = z.object({
   schemaVersion: z.literal(1).default(1),
   status: trackerStatusSchema.default("saved"),
   appliedAt: trackerDateSchema.nullable().default(null),
+  /** Set when the user archives the job (#211); the status is kept, so Unarchive restores it. */
+  archivedAt: trackerDateSchema.nullable().default(null),
   notes: z.string().max(5000).default(""),
   /** The user's own labels for the job ("referral", "dream job"); a filter on the Jobs page. */
   tags: z.array(z.string().max(30)).max(12).default([]),
@@ -342,6 +344,7 @@ export type JobTracker = z.infer<typeof jobTrackerSchema>;
 export const jobTrackerUpdateSchema = z.object({
   status: trackerStatusSchema.optional(),
   appliedAt: trackerDateSchema.nullable().optional(),
+  archivedAt: trackerDateSchema.nullable().optional(),
   notes: z.string().max(5000).optional(),
   tags: z.array(z.string().max(30)).max(12).optional(),
   interviews: z.array(interviewEventSchema).max(30).optional(),

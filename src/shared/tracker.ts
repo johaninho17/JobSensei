@@ -66,3 +66,13 @@ export function staleApplications<T extends TrackedJob & { tracker: (TrackedJob[
     return lastTouch > 0 && lastTouch < cutoff;
   });
 }
+
+/** Archived (#211): rejected or withdrawn, or put away by the user (status kept). Archived jobs sit only in Archived. */
+export function isArchived(job: StatusInputs & { tracker: (StatusInputs["tracker"] & { archivedAt?: string | null }) | null }): boolean {
+  return Boolean(job.tracker?.archivedAt) || ["rejected", "withdrawn"].includes(effectiveStatus(job));
+}
+
+/** The sidebar's Jobs number (#211): live applications only (Applied, Interviewing, Offer), never archived ones. */
+export function liveApplicationCount(jobs: Array<StatusInputs & { tracker: (StatusInputs["tracker"] & { archivedAt?: string | null }) | null }>): number {
+  return jobs.filter((job) => !isArchived(job) && ["applied", "interviewing", "offer"].includes(effectiveStatus(job))).length;
+}
