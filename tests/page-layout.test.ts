@@ -257,3 +257,13 @@ describe("Jobs page: one View menu, and sidebar counts that agree (#224)", () =>
     expect(app).toContain("liveApplicationCount(jobs) > 0 && <span");
   });
 });
+
+describe("Fit lists as tabs inside the card (#226)", () => {
+  it("the Fit card switches its lists with in-card tabs that show counts, not stacked fold-outs", async () => {
+    const page = await readFile("src/renderer/JobWorkspace.tsx", "utf8");
+    expect(page).toContain("<FitTabs ");
+    expect(page).not.toContain("function MustHaveGroups");
+    expect(page).toMatch(/role="tablist" aria-label="Fit details"/);
+    expect(page).toMatch(/<span>\{list\.label\}<\/span><strong className="tabular">\{list\.items\.length\}<\/strong>/);
+  });
+});

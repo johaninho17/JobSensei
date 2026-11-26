@@ -149,8 +149,7 @@ export function JobWorkspaceDashboard({ onOpenJobs, job, status, applicationLoad
               {/* Agy's settings when these drafts were made: a detail of the fit, not a header fact (#221). */}
               {job.hasApplicationMaterials && (() => { const score = jobSettingsScore(job.settingsScore); return <span className={`settings-score fit-settings is-${score.band}`} title={`Agy's settings when these drafts were made: ${score.score} of 100 (${settingsScoreLabel(score).split(" ")[1]}). Higher means more lenient. See Agy → Behavior.`}>Settings <strong className="tabular">{score.score}</strong> {settingsScoreLabel(score).split(" ")[1]}</span>; })()}
               {job.stretch && <StretchSummary stretch={job.stretch} />}
-              <MustHaveGroups mustHaves={job.mustHaves} gaps={job.requirementGaps.length ? job.requirementGaps : job.ratingGaps.filter((item) => !/^none\b/i.test(item)).map((item) => item.replace(/^(?:must|req):\d+\s*/i, ""))} />
-              {job.mustHaves.length === 0 && job.ratingHighlights.length > 0 && <details className="must-group is-met"><summary>Strengths ({job.ratingHighlights.length})</summary><ul>{job.ratingHighlights.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul></details>}
+              <FitTabs mustHaves={job.mustHaves} gaps={job.requirementGaps.length ? job.requirementGaps : job.ratingGaps.filter((item) => !/^none\b/i.test(item)).map((item) => item.replace(/^(?:must|req):\d+\s*/i, ""))} strengths={job.mustHaves.length === 0 ? job.ratingHighlights.slice(0, 4) : []} />
             </>}
           </section>
           {/* Shown once there are rounds; the Interview tab has the empty state (#223). */}
@@ -591,20 +590,26 @@ function StretchSummary({ stretch }: { stretch: NonNullable<JobFolderSummary["st
 
 /** The posting's required items as rated, grouped so blockers and learnable gaps are seen first. */
 /** Must-haves as one line, with the groups (blockers, to learn, gaps, met) folded away until opened. */
-function MustHaveGroups({ mustHaves, gaps = [] }: { mustHaves: JobFolderSummary["mustHaves"]; gaps?: string[] }) {
-  if (!mustHaves.length && !gaps.length) return null;
-  const groups: Array<[string, "blocker" | "learnable" | "met"]> = [["Blockers", "blocker"], ["To learn", "learnable"], ["Met", "met"]];
+/**
+ * The Fit card's lists as tabs built into the card (#226; Attune reference): Blockers, To learn, Met, Gaps, and
+ * Strengths when there are no must-haves, each with its count; the active list shows below. Blockers open first.
+ */
+function FitTabs({ mustHaves, gaps = [], strengths = [] }: { mustHaves: JobFolderSummary["mustHaves"]; gaps?: string[]; strengths?: string[] }) {
+  const lists: Array<{ id: string; label: string; tone: string; items: string[] }> = [
+    { id: "blocker", label: "Blockers", tone: "blocker", items: mustHaves.filter((item) => item.status === "blocker").map((item) => item.requirement) },
+    { id: "learnable", label: "To learn", tone: "learnable", items: mustHaves.filter((item) => item.status === "learnable").map((item) => item.requirement) },
+    { id: "met", label: "Met", tone: "met", items: mustHaves.filter((item) => item.status === "met").map((item) => item.requirement) },
+    { id: "gap", label: "Gaps", tone: "gap", items: gaps.slice(0, 6) },
+    { id: "strength", label: "Strengths", tone: "met", items: strengths },
+  ].filter((list) => list.items.length > 0);
+  const [picked, setPicked] = useState<string | null>(null);
+  if (!lists.length) return null;
+  const active = lists.find((list) => list.id === picked) ?? lists[0]!;
   const met = mustHaves.filter((item) => item.status === "met").length;
-  return <div className="must-haves">
+  return <div className="fit-tabs">
     {mustHaves.length > 0 && <p className="must-line"><strong>Must-haves</strong> {met} of {mustHaves.length} met{mustHaves.some((item) => item.status === "blocker") ? " · has a blocker" : ""}</p>}
-    {groups.map(([label, status]) => {
-      const items = mustHaves.filter((item) => item.status === status);
-      return items.length > 0 && <details key={status} className={`must-group is-${status}`} open={status === "blocker"}>
-        <summary>{label} ({items.length})</summary>
-        <ul>{items.map((item) => <li key={item.requirement}>{item.requirement}</li>)}</ul>
-      </details>;
-    })}
-    {gaps.length > 0 && <details className="must-group is-gap"><summary>Gaps ({gaps.length})</summary><ul>{gaps.slice(0, 6).map((item) => <li key={item}>{item}</li>)}</ul></details>}
+    <div className="fit-tabs-row" role="tablist" aria-label="Fit details">{lists.map((list) => <button key={list.id} role="tab" aria-selected={list.id === active.id} className={`fit-tab is-${list.tone}`} onClick={() => setPicked(list.id)}><span>{list.label}</span><strong className="tabular">{list.items.length}</strong></button>)}</div>
+    <ul className="fit-tabs-list" role="tabpanel" aria-label={active.label}>{active.items.map((item) => <li key={item}>{item}</li>)}</ul>
   </div>;
 }
 

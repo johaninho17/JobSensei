@@ -1256,3 +1256,15 @@ summary.run-status-line::-webkit-details-marker { display: none; }
 .tracker-fold > summary h2 { margin: 0; }
 .tracker-fold > summary .muted { font-size: var(--fs-13); }
 .tracker-fold[open] > summary { margin-bottom: var(--space-3); }
+
+/* Fit lists as tabs built into the card (#226): label and count in each tab; the active one is raised. */
+.fit-tabs-row { display: flex; flex-wrap: wrap; margin: var(--space-2) 0 0; border: 1px solid var(--line); border-radius: var(--radius-m); overflow: hidden; }
+.fit-tab { display: grid; flex: 1 1 0; justify-items: center; gap: 2px; min-width: 72px; padding: var(--space-2) var(--space-2); border: 0; border-right: 1px solid var(--line); color: var(--muted); background: var(--sunken); font: 600 var(--fs-12) var(--font-ui); cursor: pointer; }
+.fit-tab:last-child { border-right: 0; }
+.fit-tab strong { font: 700 var(--fs-18) var(--font-ui); color: var(--muted); }
+.fit-tab[aria-selected="true"] { color: var(--ink); background: var(--raised); }
+.fit-tab[aria-selected="true"].is-blocker strong { color: var(--risk); }
+.fit-tab[aria-selected="true"].is-learnable strong, .fit-tab[aria-selected="true"].is-gap strong { color: var(--brass); }
+.fit-tab[aria-selected="true"].is-met strong { color: var(--leaf); }
+.fit-tab:focus-visible { outline: none; box-shadow: var(--focus); }
+.fit-tabs-list { margin: var(--space-3) 0 0; padding-left: var(--space-4); font-size: var(--fs-13); }
