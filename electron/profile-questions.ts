@@ -108,3 +108,10 @@ export async function removeQuestion(workspace: string, id: string): Promise<voi
   const questions = await readQuestions(workspace);
   await saveQuestions(workspace, questions.map((candidate) => candidate.id === id ? { ...candidate, status: "removed" as const } : candidate));
 }
+
+/** Adds one question from elsewhere in the app (data analysis, #200), unless a question with that ID was ever asked. */
+export async function addQuestion(workspace: string, question: Omit<CareerQuestion, "askedAt" | "status" | "answer" | "answeredAt">, now = new Date()): Promise<void> {
+  const questions = await readQuestions(workspace);
+  const merged = mergeQuestions(questions, [question], now);
+  if (merged.length !== questions.length) await saveQuestions(workspace, merged);
+}
