@@ -22,6 +22,7 @@ import { PipelineView } from "./Pipeline";
 import { type CandidatesState } from "../shared/candidates";
 import { JobSearchView } from "./JobSearchView";
 import { ProfileQuestions } from "./ProfileQuestions";
+import { DataAnalysis } from "./DataAnalysis";
 import { DocsView } from "./DocsView";
 import { AgyView } from "./AgyView";
 import { agyBehaviorSchema, effectiveBehavior } from "../shared/agy-behavior";
@@ -1116,7 +1117,7 @@ function WorkspaceApp({ candidates }: { candidates?: CandidatesState }) {
             startView={currentLocation.kind === "setup-home" ? "setup" : null}
             onOpen={(path) => void selectFile(path)}
             notes={recruiterNotesBlock}
-            notice={<>{FEATURES.profileQuestions && <ProfileQuestions onToast={showToast} />}{FEATURES.newFilesNotice && newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">
+            notice={<>{FEATURES.profileQuestions && <ProfileQuestions onToast={showToast} />}{FEATURES.dataAnalysis && <DataAnalysis onToast={showToast} />}{FEATURES.newFilesNotice && newContextFiles.length > 0 && <section className="context-block new-files" aria-labelledby="new-files-title">
               <h2 id="new-files-title">New since you last looked</h2>
               <ul>{newContextFiles.map((path) => <li key={path}><button className="btn-link" onClick={() => void selectFile(path)}>{path.replace(/^context\//, "")}</button>{selectedCareerPaths.includes(path) ? <span className="doc-state is-ready">Used by Agy</span> : <span className="doc-state">Not used yet</span>}</li>)}</ul>
               <button className="btn-quiet" onClick={markContextReviewed}>Mark as reviewed</button>

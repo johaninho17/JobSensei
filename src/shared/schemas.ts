@@ -1455,6 +1455,14 @@ export interface SenseiApi {
     remove(id: string): Promise<void>;
     onChanged(callback: () => void): () => void;
   };
+  /** Data analysis on the Profile page (#200, electron/data-analysis.ts). */
+  analysis: {
+    get(): Promise<import("./data-analysis").AnalysisView>;
+    /** Starts the check in the background; the result arrives through onChanged. */
+    run(): Promise<void>;
+    decide(id: string, decision: "accept" | "edit" | "ask" | "refuse", row?: Partial<import("./data-analysis").FixRow> | null): Promise<{ changed: string | null }>;
+    onChanged(callback: () => void): () => void;
+  };
   /** Job Search: settings, the inbox of found postings, and the search run (Agy finds links; the app checks them). */
   jobSearch: {
     get(): Promise<{ settings: JobSearchSettings; state: JobSearchState; status: SearchStatus }>;

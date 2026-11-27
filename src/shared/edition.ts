@@ -29,6 +29,8 @@ export type Features = {
   coverLetterOptIn: boolean;
   /** Questions for you on the Profile page, from real gaps; skill answers are filed into the career records by Agy. */
   profileQuestions: boolean;
+  /** Data analysis on the Profile page (#200): findings about the career records the user accepts, edits, asks, or refuses. */
+  dataAnalysis: boolean;
   /** Making the PDFs marks a drafted job applied; off where a recruiter sends and marks it. `src/shared/tracker.ts` owns the rule. */
   pdfsMarkApplied: boolean;
   /** A PDF base resume is read directly (no Word or Markdown copy needed); its structure is shown for checking (pdf-resume.ts). */
@@ -38,8 +40,8 @@ export type Features = {
 };
 
 const FEATURES: Record<Edition, Features> = {
-  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, tune: true, learnings: true, interviewProfile: true, newFilesNotice: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, profileQuestions: true, pdfsMarkApplied: true, pdfResumes: false, agyPage: true },
-  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, tune: false, learnings: false, interviewProfile: false, newFilesNotice: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, profileQuestions: false, pdfsMarkApplied: false, pdfResumes: true, agyPage: false },
+  solo: { interviews: true, applicationQuestions: true, contentRefresh: true, tune: true, learnings: true, interviewProfile: true, newFilesNotice: true, jobSearch: true, candidates: false, candidateFilesEligible: false, coverLetterOptIn: false, profileQuestions: true, dataAnalysis: true, pdfsMarkApplied: true, pdfResumes: false, agyPage: true },
+  recruiter: { interviews: false, applicationQuestions: false, contentRefresh: false, tune: false, learnings: false, interviewProfile: false, newFilesNotice: false, jobSearch: false, candidates: true, candidateFilesEligible: true, coverLetterOptIn: true, profileQuestions: false, dataAnalysis: false, pdfsMarkApplied: false, pdfResumes: true, agyPage: false },
 };
 
 export type EditionInfo = {
@@ -85,6 +87,7 @@ export const FEATURE_AGENT_ENTRIES: Record<string, keyof Features> = {
   "workflows/jobsensei-tune.md": "tune",
   "workflows/jobsensei-story-bank.md": "interviewProfile",
   "workflows/jobsensei-file-answers.md": "profileQuestions",
+  "workflows/jobsensei-data-analysis.md": "dataAnalysis",
 };
 
 /** `sensei` pipeline commands that belong to a feature (all others are in every edition). */
@@ -111,6 +114,8 @@ export const FEATURE_MODULES: Record<string, keyof Features> = {
   "profile-questions-ipc": "profileQuestions",
   "profile-questions": "profileQuestions",
   "answer-filing": "profileQuestions",
+  "data-analysis-ipc": "dataAnalysis",
+  "data-analysis": "dataAnalysis",
   "search-ipc": "jobSearch",
   "job-search": "jobSearch",
   "job-search-runner": "jobSearch",

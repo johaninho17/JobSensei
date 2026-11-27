@@ -49,6 +49,12 @@ const api: SenseiApi = {
     remove: (id) => ipcRenderer.invoke("profile-questions:remove", id),
     onChanged: (callback) => { const listener = () => callback(); ipcRenderer.on("profile-questions:changed", listener); return () => ipcRenderer.removeListener("profile-questions:changed", listener); },
   },
+  analysis: {
+    get: () => ipcRenderer.invoke("analysis:get"),
+    run: () => ipcRenderer.invoke("analysis:run"),
+    decide: (id, decision, row) => ipcRenderer.invoke("analysis:decide", id, decision, row),
+    onChanged: (callback) => { const listener = () => callback(); ipcRenderer.on("analysis:changed", listener); return () => ipcRenderer.removeListener("analysis:changed", listener); },
+  },
   // Recruiter Edition only (registered when the edition has candidates).
   candidates: {
     state: () => ipcRenderer.invoke("candidates:state"),

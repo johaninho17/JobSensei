@@ -206,6 +206,21 @@
 .pq-inline input { flex: 1; min-width: 0; min-height: 32px; }
 .pq-remove { margin-left: auto; font-size: var(--fs-12); color: var(--muted); }
 .pq-pending { margin: var(--space-2) 0 0; font-size: var(--fs-12); }
+/* Your data (#200): one card per finding, one row of choices. */
+.da-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.da-head h2 { margin: 0; }
+.da-count { margin-left: var(--space-2); font-size: var(--fs-12); color: var(--muted); font-weight: 600; }
+.da-list { display: grid; margin: var(--space-3) 0 0; padding: 0; list-style: none; }
+.da-item { padding: var(--space-3) 0; border-top: 1px solid var(--line); font-size: var(--fs-13); }
+.da-item:first-child { border-top: 0; padding-top: 0; }
+.da-issue { margin: 0 0 var(--space-2); font-weight: 600; }
+.da-kind { display: inline-block; margin-right: var(--space-2); padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--brass-tint); font-size: var(--fs-12); font-weight: 600; }
+.da-basis { margin: 0 0 var(--space-2); padding: 0 0 0 var(--space-3); border-left: 2px solid var(--line-strong); list-style: none; color: var(--muted); }
+.da-basis q { color: var(--ink); }
+.da-fix { margin: 0 0 var(--space-2); }
+.da-edit { display: grid; gap: var(--space-2); margin: 0 0 var(--space-2); }
+.da-edit textarea { min-height: 64px; }
+.da-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .framing-lines { margin: var(--space-2) 0 var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--raised); font-size: var(--fs-13); }
 .iv-pending { margin: 0 0 var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: var(--radius-m); font-size: var(--fs-13); }
 .iv-pending p { margin: 0 0 var(--space-2); }
