@@ -22,7 +22,7 @@ export function DataAnalysis({ onToast }: { onToast: (message: string) => void }
       <h2 id="data-analysis-title">Your data{open.length > 0 && <span className="da-count">{open.length}</span>}</h2>
       <button className="btn-quiet btn-small" disabled={view.running} onClick={() => void run()}>{view.running ? "Checking…" : view.ranAt ? "Check again" : "Check my data"}</button>
     </div>
-    {view.ranAt && !view.running && !open.length && <p className="muted">Nothing to fix from the last check ({view.ranAt.slice(0, 10)}).</p>}
+    {view.ranAt && !view.running && !open.length && <p className="muted">Nothing to fix from the last check ({new Date(view.ranAt).toLocaleDateString([], { month: "short", day: "numeric" })}).</p>}
     {view.error && !view.running && <p className="inline-error" role="alert">The last check failed: {view.error}</p>}
     {problem && <p className="inline-error" role="alert">{problem}</p>}
     {open.length > 0 && <ul className="da-list">{open.map((finding) => <FindingCard key={finding.key} finding={finding} onDone={(message) => { onToast(message); load(); }} />)}</ul>}
